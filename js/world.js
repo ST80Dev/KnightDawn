@@ -466,12 +466,17 @@ const World = {
       this.specials.push({ x, y, kind: kinds[Math.floor(rng() * kinds.length)], discovered: false, name: 'Luogo ignoto' });
     };
 
+    // Buffer ≥ 2 tile dal bordo: la cornice della mappa copre i tile estremi,
+    // quindi tutte le specials devono stare dentro [2, W-3] x [2, H-3].
+    const inBuffer = (x, y) => (x >= 2 && y >= 2 && x <= W - 3 && y <= H - 3);
+
     // Estremo nord e sud: terra alla latitudine più estrema ma verso il CENTRO
     // orizzontale (evita gli angoli). Punteggio = latitudine + scarto da x medio.
     let bestN = -1, scN = Infinity, bestS = -1, scS = Infinity;
     for (let i = 0; i < this.tiles.length; i++) {
       if (this.tiles[i] === 0 || this.isWater(this.tiles[i])) continue;
       const x = i % W, y = (i / W) | 0;
+      if (!inBuffer(x, y)) continue;
       const offc = Math.abs(x - W / 2) * 0.35;
       const sn = y + offc;            // piccolo = nord & centrale
       const ss = (H - 1 - y) + offc;  // piccolo = sud & centrale
@@ -487,6 +492,7 @@ const World = {
     for (let i = 0; i < this.tiles.length; i++) {
       if (this.tiles[i] === 0 || this.isWater(this.tiles[i])) continue;
       const x = i % W, y = (i / W) | 0;
+      if (!inBuffer(x, y)) continue;
       let w = 0, tot = 0;
       for (let dy = -1; dy <= 1; dy++)
         for (let dx = -1; dx <= 1; dx++) {
@@ -532,10 +538,11 @@ const World = {
     }
 
     // Villaggi: pianura/foresta, preferibilmente vicino all'acqua, distanziati.
+    // Buffer ≥ 2 tile dal bordo mappa (la cornice copre i tile estremi).
     let vi = 0;
     for (let tries = 0; tries < 10000 && vi < 22; tries++) {
-      const x = 1 + Math.floor(rnd() * (W - 2));
-      const y = 1 + Math.floor(rnd() * (H - 2));
+      const x = 2 + Math.floor(rnd() * (W - 4));
+      const y = 2 + Math.floor(rnd() * (H - 4));
       const b = this.biomeAt(x, y);
       const okBiome = (b === B.PIANURA || b === B.PIANURA_N || b === B.PIANURA_S || b === B.FORESTA);
       // bonus vicino acqua: accetta sempre se vicino acqua, altrimenti 1 su 2
