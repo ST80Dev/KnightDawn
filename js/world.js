@@ -65,12 +65,33 @@ const World = {
     PIANURA_S: 12,  // meridionale, beige caldo (arida non desertica)
   },
 
-  CASTLE_NAMES: ['Vornkeep', 'Ashford', 'Greymoor', 'Duncairn', 'Highrock',
-                 'Carthwall', 'Stonereach', 'Blackmere', 'Ravensgate', 'Ironhold'],
-  VILLAGE_NAMES: ['Lyhall', 'Brackmere', 'Oakford', 'Mosswell', 'Thornby', 'Reedmoor',
-                  'Holloway', 'Cairnside', 'Dunmere', 'Fennwick', 'Greenford', 'Larkhollow',
-                  'Briarwood', 'Stoneford', 'Hartmere', 'Willowend', 'Crowhill',
-                  'Marshgate', 'Pineholt', 'Foxglen', 'Stagford', 'Whitebrook'],
+  // Mix di registri: anglo-medievale, cavalleresco italiano, mood tolkieniano.
+  // Tre vene per non avere mappa monoculturale ma "fantasy europea" diffusa.
+  CASTLE_NAMES: [
+    // Anglo
+    'Vornkeep', 'Ashford', 'Greymoor', 'Duncairn', 'Highrock', 'Stonereach',
+    'Blackmere', 'Ravensgate', 'Ironhold',
+    // Cavalleresco italiano
+    'Roccaforte', 'Aspramonte', 'Belforte', 'Castelferro', 'Pietralba',
+    'Montalbano', 'Roccanera', 'Altamura', 'Valbruna', 'Castelmonte',
+    // Mood tolkieniano
+    'Mornendor', 'Dolthar', 'Minariel', 'Annorant', 'Edhelmir', 'Caelthar',
+  ],
+  VILLAGE_NAMES: [
+    // Anglo
+    'Lyhall', 'Brackmere', 'Oakford', 'Mosswell', 'Thornby', 'Reedmoor',
+    'Holloway', 'Cairnside', 'Dunmere', 'Fennwick', 'Greenford', 'Larkhollow',
+    'Briarwood', 'Stoneford', 'Hartmere', 'Willowend', 'Crowhill',
+    'Marshgate', 'Pineholt', 'Foxglen', 'Stagford', 'Whitebrook',
+    // Italiano (borghi, alberi, geografia)
+    'Borgovecchio', 'Pievebella', 'Olmoreale', 'Castagnara', 'Vallepiana',
+    'Sambuco', 'Pratolungo', 'Olmeto', 'Roveto', 'Salice', 'Querceto',
+    'Pioppi', 'Faggeto', 'Cerreto', 'Frassino', 'Costanera', 'Ponteguado',
+    'Casalpiano', 'Valdarno', 'Sorbiana',
+    // Mood tolkieniano (borghi pacifici, vocali aperte)
+    'Brilonde', 'Aelinor', 'Sothmere', 'Felwyn', 'Edhelas', 'Mirathan',
+    'Lorensil', 'Cellondir', 'Thanduil', 'Eilmoth',
+  ],
 
   generate(seed) {
     this.seed = (seed >>> 0) || 1;
