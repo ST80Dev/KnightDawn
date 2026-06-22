@@ -30,10 +30,12 @@
     displayCanvas.style.width = w + 'px';
     displayCanvas.style.height = h + 'px';
 
-    // Scala intera massima che entra nel viewport (mantiene pixel netti).
-    scale = Math.max(1, Math.floor(Math.min(w / INTERNAL_W, h / INTERNAL_H)));
-    const drawW = INTERNAL_W * scale;
-    const drawH = INTERNAL_H * scale;
+    // Scala per riempire il viewport mantenendo l'aspect ratio.
+    // Niente vincolo intero: con imageSmoothingEnabled=false l'upscaling
+    // resta nearest-neighbor (pixel netti) anche a fattori frazionari.
+    scale = Math.min(w / INTERNAL_W, h / INTERNAL_H);
+    const drawW = Math.floor(INTERNAL_W * scale);
+    const drawH = Math.floor(INTERNAL_H * scale);
     offsetX = Math.floor((w - drawW) / 2);
     offsetY = Math.floor((h - drawH) / 2);
 
@@ -72,7 +74,7 @@
     displayCtx.drawImage(
       lo,
       0, 0, INTERNAL_W, INTERNAL_H,
-      offsetX, offsetY, INTERNAL_W * scale, INTERNAL_H * scale
+      offsetX, offsetY, Math.floor(INTERNAL_W * scale), Math.floor(INTERNAL_H * scale)
     );
   }
 
