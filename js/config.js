@@ -46,19 +46,14 @@ const PALETTE = {
 const TILE_BASE = 16;
 const ZOOM_LEVELS = [4, 8, 16, 32];
 
-// Risoluzione interna del rendering pixel-art.
-// Tutto viene disegnato a questa risoluzione, poi upscalato nearest-neighbor
-// sul canvas visibile. Cambiare qui per pixel più grandi (valori più bassi)
-// o più piccoli (valori più alti).
-// 640x360 = pixel art moderna, più fine di Monkey Island (320x200).
-// Risoluzione interna alta per ospitare HUD con molte info,
-// ma i primitivi grafici disegnano in blocchi PIXEL×PIXEL per mantenere
-// l'aspetto "a quadratini" sulle curve e i contorni.
-// Render interno a Full HD: scala 1:1 su display 1920x1080 (testo crispissimo)
-// e auto-scala intero su display piu piccoli mantenendo il rapporto.
-// PIXEL=3 → griglia logica 640x360, blocco 3x3 sullo schermo: chunky evidente.
-const INTERNAL_W = 1920;
-const INTERNAL_H = 1080;
+// Rendering pixel-art:
+// Il canvas viene disegnato DIRETTAMENTE alle dimensioni dell'area utile del
+// browser (vedi main.js) — nessun upscale/downscale che possa rovinare il
+// testo. La "chunkiness" della grafica e affidata a PIXEL: tutti i primitivi
+// grafici (cerchi, linee, triangoli, bordi, dithering) disegnano in blocchi
+// PIXEL x PIXEL → curve e contorni "a quadrettini" visibili.
+// Le dimensioni di font, pannelli, margini ecc. nelle scene passano da
+// S(...) (vedi main.js) per restare proporzionate al canvas attuale.
 const PIXEL = 3;
 
 // Seed RNG semplice (mulberry32) per texture procedurali
