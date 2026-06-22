@@ -155,6 +155,62 @@ In questa vista:
 [TBD] Sistema di commercio
 [TBD] Sistema di quest/missioni locali
 
+### Propagazione delle informazioni
+
+Nel mondo medievale le notizie non arrivano istantanee. Questo sistema definisce
+come gli eventi del mondo raggiungono il giocatore (e gli altri attori) nel tempo,
+in funzione della distanza e del tipo di informazione.
+
+**Principio:** il mondo vive autonomamente, ma la conoscenza del mondo è locale,
+parziale e ritardata. Il giocatore impara cose nuove parlando con NPC, entrando
+in insediamenti, o viaggiando vicino a luoghi-evento.
+
+#### Tre livelli di informazione
+
+1. **Voci certe locali** — eventi puntuali (battaglie, morti, raid, matrimoni,
+   tradimenti). Si propagano per *onde* dalla sorgente, con velocità modulata
+   dal terreno (strade veloci, foreste/montagne lente). Prima dell'onda: silenzio.
+   Dopo: notizia precisa, attribuibile, con dettagli.
+
+2. **Voci distorte (rumor)** — nella fascia intermedia tra sorgente e fronte
+   d'onda certo, l'informazione esiste in versione imprecisa: nomi sbagliati,
+   numeri gonfiati, esito ambiguo. Si risolvono in certezza quando l'onda certa
+   arriva al nodo, o se il giocatore visita di persona il luogo dell'evento.
+
+3. **Clima generale** — andamenti di fondo (guerre in corso, carestie, umori
+   delle fazioni, prezzi medi) disponibili ovunque ma a granularità grossa,
+   senza dettagli specifici. Si raffinano avvicinandosi alle terre coinvolte.
+
+#### Modello tecnico (riepilogo)
+
+Ogni evento mondiale genera un **NewsToken** con: id, tipo, coordinate origine,
+turno di emissione, payload "verità", varianti rumor.
+
+A ogni turno si calcola un raggio di propagazione
+(`r = turni_passati × velocità_terreno_media`). Gli insediamenti dentro il raggio
+"conoscono" la verità; quelli appena fuori conoscono una variante distorta;
+oltre, nulla — tranne le news flaggate come `global_climate`, sempre disponibili
+in forma vaga.
+
+Quando il giocatore parla con un NPC o entra in una locanda, l'UI pesca dalle
+news note a quel nodo, scegliendo la versione (vera/rumor) in base al raggio.
+
+#### Eccezioni e override
+
+- **Corvi messaggeri delle fazioni:** rete propria più veloce, ma limitata ai
+  nodi alleati alla fazione mittente.
+- **Spie e informatori:** in cambio di oro/favori, accelerano l'arrivo di una
+  specifica notizia al giocatore.
+- **Sogni profetici, reliquie, poteri arcani:** override narrativi che bypassano
+  il raggio normale per news selezionate.
+- **Presenza diretta:** se il giocatore è alla sorgente, conosce subito la verità
+  e diventa egli stesso vettore di propagazione viaggiando.
+
+[TBD] Tabella velocità di propagazione per tipo di terreno
+[TBD] Catalogo varianti rumor per tipo di evento
+[TBD] Specifica rete dei corvi (quali fazioni, quali nodi)
+[TBD] Documento autonomo `docs/NEWS_SYSTEM.md` quando l'implementazione parte
+
 ---
 
 ## 4. Interfaccia
