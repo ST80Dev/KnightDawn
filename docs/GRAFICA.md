@@ -21,8 +21,11 @@ con palette limitata e dithering autentico, applicata a un'estetica cartografica
 ### Due registri visivi
 
 1. **Mappa top-down (cartografica):** pergamena, inchiostro, simboli. Vista principale.
-2. **Dettaglio laterale 2D (luoghi):** pixel art classica, sfondi dipinti,
-   proporzioni tipo adventure grafica. Si attiva in castelli/taverne/dungeon.
+2. **Carta del cronista (luoghi ed eventi):** composizione statica in stile
+   manoscritto miniato medievale — cornice ornata, miniatura centrale,
+   testo narrativo, pulsanti tematici. Non è una scena navigabile.
+   Stesso formato usato per scene di luogo (carte stanziali) e per eventi
+   di viaggio (carte mobili). Dettaglio in `docs/GAMEPLAY.md`.
 
 ---
 
@@ -101,11 +104,14 @@ barra-ferite-luce     #cc2828   highlight barra ferite
 barra-sfondo          #0e0804   sfondo barre
 ```
 
-### Palette vista laterale (dettaglio luoghi)
+### Palette Carta del cronista (luoghi ed eventi)
 
-[TBD] Da definire quando si lavora sulla fase 4.
-Base: stessa famiglia cromatica della pergamena ma con più saturazione
-e range tonale per gli sfondi dipinti.
+[TBD] Da definire quando si lavora sulla Fase G3.
+Direzione: estendere la famiglia cromatica della pergamena con:
+- Tonalità più sature per le miniature (rossi cinabro, blu lapislazzulo,
+  ori, verdi malachite — i pigmenti del manoscritto miniato)
+- Cornice ornata: ori scuri, bruni, rosso porpora
+- Testo: stessa palette inchiostro della mappa per coerenza
 
 ---
 
@@ -230,15 +236,21 @@ sprite piccolo a zoom in).
 - Colori: armatura grigio-scuro, mantello (colore variabile per personalizzazione?)
 - Animazione minima: 2 frame di "camminata" per il viaggio
 
-### Sprite vista laterale (dettaglio luoghi)
-- Molto più grande e dettagliato (32×48 pixel circa)
-- Stile Monkey Island: proporzioni semi-realistiche
-- Dettaglio armatura, elmo, spada, scudo, mantello
-- Riflette l'equipaggiamento attuale (se possibile)
+### Miniature per Carta del cronista
+- Illuminazioni statiche in stile manoscritto miniato medievale
+- Una miniatura per **tipo di scena** (sala del trono, taverna, cripta,
+  monastero, accampamento, ecc.) — non per singolo luogo
+- Composizione frontale o leggermente prospettica, soggetto al centro
+- Cornice decorativa attorno (motivi geometrici, vegetali, blasoni)
+- Dimensione orientativa: ~256×192 pixel di area utile
+- Il cavaliere e gli NPC NON appaiono nelle miniature (sono fuori scena);
+  vengono rappresentati eventualmente con piccoli **medaglioni-ritratto**
+  accanto alle azioni nel pannello narrativo
 
-[TBD] Variazioni sprite per equipaggiamento
-[TBD] Sprite NPC principali
-[TBD] Sprite creature e avversari
+[TBD] Catalogo miniature per tipo di scena
+[TBD] Sistema medaglioni-ritratto per NPC nei pannelli
+[TBD] Sprite NPC principali (sulla mappa)
+[TBD] Sprite creature e avversari (sulla mappa / in combattimento)
 [TBD] Animazioni
 
 ---

@@ -108,10 +108,12 @@ Ordine di lavoro:
    Zoomabile a più livelli: regione → zona → locale.
    Zoom out = icone simboliche cartografiche. Zoom in = più dettaglio sui tile.
 
-2. **Vista dettaglio (laterale 2D):** si attiva entrando in castelli, taverne, dungeon,
-   luoghi speciali. Stile pixel art classico laterale tipo Monkey Island / King's Quest.
-   Il giocatore non controlla il personaggio in questa vista — è una scena narrativa
-   con interazioni contestuali.
+2. **Carta del cronista:** si attiva entrando in castelli, taverne, dungeon,
+   luoghi speciali. Composizione statica in stile manoscritto miniato medievale:
+   cornice ornata, miniatura centrale, testo narrativo, pulsanti tematici.
+   Non è una scena navigabile point&click — si interagisce per scelta.
+   Stesso linguaggio visivo riusato per eventi di viaggio (carte mobili sopra
+   la mappa). Dettagli in `docs/GAMEPLAY.md`.
 
 ### Generazione mondo
 
