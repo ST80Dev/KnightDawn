@@ -177,9 +177,12 @@ const World = {
           // orizzontali nette. Soglie 0.40 / 0.62 → fasce sud/centro/nord
           // approssimative ma irregolari.
           const cjit = _fbm(x + 11111, y + 22222, seedCJ, 2, freqL * 3.2);
-          const zone = temp + (cjit - 0.5) * 0.22;
-          if (zone < 0.40)       b = B.PIANURA_N;  // marrone chiaro (nord freddo)
-          else if (zone > 0.62)  b = B.PIANURA_S;  // beige caldo (sud arido)
+          const zone = temp + (cjit - 0.5) * 0.18;
+          // Banda verde centrale DOMINANTE (0.27-0.74 = ~47% del range) →
+          // il verdePrato copre la maggior parte della fascia temperata,
+          // nord/sud restano variazioni laterali piu' contenute.
+          if (zone < 0.27)       b = B.PIANURA_N;  // marrone chiaro (nord freddo)
+          else if (zone > 0.74)  b = B.PIANURA_S;  // beige caldo (sud arido)
           else                   b = B.PIANURA;    // verde chiaro (centro)
         }
         this.tiles[i] = b;

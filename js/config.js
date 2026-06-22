@@ -15,7 +15,7 @@ const PALETTE = {
   verdeBosco:    '#2a5a18',
   verdeBoscoSc:  '#1a3a10',
   verdePalude:   '#3a5a2a',
-  verdePrato:    '#7a9a4a',  // pianura temperata (verde chiaro)
+  verdePrato:    '#9ec060',  // pianura temperata (verde chiaro brillante)
   sabbia:        '#c8a870',
   pianuraNord:   '#b09a78',  // pianura settentrionale (marrone chiaro/tundra)
   pianuraSud:    '#d4bc84',  // pianura meridionale (chiaro/secco)
