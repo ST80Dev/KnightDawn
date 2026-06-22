@@ -292,13 +292,38 @@ const World = {
     return false;
   },
 
-  // Fiumi: dai rilievi scendono per pendenza fino a mare/lago o minimo locale
-  // (dove formano un piccolo lago). Marcati come FIUME; i laghi come ACQUA.
+  // Fiumi: random walk guidato dalla DISTANZA-DAL-MARE (BFS in tile), non
+  // dal gradiente di elevazione. Risultato: percorsi serpeggianti, vari,
+  // con meandri e curve, ma sempre in direzione del mare (mai si allontanano).
   _carveRivers() {
     const W = this.width, H = this.height, B = this.BIOME;
     const rng = mulberry32((this.seed ^ 0x9e3779b9) >>> 0);
-    // Sorgenti: tutte le terre alte (montagna, collina) E pianure/foreste
-    // d'altura: così i fiumi nascono ovunque sia abbastanza elevato.
+
+    // BFS multi-sorgente da tutte le acque → distanza in tile dal mare.
+    const dist = new Int32Array(W * H);
+    for (let i = 0; i < dist.length; i++) dist[i] = -1;
+    const queue = [];
+    for (let i = 0; i < this.tiles.length; i++) {
+      if (this.isWater(this.tiles[i])) { dist[i] = 0; queue.push(i); }
+    }
+    let head = 0;
+    while (head < queue.length) {
+      const i = queue[head++];
+      const x = i % W, y = (i / W) | 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue;
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+          const ni = ny * W + nx;
+          if (dist[ni] !== -1) continue;
+          dist[ni] = dist[i] + 1;
+          queue.push(ni);
+        }
+      }
+    }
+
+    // Sorgenti: terre alte e qualche pianura/foresta in quota.
     const sources = [];
     for (let i = 0; i < this.tiles.length; i++) {
       const b = this.tiles[i];
@@ -308,31 +333,53 @@ const World = {
       }
     }
     if (!sources.length) return;
-    // Molti più fiumi, proporzionali alla superficie del mondo.
-    const baseN = Math.round((W * H) / 800);   // ~54 per 240×180
+    const baseN = Math.round((W * H) / 800);
     const N = baseN + Math.floor(rng() * baseN * 0.4);
+
     for (let s = 0; s < N; s++) {
-      let idx = sources[Math.floor(rng() * sources.length)];
+      const idx = sources[Math.floor(rng() * sources.length)];
+      if (dist[idx] < 0) continue;     // isolata dal mare: salta
       let x = idx % W, y = (idx / W) | 0;
       const visited = new Set();
+      let lastDx = 0, lastDy = 0;
       let steps = 0;
-      while (steps++ < W + H) {
+      while (steps++ < (W + H) * 2) {
         const i = y * W + x;
-        if (this.isWater(this.tiles[i])) break;          // raggiunto mare/lago
+        if (this.isWater(this.tiles[i])) break;
         if (this.tiles[i] !== B.MONTAGNA) this.tiles[i] = B.FIUME;
         visited.add(i);
-        let bx = -1, by = -1, be = this.elev[i];
-        for (let dy = -1; dy <= 1; dy++)
+        const di = dist[i];
+
+        // Vicini: ammessi solo quelli che NON si allontanano dal mare.
+        // Tra "uguali" (stessa distanza) il random walk crea meandri.
+        const cands = [];
+        let totalW = 0;
+        for (let dy = -1; dy <= 1; dy++) {
           for (let dx = -1; dx <= 1; dx++) {
             if (!dx && !dy) continue;
             const nx = x + dx, ny = y + dy;
             if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
             const ni = ny * W + nx;
             if (visited.has(ni)) continue;
-            if (this.elev[ni] < be) { be = this.elev[ni]; bx = nx; by = ny; }
+            const dn = dist[ni];
+            if (dn < 0 || dn > di) continue;          // mai indietro
+            // Peso: chi avvicina al mare è preferito, ma "uguale" è
+            // ammesso → meandri. Bonus per continuità di direzione
+            // (curve morbide) e jitter casuale per varieta'.
+            let w = (dn < di) ? 1.6 : 0.9;
+            if (dx * lastDx + dy * lastDy > 0) w *= 1.5;     // stessa direz
+            else if (dx * lastDx + dy * lastDy < 0) w *= 0.3; // backtrack
+            w *= 0.5 + rng() * 1.0;
+            cands.push({ nx, ny, dx, dy, w });
+            totalW += w;
           }
-        if (bx < 0) { this._makeLake(x, y); break; }      // minimo locale → lago
-        x = bx; y = by;
+        }
+        if (!cands.length) { this._makeLake(x, y); break; }
+        let r = rng() * totalW;
+        let pick = cands[cands.length - 1];
+        for (const c of cands) { r -= c.w; if (r <= 0) { pick = c; break; } }
+        lastDx = pick.dx; lastDy = pick.dy;
+        x = pick.nx; y = pick.ny;
       }
     }
   },
