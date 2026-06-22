@@ -70,6 +70,22 @@ indipendentemente dal giocatore. Il tempo scorre a passi di viaggio, interazione
 6. **Grafica procedurale:** i tile e sprite sono disegnati in canvas via codice, non caricati da file PNG
    (possibilità futura di caricare spritesheet, ma lo scheletro parte procedurale)
 7. **Test incrementale:** ogni feature deve essere visibile e testabile prima di passare alla successiva
+8. **Branch e PR — REGOLA OBBLIGATORIA:** prima di iniziare qualsiasi nuova modifica,
+   controllare SEMPRE lo stato del branch corrente rispetto a `main`:
+
+   ```
+   git log origin/main..HEAD --oneline
+   ```
+
+   - Se l'output è **vuoto** → il branch è già stato integrato in `main` (PR mergiata).
+     In questo caso **NON committare oltre** su quel branch: creare subito un nuovo
+     branch a partire dal HEAD corrente (o da `main` aggiornato) con un nome
+     descrittivo del prossimo blocco di lavoro, e proseguire lì.
+   - Se l'output **contiene commit** → il branch ha ancora lavoro non integrato:
+     si può continuare a committare sullo stesso branch.
+
+   Questa regola vale **anche per modifiche minime** (rinomine, refactor, fix).
+   Un branch già mergiato è "chiuso": ogni nuovo lavoro deve partire fresco.
 
 ## Fase corrente
 

@@ -1,34 +1,37 @@
-// FERRO & CENERE — Schermata titolo (home)
-// Primo test estetico: pergamena + bordo cartografico + tipografia + rosa dei venti.
+// FERRO & CENERE — Schermata titolo
+// Disegnata sul canvas interno a 800x450 con primitivi pixel-art chunky
+// (blocchi PIXEL×PIXEL). Upscalata nearest-neighbor sul display.
 
 const TitleScreen = {
   buttons: [],
   hoverIndex: -1,
+  _lastHover: -1,
 
   init(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
+    this.ctx.imageSmoothingEnabled = false;
+
     this.buttons = [
-      { label: 'Nuova Partita',   action: 'new' },
-      { label: 'Continua',        action: 'continue', disabled: true },
-      { label: 'Carica / Importa', action: 'load',    disabled: true },
-      { label: 'Crediti',         action: 'credits',  disabled: true },
+      { label: 'NUOVA PARTITA',    action: 'new' },
+      { label: 'CONTINUA',         action: 'continue', disabled: true },
+      { label: 'CARICA / IMPORTA', action: 'load',     disabled: true },
+      { label: 'CREDITI',          action: 'credits',  disabled: true },
     ];
 
-    canvas.addEventListener('mousemove', (e) => this.onMove(e));
-    canvas.addEventListener('click', (e) => this.onClick(e));
+    const display = document.getElementById('game');
+    display.addEventListener('mousemove', (e) => this.onMove(e));
+    display.addEventListener('click', (e) => this.onClick(e));
   },
 
   layout() {
     const w = this.canvas.width;
     const h = this.canvas.height;
-    // Geometria pulsanti: centrati, parte inferiore-centrale
-    const btnW = Math.min(360, w * 0.45);
-    const btnH = 44;
-    const gap = 14;
-    const totalH = this.buttons.length * btnH + (this.buttons.length - 1) * gap;
-    const startY = h * 0.58;
-    const x = (w - btnW) / 2;
+    const btnW = 380;
+    const btnH = 42;
+    const gap = 12;
+    const startY = Math.floor(h * 0.58);
+    const x = Math.floor((w - btnW) / 2);
     this.buttons.forEach((b, i) => {
       b.x = x;
       b.y = startY + i * (btnH + gap);
@@ -38,16 +41,14 @@ const TitleScreen = {
   },
 
   onMove(e) {
-    const r = this.canvas.getBoundingClientRect();
-    const mx = (e.clientX - r.left) * (this.canvas.width / r.width);
-    const my = (e.clientY - r.top) * (this.canvas.height / r.height);
+    const { x: mx, y: my } = window.GameRender.displayToInternal(e.clientX, e.clientY);
     let h = -1;
     this.buttons.forEach((b, i) => {
       if (!b.disabled && mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) h = i;
     });
     if (h !== this.hoverIndex) {
       this.hoverIndex = h;
-      this.canvas.style.cursor = h >= 0 ? 'pointer' : 'default';
+      document.getElementById('game').style.cursor = h >= 0 ? 'pointer' : 'default';
     }
   },
 
@@ -56,7 +57,6 @@ const TitleScreen = {
     const b = this.buttons[this.hoverIndex];
     if (b.disabled) return;
     console.log('Azione titolo:', b.action);
-    // Hook futuro: switch a creazione personaggio / vista mondo
   },
 
   draw() {
@@ -65,12 +65,12 @@ const TitleScreen = {
     const w = this.canvas.width;
     const h = this.canvas.height;
 
-    // 1. Sfondo nero/inchiostro (vignetta esterna fuori dalla pergamena)
+    // 1. Sfondo inchiostro
     ctx.fillStyle = PALETTE.inkNero;
     ctx.fillRect(0, 0, w, h);
 
-    // 2. Pergamena: occupiamo quasi tutto il canvas con un piccolo margine
-    const m = Math.floor(Math.min(w, h) * 0.025);
+    // 2. Pergamena
+    const m = PIXEL * 6;
     const pw = w - m * 2;
     const ph = h - m * 2;
     const parchment = getParchmentTexture(pw, ph, 1337);
@@ -80,102 +80,90 @@ const TitleScreen = {
     drawCartographicBorder(ctx, m, m, pw, ph);
 
     // 4. Titolo
-    const cx = w / 2;
-    const titleY = h * 0.22;
+    const cx = Math.floor(w / 2);
+    const titleY = Math.floor(h * 0.22);
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    // ombra leggera sotto il titolo
-    ctx.fillStyle = 'rgba(26,14,4,0.25)';
-    ctx.font = `bold ${Math.floor(h * 0.11)}px Georgia, "Times New Roman", serif`;
-    ctx.fillText('Ferro & Cenere', cx + 3, titleY + 3);
+    // Ombra (decalata di PIXEL*2)
+    ctx.fillStyle = PALETTE.inkMedio;
+    ctx.font = 'bold 96px "Courier New", monospace';
+    ctx.fillText('KNIGHT DAWN', cx + PIXEL * 2, titleY + PIXEL * 2);
 
-    // titolo principale
+    // Titolo
     ctx.fillStyle = PALETTE.inkScuro;
-    ctx.fillText('Ferro & Cenere', cx, titleY);
+    ctx.fillText('KNIGHT DAWN', cx, titleY);
 
-    // separatori decorativi sopra/sotto il titolo
-    ctx.strokeStyle = PALETTE.inkMedio;
-    ctx.lineWidth = 1.5;
-    const lineW = Math.min(440, w * 0.5);
-    for (const yOff of [-h * 0.075, h * 0.075]) {
+    // 5. Separatori a rombi
+    ctx.fillStyle = PALETTE.inkScuro;
+    const lineW = 520;
+    for (const yOff of [-72, 72]) {
       const ly = titleY + yOff;
-      ctx.beginPath();
-      ctx.moveTo(cx - lineW / 2, ly);
-      ctx.lineTo(cx + lineW / 2, ly);
-      ctx.stroke();
-      // rombi alle estremità
-      ctx.fillStyle = PALETTE.inkScuro;
+      // linea: rettangolo PIXEL alto
+      ctx.fillRect(Math.floor(cx - lineW / 2), Math.floor(ly), lineW, PIXEL);
+      // rombi alle estremità (5 blocchi)
       for (const sx of [-1, 1]) {
-        ctx.beginPath();
-        ctx.moveTo(cx + sx * (lineW / 2 + 8), ly);
-        ctx.lineTo(cx + sx * (lineW / 2 + 4), ly - 4);
-        ctx.lineTo(cx + sx * (lineW / 2),     ly);
-        ctx.lineTo(cx + sx * (lineW / 2 + 4), ly + 4);
-        ctx.closePath();
-        ctx.fill();
+        const ex = Math.floor(cx + sx * (lineW / 2 + PIXEL * 3));
+        ctx.fillRect(ex, ly - PIXEL, PIXEL, PIXEL);
+        ctx.fillRect(ex - PIXEL, ly, PIXEL * 3, PIXEL);
+        ctx.fillRect(ex, ly + PIXEL, PIXEL, PIXEL);
       }
     }
 
-    // sottotitolo in corsivo
+    // 6. Sottotitolo
     ctx.fillStyle = PALETTE.inkLeggero;
-    ctx.font = `italic ${Math.floor(h * 0.028)}px Georgia, serif`;
-    ctx.fillText('— cronache di un cavaliere errante —', cx, titleY + h * 0.11);
+    ctx.font = 'italic 22px "Courier New", monospace';
+    ctx.fillText('- cronache di un cavaliere errante -', cx, titleY + 116);
 
-    // 5. Rosa dei venti decorativa in alto a destra
-    const roseR = Math.min(60, w * 0.05);
-    drawCompassRose(ctx, w - m - 60, m + 60, roseR);
+    // 7. Rosa dei venti
+    drawCompassRose(ctx, w - m - 60, m + 60, 42);
 
-    // 6. Etichetta "Terra Incognita" in basso a sinistra (vibe cartografico)
+    // 8. Etichetta "Terra Incognita"
     ctx.save();
-    ctx.fillStyle = 'rgba(58,32,16,0.35)';
-    ctx.font = `italic ${Math.floor(h * 0.022)}px Georgia, serif`;
+    ctx.fillStyle = PALETTE.inkLeggero;
+    ctx.font = 'italic 18px "Courier New", monospace';
     ctx.textAlign = 'left';
-    ctx.fillText('Terra Incognita', m + 36, h - m - 36);
+    ctx.fillText('Terra Incognita', m + 24, h - m - 24);
     ctx.restore();
 
-    // 7. Pulsanti
+    // 9. Pulsanti
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     this.buttons.forEach((b, i) => {
       const hovered = i === this.hoverIndex;
-      // Sfondo pulsante: lieve oscuramento della pergamena
-      ctx.fillStyle = hovered
-        ? 'rgba(26,14,4,0.18)'
-        : 'rgba(26,14,4,0.08)';
+
+      // Fondo del pulsante: tono pergamena più scuro pieno (no alpha smooth)
+      ctx.fillStyle = hovered ? PALETTE.pergScura : PALETTE.pergMedia;
       ctx.fillRect(b.x, b.y, b.w, b.h);
 
-      // Bordo
-      ctx.strokeStyle = hovered ? PALETTE.inkScuro : PALETTE.inkMedio;
-      ctx.lineWidth = hovered ? 2 : 1;
-      ctx.strokeRect(b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1);
+      // Bordo: rettangolo cavo da 1 blocco
+      drawPixelRectStroke(
+        ctx, b.x, b.y, b.w, b.h,
+        hovered ? PALETTE.inkScuro : PALETTE.inkMedio
+      );
 
-      // Decorazioni laterali (piccoli rombi)
-      const cy = b.y + b.h / 2;
-      ctx.fillStyle = PALETTE.inkMedio;
+      // Rombi laterali (in blocchi PIXEL)
+      const cyB = Math.floor(b.y + b.h / 2);
+      ctx.fillStyle = PALETTE.inkScuro;
       for (const sx of [-1, 1]) {
-        const ex = sx === -1 ? b.x + 10 : b.x + b.w - 10;
-        ctx.beginPath();
-        ctx.moveTo(ex - 4, cy);
-        ctx.lineTo(ex, cy - 4);
-        ctx.lineTo(ex + 4, cy);
-        ctx.lineTo(ex, cy + 4);
-        ctx.closePath();
-        ctx.fill();
+        const ex = sx === -1 ? b.x + PIXEL * 4 : b.x + b.w - PIXEL * 5;
+        ctx.fillRect(ex, cyB - PIXEL, PIXEL, PIXEL);
+        ctx.fillRect(ex - PIXEL, cyB, PIXEL * 3, PIXEL);
+        ctx.fillRect(ex, cyB + PIXEL, PIXEL, PIXEL);
       }
 
       // Testo
       ctx.fillStyle = b.disabled
-        ? 'rgba(58,32,16,0.4)'
+        ? PALETTE.inkLeggero
         : (hovered ? PALETTE.inkNero : PALETTE.inkScuro);
-      ctx.font = `${hovered ? 'bold ' : ''}${Math.floor(h * 0.028)}px Georgia, serif`;
-      ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 + 1);
+      ctx.font = `${hovered ? 'bold ' : ''}22px "Courier New", monospace`;
+      ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2);
     });
 
-    // 8. Versione / footer
-    ctx.fillStyle = 'rgba(58,32,16,0.5)';
-    ctx.font = `${Math.floor(h * 0.018)}px "Courier New", monospace`;
+    // 10. Footer
+    ctx.fillStyle = PALETTE.inkLeggero;
+    ctx.font = '16px "Courier New", monospace';
     ctx.textAlign = 'right';
-    ctx.fillText('v0.0.1 — fase 1 · test grafico', w - m - 36, h - m - 36);
+    ctx.fillText('v0.0.4  fase 1  test grafico', w - m - 24, h - m - 24);
   },
 };

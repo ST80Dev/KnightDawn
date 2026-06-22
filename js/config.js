@@ -46,6 +46,18 @@ const PALETTE = {
 const TILE_BASE = 16;
 const ZOOM_LEVELS = [4, 8, 16, 32];
 
+// Risoluzione interna del rendering pixel-art.
+// Tutto viene disegnato a questa risoluzione, poi upscalato nearest-neighbor
+// sul canvas visibile. Cambiare qui per pixel più grandi (valori più bassi)
+// o più piccoli (valori più alti).
+// 640x360 = pixel art moderna, più fine di Monkey Island (320x200).
+// Risoluzione interna alta per ospitare HUD con molte info,
+// ma i primitivi grafici disegnano in blocchi PIXEL×PIXEL per mantenere
+// l'aspetto "a quadratini" sulle curve e i contorni.
+const INTERNAL_W = 1280;
+const INTERNAL_H = 720;
+const PIXEL = 3; // dimensione del "pixel logico" per la grafica chunky
+
 // Seed RNG semplice (mulberry32) per texture procedurali
 function mulberry32(seed) {
   let a = seed >>> 0;
