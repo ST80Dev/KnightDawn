@@ -57,8 +57,43 @@ Primo passo, vanilla e senza dipendenze. Esposto come oggetto globale `World`.
 - **Noise:** value-noise con hash interi + interpolazione bilineare smoothstep,
   sommato in fBm (5 ottave per l'elevazione, 4 per l'umidità). Seedabile.
 - **Elevazione:** noise + **bias radiale "continente"** (centro alto, bordi
-  mare), poi **normalizzazione min/max** per sfruttare tutto l'intervallo
-  (così compaiono davvero montagne e coste).
+  mare) + **noise ridged** che genera **catene montuose** (creste lineari, non
+  blob), più forti verso l'interno; poi **normalizzazione min/max** per
+  sfruttare tutto l'intervallo. Le montagne risultano in catene fiancheggiate
+  da colline, con foreste/pianure interposte.
+- **Livello del mare per quantile:** la soglia acqua è fissata a una frazione
+  obiettivo dei tile (26%–42%, variabile per seed) invece che a un valore fisso
+  di elevazione. Così c'è sempre abbastanza mare **navigabile** ma la *forma*
+  (coste, **isole**, **istmi**, **canali**) cambia a ogni mondo. Anche colline
+  (~20%) e montagne (~7%, le creste) sono fissate per quantile per evitare
+  blob monolitici.
+- **Confini variabili:** niente più anello d'acqua forzato. I bordi del mondo
+  possono essere terra o mare a seconda del noise (es. una catena montuosa che
+  arriva fino all'orlo). La camera tiene comunque il mondo inquadrato.
+
+- **Clima (emisfero boreale):** campo di temperatura per **latitudine** (nord
+  freddo, sud caldo) con raffreddamento per quota e variazione a noise. Guida i
+  biomi: estremo nord → **neve/tundra** (NEVE) e **mare ghiacciato** (GHIACCIO);
+  sud caldo e secco → **deserti** (SABBIA); fasce temperate → foreste, pianure,
+  colline, paludi.
+- **Fiumi e laghi:** i fiumi (FIUME) partono dai rilievi e scendono per
+  pendenza fino a mare/lago; in un minimo locale formano un piccolo **lago**.
+- **Zone speciali agli estremi:** alcuni **luoghi ignoti** generati agli estremi
+  (nord, sud, isola remota) con tipo casuale (rovine, tempio, monolite, relitto,
+  cripta, faro, santuario, voragine). La natura resta nascosta
+  (`discovered=false`): si scoprono **giocando** — sulla mappa appaiono solo
+  come "?" finché non raggiunti.
+
+### Navigazione
+
+L'acqua è **navigabile via nave** (il cavaliere dovrà affrontare tratte
+marittime): isole e canali rendono il mare parte dell'esplorazione. Rotte,
+imbarchi e porti sono un passo successivo (gameplay/`travel.js`).
+
+### Da fare (prossimi passi mondo)
+
+Porti sui litorali; strade A* tra strutture; fazioni e regioni nominate;
+fog of war (che nasconderà davvero le zone speciali finché non scoperte).
 - **Biomi** (da elevazione `en` + umidità `mn`, entrambe normalizzate `[0,1]`):
   acqua `<0.34`, montagna `>0.82`, collina `>0.66`, palude (bassa+umida),
   foresta (umida), sabbia (secca), altrimenti pianura.

@@ -550,6 +550,7 @@ const GameScreen = {
     ctx.drawImage(tex, area.x, area.y);
 
     // Mondo reale (biomi + strutture + cavaliere), clippato nella cornice.
+    MapRenderer.clampCam(this.cam, area); // mondo sempre inquadrato
     ctx.save();
     ctx.beginPath();
     ctx.rect(area.x, area.y, area.w, area.h);
@@ -559,11 +560,20 @@ const GameScreen = {
 
     drawCartographicBorder(ctx, area.x, area.y, area.w, area.h);
 
-    ctx.fillStyle = PALETTE.inkScuro;
-    ctx.font = `italic bold ${SF(15)}px "Courier New", monospace`;
+    // Etichetta regione su targhetta chiara (leggibile su qualsiasi fondo).
+    const rTxt = 'Le Marche di Vorn';
+    const rFs = SF(17);
+    ctx.font = `italic bold ${rFs}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    ctx.fillText('Le Marche di Vorn', area.x + SF(14), area.y + SF(14));
+    const rw = ctx.measureText(rTxt).width;
+    const rx = area.x + SF(14), ry = area.y + SF(12);
+    const rpadX = SF(8), rpadY = SF(5);
+    ctx.fillStyle = 'rgba(216,200,160,0.88)';
+    ctx.fillRect(rx - rpadX, ry - rpadY, rw + rpadX * 2, rFs + rpadY * 2);
+    drawPixelRectStroke(ctx, rx - rpadX, ry - rpadY, rw + rpadX * 2, rFs + rpadY * 2, PALETTE.inkScuro);
+    ctx.fillStyle = PALETTE.inkScuro;
+    ctx.fillText(rTxt, rx, ry);
 
     if (window.UI.compact) this.drawZoomButtons(area);
   },

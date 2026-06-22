@@ -31,6 +31,20 @@ function _fbm(x, y, seed, octaves, freq) {
   }
   return sum / norm;
 }
+// Ridged multifractal: crea creste/linee → catene montuose (non blob).
+function _ridge(x, y, seed, octaves, freq) {
+  let amp = 1, sum = 0, norm = 0, f = freq;
+  for (let i = 0; i < octaves; i++) {
+    let n = _valueNoise(x * f, y * f, (seed + i * 1013) | 0);
+    n = 1 - Math.abs(2 * n - 1); // cresta
+    n = n * n;                   // affila il profilo
+    sum += amp * n;
+    norm += amp;
+    amp *= 0.5;
+    f *= 2;
+  }
+  return sum / norm;
+}
 
 const World = {
   width: 0,
@@ -39,9 +53,13 @@ const World = {
   tiles: null,    // Uint8Array: bioma per tile
   elev: null,     // Float32Array: elevazione (per ombreggiature future)
   structures: [], // [{ type:'castle'|'village', x, y, name }]
+  specials: [],   // [{ x, y, kind, discovered, name }] — luoghi ignoti agli estremi
   knightStart: { x: 0, y: 0 },
 
-  BIOME: { ACQUA: 0, PIANURA: 1, FORESTA: 2, COLLINA: 3, MONTAGNA: 4, PALUDE: 5, SABBIA: 6 },
+  BIOME: {
+    ACQUA: 0, PIANURA: 1, FORESTA: 2, COLLINA: 3, MONTAGNA: 4, PALUDE: 5,
+    SABBIA: 6, NEVE: 7, GHIACCIO: 8, FIUME: 9,
+  },
 
   CASTLE_NAMES: ['Vornkeep', 'Ashford', 'Greymoor', 'Duncairn', 'Highrock', 'Carthwall'],
   VILLAGE_NAMES: ['Lyhall', 'Brackmere', 'Oakford', 'Mosswell', 'Thornby', 'Reedmoor',
@@ -56,25 +74,36 @@ const World = {
     this.tiles = new Uint8Array(W * H);
     this.elev = new Float32Array(W * H);
 
-    const freq = 3.2 / Math.max(W, H); // poche, ampie feature
-    const seedE = this.seed;
+    const freqL = 2.2 / Math.max(W, H);   // forma continente a grande scala
+    const freqD = 5.0 / Math.max(W, H);   // dettaglio coste + isole
+    const freqR = 5.5 / Math.max(W, H);   // creste montuose
+    const freqM = 6.0 / Math.max(W, H);   // umidità a grana fine
+    const seedL = this.seed;
+    const seedD = (this.seed ^ 0x27d4eb2f) | 0;
+    const seedR = (this.seed ^ 0x68bc21eb) | 0;
     const seedM = (this.seed ^ 0x5bd1e995) | 0;
+    const seedT = (this.seed ^ 0x13579bdf) | 0; // variazione climatica
 
-    // Passata 1: campi grezzi di elevazione (con falloff costiero) e umidità.
-    // Il value-noise si concentra attorno a 0.5: salviamo min/max per
-    // normalizzare e sfruttare tutto l'intervallo (montagne incluse).
+    // Passata 1: elevazione = continente (grande scala) + dettaglio costiero,
+    // SENZA bias radiale forzato → i confini del mondo variano (terra o mare),
+    // con isole, istmi e canali generati dal noise. Più creste montuose.
+    // Un falloff MOLTO leggero solo sull'ultimo anello evita tagli netti.
     const hum = new Float32Array(W * H);
     let eMin = Infinity, eMax = -Infinity, mMin = Infinity, mMax = -Infinity;
+    const edge = 6; // tile dell'anello esterno con leggero abbassamento
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
-        let e = _fbm(x, y, seedE, 5, freq);
-        // Bias "continente": gradiente radiale (centro alto, bordi mare) scommato
-        // al noise → terra al centro circondata da costa/acqua.
-        const dx = (x / W - 0.5) * 2;
-        const dy = (y / H - 0.5) * 2;
-        const d = Math.sqrt(dx * dx + dy * dy);
-        e = e * 0.58 + (1 - d) * 0.55;
-        const m = _fbm(x + 1000, y + 1000, seedM, 4, freq * 1.7);
+        const cont = _fbm(x, y, seedL, 4, freqL);
+        const det  = _fbm(x, y, seedD, 4, freqD);
+        let e = cont * 0.70 + det * 0.30;
+        // Catene montuose dove l'elevazione è già medio-alta.
+        const r = _ridge(x, y, seedR, 4, freqR);
+        e += r * 0.45 * Math.max(0, e - 0.52);
+        // Falloff leggerissimo sull'orlo estremo (no anello d'acqua forzato).
+        const em = Math.min(x, y, W - 1 - x, H - 1 - y);
+        if (em < edge) e -= (1 - em / edge) * 0.12;
+
+        const m = _fbm(x + 1000, y + 1000, seedM, 4, freqM);
         const i = y * W + x;
         this.elev[i] = e; hum[i] = m;
         if (e < eMin) eMin = e; if (e > eMax) eMax = e;
@@ -82,24 +111,60 @@ const World = {
       }
     }
 
-    // Passata 2: normalizza e assegna biomi su intervallo [0,1].
-    const eSpan = (eMax - eMin) || 1;
+    // Passata 2: soglie per QUANTILE sull'elevazione → quantità di mare,
+    // colline e montagne consistenti tra i seed (sempre mare navigabile e
+    // catene), mentre la FORMA (coste, isole, istmi, canali) resta variabile.
+    const sorted = Float32Array.from(this.elev).sort();
+    const N = sorted.length;
+    const q = (f) => sorted[Math.max(0, Math.min(N - 1, Math.floor(f * N)))];
+    const rng = mulberry32((this.seed ^ 0xBEEFCAFE) >>> 0);
+    const seaFrac = 0.26 + rng() * 0.16;   // 26%–42% di mare (variabile per seed)
+    const seaLevel   = q(seaFrac);
+    const coastLevel = q(seaFrac + 0.06);  // bassopiano costiero → paludi
+    const hillLevel  = q(0.80);            // ~20% terreni alti (colline+)
+    const mountLevel = q(0.93);            // ~7% montagne (le creste)
+
     const mSpan = (mMax - mMin) || 1;
-    for (let i = 0; i < W * H; i++) {
-      const en = (this.elev[i] - eMin) / eSpan;
-      const mn = (hum[i] - mMin) / mSpan;
-      let b;
-      if (en < 0.34)       b = B.ACQUA;
-      else if (en > 0.82)  b = B.MONTAGNA;
-      else if (en > 0.66)  b = B.COLLINA;
-      else if (en < 0.42 && mn > 0.60) b = B.PALUDE;
-      else if (mn > 0.58)  b = B.FORESTA;
-      else if (mn < 0.28)  b = B.SABBIA;
-      else                 b = B.PIANURA;
-      this.tiles[i] = b;
+    const eSpanE = (eMax - eMin) || 1;
+    // Clima emisfero boreale: nord (y basso) freddo, sud (y alto) caldo;
+    // la quota raffredda; un po' di noise rompe le bande nette.
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        const e = this.elev[i];
+        const mn = (hum[i] - mMin) / mSpan;
+        const enorm = (e - eMin) / eSpanE;
+        const tN = _fbm(x + 5000, y + 5000, seedT, 3, freqL * 1.6);
+        let temp = (y / (H - 1));               // 0 nord freddo .. 1 sud caldo
+        temp -= Math.max(0, enorm - 0.5) * 0.7; // quota → più freddo
+        temp += (tN - 0.5) * 0.16;
+        temp = Math.max(0, Math.min(1, temp));
+
+        let b;
+        if (e < seaLevel) {
+          b = (temp < 0.10) ? B.GHIACCIO : B.ACQUA; // mare ghiacciato solo all'estremo nord
+        } else if (e >= mountLevel) {
+          b = B.MONTAGNA;
+        } else if (temp < 0.15) {
+          b = B.NEVE;                                // neve/tundra solo nelle terre più fredde
+        } else if (e >= hillLevel) {
+          b = B.COLLINA;
+        } else if (e < coastLevel && mn > 0.55 && temp > 0.35) {
+          b = B.PALUDE;                              // paludi nelle basse terre umide
+        } else if (temp > 0.66 && mn < 0.38) {
+          b = B.SABBIA;                              // deserti caldi e secchi (sud)
+        } else if (mn > 0.56) {
+          b = B.FORESTA;
+        } else {
+          b = B.PIANURA;
+        }
+        this.tiles[i] = b;
+      }
     }
 
+    this._carveRivers();
     this._placeStructures();
+    this._placeSpecials();
     return this;
   },
 
@@ -108,16 +173,132 @@ const World = {
     return this.tiles[y * this.width + x];
   },
 
+  biomeClamped(x, y) {
+    const W = this.width, H = this.height;
+    if (x < 0) x = 0; else if (x >= W) x = W - 1;
+    if (y < 0) y = 0; else if (y >= H) y = H - 1;
+    return this.tiles[y * W + x];
+  },
+
+  isWater(b) {
+    const B = this.BIOME;
+    return b === B.ACQUA || b === B.GHIACCIO || b === B.FIUME;
+  },
+
   isLand(x, y) {
     const b = this.biomeAt(x, y);
-    return b > 0; // tutto tranne ACQUA (0) e fuori mappa (-1)
+    return b > 0 && !this.isWater(b); // né mare/lago/fiume né fuori mappa
   },
 
   _nearWater(x, y, r) {
     for (let dy = -r; dy <= r; dy++)
-      for (let dx = -r; dx <= r; dx++)
-        if (this.biomeAt(x + dx, y + dy) === this.BIOME.ACQUA) return true;
+      for (let dx = -r; dx <= r; dx++) {
+        const b = this.biomeAt(x + dx, y + dy);
+        if (b >= 0 && this.isWater(b)) return true;
+      }
     return false;
+  },
+
+  // Fiumi: dai rilievi scendono per pendenza fino a mare/lago o minimo locale
+  // (dove formano un piccolo lago). Marcati come FIUME; i laghi come ACQUA.
+  _carveRivers() {
+    const W = this.width, H = this.height, B = this.BIOME;
+    const rng = mulberry32((this.seed ^ 0x9e3779b9) >>> 0);
+    const sources = [];
+    for (let i = 0; i < this.tiles.length; i++) {
+      const b = this.tiles[i];
+      if (b === B.MONTAGNA || b === B.COLLINA) sources.push(i);
+    }
+    if (!sources.length) return;
+    const N = 10 + Math.floor(rng() * 7);
+    for (let s = 0; s < N; s++) {
+      let idx = sources[Math.floor(rng() * sources.length)];
+      let x = idx % W, y = (idx / W) | 0;
+      const visited = new Set();
+      let steps = 0;
+      while (steps++ < W + H) {
+        const i = y * W + x;
+        if (this.isWater(this.tiles[i])) break;          // raggiunto mare/lago
+        if (this.tiles[i] !== B.MONTAGNA) this.tiles[i] = B.FIUME;
+        visited.add(i);
+        let bx = -1, by = -1, be = this.elev[i];
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dx = -1; dx <= 1; dx++) {
+            if (!dx && !dy) continue;
+            const nx = x + dx, ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+            const ni = ny * W + nx;
+            if (visited.has(ni)) continue;
+            if (this.elev[ni] < be) { be = this.elev[ni]; bx = nx; by = ny; }
+          }
+        if (bx < 0) { this._makeLake(x, y); break; }      // minimo locale → lago
+        x = bx; y = by;
+      }
+    }
+  },
+
+  _makeLake(cx, cy) {
+    const W = this.width, H = this.height, B = this.BIOME;
+    const e0 = this.elev[cy * W + cx];
+    for (let dy = -2; dy <= 2; dy++)
+      for (let dx = -2; dx <= 2; dx++) {
+        const nx = cx + dx, ny = cy + dy;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+        const ni = ny * W + nx;
+        if (Math.abs(dx) + Math.abs(dy) <= 2 && this.elev[ni] <= e0 + 0.015) {
+          this.tiles[ni] = B.ACQUA;
+        }
+      }
+  },
+
+  // Zone speciali agli estremi (nord, sud, isola remota): tipo casuale, ma la
+  // natura resta IGNOTA (discovered=false) — si scoprono giocando.
+  _placeSpecials() {
+    const W = this.width, H = this.height;
+    const rng = mulberry32((this.seed ^ 0x1234abcd) >>> 0);
+    const kinds = ['rovine', 'tempio', 'monolite', 'relitto', 'cripta', 'faro', 'santuario', 'voragine'];
+    this.specials = [];
+    const far = (x, y, md) => this.specials.every(s => (s.x - x) ** 2 + (s.y - y) ** 2 >= md * md);
+    const add = (x, y) => {
+      this.specials.push({ x, y, kind: kinds[Math.floor(rng() * kinds.length)], discovered: false, name: 'Luogo ignoto' });
+    };
+
+    // Estremo nord e sud: terra alla latitudine più estrema ma verso il CENTRO
+    // orizzontale (evita gli angoli). Punteggio = latitudine + scarto da x medio.
+    let bestN = -1, scN = Infinity, bestS = -1, scS = Infinity;
+    for (let i = 0; i < this.tiles.length; i++) {
+      if (this.tiles[i] === 0 || this.isWater(this.tiles[i])) continue;
+      const x = i % W, y = (i / W) | 0;
+      const offc = Math.abs(x - W / 2) * 0.35;
+      const sn = y + offc;            // piccolo = nord & centrale
+      const ss = (H - 1 - y) + offc;  // piccolo = sud & centrale
+      if (sn < scN) { scN = sn; bestN = i; }
+      if (ss < scS) { scS = ss; bestS = i; }
+    }
+    if (bestN >= 0) add(bestN % W, (bestN / W) | 0);
+    if (bestS >= 0) add(bestS % W, (bestS / W) | 0);
+
+    // Isola remota: terra circondata da acqua VERA (no fuori-mappa), lontana
+    // dal centro e dalle altre zone speciali.
+    let bi = -1, bs = -1; const cxC = W / 2, cyC = H / 2;
+    for (let i = 0; i < this.tiles.length; i++) {
+      if (this.tiles[i] === 0 || this.isWater(this.tiles[i])) continue;
+      const x = i % W, y = (i / W) | 0;
+      let w = 0, tot = 0;
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue;
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+          tot++;
+          if (this.isWater(this.tiles[ny * W + nx])) w++;
+        }
+      if (tot >= 5 && w >= tot - 1 && far(x, y, 18)) { // quasi tutto acqua attorno
+        const d = (x - cxC) * (x - cxC) + (y - cyC) * (y - cyC);
+        if (d > bs) { bs = d; bi = i; }
+      }
+    }
+    if (bi >= 0) add(bi % W, (bi / W) | 0);
   },
 
   _far(x, y, minD) {
@@ -165,7 +346,7 @@ const World = {
     // Partenza del cavaliere: primo castello, altrimenti centro su terra.
     const firstCastle = this.structures.find(s => s.type === 'castle');
     if (firstCastle) {
-      this.knightStart = { x: firstCastle.x, y: firstCastle.y + 1 };
+      this.knightStart = { x: firstCastle.x, y: firstCastle.y };
     } else {
       let bx = Math.floor(W / 2), by = Math.floor(H / 2);
       outer:
