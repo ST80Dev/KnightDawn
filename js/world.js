@@ -277,30 +277,37 @@ const World = {
     // rompono la monotonia delle zone fredde (roccia/ghiaccio nella neve).
     const microRng = mulberry32((this.seed ^ 0x33333333) >>> 0);
     const plainList = [B.PIANURA, B.PIANURA_N, B.PIANURA_S];
+    // Crescita ORGANICA: pop random dalla frontiera (no FIFO), espansione
+    // 8-connessa (anche diagonali) e ogni vicino entra in frontiera con
+    // probabilità ~55%. Risultato: blob tondeggianti irregolari, niente
+    // più croci/rombi caratteristici della BFS classica con target piccolo.
     const growCluster = (sx, sy, fromList, to, sizeMin, sizeMax) => {
       const startIdx = sy * W + sx;
       if (fromList.indexOf(this.tiles[startIdx]) < 0) return;
       const target = sizeMin + Math.floor(microRng() * (sizeMax - sizeMin + 1));
       const seen = new Set();
-      const queue = [[sx, sy]];
-      let qi = 0, placed = 0;
-      while (qi < queue.length && placed < target) {
-        const [x, y] = queue[qi++];
+      const frontier = [[sx, sy]];
+      let placed = 0;
+      const D8 = [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+      while (frontier.length && placed < target) {
+        const k = Math.floor(microRng() * frontier.length);
+        const [x, y] = frontier[k];
+        // swap-remove O(1)
+        frontier[k] = frontier[frontier.length - 1];
+        frontier.pop();
         const i = y * W + x;
         if (seen.has(i)) continue;
         if (fromList.indexOf(this.tiles[i]) < 0) continue;
         seen.add(i);
         this.tiles[i] = to;
         placed++;
-        const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-        for (let k = dirs.length - 1; k > 0; k--) {
-          const j = Math.floor(microRng() * (k + 1));
-          [dirs[k], dirs[j]] = [dirs[j], dirs[k]];
-        }
-        for (const [dx, dy] of dirs) {
+        for (const [dx, dy] of D8) {
           const nx = x + dx, ny = y + dy;
           if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
-          if (!seen.has(ny * W + nx)) queue.push([nx, ny]);
+          const ni = ny * W + nx;
+          if (seen.has(ni)) continue;
+          // ~55% di chance: frontiera selettiva → contorno frastagliato.
+          if (microRng() < 0.55) frontier.push([nx, ny]);
         }
       }
     };
