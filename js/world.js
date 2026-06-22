@@ -70,28 +70,34 @@ const World = {
     this.tiles = new Uint8Array(W * H);
     this.elev = new Float32Array(W * H);
 
-    const freqE = 4.2 / Math.max(W, H);   // feature medie (mixing maggiore)
+    const freqL = 2.2 / Math.max(W, H);   // forma continente a grande scala
+    const freqD = 5.0 / Math.max(W, H);   // dettaglio coste + isole
     const freqR = 5.5 / Math.max(W, H);   // creste montuose
-    const freqM = 6.0 / Math.max(W, H);   // umidità a grana più fine
-    const seedE = this.seed;
+    const freqM = 6.0 / Math.max(W, H);   // umidità a grana fine
+    const seedL = this.seed;
+    const seedD = (this.seed ^ 0x27d4eb2f) | 0;
     const seedR = (this.seed ^ 0x68bc21eb) | 0;
     const seedM = (this.seed ^ 0x5bd1e995) | 0;
 
-    // Passata 1: campi grezzi di elevazione (continente + catene montuose) e
-    // umidità. Salviamo min/max per normalizzare su tutto l'intervallo.
+    // Passata 1: elevazione = continente (grande scala) + dettaglio costiero,
+    // SENZA bias radiale forzato → i confini del mondo variano (terra o mare),
+    // con isole, istmi e canali generati dal noise. Più creste montuose.
+    // Un falloff MOLTO leggero solo sull'ultimo anello evita tagli netti.
     const hum = new Float32Array(W * H);
     let eMin = Infinity, eMax = -Infinity, mMin = Infinity, mMax = -Infinity;
+    const edge = 6; // tile dell'anello esterno con leggero abbassamento
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
-        const base = _fbm(x, y, seedE, 5, freqE);
-        const dx = (x / W - 0.5) * 2;
-        const dy = (y / H - 0.5) * 2;
-        const d = Math.sqrt(dx * dx + dy * dy);
-        const cont = 1 - d;                 // gradiente continente (centro alto)
-        let e = base * 0.5 + cont * 0.5;
-        // Catene montuose: creste ridged, soprattutto verso l'interno.
+        const cont = _fbm(x, y, seedL, 4, freqL);
+        const det  = _fbm(x, y, seedD, 4, freqD);
+        let e = cont * 0.70 + det * 0.30;
+        // Catene montuose dove l'elevazione è già medio-alta.
         const r = _ridge(x, y, seedR, 4, freqR);
-        e += r * 0.5 * Math.max(0, cont);
+        e += r * 0.45 * Math.max(0, e - 0.52);
+        // Falloff leggerissimo sull'orlo estremo (no anello d'acqua forzato).
+        const em = Math.min(x, y, W - 1 - x, H - 1 - y);
+        if (em < edge) e -= (1 - em / edge) * 0.12;
+
         const m = _fbm(x + 1000, y + 1000, seedM, 4, freqM);
         const i = y * W + x;
         this.elev[i] = e; hum[i] = m;
@@ -100,20 +106,31 @@ const World = {
       }
     }
 
-    // Passata 2: normalizza e assegna biomi su intervallo [0,1].
-    const eSpan = (eMax - eMin) || 1;
+    // Passata 2: soglie per QUANTILE sull'elevazione → quantità di mare,
+    // colline e montagne consistenti tra i seed (sempre mare navigabile e
+    // catene), mentre la FORMA (coste, isole, istmi, canali) resta variabile.
+    const sorted = Float32Array.from(this.elev).sort();
+    const N = sorted.length;
+    const q = (f) => sorted[Math.max(0, Math.min(N - 1, Math.floor(f * N)))];
+    const rng = mulberry32((this.seed ^ 0xBEEFCAFE) >>> 0);
+    const seaFrac = 0.26 + rng() * 0.16;   // 26%–42% di mare (variabile per seed)
+    const seaLevel   = q(seaFrac);
+    const coastLevel = q(seaFrac + 0.06);  // bassopiano costiero → paludi
+    const hillLevel  = q(0.80);            // ~20% terreni alti (colline+)
+    const mountLevel = q(0.93);            // ~7% montagne (le creste)
+
     const mSpan = (mMax - mMin) || 1;
     for (let i = 0; i < W * H; i++) {
-      const en = (this.elev[i] - eMin) / eSpan;
+      const e = this.elev[i];
       const mn = (hum[i] - mMin) / mSpan;
       let b;
-      if (en < 0.34)       b = B.ACQUA;
-      else if (en > 0.82)  b = B.MONTAGNA;
-      else if (en > 0.66)  b = B.COLLINA;
-      else if (en < 0.42 && mn > 0.60) b = B.PALUDE;
-      else if (mn > 0.58)  b = B.FORESTA;
-      else if (mn < 0.28)  b = B.SABBIA;
-      else                 b = B.PIANURA;
+      if (e < seaLevel)        b = B.ACQUA;
+      else if (e >= mountLevel) b = B.MONTAGNA;
+      else if (e >= hillLevel)  b = B.COLLINA;
+      else if (e < coastLevel && mn > 0.55) b = B.PALUDE;
+      else if (mn > 0.58)       b = B.FORESTA;
+      else if (mn < 0.30)       b = B.SABBIA;
+      else                      b = B.PIANURA;
       this.tiles[i] = b;
     }
 

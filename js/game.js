@@ -550,6 +550,7 @@ const GameScreen = {
     ctx.drawImage(tex, area.x, area.y);
 
     // Mondo reale (biomi + strutture + cavaliere), clippato nella cornice.
+    MapRenderer.clampCam(this.cam, area); // mondo sempre inquadrato
     ctx.save();
     ctx.beginPath();
     ctx.rect(area.x, area.y, area.w, area.h);

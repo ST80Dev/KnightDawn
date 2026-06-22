@@ -9,9 +9,15 @@
 const MapRenderer = {
   tilePx(cam) { return MAP_ZOOM_STEPS[cam.step]; },
 
-  clampCam(cam) {
-    cam.cx = Math.max(0, Math.min(cam.cx, World.width));
-    cam.cy = Math.max(0, Math.min(cam.cy, World.height));
+  // Tiene il centro camera così che il mondo resti inquadrato: niente pan nel
+  // vuoto oltre i confini. Se il mondo è più piccolo della vista, lo centra.
+  clampCam(cam, area) {
+    const t = this.tilePx(cam);
+    const halfW = (area.w / 2) / t, halfH = (area.h / 2) / t;
+    cam.cx = World.width  <= halfW * 2 ? World.width  / 2
+           : Math.min(Math.max(cam.cx, halfW), World.width  - halfW);
+    cam.cy = World.height <= halfH * 2 ? World.height / 2
+           : Math.min(Math.max(cam.cy, halfH), World.height - halfH);
   },
 
   zoom(cam, dir) {
@@ -22,7 +28,7 @@ const MapRenderer = {
     const t = this.tilePx(cam);
     cam.cx -= dxPx / t;
     cam.cy -= dyPx / t;
-    this.clampCam(cam);
+    // Il clamp avviene al disegno (serve l'area): qui solo lo spostamento.
   },
 
   // Origine = coordinate tile (float) all'angolo alto-sx dell'area.

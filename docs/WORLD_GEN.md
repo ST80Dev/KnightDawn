@@ -61,8 +61,27 @@ Primo passo, vanilla e senza dipendenze. Esposto come oggetto globale `World`.
   blob), più forti verso l'interno; poi **normalizzazione min/max** per
   sfruttare tutto l'intervallo. Le montagne risultano in catene fiancheggiate
   da colline, con foreste/pianure interposte.
-- **Bordi:** oltre i confini del mondo il renderer disegna mare aperto, quindi
-  il continente è circondato da oceano (confine naturale "invalicabile").
+- **Livello del mare per quantile:** la soglia acqua è fissata a una frazione
+  obiettivo dei tile (26%–42%, variabile per seed) invece che a un valore fisso
+  di elevazione. Così c'è sempre abbastanza mare **navigabile** ma la *forma*
+  (coste, **isole**, **istmi**, **canali**) cambia a ogni mondo. Anche colline
+  (~20%) e montagne (~7%, le creste) sono fissate per quantile per evitare
+  blob monolitici.
+- **Confini variabili:** niente più anello d'acqua forzato. I bordi del mondo
+  possono essere terra o mare a seconda del noise (es. una catena montuosa che
+  arriva fino all'orlo). La camera tiene comunque il mondo inquadrato.
+
+### Navigazione
+
+L'acqua è pensata come **navigabile via nave** (il cavaliere dovrà affrontare
+tratte marittime): isole e canali rendono il mare parte dell'esplorazione.
+Le rotte/imbarchi e i porti sono un passo successivo (gameplay/`travel.js`).
+
+### Da fare (prossimi passi mondo)
+
+Fiumi (discesa da montagne) e laghi interni; porti sui litorali; zone speciali
+agli estremi (es. terre ghiacciate a nord / deserto a sud, stile "oltre la
+Barriera"); strade A* tra strutture; fazioni e regioni nominate; fog of war.
 - **Biomi** (da elevazione `en` + umidità `mn`, entrambe normalizzate `[0,1]`):
   acqua `<0.34`, montagna `>0.82`, collina `>0.66`, palude (bassa+umida),
   foresta (umida), sabbia (secca), altrimenti pianura.
