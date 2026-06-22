@@ -68,6 +68,11 @@ const MapRenderer = {
       }
     }
 
+    // 4. Isolinee di altitudine (cartografia a vista delle zone rialzate).
+    if (t >= 5 && World.contourLevels && World.contourLevels.length) {
+      this._drawContours(ctx, area, ox, oy, t, x0, y0, x1, y1);
+    }
+
     // 5-6. Strutture + etichette
     for (const s of World.structures) {
       const sx = area.x + (s.x + 0.5 - ox) * t;
@@ -198,6 +203,65 @@ const MapRenderer = {
       ctx.moveTo(sx + t * 0.3, cy); ctx.lineTo(sx + t * 0.3, cy - t * 0.25);
       ctx.moveTo(sx + t * 0.6, cy); ctx.lineTo(sx + t * 0.6, cy - t * 0.18);
       ctx.stroke();
+    }
+  },
+
+  // Disegna isolinee fra tile la cui elevazione attraversa una soglia. Più
+  // soglie attraversate → più tratti vicini → terreno più ripido. Salta i
+  // tile d'acqua (niente isolinee in mare/fiume).
+  _drawContours(ctx, area, ox, oy, t, x0, y0, x1, y1) {
+    const W = World.width, H = World.height;
+    const elev = World.elev;
+    const levels = World.contourLevels;
+    const nL = levels.length;
+    // Inchiostro tenue da cartografo: appena visibile, non disturba la mappa.
+    ctx.strokeStyle = 'rgba(58, 32, 16, 0.45)'; // inkScuro semitrasparente
+    ctx.lineWidth = Math.max(1, Math.floor(t * 0.06));
+    ctx.lineCap = 'butt';
+    const isWater = (b) => World.isWater(b);
+    for (let ty = Math.max(0, y0); ty < Math.min(H, y1); ty++) {
+      for (let tx = Math.max(0, x0); tx < Math.min(W, x1); tx++) {
+        const i = ty * W + tx;
+        const b = World.tiles[i];
+        if (isWater(b)) continue;
+        const e = elev[i];
+        const sx = area.x + (tx - ox) * t;
+        const sy = area.y + (ty - oy) * t;
+        // Bordo destro: confronto con il vicino a destra.
+        if (tx + 1 < W) {
+          const j = i + 1;
+          if (!isWater(World.tiles[j])) {
+            const en = elev[j];
+            for (let k = 0; k < nL; k++) {
+              const L = levels[k];
+              if ((e >= L) !== (en >= L)) {
+                ctx.beginPath();
+                ctx.moveTo(sx + t, sy);
+                ctx.lineTo(sx + t, sy + t);
+                ctx.stroke();
+                break;
+              }
+            }
+          }
+        }
+        // Bordo inferiore: confronto con il vicino sotto.
+        if (ty + 1 < H) {
+          const j = i + W;
+          if (!isWater(World.tiles[j])) {
+            const en = elev[j];
+            for (let k = 0; k < nL; k++) {
+              const L = levels[k];
+              if ((e >= L) !== (en >= L)) {
+                ctx.beginPath();
+                ctx.moveTo(sx,     sy + t);
+                ctx.lineTo(sx + t, sy + t);
+                ctx.stroke();
+                break;
+              }
+            }
+          }
+        }
+      }
     }
   },
 

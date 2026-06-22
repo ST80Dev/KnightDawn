@@ -193,6 +193,12 @@ const World = {
       }
     }
 
+    // Isolinee di altitudine simboliche: 4 soglie quantili sopra il livello
+    // del mare. Il renderer disegna un tratto fine sul bordo tra due tile la
+    // cui elevazione attraversa una di queste soglie → cartografia "a vista"
+    // delle zone rialzate, senza numeri.
+    this.contourLevels = [q(0.55), q(0.70), q(0.82), q(0.92)];
+
     this._carveRivers();
     this._placeStructures();
     this._placeSpecials();
@@ -202,6 +208,11 @@ const World = {
   biomeAt(x, y) {
     if (x < 0 || y < 0 || x >= this.width || y >= this.height) return -1;
     return this.tiles[y * this.width + x];
+  },
+
+  elevAt(x, y) {
+    if (x < 0 || y < 0 || x >= this.width || y >= this.height) return -Infinity;
+    return this.elev[y * this.width + x];
   },
 
   biomeClamped(x, y) {
