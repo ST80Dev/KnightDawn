@@ -68,7 +68,7 @@ const MAP_ZOOM_DEFAULT = 5; // indice → 10 px/tile
 // PIXEL x PIXEL → curve e contorni "a quadrettini" visibili.
 // Le dimensioni di font, pannelli, margini ecc. nelle scene passano da
 // S(...) (vedi main.js) per restare proporzionate al canvas attuale.
-const PIXEL = 3;
+const PIXEL = 2;
 
 // Seed RNG semplice (mulberry32) per texture procedurali
 function mulberry32(seed) {
