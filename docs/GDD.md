@@ -73,6 +73,33 @@ Si definisce attraverso le scelte di gioco:
 [TBD] Arti magiche / abilità speciali
 [TBD] Sistema di titoli emergenti (condizioni di trigger)
 
+#### Seguito
+
+Il cavaliere è sempre il POV: la sua morte chiude la partita. Attorno a lui
+possono però aggregarsi figure che lo accompagnano nei viaggi e nei combattimenti,
+trattate come **unità integrata**, non micro-gestita.
+
+Tre cerchi:
+
+1. **Cavaliere** — sempre presente.
+2. **Apprendista** — slot unico, non permanente. Si ottiene per evento narrativo
+   (taverna, villaggio, incontro casuale). Cresce nel tempo, poi prima o poi se
+   ne va (parte per la propria strada, muore, viene reclamato da una fazione,
+   fonda una sua compagnia). Il giocatore può poi trovarne un altro.
+3. **Compagni d'arme** — max 3, slot per ruolo/archetipo distinto:
+   - **Lama** — guerriero diretto, bonus attacco in combattimento aperto
+   - **Ombra** — esploratore/ladro, riduce costi di movimento in certi terreni,
+     bonus in imboscate e fuga, accesso a informazioni
+   - **Conoscitore** — medico/saggio/araldo, recupero ferite più rapido, bonus
+     reputazione in interazioni diplomatiche, identifica oggetti
+   La compagnia funziona anche incompleta; non è obbligatorio averli tutti.
+
+Tutti i membri del seguito contribuiscono al combattimento come modificatori
+sull'unità singola (HP totali, attacchi extra per round, bonus a fuga ecc.),
+senza ordini individuali.
+
+Dettagli (paga, fedeltà, eventi) → `### Compagnia e covi` in §3.
+
 ### Il mondo
 
 Grande mappa generata proceduralmente. Nebbia di guerra — scopri esplorando.
@@ -214,6 +241,82 @@ In questa vista:
 [TBD] Sistema di commercio
 [TBD] Sistema di quest/missioni locali
 
+### Compagnia e covi
+
+Estensione del **Seguito** (definito in §2 *Il cavaliere*) con regole di
+gestione narrativa — non strategica. L'obiettivo è dare profondità senza
+trasformare il gioco in gestionale: nessuna economia complessa, nessuna
+produzione di truppe, nessuna costruzione libera.
+
+#### Apprendista
+
+- Slot unico, mai più di uno alla volta.
+- Si ottiene per **evento narrativo** (incontro in taverna, villaggio, scampato
+  da un combattimento ecc.). Non si compra.
+- Cresce nel tempo: piccoli miglioramenti di abilità, sviluppo di un arco proprio
+  (lealtà, ambizione, talento emergente).
+- Esce di scena per **evento di chiusura**: parte per la sua strada, muore in
+  combattimento, viene reclamato da una fazione, fonda una sua compagnia.
+- Dopo la sua uscita il giocatore può trovarne un altro, sempre per evento.
+  Ogni apprendista è una figura unica, non intercambiabile.
+
+#### Compagni d'arme
+
+- Max 3 slot, uno per archetipo: **Lama** / **Ombra** / **Conoscitore**.
+- Assoldati o reclutati per archi narrativi. Hanno nome, storia, eventi propri.
+- Paga periodica in **Diari** (ogni Diario o ogni N Diari — [TBD]).
+- Possono **morire in combattimento** (sempre prima del cavaliere, mai dopo).
+
+**Dinamica paga / fedeltà:**
+
+1. *Paga regolare* → prestazioni piene, fedeltà stabile.
+2. *Ritardo breve* → malus prestazioni (meno efficaci in combattimento).
+3. *Ritardo lungo* → fedeltà scende → eventi di confronto/negoziazione
+   (perlopiù recuperabili con denaro, favori, gesti narrativi).
+4. *Fedeltà a zero* → abbandono silenzioso **o** tradimento narrativo.
+   Quasi sempre recuperabile se il giocatore la gestisce bene; raramente i
+   compagni diventano antagonisti permanenti.
+
+#### Covi
+
+Il cavaliere può fondare uno o più covi sulla mappa: rifugi personali con
+servizi tematici.
+
+- **Multipli consentiti**, ma il **costo di fondazione cresce** per ogni covo
+  aggiuntivo (1° accessibile, 2° impegnativo, 3°+ costoso).
+- Sbloccabili anche in **early/mid game**, non solo a metà partita: quando il
+  giocatore individua un'area di mondo di suo interesse, può piantare lì radici.
+- **Non si costruiscono da zero:** si *riprendono* location preesistenti sulla
+  mappa, compatibili per tipo (torre abbandonata, maniero decaduto, monastero in
+  rovina, casale isolato, grotta sistemata, ecc.).
+- Il giocatore sceglie tra i candidati compatibili nell'area. Tipo di location e
+  tipo di strutture installabili sono correlati (es. torre → buona volieria;
+  grotta → non adatta a stalla).
+
+**Slot strutture (max 4 per covo):**
+
+- **Stalla** — cavallo di riserva o di razza migliore
+- **Fucina** — manutenzione e lieve potenziamento armi (non crafting libero)
+- **Alloggio** — recupero ferite accelerato tra viaggi
+- **Volieria** — estende la rete dei corvi del giocatore (vedi *Propagazione
+  delle informazioni*): notizie più rapide nella zona
+- **Dispensa** — riduce il costo di paga dei compagni mentre stazionano lì
+- **Archivio** — accumula lore/mappe, bonus esplorazione nella regione
+
+**Degrado per assenza:**
+
+- Se il cavaliere non torna entro **X Diari** [TBD], il covo inizia a degradare:
+  perde slot attivi uno alla volta (fucina arrugginisce, stalla saccheggiata,
+  corvi della volieria si disperdono).
+- Recuperabile rientrando e pagando un **costo di ripristino**.
+- Dopo assenza molto prolungata → covo **perso definitivamente**, rioccupato
+  da altri (briganti, fazioni, eremiti).
+
+[TBD] Numeri esatti: costi di fondazione, paga compagni, soglia Diari per
+degrado, costi di ripristino. Da definire con l'economia generale del gioco.
+[TBD] Tabella compatibilità location ↔ strutture installabili.
+[TBD] Catalogo eventi recovery per fedeltà compagni e per recupero apprendista.
+
 ### Propagazione delle informazioni
 
 Nel mondo medievale le notizie non arrivano istantanee. Questo sistema definisce
@@ -323,6 +426,13 @@ Dettagli in `docs/UI_GUIDE.md`.
 - Sistema reputazione
 - Eventi autonomi del mondo
 - NPC con memoria
+- Propagazione delle informazioni (NewsToken, onde, rumor)
+
+### Fase 6b — Compagnia e covi
+- Apprendista (slot unico, archi narrativi di acquisizione e uscita)
+- Compagni d'arme (Lama / Ombra / Conoscitore) con paga e fedeltà
+- Sistema covi: fondazione su location esistenti, slot strutture, degrado
+- Integrazione covi ↔ propagazione news (volieria)
 
 ### Fase 7 — Archi narrativi
 - Sistema missione/profezia
