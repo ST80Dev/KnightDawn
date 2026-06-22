@@ -122,7 +122,7 @@ const World = {
     // più catene/poche, foreste sparse/fitte). Le frequenze e le frazioni
     // variano per seed → mappe distinte tra loro, non sempre la stessa cosa.
     const styleRng = mulberry32((this.seed ^ 0xA5A5A5A5) >>> 0);
-    const seaFrac     = 0.14 + styleRng() * 0.18;          // 14%–32%
+    const seaFrac     = 0.10 + styleRng() * 0.12;          // 10%–22% (era 14-32)
     const mountFrac   = 0.045 + styleRng() * 0.055;        // 4.5%–10%
     const forestCover = 0.20 + styleRng() * 0.22;          // 20%–42%
     const desertBias  = styleRng();                        // 0..1
