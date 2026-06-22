@@ -121,7 +121,9 @@ const MapRenderer = {
       case B.ACQUA:    return PALETTE.bluFiume;
       case B.FIUME:    return PALETTE.bluFiumeCh;
       case B.GHIACCIO: return PALETTE.ghiaccio;
-      case B.PIANURA:  return PALETTE.pergChiara;
+      case B.PIANURA:  return PALETTE.verdePrato;     // pianura temperata (centro)
+      case B.PIANURA_N:return PALETTE.pianuraNord;    // pianura settentrionale
+      case B.PIANURA_S:return PALETTE.pianuraSud;     // pianura meridionale
       case B.COLLINA:  return PALETTE.pergScura;
       case B.SABBIA:   return PALETTE.sabbia;
       case B.PALUDE:   return PALETTE.verdePalude;
@@ -394,6 +396,9 @@ const MapRenderer = {
       case B.SABBIA:   hex = PALETTE.sabbia; break;
       case B.NEVE:     hex = PALETTE.neveCime; break;
       case B.ROCCIA:   hex = PALETTE.grigioPietra; break;
+      case B.PIANURA:  hex = PALETTE.verdePrato; break;
+      case B.PIANURA_N:hex = PALETTE.pianuraNord; break;
+      case B.PIANURA_S:hex = PALETTE.pianuraSud; break;
       default:         hex = PALETTE.pergChiara;
     }
     return hexToRgb(hex);

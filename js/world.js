@@ -59,6 +59,10 @@ const World = {
   BIOME: {
     ACQUA: 0, PIANURA: 1, FORESTA: 2, COLLINA: 3, MONTAGNA: 4, PALUDE: 5,
     SABBIA: 6, NEVE: 7, GHIACCIO: 8, FIUME: 9, ROCCIA: 10,
+    // Sotto-tipi di pianura per zona climatica (rendering diverso, stessa
+    // semantica di gameplay della PIANURA: terra aperta percorribile).
+    PIANURA_N: 11,  // settentrionale, marrone chiaro (tundra/steppa)
+    PIANURA_S: 12,  // meridionale, beige caldo (arida non desertica)
   },
 
   CASTLE_NAMES: ['Vornkeep', 'Ashford', 'Greymoor', 'Duncairn', 'Highrock',
@@ -97,6 +101,7 @@ const World = {
     const seedT = (this.seed ^ 0x13579bdf) | 0;
     const seedFC = (this.seed ^ 0x71f3a9d5) | 0; // grumi foresta
     const seedFR = (this.seed ^ 0x33a712cc) | 0; // dettaglio bordi grumi
+    const seedCJ = (this.seed ^ 0x4d8e2b07) | 0; // jitter confine climatico
 
     // Passata 1: elevazione + umidità + ridge (separato). Il ridge NON viene
     // sommato a elev: lo usiamo poi come SELETTORE per le catene montuose,
@@ -167,7 +172,15 @@ const World = {
         } else if (temp > 0.66 && mn < (0.26 + desertBias * 0.10)) {
           b = B.SABBIA;
         } else {
-          b = B.PIANURA;
+          // Pianura: sotto-tipo per zona climatica. Confine FRASTAGLIATO
+          // grazie a un noise dedicato sommato a temp → niente bande
+          // orizzontali nette. Soglie 0.40 / 0.62 → fasce sud/centro/nord
+          // approssimative ma irregolari.
+          const cjit = _fbm(x + 11111, y + 22222, seedCJ, 2, freqL * 3.2);
+          const zone = temp + (cjit - 0.5) * 0.22;
+          if (zone < 0.40)       b = B.PIANURA_N;  // marrone chiaro (nord freddo)
+          else if (zone > 0.62)  b = B.PIANURA_S;  // beige caldo (sud arido)
+          else                   b = B.PIANURA;    // verde chiaro (centro)
         }
         this.tiles[i] = b;
       }
@@ -181,7 +194,8 @@ const World = {
       for (let x = 0; x < W; x++) {
         const i = y * W + x;
         const b = tilesCopy[i];
-        if (b !== B.PIANURA && b !== B.COLLINA && b !== B.NEVE) continue;
+        if (b !== B.PIANURA && b !== B.PIANURA_N && b !== B.PIANURA_S &&
+            b !== B.COLLINA && b !== B.NEVE) continue;
         if ((this.elev[i] - seaLevel) < eSeaSpan * 0.18) continue;
         let adj = 0;
         for (let dy = -1; dy <= 1 && adj < 2; dy++) {
@@ -239,11 +253,12 @@ const World = {
       const x = i % W, y = (i / W) | 0;
       const b = this.tiles[i];
       const h = _hash2(x, y, this.seed ^ 0x33333333);
-      if      (b === B.PIANURA  && h < 0.012) this.tiles[i] = B.FORESTA;
-      else if (b === B.PIANURA  && h > 0.988) this.tiles[i] = B.ROCCIA;
+      const isPlain = (b === B.PIANURA || b === B.PIANURA_N || b === B.PIANURA_S);
+      if      (isPlain          && h < 0.012) this.tiles[i] = B.FORESTA;
+      else if (isPlain          && h > 0.988) this.tiles[i] = B.ROCCIA;
       else if (b === B.COLLINA  && h < 0.018) this.tiles[i] = B.FORESTA;
       else if (b === B.COLLINA  && h > 0.970) this.tiles[i] = B.ROCCIA;
-      else if (b === B.FORESTA  && h > 0.965) this.tiles[i] = B.PIANURA;
+      else if (b === B.FORESTA  && h > 0.965) this.tiles[i] = B.PIANURA; // radura
       else if (b === B.MONTAGNA && h < 0.020) this.tiles[i] = B.ROCCIA;
     }
 
@@ -328,7 +343,8 @@ const World = {
     for (let i = 0; i < this.tiles.length; i++) {
       const b = this.tiles[i];
       if (b === B.MONTAGNA || b === B.COLLINA || b === B.ROCCIA) sources.push(i);
-      else if ((b === B.PIANURA || b === B.FORESTA) && this.elev[i] > 0 && rng() < 0.04) {
+      else if ((b === B.PIANURA || b === B.PIANURA_N || b === B.PIANURA_S ||
+                b === B.FORESTA) && this.elev[i] > 0 && rng() < 0.04) {
         sources.push(i);
       }
     }
@@ -468,7 +484,8 @@ const World = {
       const x = 2 + Math.floor(rnd() * (W - 4));
       const y = 2 + Math.floor(rnd() * (H - 4));
       const b = this.biomeAt(x, y);
-      if ((b === B.COLLINA || b === B.PIANURA) && this._far(x, y, 22)) {
+      const isPlainAny = (b === B.PIANURA || b === B.PIANURA_N || b === B.PIANURA_S);
+      if ((b === B.COLLINA || isPlainAny) && this._far(x, y, 22)) {
         this.structures.push({ type: 'castle', x, y, name: this.CASTLE_NAMES[ci % this.CASTLE_NAMES.length] });
         ci++;
       }
@@ -480,7 +497,7 @@ const World = {
       const x = 1 + Math.floor(rnd() * (W - 2));
       const y = 1 + Math.floor(rnd() * (H - 2));
       const b = this.biomeAt(x, y);
-      const okBiome = (b === B.PIANURA || b === B.FORESTA);
+      const okBiome = (b === B.PIANURA || b === B.PIANURA_N || b === B.PIANURA_S || b === B.FORESTA);
       // bonus vicino acqua: accetta sempre se vicino acqua, altrimenti 1 su 2
       const okPlace = okBiome && this._far(x, y, 8) &&
                       (this._nearWater(x, y, 2) || rnd() < 0.5);
