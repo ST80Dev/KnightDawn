@@ -47,3 +47,28 @@ e fazioni dominanti.
 
 [TBD] Il seed del mondo è un numero che il giocatore può condividere
 per giocare lo stesso mondo.
+
+---
+
+## 7. Implementazione corrente (Fase 1) — `js/world.js`
+
+Primo passo, vanilla e senza dipendenze. Esposto come oggetto globale `World`.
+
+- **Noise:** value-noise con hash interi + interpolazione bilineare smoothstep,
+  sommato in fBm (5 ottave per l'elevazione, 4 per l'umidità). Seedabile.
+- **Elevazione:** noise + **bias radiale "continente"** (centro alto, bordi
+  mare), poi **normalizzazione min/max** per sfruttare tutto l'intervallo
+  (così compaiono davvero montagne e coste).
+- **Biomi** (da elevazione `en` + umidità `mn`, entrambe normalizzate `[0,1]`):
+  acqua `<0.34`, montagna `>0.82`, collina `>0.66`, palude (bassa+umida),
+  foresta (umida), sabbia (secca), altrimenti pianura.
+  Distribuzione tipica verificata: acqua ~10-30%, pianura ~30%, foresta/collina
+  variabili, montagna ~3-12%.
+- **Strutture:** 5 castelli (su collina/pianura, distanza ≥22) e 12 villaggi
+  (pianura/foresta, preferibilmente vicino all'acqua, distanza ≥8), con nomi.
+- **Partenza cavaliere:** accanto al primo castello (fallback: tile di terra
+  più vicino al centro).
+- **Dimensioni:** `WORLD_W × WORLD_H` (160×120) in `config.js`.
+
+Non ancora implementati (passi successivi): fiumi, strade (A*), fazioni,
+regioni nominate, fog of war, vincoli di connettività.

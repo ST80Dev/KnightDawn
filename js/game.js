@@ -1,23 +1,21 @@
-// FERRO & CENERE — schermata gioco principale (bozza pannelli HUD)
+// FERRO & CENERE — schermata gioco principale
 // Disegnata direttamente sul canvas display (vedi main.js). Le dimensioni
 // passano da S(...)/SF(...) per restare proporzionate al canvas.
 //
 // Layout adattivo:
 //  - desktop (landscape ampio): 3 colonne — stato | mappa+diario | contesto.
-//  - compatto (UI.compact, tipico mobile portrait): mappa grande a tutto
-//    schermo + footer con due righe di mini-pulsanti:
-//      · riga 1 — navigazione aree (Stato/Contesto/Diario/Regione): aprono il
-//        relativo pannello come OVERLAY a tutto schermo sopra la mappa;
-//      · riga 2 — azioni di gioco (Inventario/Mappa/Accampa/Interagisci).
+//  - compatto (UI.compact, mobile portrait): mappa grande + footer con due
+//    righe di mini-pulsanti (navigazione aree → overlay; azioni di gioco).
 //
-// Zoom mappa: rotella del mouse (desktop) + pulsanti +/- sulla mappa (mobile).
+// Mappa: generata da World, disegnata da MapRenderer dentro il pannello mappa.
+// Camera con pan libero (drag) e zoom a passi discreti centrato sul centro
+// camera (rotella su desktop, +/- su mobile).
 // Input via Pointer Events (mouse + touch).
 
 const GameScreen = {
   canvas: null,
   ctx: null,
 
-  // hover/press per gruppo di pulsanti (-1 = nessuno)
   hoverBtn: -1, pressedBtn: -1,     // azioni
   hoverNav: -1, pressedNav: -1,     // navigazione aree (compatto)
   hoverZoom: -1, pressedZoom: -1,   // +/- zoom (compatto)
@@ -27,13 +25,16 @@ const GameScreen = {
   navButtons: [],
   zoomButtons: [],
 
-  activeOverlay: null,   // null | 'stato' | 'contesto' | 'log' | 'mini'
+  activeOverlay: null,
   overlayCard: null,
   overlayClose: null,
   overlayPressed: null,
 
   mapRect: null,
-  mapZoom: 1,
+  cam: { cx: 0, cy: 0, step: 0 },
+  knightPos: { x: 0, y: 0 },
+  dragging: false,
+  dragLast: { x: 0, y: 0 },
 
   init(canvas) {
     this.canvas = canvas;
@@ -46,8 +47,6 @@ const GameScreen = {
       { label: 'ACCAMPA',    action: 'accampa' },
       { label: 'INTERAGISCI', action: 'interagisci', disabled: true },
     ];
-
-    // Navigazione aree (compatto): ogni pulsante apre un overlay a tutto schermo.
     this.navButtons = [
       { label: 'STATO',    key: 'stato' },
       { label: 'CONTESTO', key: 'contesto' },
@@ -80,13 +79,15 @@ const GameScreen = {
       'Una taverna si scorge a sud-ovest.',
     ];
     this.meta = {
-      anno: 1042,
-      turno: 1,
-      stagione: 'Primavera',
-      meteo: 'Sereno',
-      destinazione: 'nessuna',
+      anno: 1042, turno: 1, stagione: 'Primavera', meteo: 'Sereno', destinazione: 'nessuna',
     };
+
+    // Genera il mondo e posiziona camera/cavaliere.
+    World.generate((Math.random() * 0xFFFFFFFF) >>> 0);
+    this.knightPos = { x: World.knightStart.x, y: World.knightStart.y };
+    this.cam = { cx: this.knightPos.x + 0.5, cy: this.knightPos.y + 0.5, step: MAP_ZOOM_DEFAULT };
     this.activeOverlay = null;
+    this.dragging = false;
   },
 
   // ─── Layout ───────────────────────────────────────────────────────────────
@@ -95,78 +96,39 @@ const GameScreen = {
   },
 
   layoutDesktop() {
-    const W = window.UI.w;
-    const H = window.UI.h;
+    const W = window.UI.w, H = window.UI.h;
     const pad = SF(12);
     const topBarH = SF(76);
     const leftW = SF(360);
     const rightW = SF(310);
     const bottomH = SF(240);
 
-    const map = {
-      x: leftW + pad,
-      y: topBarH + pad,
-      w: W - leftW - rightW - pad * 3,
-      h: H - topBarH - bottomH - pad * 3,
-    };
-    const left = {
-      x: pad,
-      y: topBarH + pad,
-      w: leftW - pad,
-      h: H - topBarH - pad * 2,
-    };
-    const right = {
-      x: W - rightW,
-      y: topBarH + pad,
-      w: rightW - pad,
-      h: H - topBarH - bottomH - pad * 3,
-    };
-    const log = {
-      x: leftW + pad,
-      y: H - bottomH - pad,
-      w: map.w * 0.62,
-      h: bottomH,
-    };
-    const mini = {
-      x: log.x + log.w + pad,
-      y: H - bottomH - pad,
-      w: map.w - log.w - pad,
-      h: bottomH,
-    };
+    const map = { x: leftW + pad, y: topBarH + pad, w: W - leftW - rightW - pad * 3, h: H - topBarH - bottomH - pad * 3 };
+    const left = { x: pad, y: topBarH + pad, w: leftW - pad, h: H - topBarH - pad * 2 };
+    const right = { x: W - rightW, y: topBarH + pad, w: rightW - pad, h: H - topBarH - bottomH - pad * 3 };
+    const log = { x: leftW + pad, y: H - bottomH - pad, w: map.w * 0.62, h: bottomH };
+    const mini = { x: log.x + log.w + pad, y: H - bottomH - pad, w: map.w - log.w - pad, h: bottomH };
     const topBar = { x: 0, y: 0, w: W, h: topBarH };
 
     return { compact: false, pad, topBar, left, map, right, log, mini };
   },
 
   layoutCompact() {
-    const W = window.UI.w;
-    const H = window.UI.h;
+    const W = window.UI.w, H = window.UI.h;
     const pad = SF(8);
     const topBarH = SF(56);
-    // Footer: due righe di mini-pulsanti (navigazione aree + azioni).
-    const navH = SF(28);
-    const actH = SF(34);
-    const fGap = SF(6);
-    const fPad = SF(8);
+    const navH = SF(28), actH = SF(34), fGap = SF(6), fPad = SF(8);
     const footerH = fPad * 2 + navH + fGap + actH;
 
     const topBar = { x: 0, y: 0, w: W, h: topBarH };
-    const map = {
-      x: pad,
-      y: topBarH + pad,
-      w: W - pad * 2,
-      h: H - topBarH - footerH - pad * 2,
-    };
+    const map = { x: pad, y: topBarH + pad, w: W - pad * 2, h: H - topBarH - footerH - pad * 2 };
     const footer = { x: 0, y: H - footerH, w: W, h: footerH, navH, actH, fGap, fPad };
 
     return { compact: true, pad, topBar, map, footer };
   },
 
-  // Azioni: 2×2 ancorate in basso nell'area (desktop) o riempimento.
   layoutButtons(area) {
-    const cols = 2, rows = 2;
-    const gap = SF(8);
-    const padInner = SF(14);
+    const cols = 2, rows = 2, gap = SF(8), padInner = SF(14);
     const bw = (area.w - padInner * 2 - gap * (cols - 1)) / cols;
     const bh = SF(32);
     const startX = area.x + padInner;
@@ -175,12 +137,10 @@ const GameScreen = {
       const c = i % cols, r = Math.floor(i / cols);
       b.x = Math.floor(startX + c * (bw + gap));
       b.y = Math.floor(startY + r * (bh + gap));
-      b.w = Math.floor(bw);
-      b.h = bh;
+      b.w = Math.floor(bw); b.h = bh;
     });
   },
 
-  // Footer compatto: nav (riga 1) + azioni (riga 2), ognuna 4 pulsanti in fila.
   layoutFooter(f) {
     const gap = f.fGap;
     const colW = (f.w - f.fPad * 2 - gap * 3) / 4;
@@ -188,19 +148,32 @@ const GameScreen = {
     const navY = f.y + f.fPad;
     const actY = navY + f.navH + gap;
     this.navButtons.forEach((b, i) => {
-      b.x = Math.floor(x0 + i * (colW + gap));
-      b.y = navY; b.w = Math.floor(colW); b.h = f.navH;
+      b.x = Math.floor(x0 + i * (colW + gap)); b.y = navY; b.w = Math.floor(colW); b.h = f.navH;
     });
     this.actionButtons.forEach((b, i) => {
-      b.x = Math.floor(x0 + i * (colW + gap));
-      b.y = actY; b.w = Math.floor(colW); b.h = f.actH;
+      b.x = Math.floor(x0 + i * (colW + gap)); b.y = actY; b.w = Math.floor(colW); b.h = f.actH;
     });
   },
 
   // ─── Input (Pointer Events) ────────────────────────────────────────────────
+  inMap(p) {
+    const r = this.mapRect;
+    return !!r && p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+  },
+
   onPointerMove(p, type) {
     if (Scenes.current !== this) return;
-    if (type === 'touch') return; // l'hover non esiste su touch
+
+    // Pan in corso: vale per mouse e touch.
+    if (this.dragging) {
+      MapRenderer.pan(this.cam, p.x - this.dragLast.x, p.y - this.dragLast.y);
+      this.dragLast = { x: p.x, y: p.y };
+      if (type !== 'touch') document.getElementById('game').style.cursor = 'grabbing';
+      window.GameRender.invalidate();
+      return;
+    }
+
+    if (type === 'touch') return; // hover solo su mouse
 
     if (this.activeOverlay) {
       const over = this.overlayWhere(p) === 'close';
@@ -213,8 +186,9 @@ const GameScreen = {
     const hb = btnHitIndex(this.actionButtons, p.x, p.y);
     const hn = compact ? btnHitIndex(this.navButtons, p.x, p.y) : -1;
     const hz = compact ? btnHitIndex(this.zoomButtons, p.x, p.y) : -1;
+    const onBtn = hb >= 0 || hn >= 0 || hz >= 0;
     document.getElementById('game').style.cursor =
-      (hb >= 0 || hn >= 0 || hz >= 0) ? 'pointer' : 'default';
+      onBtn ? 'pointer' : (this.inMap(p) ? 'grab' : 'default');
     if (hb !== this.hoverBtn || hn !== this.hoverNav || hz !== this.hoverZoom) {
       this.hoverBtn = hb; this.hoverNav = hn; this.hoverZoom = hz;
       window.GameRender.invalidate();
@@ -223,30 +197,37 @@ const GameScreen = {
 
   onPointerDown(p) {
     if (Scenes.current !== this) return;
-    if (this.activeOverlay) {
-      this.overlayPressed = this.overlayWhere(p);
-      return;
-    }
+    if (this.activeOverlay) { this.overlayPressed = this.overlayWhere(p); return; }
+
     const compact = window.UI.compact;
     this.pressedBtn = btnHitIndex(this.actionButtons, p.x, p.y);
     this.pressedNav = compact ? btnHitIndex(this.navButtons, p.x, p.y) : -1;
     this.pressedZoom = compact ? btnHitIndex(this.zoomButtons, p.x, p.y) : -1;
-    this.hoverBtn = this.pressedBtn;
-    this.hoverNav = this.pressedNav;
-    this.hoverZoom = this.pressedZoom;
+
+    if (this.pressedBtn < 0 && this.pressedNav < 0 && this.pressedZoom < 0 && this.inMap(p)) {
+      // Nessun pulsante: inizia il pan della mappa.
+      this.dragging = true;
+      this.dragLast = { x: p.x, y: p.y };
+      return;
+    }
+    this.hoverBtn = this.pressedBtn; this.hoverNav = this.pressedNav; this.hoverZoom = this.pressedZoom;
     window.GameRender.invalidate();
   },
 
   onPointerUp(p, type) {
     if (Scenes.current !== this) return;
 
+    if (this.dragging) {
+      this.dragging = false;
+      if (type !== 'touch') document.getElementById('game').style.cursor = this.inMap(p) ? 'grab' : 'default';
+      return;
+    }
+
     if (this.activeOverlay) {
       const where = this.overlayWhere(p);
       if ((this.overlayPressed === 'close' && where === 'close') ||
           (this.overlayPressed === 'outside' && where === 'outside')) {
-        this.activeOverlay = null;
-        this.hoverClose = false;
-        window.GameRender.invalidate();
+        this.activeOverlay = null; this.hoverClose = false; window.GameRender.invalidate();
       }
       this.overlayPressed = null;
       return;
@@ -263,7 +244,8 @@ const GameScreen = {
     if (type === 'touch') { this.hoverBtn = this.hoverNav = this.hoverZoom = -1; }
 
     if (fireZ) {
-      this.zoomBy(this.zoomButtons[zi].key === 'in' ? 1.25 : 1 / 1.25);
+      MapRenderer.zoom(this.cam, this.zoomButtons[zi].key === 'in' ? 1 : -1);
+      window.GameRender.invalidate();
     } else if (fireN) {
       const k = this.navButtons[ni].key;
       this.activeOverlay = (this.activeOverlay === k) ? null : k;
@@ -277,6 +259,7 @@ const GameScreen = {
   },
 
   onPointerCancel() {
+    this.dragging = false;
     this.pressedBtn = this.pressedNav = this.pressedZoom = -1;
     this.hoverBtn = this.hoverNav = this.hoverZoom = -1;
     this.overlayPressed = null;
@@ -286,14 +269,8 @@ const GameScreen = {
   onWheel(p, deltaY) {
     if (Scenes.current !== this) return;
     if (this.activeOverlay) return;
-    const r = this.mapRect;
-    if (!r) return;
-    if (p.x < r.x || p.x > r.x + r.w || p.y < r.y || p.y > r.y + r.h) return;
-    this.zoomBy(deltaY < 0 ? 1.15 : 1 / 1.15);
-  },
-
-  zoomBy(factor) {
-    this.mapZoom = Math.max(0.6, Math.min(this.mapZoom * factor, 4));
+    if (!this.inMap(p)) return;
+    MapRenderer.zoom(this.cam, deltaY < 0 ? 1 : -1); // centrato sul centro camera
     window.GameRender.invalidate();
   },
 
@@ -309,8 +286,7 @@ const GameScreen = {
   draw() {
     const L = this.layout();
     const ctx = this.ctx;
-    const W = window.UI.w;
-    const H = window.UI.h;
+    const W = window.UI.w, H = window.UI.h;
 
     ctx.fillStyle = PALETTE.inkNero;
     ctx.fillRect(0, 0, W, H);
@@ -345,9 +321,8 @@ const GameScreen = {
     this.layoutFooter(L.footer);
 
     this.drawTopBar(L.topBar, true);
-    this.drawMapPanel(L.map);   // disegna anche i pulsanti +/- (compatto)
+    this.drawMapPanel(L.map);   // disegna anche i pulsanti +/-
 
-    // Footer
     const ctx = this.ctx;
     const f = L.footer;
     ctx.fillStyle = PALETTE.inkScuro;
@@ -369,8 +344,7 @@ const GameScreen = {
       const hovered = i === this.hoverNav;
       ctx.fillStyle = active ? PALETTE.pergMedia : (hovered ? PALETTE.pergScura : PALETTE.hudSfondo);
       ctx.fillRect(b.x, b.y, b.w, b.h);
-      drawPixelRectStroke(ctx, b.x, b.y, b.w, b.h,
-                          active ? PALETTE.hudTitolo : PALETTE.hudBordo);
+      drawPixelRectStroke(ctx, b.x, b.y, b.w, b.h, active ? PALETTE.hudTitolo : PALETTE.hudBordo);
       ctx.fillStyle = active ? PALETTE.inkNero : PALETTE.hudTitolo;
       ctx.font = `${active ? 'bold ' : ''}${SF(12)}px "Courier New", monospace`;
       ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2);
@@ -385,11 +359,8 @@ const GameScreen = {
       const hovered = i === this.hoverBtn;
       ctx.fillStyle = hovered ? PALETTE.pergMedia : PALETTE.inkScuro;
       ctx.fillRect(b.x, b.y, b.w, b.h);
-      drawPixelRectStroke(ctx, b.x, b.y, b.w, b.h,
-                          hovered ? PALETTE.hudTitolo : PALETTE.hudBordo);
-      ctx.fillStyle = b.disabled
-        ? PALETTE.hudDim
-        : (hovered ? PALETTE.inkNero : PALETTE.hudTitolo);
+      drawPixelRectStroke(ctx, b.x, b.y, b.w, b.h, hovered ? PALETTE.hudTitolo : PALETTE.hudBordo);
+      ctx.fillStyle = b.disabled ? PALETTE.hudDim : (hovered ? PALETTE.inkNero : PALETTE.hudTitolo);
       ctx.font = `${hovered ? 'bold ' : ''}${SF(13)}px "Courier New", monospace`;
       ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2);
     });
@@ -421,7 +392,6 @@ const GameScreen = {
   drawOverlay() {
     const ctx = this.ctx;
     const W = window.UI.w, H = window.UI.h;
-    // Velo scuro sopra la mappa
     ctx.fillStyle = 'rgba(10,6,2,0.72)';
     ctx.fillRect(0, 0, W, H);
 
@@ -430,10 +400,8 @@ const GameScreen = {
     this.overlayCard = card;
 
     const titleByKey = {
-      stato: 'STATO CAVALIERE',
-      contesto: 'CONTESTO',
-      log: 'DIARIO EVENTI',
-      mini: 'MINIMAPPA REGIONALE',
+      stato: 'STATO CAVALIERE', contesto: 'CONTESTO',
+      log: 'DIARIO EVENTI', mini: 'MINIMAPPA REGIONALE',
     };
     this.drawPanel(card, titleByKey[this.activeOverlay] || '');
 
@@ -442,7 +410,6 @@ const GameScreen = {
     if (this.activeOverlay === 'log')      this.drawLog(card, card.y + card.h - SF(16));
     if (this.activeOverlay === 'mini')     this.drawMinimap(card);
 
-    // Pulsante chiudi (X) nella banda titolo, a destra
     const bandH = SF(26);
     const cs = SF(20);
     const close = {
@@ -466,8 +433,7 @@ const GameScreen = {
     ctx.fillStyle = PALETTE.pergScura;
     ctx.fillRect(area.x, area.y, area.w, area.h);
     drawPixelRectStroke(ctx, area.x, area.y, area.w, area.h, PALETTE.inkScuro);
-    drawPixelRectStroke(ctx, area.x + PIXEL * 2, area.y + PIXEL * 2,
-                        area.w - PIXEL * 4, area.h - PIXEL * 4, PALETTE.inkMedio);
+    drawPixelRectStroke(ctx, area.x + PIXEL * 2, area.y + PIXEL * 2, area.w - PIXEL * 4, area.h - PIXEL * 4, PALETTE.inkMedio);
     const bandH = SF(26);
     ctx.fillStyle = PALETTE.inkScuro;
     ctx.fillRect(area.x + PIXEL * 4, area.y + PIXEL * 4, area.w - PIXEL * 8, bandH);
@@ -501,8 +467,7 @@ const GameScreen = {
     } else {
       ctx.font = `${SF(16)}px "Courier New", monospace`;
       ctx.fillText(`Anno ${meta.anno}  ·  Turno ${meta.turno}`, area.w - SF(18), area.h / 2 - SF(10));
-      ctx.fillText(`${meta.stagione}  ·  ${meta.meteo}  ·  Destinazione: ${meta.destinazione}`,
-                   area.w - SF(18), area.h / 2 + SF(10));
+      ctx.fillText(`${meta.stagione}  ·  ${meta.meteo}  ·  Destinazione: ${meta.destinazione}`, area.w - SF(18), area.h / 2 + SF(10));
       drawCompassRose(ctx, area.x + area.w / 2, area.y + area.h / 2, SF(26));
     }
   },
@@ -536,10 +501,7 @@ const GameScreen = {
     ctx.fillText('EQUIPAGGIAMENTO', innerX, y); y += SF(22);
     ctx.fillStyle = PALETTE.hudNormale;
     ctx.font = `${SF(14)}px "Courier New", monospace`;
-    for (const item of k.equip) {
-      ctx.fillText('· ' + item, innerX, y);
-      y += SF(20);
-    }
+    for (const item of k.equip) { ctx.fillText('· ' + item, innerX, y); y += SF(20); }
     y += SF(10);
 
     ctx.fillStyle = PALETTE.hudTitolo;
@@ -552,13 +514,8 @@ const GameScreen = {
       const dotW = SF(9);
       const dotsX = area.x + area.w - PIXEL * 8 - dotW * 7;
       for (let i = -3; i <= 3; i++) {
-        const filled = (r.val >= 0 && i > 0 && i <= r.val) ||
-                       (r.val < 0 && i < 0 && i >= r.val);
-        ctx.fillStyle = i === 0
-          ? PALETTE.inkMedio
-          : (filled
-              ? (r.val > 0 ? '#3a9a22' : '#aa2020')
-              : PALETTE.inkMedio);
+        const filled = (r.val >= 0 && i > 0 && i <= r.val) || (r.val < 0 && i < 0 && i >= r.val);
+        ctx.fillStyle = i === 0 ? PALETTE.inkMedio : (filled ? (r.val > 0 ? '#3a9a22' : '#aa2020') : PALETTE.inkMedio);
         const dx = dotsX + (i + 3) * dotW;
         ctx.fillRect(dx, y + SF(3), dotW - PIXEL, dotW - PIXEL);
       }
@@ -576,8 +533,7 @@ const GameScreen = {
     ctx.font = `${SF(12)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     ctx.fillText(`${value.cur}/${value.max}`, x + w, y);
-    const barY = y + SF(14);
-    const barH = SF(10);
+    const barY = y + SF(14), barH = SF(10);
     ctx.fillStyle = '#0e0804';
     ctx.fillRect(x, barY, w, barH);
     drawPixelRectStroke(this.ctx, x, barY, w, barH, PALETTE.inkScuro);
@@ -592,19 +548,16 @@ const GameScreen = {
     const ctx = this.ctx;
     const tex = getParchmentTexture(area.w, area.h, 9999);
     ctx.drawImage(tex, area.x, area.y);
-    drawCartographicBorder(ctx, area.x, area.y, area.w, area.h);
 
-    // Tile demo: clip alla cornice + zoom attorno al centro mappa.
+    // Mondo reale (biomi + strutture + cavaliere), clippato nella cornice.
     ctx.save();
     ctx.beginPath();
     ctx.rect(area.x, area.y, area.w, area.h);
     ctx.clip();
-    const cx = area.x + area.w / 2, cy = area.y + area.h / 2;
-    ctx.translate(cx, cy);
-    ctx.scale(this.mapZoom, this.mapZoom);
-    ctx.translate(-cx, -cy);
-    this.drawDemoTiles(area);
+    MapRenderer.draw(ctx, area, this.cam, this.knightPos);
     ctx.restore();
+
+    drawCartographicBorder(ctx, area.x, area.y, area.w, area.h);
 
     ctx.fillStyle = PALETTE.inkScuro;
     ctx.font = `italic bold ${SF(15)}px "Courier New", monospace`;
@@ -613,117 +566,6 @@ const GameScreen = {
     ctx.fillText('Le Marche di Vorn', area.x + SF(14), area.y + SF(14));
 
     if (window.UI.compact) this.drawZoomButtons(area);
-  },
-
-  drawDemoTiles(area) {
-    const cx = area.x + area.w / 2;
-    const cy = area.y + area.h / 2;
-
-    this.drawTree(area.x + SF(120), area.y + SF(140));
-    this.drawTree(area.x + SF(160), area.y + SF(170));
-    this.drawTree(area.x + SF(110), area.y + SF(200));
-    this.drawTree(area.x + SF(200), area.y + SF(145));
-    this.drawTree(area.x + SF(180), area.y + SF(210));
-
-    this.drawMountain(area.x + area.w - SF(220), area.y + SF(100));
-    this.drawMountain(area.x + area.w - SF(180), area.y + SF(110));
-    this.drawMountain(area.x + area.w - SF(140), area.y + SF(100));
-    this.drawMountain(area.x + area.w - SF(160), area.y + SF(150));
-
-    this.drawRiver([
-      [area.x + SF(50), area.y + area.h - SF(60)],
-      [area.x + SF(180), area.y + area.h - SF(140)],
-      [area.x + SF(320), area.y + area.h - SF(100)],
-      [area.x + SF(460), area.y + area.h - SF(200)],
-      [area.x + SF(600), area.y + area.h - SF(180)],
-    ]);
-
-    this.drawCastle(cx, cy, 'Vornkeep');
-    this.drawVillage(area.x + SF(280), area.y + area.h - SF(80), 'Lyhall');
-    this.drawKnightMarker(cx - SF(60), cy + SF(30));
-    this.drawDashedPath(cx, cy + SF(20), area.x + SF(280), area.y + area.h - SF(90));
-  },
-
-  drawTree(x, y) {
-    const ctx = this.ctx;
-    pixelTriangle(ctx, [x, y - SF(18)], [x - SF(12), y + SF(4)], [x + SF(12), y + SF(4)], PALETTE.verdeBosco);
-    ctx.fillStyle = PALETTE.inkScuro;
-    ctx.fillRect(x - PIXEL, y + SF(4), PIXEL * 2, PIXEL * 2);
-  },
-
-  drawMountain(x, y) {
-    const ctx = this.ctx;
-    pixelTriangle(ctx, [x, y - SF(30)], [x - SF(26), y + SF(14)], [x + SF(26), y + SF(14)], PALETTE.marrMontagna);
-    pixelTriangle(ctx, [x, y - SF(30)], [x + SF(26), y + SF(14)], [x + SF(4), y + SF(14)], PALETTE.marrMontCh);
-    pixelTriangle(ctx, [x, y - SF(30)], [x - SF(8), y - SF(16)], [x + SF(8), y - SF(16)], PALETTE.neveCime);
-  },
-
-  drawRiver(points) {
-    const ctx = this.ctx;
-    for (let i = 0; i < points.length - 1; i++) {
-      pixelLine(ctx, points[i][0], points[i][1], points[i+1][0], points[i+1][1], PALETTE.bluFiume);
-      pixelLine(ctx, points[i][0], points[i][1] + PIXEL, points[i+1][0], points[i+1][1] + PIXEL, PALETTE.bluFiumeCh);
-    }
-  },
-
-  drawCastle(x, y, name) {
-    const ctx = this.ctx;
-    ctx.fillStyle = PALETTE.grigioPietra;
-    ctx.fillRect(x - SF(18), y - SF(14), SF(36), SF(28));
-    for (let i = 0; i < 5; i++) {
-      ctx.fillRect(x - SF(18) + i * SF(8), y - SF(20), SF(4), SF(6));
-    }
-    ctx.fillRect(x - SF(22), y - SF(22), SF(8), SF(36));
-    ctx.fillRect(x + SF(14), y - SF(22), SF(8), SF(36));
-    ctx.fillStyle = PALETTE.inkScuro;
-    ctx.fillRect(x - SF(4), y, SF(8), SF(14));
-    ctx.fillStyle = PALETTE.rossoBandiera;
-    ctx.fillRect(x - PIXEL, y - SF(32), PIXEL * 2, SF(12));
-    ctx.fillRect(x - SF(4), y - SF(32), SF(8), SF(4));
-    ctx.fillStyle = PALETTE.inkScuro;
-    ctx.font = `italic bold ${SF(13)}px "Courier New", monospace`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.fillText(name, x, y + SF(18));
-  },
-
-  drawVillage(x, y, name) {
-    const ctx = this.ctx;
-    for (let i = 0; i < 3; i++) {
-      const cx = x - SF(18) + i * SF(18);
-      pixelTriangle(ctx, [cx, y - SF(10)], [cx - SF(8), y + SF(2)], [cx + SF(8), y + SF(2)], PALETTE.marrTetto);
-      ctx.fillStyle = PALETTE.pergMedia;
-      ctx.fillRect(cx - SF(6), y + SF(2), SF(12), SF(8));
-    }
-    ctx.fillStyle = PALETTE.inkScuro;
-    ctx.font = `italic ${SF(12)}px "Courier New", monospace`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
-    ctx.fillText(name, x, y + SF(14));
-  },
-
-  drawKnightMarker(x, y) {
-    const ctx = this.ctx;
-    pixelCircle(ctx, x, y, SF(8), PALETTE.cavMarker);
-    ctx.fillStyle = PALETTE.cavMarker;
-    ctx.fillRect(x - SF(8), y - PIXEL / 2, SF(16), PIXEL);
-    ctx.fillRect(x - PIXEL / 2, y - SF(8), PIXEL, SF(16));
-  },
-
-  drawDashedPath(x0, y0, x1, y1) {
-    const ctx = this.ctx;
-    const dx = x1 - x0;
-    const dy = y1 - y0;
-    const dist = Math.hypot(dx, dy);
-    const steps = Math.floor(dist / SF(8));
-    for (let i = 0; i < steps; i += 2) {
-      const t1 = i / steps;
-      const t2 = (i + 1) / steps;
-      pixelLine(ctx,
-        x0 + dx * t1, y0 + dy * t1,
-        x0 + dx * t2, y0 + dy * t2,
-        PALETTE.inkLeggero);
-    }
   },
 
   drawContext(area) {
@@ -740,10 +582,7 @@ const GameScreen = {
       ctx.fillStyle = PALETTE.hudNormale;
       ctx.font = `${SF(14)}px "Courier New", monospace`;
       const lines = Array.isArray(body) ? body : [body];
-      for (const line of lines) {
-        ctx.fillText(line, x, y);
-        y += SF(18);
-      }
+      for (const line of lines) { ctx.fillText(line, x, y); y += SF(18); }
       y += SF(10);
     };
 
@@ -752,12 +591,8 @@ const GameScreen = {
     drawSection('STAGIONE',      'Primavera · 12° giorno');
     drawSection('METEO',         'Sereno · vento da est');
     drawSection('NOTIZIE DAL MONDO', [
-      'Lord Aerin di Vorn',
-      'ha bandito una taglia',
-      'sui banditi del Sud.',
-      '',
-      'L\'Ordine del Cervo',
-      'cerca cavalieri.',
+      'Lord Aerin di Vorn', 'ha bandito una taglia', 'sui banditi del Sud.',
+      '', 'L\'Ordine del Cervo', 'cerca cavalieri.',
     ]);
   },
 
@@ -767,8 +602,7 @@ const GameScreen = {
     const yStart = area.y + PIXEL * 4 + SF(26) + SF(4);
     const logBottom = bottomY - PIXEL * 2;
 
-    const colors = [PALETTE.hudEvento, PALETTE.hudNormale, PALETTE.hudNormale,
-                    PALETTE.hudDim, PALETTE.hudMorto];
+    const colors = [PALETTE.hudEvento, PALETTE.hudNormale, PALETTE.hudNormale, PALETTE.hudDim, PALETTE.hudMorto];
     ctx.font = `${SF(14)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
@@ -793,31 +627,25 @@ const GameScreen = {
     ctx.fillStyle = PALETTE.pergMedia;
     ctx.fillRect(inner.x, inner.y, inner.w, inner.h);
 
-    const rnd = mulberry32(7);
-    ctx.fillStyle = PALETTE.verdeBosco;
-    for (let i = 0; i < 18; i++) {
-      const px = inner.x + Math.floor(rnd() * inner.w);
-      const py = inner.y + Math.floor(rnd() * inner.h);
-      ctx.fillRect(px, py, PIXEL * 2, PIXEL * 2);
-    }
-    ctx.fillStyle = PALETTE.marrMontagna;
-    for (let i = 0; i < 8; i++) {
-      const px = inner.x + Math.floor(rnd() * inner.w);
-      const py = inner.y + Math.floor(rnd() * inner.h);
-      ctx.fillRect(px, py, PIXEL * 2, PIXEL * 2);
-    }
-    ctx.fillStyle = PALETTE.bluFiume;
-    for (let i = 0; i < 10; i++) {
-      const px = inner.x + Math.floor(rnd() * inner.w);
-      const py = inner.y + Math.floor(rnd() * inner.h);
-      ctx.fillRect(px, py, PIXEL, PIXEL);
+    // Thumbnail del mondo reale (canvas cachato) + riquadro vista corrente.
+    if (World.tiles) {
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(MapRenderer.thumbnail(), inner.x, inner.y, inner.w, inner.h);
+
+      const t = MapRenderer.tilePx(this.cam);
+      const vw = (this.mapRect ? this.mapRect.w / t : 0) / World.width * inner.w;
+      const vh = (this.mapRect ? this.mapRect.h / t : 0) / World.height * inner.h;
+      const vx = inner.x + (this.cam.cx / World.width) * inner.w - vw / 2;
+      const vy = inner.y + (this.cam.cy / World.height) * inner.h - vh / 2;
+      drawPixelRectStroke(ctx, vx, vy, Math.max(vw, PIXEL), Math.max(vh, PIXEL), PALETTE.cavMarker);
     }
 
     drawPixelRectStroke(ctx, inner.x, inner.y, inner.w, inner.h, PALETTE.inkScuro);
 
+    // Marker cavaliere
     ctx.fillStyle = PALETTE.cavMarker;
-    const kx = Math.floor(inner.x + inner.w / 2);
-    const ky = Math.floor(inner.y + inner.h / 2);
+    const kx = Math.floor(inner.x + (this.knightPos.x / World.width) * inner.w);
+    const ky = Math.floor(inner.y + (this.knightPos.y / World.height) * inner.h);
     ctx.fillRect(kx - PIXEL, ky - PIXEL, PIXEL * 2, PIXEL * 2);
 
     ctx.fillStyle = PALETTE.hudNormale;

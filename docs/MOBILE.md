@@ -55,11 +55,14 @@ scaling — affrontate qui.
 ## Zoom mappa
 
 - **Desktop:** rotella del mouse (`wheel`) quando il puntatore è sopra l'area
-  mappa; `preventDefault` per non scrollare la pagina.
-- **Mobile (compatto):** pulsanti `+` / `−` nell'angolo della mappa.
-- Stato condiviso `mapZoom` (clamp `[0.6, 4]`), applicato come trasformazione
-  attorno al centro mappa; il contenuto è clippato dentro la cornice. È la base
-  per la futura camera/pan vera della mappa.
+  mappa; `preventDefault` per non scrollare la pagina. Pan con drag del mouse.
+- **Mobile (compatto):** pulsanti `+` / `−` nell'angolo della mappa. Pan con
+  drag del dito.
+- Lo zoom è **discreto a passi ravvicinati** (`MAP_ZOOM_STEPS` in `config.js`,
+  px/tile), **non** i 4 livelli semantici regione/zona/locale, e **non**
+  continuo. È **centrato sul centro camera**, che l'utente sposta liberamente
+  col pan: lo zoom mantiene fisso quel punto. Camera e disegno stanno in
+  `renderer.js` (`MapRenderer`), lo stato `cam = {cx, cy, step}` nella scena.
 
 ## Input unificato (Pointer Events)
 

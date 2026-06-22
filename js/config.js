@@ -14,6 +14,8 @@ const PALETTE = {
 
   verdeBosco:    '#2a5a18',
   verdeBoscoSc:  '#1a3a10',
+  verdePalude:   '#3a5a2a',
+  sabbia:        '#c8a870',
 
   bluFiume:      '#3a6a9a',
   bluFiumeCh:    '#4a80b4',
@@ -26,6 +28,7 @@ const PALETTE = {
   rossoBandCh:   '#aa1818',
 
   grigioPietra:  '#8a7a5a',
+  grigioPietraSc:'#6a5a40',
   marrTetto:     '#6a3a18',
 
   cavMarker:     '#cc2020',
@@ -44,7 +47,17 @@ const PALETTE = {
 
 // Tile e zoom
 const TILE_BASE = 16;
-const ZOOM_LEVELS = [4, 8, 16, 32];
+const ZOOM_LEVELS = [4, 8, 16, 32]; // livelli semantici di riferimento (GRAFICA.md)
+
+// Dimensioni del mondo (griglia di tile)
+const WORLD_W = 160;
+const WORLD_H = 120;
+
+// Zoom mappa: passi discreti ravvicinati (px per tile), NON i 4 livelli
+// semantici regione/zona/locale. Lo zoom è centrato sul centro camera, che
+// l'utente sposta liberamente col pan.
+const MAP_ZOOM_STEPS = [3, 4, 5, 6, 8, 10, 13, 16, 20, 26, 32];
+const MAP_ZOOM_DEFAULT = 5; // indice → 10 px/tile
 
 // Rendering pixel-art:
 // Il canvas viene disegnato DIRETTAMENTE alle dimensioni dell'area utile del
