@@ -1,94 +1,76 @@
 // FERRO & CENERE — bootstrap
-// Pipeline:
-//  - canvas interno a INTERNAL_W × INTERNAL_H, dove disegnano le scene
-//  - blit sul canvas visibile con nearest-neighbor a scala frazionaria
-//    per riempire l'area utile del browser (window.innerWidth/innerHeight)
-//  - scene manager (Scenes) sceglie cosa disegnare
+// Pipeline semplificata: render DIRETTO sul canvas visibile, alle dimensioni
+// esatte dell'area utile del browser. Niente upscale/downscale interno:
+// il testo resta nitido a qualsiasi finestra. PIXEL resta la "chunkiness"
+// dei primitivi grafici (vedi config.js / tiles.js).
+//
+// Tutto cio che e disegnato dalle scene si dimensiona via UI.scale, che
+// rapporta l'altezza del canvas a un'altezza di riferimento (DESIGN_H).
+
+const DESIGN_H = 900; // altezza di riferimento per scaling tipografico
 
 (function () {
-  const displayCanvas = document.getElementById('game');
-  const displayCtx = displayCanvas.getContext('2d');
-
-  const lo = document.createElement('canvas');
-  lo.width = INTERNAL_W;
-  lo.height = INTERNAL_H;
-  const loCtx = lo.getContext('2d');
-  loCtx.imageSmoothingEnabled = false;
-  displayCtx.imageSmoothingEnabled = false;
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
 
   let needsRedraw = true;
-  let scale = 1;
-  let offsetX = 0;
-  let offsetY = 0;
 
   function resize() {
-    // Usa l'area utile del browser (esclude barre OS/scheda/URL).
     const w = window.innerWidth;
     const h = window.innerHeight;
-    displayCanvas.width = w;
-    displayCanvas.height = h;
-    displayCanvas.style.width = w + 'px';
-    displayCanvas.style.height = h + 'px';
-
-    // Scala frazionaria mantenendo l'aspect ratio del canvas interno.
-    scale = Math.min(w / INTERNAL_W, h / INTERNAL_H);
-    const drawW = Math.floor(INTERNAL_W * scale);
-    const drawH = Math.floor(INTERNAL_H * scale);
-    offsetX = Math.floor((w - drawW) / 2);
-    offsetY = Math.floor((h - drawH) / 2);
-
-    displayCtx.imageSmoothingEnabled = false;
+    canvas.width = w;
+    canvas.height = h;
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    ctx.imageSmoothingEnabled = false;
+    // UI.scale: fattore per font/spaziature relative al DESIGN_H
+    window.UI.scale = h / DESIGN_H;
+    window.UI.w = w;
+    window.UI.h = h;
     needsRedraw = true;
   }
 
   function displayToInternal(clientX, clientY) {
-    const r = displayCanvas.getBoundingClientRect();
-    const x = (clientX - r.left - offsetX) / scale;
-    const y = (clientY - r.top - offsetY) / scale;
-    return { x, y };
+    const r = canvas.getBoundingClientRect();
+    return { x: clientX - r.left, y: clientY - r.top };
   }
 
   window.addEventListener('resize', resize);
 
+  window.UI = { scale: 1, w: 0, h: 0 };
   window.GameRender = {
-    ctx: loCtx,
-    canvas: lo,
-    width: INTERNAL_W,
-    height: INTERNAL_H,
+    ctx: ctx,
+    canvas: canvas,
+    get width()  { return canvas.width; },
+    get height() { return canvas.height; },
     displayToInternal,
     invalidate() { needsRedraw = true; },
   };
 
-  // Registra e inizializza le scene
+  // Registra e inizializza le scene (entrambe disegnano sul canvas display)
   Scenes.register('title', TitleScreen);
   Scenes.register('game',  GameScreen);
-  TitleScreen.init(lo);
-  GameScreen.init(lo);
+  TitleScreen.init(canvas);
+  GameScreen.init(canvas);
   Scenes.switchTo('title');
-
-  function blit() {
-    displayCtx.fillStyle = '#1a0e04';
-    displayCtx.fillRect(0, 0, displayCanvas.width, displayCanvas.height);
-    displayCtx.imageSmoothingEnabled = false;
-    displayCtx.drawImage(
-      lo,
-      0, 0, INTERNAL_W, INTERNAL_H,
-      offsetX, offsetY, Math.floor(INTERNAL_W * scale), Math.floor(INTERNAL_H * scale)
-    );
-  }
 
   function loop() {
     if (needsRedraw) {
       Scenes.draw();
-      blit();
       needsRedraw = false;
     }
     requestAnimationFrame(loop);
   }
 
-  // Le scene chiamano invalidate() quando lo hover cambia ecc.
-  displayCanvas.addEventListener('mousemove', () => { needsRedraw = true; });
+  canvas.addEventListener('mousemove', () => { needsRedraw = true; });
 
   resize();
   loop();
 })();
+
+// Helper globali per dimensionamento responsivo:
+// S(n)  → pixel scalati al canvas attuale (per font, padding, ecc.)
+// SF(n) → numero floor-ato per allineamento pixel
+function S(n)  { return n * (window.UI ? window.UI.scale : 1); }
+function SF(n) { return Math.floor(S(n)); }

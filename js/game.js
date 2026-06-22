@@ -1,8 +1,7 @@
 // FERRO & CENERE — schermata gioco principale (bozza pannelli HUD)
-// Disegnata sul canvas interno (INTERNAL_W x INTERNAL_H). Mostra la
-// struttura: barra superiore con titolo + meta, pannello stato cavaliere
-// a sinistra, mappa al centro, info contesto a destra, log eventi e
-// minimappa in basso. I contenuti sono placeholder rappresentativi.
+// Disegnata direttamente sul canvas display (vedi main.js).
+// Tutte le dimensioni passano da S(...)/SF(...) per restare proporzionate
+// al canvas attuale.
 
 const GameScreen = {
   canvas: null,
@@ -29,7 +28,6 @@ const GameScreen = {
   },
 
   onEnter() {
-    // Placeholder: in futuro qui si inizializza lo stato della partita
     this.knight = {
       nome: 'Sir Aldric di Vorn',
       titolo: 'Cavaliere Errante',
@@ -39,10 +37,10 @@ const GameScreen = {
       ferite: { cur: 2, max: 12 },
       equip: ['Spada bastarda', 'Scudo araldico', 'Cotta di maglia', 'Mantello scuro'],
       reputazione: [
-        { nome: 'Casata Vorn',    val: 3 },
+        { nome: 'Casata Vorn',      val: 3 },
         { nome: 'Ordine del Cervo', val: 1 },
-        { nome: 'Mercanti Liberi', val: 0 },
-        { nome: 'Banditi del Sud', val: -2 },
+        { nome: 'Mercanti Liberi',  val: 0 },
+        { nome: 'Banditi del Sud',  val: -2 },
       ],
     };
     this.log = [
@@ -61,15 +59,14 @@ const GameScreen = {
     };
   },
 
-  // ─── layout calcolato a partire dalle dimensioni interne ───
   layout() {
     const W = this.canvas.width;
     const H = this.canvas.height;
-    const pad = PIXEL * 4;
-    const topBarH = 90;
-    const leftW = 420;
-    const rightW = 360;
-    const bottomH = 280;
+    const pad = SF(12);
+    const topBarH = SF(76);
+    const leftW = SF(360);
+    const rightW = SF(310);
+    const bottomH = SF(240);
 
     const map = {
       x: leftW + pad,
@@ -107,13 +104,12 @@ const GameScreen = {
   },
 
   layoutButtons(area) {
-    // 4 pulsanti azione disposti in due righe da 2 dentro l'area log (in basso)
     const cols = 2;
     const rows = 2;
-    const gap = PIXEL * 3;
-    const padInner = PIXEL * 5;
+    const gap = SF(8);
+    const padInner = SF(14);
     const bw = (area.w - padInner * 2 - gap * (cols - 1)) / cols;
-    const bh = 36;
+    const bh = SF(32);
     const startX = area.x + padInner;
     const startY = area.y + area.h - bh * rows - gap * (rows - 1) - padInner;
     this.actionButtons.forEach((b, i) => {
@@ -148,7 +144,6 @@ const GameScreen = {
     console.log('Azione gioco:', b.action);
   },
 
-  // ─── disegno ───────────────────────────────────────────────
   draw() {
     const L = this.layout();
     this.layoutButtons(L.log);
@@ -157,137 +152,110 @@ const GameScreen = {
     const W = this.canvas.width;
     const H = this.canvas.height;
 
-    // Fondo: pergamena su tutto
     ctx.fillStyle = PALETTE.inkNero;
     ctx.fillRect(0, 0, W, H);
     const parchment = getParchmentTexture(W, H, 4242);
     ctx.drawImage(parchment, 0, 0);
 
-    // Barra superiore (titolo + meta)
     this.drawTopBar(L.topBar);
-
-    // Pannello stato cavaliere (sinistra)
     this.drawPanel(L.left, 'STATO CAVALIERE');
     this.drawKnightStatus(L.left);
-
-    // Pannello mappa (centro)
     this.drawMapPanel(L.map);
-
-    // Pannello info contesto (destra)
     this.drawPanel(L.right, 'CONTESTO');
     this.drawContext(L.right);
-
-    // Log eventi (basso-centro)
     this.drawPanel(L.log, 'LOG EVENTI E AZIONI');
     this.drawLogAndActions(L.log);
-
-    // Minimappa (basso-destra)
     this.drawPanel(L.mini, 'MINIMAPPA REGIONALE');
     this.drawMinimap(L.mini);
   },
 
-  // Pannello base con cornice pixel-art
   drawPanel(area, title) {
     const ctx = this.ctx;
-    // Sfondo del pannello (toni piu scuri della pergamena)
     ctx.fillStyle = PALETTE.pergScura;
     ctx.fillRect(area.x, area.y, area.w, area.h);
-    // Bordo esterno doppio
     drawPixelRectStroke(ctx, area.x, area.y, area.w, area.h, PALETTE.inkScuro);
     drawPixelRectStroke(ctx, area.x + PIXEL * 2, area.y + PIXEL * 2,
                         area.w - PIXEL * 4, area.h - PIXEL * 4, PALETTE.inkMedio);
-    // Cartiglio del titolo (banda in alto)
-    const bandH = 28;
+    const bandH = SF(26);
     ctx.fillStyle = PALETTE.inkScuro;
     ctx.fillRect(area.x + PIXEL * 4, area.y + PIXEL * 4, area.w - PIXEL * 8, bandH);
     ctx.fillStyle = PALETTE.hudTitolo;
-    ctx.font = 'bold 18px "Courier New", monospace';
+    ctx.font = `bold ${SF(16)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(title, area.x + PIXEL * 8, area.y + PIXEL * 4 + bandH / 2);
   },
 
-  // ─── BARRA SUPERIORE ───────────────────────────────────────
   drawTopBar(area) {
     const ctx = this.ctx;
-    // Banda scura
     ctx.fillStyle = PALETTE.inkScuro;
     ctx.fillRect(area.x, area.y, area.w, area.h);
-    // Bordo inferiore decorato
     ctx.fillStyle = PALETTE.hudTitolo;
     ctx.fillRect(area.x, area.y + area.h - PIXEL, area.w, PIXEL);
 
-    // Titolo gioco a sinistra
     ctx.fillStyle = PALETTE.hudTitolo;
-    ctx.font = 'bold 42px "Courier New", monospace';
+    ctx.font = `bold ${SF(36)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText('KNIGHT DAWN', PIXEL * 6, area.h / 2);
+    ctx.fillText('KNIGHT DAWN', SF(18), area.h / 2);
 
-    // Meta a destra
     const meta = this.meta;
     ctx.fillStyle = PALETTE.hudNormale;
-    ctx.font = '18px "Courier New", monospace';
+    ctx.font = `${SF(16)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     const lines = [
       `Anno ${meta.anno}  ·  Turno ${meta.turno}`,
       `${meta.stagione}  ·  ${meta.meteo}  ·  Destinazione: ${meta.destinazione}`,
     ];
-    ctx.fillText(lines[0], area.w - PIXEL * 6, area.h / 2 - 12);
-    ctx.fillText(lines[1], area.w - PIXEL * 6, area.h / 2 + 12);
+    ctx.fillText(lines[0], area.w - SF(18), area.h / 2 - SF(10));
+    ctx.fillText(lines[1], area.w - SF(18), area.h / 2 + SF(10));
 
-    // Rosa dei venti centrata (piccolina)
-    drawCompassRose(ctx, area.x + area.w / 2, area.y + area.h / 2, 30);
+    drawCompassRose(ctx, area.x + area.w / 2, area.y + area.h / 2, SF(26));
   },
 
-  // ─── PANNELLO STATO CAVALIERE ──────────────────────────────
   drawKnightStatus(area) {
     const ctx = this.ctx;
     const k = this.knight;
     const innerX = area.x + PIXEL * 8;
-    let y = area.y + PIXEL * 4 + 28 + PIXEL * 6;
+    let y = area.y + PIXEL * 4 + SF(26) + SF(12);
 
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
 
-    // Nome
     ctx.fillStyle = PALETTE.hudTitolo;
-    ctx.font = 'bold 22px "Courier New", monospace';
+    ctx.font = `bold ${SF(20)}px "Courier New", monospace`;
     ctx.fillText(k.nome, innerX, y);
-    y += 28;
+    y += SF(26);
     ctx.fillStyle = PALETTE.hudNormale;
-    ctx.font = 'italic 16px "Courier New", monospace';
+    ctx.font = `italic ${SF(15)}px "Courier New", monospace`;
     ctx.fillText(k.titolo, innerX, y);
-    y += 30;
+    y += SF(28);
 
-    // Barre attributi
-    this.drawAttrBar(innerX, y, area.w - PIXEL * 16, 'VIGORE',  k.vigore,  '#2a7a1a',  '#3a9a22'); y += 30;
-    this.drawAttrBar(innerX, y, area.w - PIXEL * 16, 'VOLONTÀ', k.volonta, '#4a3ab0',  '#6050c8'); y += 30;
-    this.drawAttrBar(innerX, y, area.w - PIXEL * 16, 'ONORE',   k.onore,   '#b07a18',  '#d09820'); y += 30;
-    this.drawAttrBar(innerX, y, area.w - PIXEL * 16, 'FERITE',  k.ferite,  '#aa2020',  '#cc2828'); y += 36;
+    const barW = area.w - PIXEL * 16;
+    this.drawAttrBar(innerX, y, barW, 'VIGORE',  k.vigore,  '#2a7a1a', '#3a9a22'); y += SF(28);
+    this.drawAttrBar(innerX, y, barW, 'VOLONTÀ', k.volonta, '#4a3ab0', '#6050c8'); y += SF(28);
+    this.drawAttrBar(innerX, y, barW, 'ONORE',   k.onore,   '#b07a18', '#d09820'); y += SF(28);
+    this.drawAttrBar(innerX, y, barW, 'FERITE',  k.ferite,  '#aa2020', '#cc2828'); y += SF(34);
 
-    // Equipaggiamento
     ctx.fillStyle = PALETTE.hudTitolo;
-    ctx.font = 'bold 16px "Courier New", monospace';
-    ctx.fillText('EQUIPAGGIAMENTO', innerX, y); y += 22;
+    ctx.font = `bold ${SF(15)}px "Courier New", monospace`;
+    ctx.fillText('EQUIPAGGIAMENTO', innerX, y); y += SF(22);
     ctx.fillStyle = PALETTE.hudNormale;
-    ctx.font = '15px "Courier New", monospace';
+    ctx.font = `${SF(14)}px "Courier New", monospace`;
     for (const item of k.equip) {
       ctx.fillText('· ' + item, innerX, y);
-      y += 20;
+      y += SF(20);
     }
-    y += 10;
+    y += SF(10);
 
-    // Reputazione
     ctx.fillStyle = PALETTE.hudTitolo;
-    ctx.font = 'bold 16px "Courier New", monospace';
-    ctx.fillText('REPUTAZIONE', innerX, y); y += 22;
-    ctx.font = '15px "Courier New", monospace';
+    ctx.font = `bold ${SF(15)}px "Courier New", monospace`;
+    ctx.fillText('REPUTAZIONE', innerX, y); y += SF(22);
+    ctx.font = `${SF(14)}px "Courier New", monospace`;
     for (const r of k.reputazione) {
       ctx.fillStyle = PALETTE.hudNormale;
       ctx.fillText(r.nome, innerX, y);
-      // pallini di reputazione (-3..+3)
-      const dotW = 10;
+      const dotW = SF(9);
       const dotsX = area.x + area.w - PIXEL * 8 - dotW * 7;
       for (let i = -3; i <= 3; i++) {
         const filled = (r.val >= 0 && i > 0 && i <= r.val) ||
@@ -298,185 +266,140 @@ const GameScreen = {
               ? (r.val > 0 ? '#3a9a22' : '#aa2020')
               : PALETTE.inkMedio);
         const dx = dotsX + (i + 3) * dotW;
-        ctx.fillRect(dx, y + 4, dotW - 2, dotW - 2);
+        ctx.fillRect(dx, y + SF(3), dotW - PIXEL, dotW - PIXEL);
       }
-      y += 20;
+      y += SF(20);
     }
   },
 
   drawAttrBar(x, y, w, label, value, color, colorHi) {
     const ctx = this.ctx;
-    // etichetta
     ctx.fillStyle = PALETTE.hudTitolo;
-    ctx.font = 'bold 13px "Courier New", monospace';
+    ctx.font = `bold ${SF(12)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.fillText(label, x, y);
-    // numeri
     ctx.fillStyle = PALETTE.hudNormale;
-    ctx.font = '13px "Courier New", monospace';
+    ctx.font = `${SF(12)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     ctx.fillText(`${value.cur}/${value.max}`, x + w, y);
-    // barra
-    const barY = y + 14;
-    const barH = 10;
+    const barY = y + SF(14);
+    const barH = SF(10);
     ctx.fillStyle = '#0e0804';
     ctx.fillRect(x, barY, w, barH);
     drawPixelRectStroke(this.ctx, x, barY, w, barH, PALETTE.inkScuro);
     const fillW = Math.floor((w - PIXEL * 2) * value.cur / value.max);
     ctx.fillStyle = color;
     ctx.fillRect(x + PIXEL, barY + PIXEL, fillW, barH - PIXEL * 2);
-    // highlight superiore (1 blocco)
     ctx.fillStyle = colorHi;
     ctx.fillRect(x + PIXEL, barY + PIXEL, fillW, PIXEL);
   },
 
-  // ─── PANNELLO MAPPA (placeholder) ──────────────────────────
   drawMapPanel(area) {
     const ctx = this.ctx;
-
-    // Sfondo pergamena del pannello mappa (texture propria dedicata)
     const tex = getParchmentTexture(area.w, area.h, 9999);
     ctx.drawImage(tex, area.x, area.y);
-
-    // Bordo cartografico doppio
     drawCartographicBorder(ctx, area.x, area.y, area.w, area.h);
-
-    // Demo tile (placeholder): qualche simbolo cartografico sparso
-    // per dare un'idea di come apparira la mappa.
     this.drawDemoTiles(area);
-
-    // Etichetta in alto
     ctx.fillStyle = PALETTE.inkScuro;
-    ctx.font = 'italic bold 16px "Courier New", monospace';
+    ctx.font = `italic bold ${SF(15)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    ctx.fillText('Le Marche di Vorn', area.x + PIXEL * 8, area.y + PIXEL * 8);
+    ctx.fillText('Le Marche di Vorn', area.x + SF(14), area.y + SF(14));
   },
 
-  // Disegna pochi simboli cartografici di esempio (foreste, montagne,
-  // un castello, un villaggio, un fiume) per testare l'aspetto.
   drawDemoTiles(area) {
-    const ctx = this.ctx;
     const cx = area.x + area.w / 2;
     const cy = area.y + area.h / 2;
 
-    // Foresta: gruppo di "alberi" stilizzati
-    this.drawTree(area.x + 120, area.y + 140);
-    this.drawTree(area.x + 160, area.y + 170);
-    this.drawTree(area.x + 110, area.y + 200);
-    this.drawTree(area.x + 200, area.y + 145);
-    this.drawTree(area.x + 180, area.y + 210);
+    this.drawTree(area.x + SF(120), area.y + SF(140));
+    this.drawTree(area.x + SF(160), area.y + SF(170));
+    this.drawTree(area.x + SF(110), area.y + SF(200));
+    this.drawTree(area.x + SF(200), area.y + SF(145));
+    this.drawTree(area.x + SF(180), area.y + SF(210));
 
-    // Montagne: catena a nord-est
-    this.drawMountain(area.x + area.w - 220, area.y + 100);
-    this.drawMountain(area.x + area.w - 180, area.y + 110);
-    this.drawMountain(area.x + area.w - 140, area.y + 100);
-    this.drawMountain(area.x + area.w - 160, area.y + 150);
+    this.drawMountain(area.x + area.w - SF(220), area.y + SF(100));
+    this.drawMountain(area.x + area.w - SF(180), area.y + SF(110));
+    this.drawMountain(area.x + area.w - SF(140), area.y + SF(100));
+    this.drawMountain(area.x + area.w - SF(160), area.y + SF(150));
 
-    // Fiume serpeggiante
     this.drawRiver([
-      [area.x + 50, area.y + area.h - 60],
-      [area.x + 180, area.y + area.h - 140],
-      [area.x + 320, area.y + area.h - 100],
-      [area.x + 460, area.y + area.h - 200],
-      [area.x + 600, area.y + area.h - 180],
+      [area.x + SF(50), area.y + area.h - SF(60)],
+      [area.x + SF(180), area.y + area.h - SF(140)],
+      [area.x + SF(320), area.y + area.h - SF(100)],
+      [area.x + SF(460), area.y + area.h - SF(200)],
+      [area.x + SF(600), area.y + area.h - SF(180)],
     ]);
 
-    // Castello al centro
     this.drawCastle(cx, cy, 'Vornkeep');
-
-    // Villaggio sud
-    this.drawVillage(area.x + 280, area.y + area.h - 80, 'Lyhall');
-
-    // Posizione cavaliere
-    this.drawKnightMarker(cx - 60, cy + 30);
-
-    // Strada tratteggiata castello → villaggio
-    this.drawDashedPath(cx, cy + 20, area.x + 280, area.y + area.h - 90);
+    this.drawVillage(area.x + SF(280), area.y + area.h - SF(80), 'Lyhall');
+    this.drawKnightMarker(cx - SF(60), cy + SF(30));
+    this.drawDashedPath(cx, cy + SF(20), area.x + SF(280), area.y + area.h - SF(90));
   },
 
   drawTree(x, y) {
     const ctx = this.ctx;
-    // chioma: triangolino di 3 blocchi
-    ctx.fillStyle = PALETTE.verdeBoscoSc;
-    pixelTriangle(ctx, [x, y - 18], [x - 12, y + 4], [x + 12, y + 4], PALETTE.verdeBosco);
-    // tronco
+    pixelTriangle(ctx, [x, y - SF(18)], [x - SF(12), y + SF(4)], [x + SF(12), y + SF(4)], PALETTE.verdeBosco);
     ctx.fillStyle = PALETTE.inkScuro;
-    ctx.fillRect(x - PIXEL, y + 4, PIXEL * 2, PIXEL * 2);
+    ctx.fillRect(x - PIXEL, y + SF(4), PIXEL * 2, PIXEL * 2);
   },
 
   drawMountain(x, y) {
     const ctx = this.ctx;
-    // Profilo triangolare grande
-    pixelTriangle(ctx, [x, y - 30], [x - 26, y + 14], [x + 26, y + 14], PALETTE.marrMontagna);
-    // Versante luce (triangolo piu piccolo a destra)
-    pixelTriangle(ctx, [x, y - 30], [x + 26, y + 14], [x + 4, y + 14], PALETTE.marrMontCh);
-    // Neve sulla cima
-    pixelTriangle(ctx, [x, y - 30], [x - 8, y - 16], [x + 8, y - 16], PALETTE.neveCime);
+    pixelTriangle(ctx, [x, y - SF(30)], [x - SF(26), y + SF(14)], [x + SF(26), y + SF(14)], PALETTE.marrMontagna);
+    pixelTriangle(ctx, [x, y - SF(30)], [x + SF(26), y + SF(14)], [x + SF(4), y + SF(14)], PALETTE.marrMontCh);
+    pixelTriangle(ctx, [x, y - SF(30)], [x - SF(8), y - SF(16)], [x + SF(8), y - SF(16)], PALETTE.neveCime);
   },
 
   drawRiver(points) {
     const ctx = this.ctx;
     for (let i = 0; i < points.length - 1; i++) {
       pixelLine(ctx, points[i][0], points[i][1], points[i+1][0], points[i+1][1], PALETTE.bluFiume);
-      // doppia linea per spessore
       pixelLine(ctx, points[i][0], points[i][1] + PIXEL, points[i+1][0], points[i+1][1] + PIXEL, PALETTE.bluFiumeCh);
     }
   },
 
   drawCastle(x, y, name) {
     const ctx = this.ctx;
-    // Base: blocco quadrato muro
     ctx.fillStyle = PALETTE.grigioPietra;
-    ctx.fillRect(x - 18, y - 14, 36, 28);
-    // Merlature in cima
-    ctx.fillStyle = PALETTE.grigioPietra;
+    ctx.fillRect(x - SF(18), y - SF(14), SF(36), SF(28));
     for (let i = 0; i < 5; i++) {
-      ctx.fillRect(x - 18 + i * 8, y - 20, 4, 6);
+      ctx.fillRect(x - SF(18) + i * SF(8), y - SF(20), SF(4), SF(6));
     }
-    // Torrette laterali
-    ctx.fillRect(x - 22, y - 22, 8, 36);
-    ctx.fillRect(x + 14, y - 22, 8, 36);
-    // Portone
+    ctx.fillRect(x - SF(22), y - SF(22), SF(8), SF(36));
+    ctx.fillRect(x + SF(14), y - SF(22), SF(8), SF(36));
     ctx.fillStyle = PALETTE.inkScuro;
-    ctx.fillRect(x - 4, y, 8, 14);
-    // Stendardo rosso
+    ctx.fillRect(x - SF(4), y, SF(8), SF(14));
     ctx.fillStyle = PALETTE.rossoBandiera;
-    ctx.fillRect(x - 1, y - 32, 2, 12);
-    ctx.fillRect(x - 4, y - 32, 8, 4);
-    // Etichetta
+    ctx.fillRect(x - PIXEL, y - SF(32), PIXEL * 2, SF(12));
+    ctx.fillRect(x - SF(4), y - SF(32), SF(8), SF(4));
     ctx.fillStyle = PALETTE.inkScuro;
-    ctx.font = 'italic bold 14px "Courier New", monospace';
+    ctx.font = `italic bold ${SF(13)}px "Courier New", monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillText(name, x, y + 18);
+    ctx.fillText(name, x, y + SF(18));
   },
 
   drawVillage(x, y, name) {
     const ctx = this.ctx;
-    // Tre casette: tetti a punta
     for (let i = 0; i < 3; i++) {
-      const cx = x - 18 + i * 18;
-      // tetto
-      pixelTriangle(ctx, [cx, y - 10], [cx - 8, y + 2], [cx + 8, y + 2], PALETTE.marrTetto);
-      // muri
+      const cx = x - SF(18) + i * SF(18);
+      pixelTriangle(ctx, [cx, y - SF(10)], [cx - SF(8), y + SF(2)], [cx + SF(8), y + SF(2)], PALETTE.marrTetto);
       ctx.fillStyle = PALETTE.pergMedia;
-      ctx.fillRect(cx - 6, y + 2, 12, 8);
+      ctx.fillRect(cx - SF(6), y + SF(2), SF(12), SF(8));
     }
     ctx.fillStyle = PALETTE.inkScuro;
-    ctx.font = 'italic 12px "Courier New", monospace';
+    ctx.font = `italic ${SF(12)}px "Courier New", monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillText(name, x, y + 14);
+    ctx.fillText(name, x, y + SF(14));
   },
 
   drawKnightMarker(x, y) {
     const ctx = this.ctx;
-    // Cerchio rosso + croce
-    pixelCircle(ctx, x, y, 8, PALETTE.cavMarker);
+    pixelCircle(ctx, x, y, SF(8), PALETTE.cavMarker);
     ctx.fillStyle = PALETTE.cavMarker;
-    ctx.fillRect(x - 8, y - PIXEL / 2, 16, PIXEL);
-    ctx.fillRect(x - PIXEL / 2, y - 8, PIXEL, 16);
+    ctx.fillRect(x - SF(8), y - PIXEL / 2, SF(16), PIXEL);
+    ctx.fillRect(x - PIXEL / 2, y - SF(8), PIXEL, SF(16));
   },
 
   drawDashedPath(x0, y0, x1, y1) {
@@ -484,7 +407,7 @@ const GameScreen = {
     const dx = x1 - x0;
     const dy = y1 - y0;
     const dist = Math.hypot(dx, dy);
-    const steps = Math.floor(dist / 8);
+    const steps = Math.floor(dist / SF(8));
     for (let i = 0; i < steps; i += 2) {
       const t1 = i / steps;
       const t2 = (i + 1) / steps;
@@ -495,75 +418,56 @@ const GameScreen = {
     }
   },
 
-  // ─── PANNELLO CONTESTO (destra) ───────────────────────────
   drawContext(area) {
     const ctx = this.ctx;
     const x = area.x + PIXEL * 8;
-    let y = area.y + PIXEL * 4 + 28 + PIXEL * 6;
+    let y = area.y + PIXEL * 4 + SF(26) + SF(10);
 
-    ctx.fillStyle = PALETTE.hudTitolo;
-    ctx.font = 'bold 14px "Courier New", monospace';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText('LUOGO ATTUALE', x, y); y += 20;
-    ctx.fillStyle = PALETTE.hudNormale;
-    ctx.font = '14px "Courier New", monospace';
-    ctx.fillText('Pianura, Marche di Vorn', x, y); y += 30;
+    const drawSection = (title, body) => {
+      ctx.fillStyle = PALETTE.hudTitolo;
+      ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(title, x, y); y += SF(20);
+      ctx.fillStyle = PALETTE.hudNormale;
+      ctx.font = `${SF(14)}px "Courier New", monospace`;
+      const lines = Array.isArray(body) ? body : [body];
+      for (const line of lines) {
+        ctx.fillText(line, x, y);
+        y += SF(18);
+      }
+      y += SF(10);
+    };
 
-    ctx.fillStyle = PALETTE.hudTitolo;
-    ctx.font = 'bold 14px "Courier New", monospace';
-    ctx.fillText('VISIBILITÀ', x, y); y += 20;
-    ctx.fillStyle = PALETTE.hudNormale;
-    ctx.font = '14px "Courier New", monospace';
-    ctx.fillText('5 tile (pianura)', x, y); y += 30;
-
-    ctx.fillStyle = PALETTE.hudTitolo;
-    ctx.font = 'bold 14px "Courier New", monospace';
-    ctx.fillText('STAGIONE', x, y); y += 20;
-    ctx.fillStyle = PALETTE.hudNormale;
-    ctx.font = '14px "Courier New", monospace';
-    ctx.fillText('Primavera · 12° giorno', x, y); y += 30;
-
-    ctx.fillStyle = PALETTE.hudTitolo;
-    ctx.font = 'bold 14px "Courier New", monospace';
-    ctx.fillText('METEO', x, y); y += 20;
-    ctx.fillStyle = PALETTE.hudNormale;
-    ctx.font = '14px "Courier New", monospace';
-    ctx.fillText('Sereno · vento da est', x, y); y += 30;
-
-    ctx.fillStyle = PALETTE.hudTitolo;
-    ctx.font = 'bold 14px "Courier New", monospace';
-    ctx.fillText('NOTIZIE DAL MONDO', x, y); y += 20;
-    ctx.fillStyle = PALETTE.hudNormale;
-    ctx.font = '13px "Courier New", monospace';
-    const news = [
+    drawSection('LUOGO ATTUALE', 'Pianura, Marche di Vorn');
+    drawSection('VISIBILITÀ',    '5 tile (pianura)');
+    drawSection('STAGIONE',      'Primavera · 12° giorno');
+    drawSection('METEO',         'Sereno · vento da est');
+    drawSection('NOTIZIE DAL MONDO', [
       'Lord Aerin di Vorn',
       'ha bandito una taglia',
       'sui banditi del Sud.',
       '',
       'L\'Ordine del Cervo',
       'cerca cavalieri.',
-    ];
-    for (const line of news) { ctx.fillText(line, x, y); y += 17; }
+    ]);
   },
 
-  // ─── LOG EVENTI + AZIONI ───────────────────────────────────
   drawLogAndActions(area) {
     const ctx = this.ctx;
     const x = area.x + PIXEL * 8;
-    const yStart = area.y + PIXEL * 4 + 28 + PIXEL * 4;
+    const yStart = area.y + PIXEL * 4 + SF(26) + SF(4);
     const buttonsTop = this.actionButtons[0]
-      ? this.actionButtons[0].y - PIXEL * 4
+      ? this.actionButtons[0].y - SF(8)
       : area.y + area.h;
     const logBottom = buttonsTop - PIXEL * 2;
 
-    // Log: dal piu recente al piu vecchio, dal basso verso l'alto
     const colors = [PALETTE.hudEvento, PALETTE.hudNormale, PALETTE.hudNormale,
                     PALETTE.hudDim, PALETTE.hudMorto];
-    ctx.font = '14px "Courier New", monospace';
+    ctx.font = `${SF(14)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'bottom';
-    const lineH = 20;
+    const lineH = SF(20);
     const recent = this.log.slice().reverse();
     let yy = logBottom;
     for (let i = 0; i < recent.length && yy > yStart; i++) {
@@ -572,7 +476,6 @@ const GameScreen = {
       yy -= lineH;
     }
 
-    // Pulsanti azione
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     this.actionButtons.forEach((b, i) => {
@@ -584,25 +487,22 @@ const GameScreen = {
       ctx.fillStyle = b.disabled
         ? PALETTE.hudDim
         : (hovered ? PALETTE.inkNero : PALETTE.hudTitolo);
-      ctx.font = `${hovered ? 'bold ' : ''}14px "Courier New", monospace`;
+      ctx.font = `${hovered ? 'bold ' : ''}${SF(14)}px "Courier New", monospace`;
       ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2);
     });
   },
 
-  // ─── MINIMAPPA ─────────────────────────────────────────────
   drawMinimap(area) {
     const ctx = this.ctx;
     const inner = {
       x: area.x + PIXEL * 8,
-      y: area.y + PIXEL * 4 + 28 + PIXEL * 4,
+      y: area.y + PIXEL * 4 + SF(26) + SF(4),
       w: area.w - PIXEL * 16,
-      h: area.h - 28 - PIXEL * 16 - 22,
+      h: area.h - SF(26) - PIXEL * 16 - SF(22),
     };
-    // Sfondo a tile di pergamena/foresta/montagna sparsi
     ctx.fillStyle = PALETTE.pergMedia;
     ctx.fillRect(inner.x, inner.y, inner.w, inner.h);
 
-    // Foreste random (piccole patch verdi)
     const rnd = mulberry32(7);
     ctx.fillStyle = PALETTE.verdeBosco;
     for (let i = 0; i < 18; i++) {
@@ -610,14 +510,12 @@ const GameScreen = {
       const py = inner.y + Math.floor(rnd() * inner.h);
       ctx.fillRect(px, py, PIXEL * 2, PIXEL * 2);
     }
-    // Montagne (patch marroni)
     ctx.fillStyle = PALETTE.marrMontagna;
     for (let i = 0; i < 8; i++) {
       const px = inner.x + Math.floor(rnd() * inner.w);
       const py = inner.y + Math.floor(rnd() * inner.h);
       ctx.fillRect(px, py, PIXEL * 2, PIXEL * 2);
     }
-    // Acqua (linee blu)
     ctx.fillStyle = PALETTE.bluFiume;
     for (let i = 0; i < 10; i++) {
       const px = inner.x + Math.floor(rnd() * inner.w);
@@ -625,20 +523,17 @@ const GameScreen = {
       ctx.fillRect(px, py, PIXEL, PIXEL);
     }
 
-    // Cornice
     drawPixelRectStroke(ctx, inner.x, inner.y, inner.w, inner.h, PALETTE.inkScuro);
 
-    // Posizione cavaliere (centro)
     ctx.fillStyle = PALETTE.cavMarker;
     const kx = Math.floor(inner.x + inner.w / 2);
     const ky = Math.floor(inner.y + inner.h / 2);
     ctx.fillRect(kx - PIXEL, ky - PIXEL, PIXEL * 2, PIXEL * 2);
 
-    // Etichetta sotto
     ctx.fillStyle = PALETTE.hudNormale;
-    ctx.font = 'italic 13px "Courier New", monospace';
+    ctx.font = `italic ${SF(12)}px "Courier New", monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
-    ctx.fillText('Sei qui · Marche di Vorn', area.x + area.w / 2, area.y + area.h - PIXEL * 4);
+    ctx.fillText('Sei qui · Marche di Vorn', area.x + area.w / 2, area.y + area.h - SF(8));
   },
 };

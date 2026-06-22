@@ -1,6 +1,7 @@
 // FERRO & CENERE — Schermata titolo
-// Disegnata sul canvas interno a 800x450 con primitivi pixel-art chunky
-// (blocchi PIXEL×PIXEL). Upscalata nearest-neighbor sul display.
+// Disegna direttamente sul canvas display (vedi main.js). Tutte le
+// dimensioni assolute passano da S(...) per essere proporzionali al
+// canvas attuale.
 
 const TitleScreen = {
   buttons: [],
@@ -27,9 +28,9 @@ const TitleScreen = {
   layout() {
     const w = this.canvas.width;
     const h = this.canvas.height;
-    const btnW = 570;
-    const btnH = 63;
-    const gap = 18;
+    const btnW = SF(570);
+    const btnH = SF(63);
+    const gap = SF(18);
     const startY = Math.floor(h * 0.58);
     const x = Math.floor((w - btnW) / 2);
     this.buttons.forEach((b, i) => {
@@ -50,6 +51,7 @@ const TitleScreen = {
     if (h !== this.hoverIndex) {
       this.hoverIndex = h;
       document.getElementById('game').style.cursor = h >= 0 ? 'pointer' : 'default';
+      window.GameRender.invalidate();
     }
   },
 
@@ -76,7 +78,7 @@ const TitleScreen = {
     ctx.fillRect(0, 0, w, h);
 
     // 2. Pergamena
-    const m = PIXEL * 6;
+    const m = SF(18);
     const pw = w - m * 2;
     const ph = h - m * 2;
     const parchment = getParchmentTexture(pw, ph, 1337);
@@ -91,23 +93,21 @@ const TitleScreen = {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    // Ombra (decalata di PIXEL*2)
+    const titleSize = SF(144);
     ctx.fillStyle = PALETTE.inkMedio;
-    ctx.font = 'bold 144px "Courier New", monospace';
+    ctx.font = `bold ${titleSize}px "Courier New", monospace`;
     ctx.fillText('KNIGHT DAWN', cx + PIXEL * 2, titleY + PIXEL * 2);
 
-    // Titolo
     ctx.fillStyle = PALETTE.inkScuro;
     ctx.fillText('KNIGHT DAWN', cx, titleY);
 
     // 5. Separatori a rombi
     ctx.fillStyle = PALETTE.inkScuro;
-    const lineW = 780;
-    for (const yOff of [-108, 108]) {
+    const lineW = SF(780);
+    const yOffMag = SF(108);
+    for (const yOff of [-yOffMag, yOffMag]) {
       const ly = titleY + yOff;
-      // linea: rettangolo PIXEL alto
       ctx.fillRect(Math.floor(cx - lineW / 2), Math.floor(ly), lineW, PIXEL);
-      // rombi alle estremità (5 blocchi)
       for (const sx of [-1, 1]) {
         const ex = Math.floor(cx + sx * (lineW / 2 + PIXEL * 3));
         ctx.fillRect(ex, ly - PIXEL, PIXEL, PIXEL);
@@ -118,18 +118,18 @@ const TitleScreen = {
 
     // 6. Sottotitolo
     ctx.fillStyle = PALETTE.inkLeggero;
-    ctx.font = 'italic 32px "Courier New", monospace';
-    ctx.fillText('- cronache di un cavaliere errante -', cx, titleY + 174);
+    ctx.font = `italic ${SF(32)}px "Courier New", monospace`;
+    ctx.fillText('- cronache di un cavaliere errante -', cx, titleY + SF(174));
 
     // 7. Rosa dei venti
-    drawCompassRose(ctx, w - m - 90, m + 90, 64);
+    drawCompassRose(ctx, w - m - SF(90), m + SF(90), SF(64));
 
     // 8. Etichetta "Terra Incognita"
     ctx.save();
     ctx.fillStyle = PALETTE.inkLeggero;
-    ctx.font = 'italic 26px "Courier New", monospace';
+    ctx.font = `italic ${SF(26)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
-    ctx.fillText('Terra Incognita', m + 36, h - m - 36);
+    ctx.fillText('Terra Incognita', m + SF(36), h - m - SF(36));
     ctx.restore();
 
     // 9. Pulsanti
@@ -138,17 +138,14 @@ const TitleScreen = {
     this.buttons.forEach((b, i) => {
       const hovered = i === this.hoverIndex;
 
-      // Fondo del pulsante: tono pergamena più scuro pieno (no alpha smooth)
       ctx.fillStyle = hovered ? PALETTE.pergScura : PALETTE.pergMedia;
       ctx.fillRect(b.x, b.y, b.w, b.h);
 
-      // Bordo: rettangolo cavo da 1 blocco
       drawPixelRectStroke(
         ctx, b.x, b.y, b.w, b.h,
         hovered ? PALETTE.inkScuro : PALETTE.inkMedio
       );
 
-      // Rombi laterali (in blocchi PIXEL)
       const cyB = Math.floor(b.y + b.h / 2);
       ctx.fillStyle = PALETTE.inkScuro;
       for (const sx of [-1, 1]) {
@@ -158,18 +155,17 @@ const TitleScreen = {
         ctx.fillRect(ex, cyB + PIXEL, PIXEL, PIXEL);
       }
 
-      // Testo
       ctx.fillStyle = b.disabled
         ? PALETTE.inkLeggero
         : (hovered ? PALETTE.inkNero : PALETTE.inkScuro);
-      ctx.font = `${hovered ? 'bold ' : ''}32px "Courier New", monospace`;
+      ctx.font = `${hovered ? 'bold ' : ''}${SF(32)}px "Courier New", monospace`;
       ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2);
     });
 
     // 10. Footer
     ctx.fillStyle = PALETTE.inkLeggero;
-    ctx.font = '24px "Courier New", monospace';
+    ctx.font = `${SF(22)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
-    ctx.fillText('v0.0.5  fase 1  test grafico', w - m - 36, h - m - 36);
+    ctx.fillText('v0.0.6  fase 1  test grafico', w - m - SF(36), h - m - SF(36));
   },
 };
