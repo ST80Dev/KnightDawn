@@ -293,6 +293,7 @@ const MapRenderer = {
 
   _drawStructure(ctx, s, cx, cy, t) {
     if (s.type === 'castle') this._drawCastle(ctx, cx, cy, t, s.name);
+    else if (s.type === 'keep') this._drawKeep(ctx, cx, cy, t, s.name);
     else this._drawVillage(ctx, cx, cy, t, s.name);
   },
 
@@ -326,6 +327,32 @@ const MapRenderer = {
     ctx.fillRect(cx, y - o - fh, w * 0.30, fh * 0.45);
 
     this._label(ctx, name, cx, y + h + o + S(2), t, true);
+  },
+
+  // Castello minore / torre di guardia: una sola torre più piccola del
+  // castello maggiore, senza stendardo, merlature sopra. Avamposto.
+  _drawKeep(ctx, cx, cy, t, name) {
+    const s = Math.max(S(9), t * 0.65);
+    const w = s * 0.50, h = s * 0.95;
+    const x = Math.round(cx - w / 2), y = Math.round(cy - h / 2);
+    const o = Math.max(1, s * 0.10);
+
+    ctx.fillStyle = PALETTE.inkNero;
+    ctx.fillRect(x - o, y - o, w + 2 * o, h + 2 * o);
+    ctx.fillStyle = PALETTE.grigioPietra;
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = PALETTE.grigioPietraSc;       // ombra a destra
+    ctx.fillRect(x + w * 0.60, y, w * 0.40, h);
+    // merlatura a 3 denti
+    ctx.fillStyle = PALETTE.inkNero;
+    const nw = w / 3;
+    ctx.fillRect(x + nw, y - o, nw, o * 1.6);
+    // feritoia + portone
+    ctx.fillStyle = PALETTE.inkScuro;
+    ctx.fillRect(cx - w * 0.10, y + h * 0.30, w * 0.20, h * 0.18);
+    ctx.fillRect(cx - w * 0.18, y + h * 0.62, w * 0.36, h * 0.38);
+
+    this._label(ctx, name, cx, y + h + o + S(2), t, false);
   },
 
   _drawVillage(ctx, cx, cy, t, name) {

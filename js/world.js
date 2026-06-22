@@ -70,12 +70,25 @@ const World = {
   CASTLE_NAMES: [
     // Anglo
     'Vornkeep', 'Ashford', 'Greymoor', 'Duncairn', 'Highrock', 'Stonereach',
-    'Blackmere', 'Ravensgate', 'Ironhold',
+    'Blackmere', 'Ravensgate', 'Ironhold', 'Wolfgate', 'Steelmoor',
     // Cavalleresco italiano
     'Roccaforte', 'Aspramonte', 'Belforte', 'Castelferro', 'Pietralba',
     'Montalbano', 'Roccanera', 'Altamura', 'Valbruna', 'Castelmonte',
     // Mood tolkieniano
     'Mornendor', 'Dolthar', 'Minariel', 'Annorant', 'Edhelmir', 'Caelthar',
+  ],
+  KEEP_NAMES: [
+    // Anglo (torri/avamposti)
+    'Brackwatch', 'Stagholm', 'Wolfden', 'Ironguard', 'Thornkeep',
+    'Mosspeak', 'Crowtower', 'Whitepost', 'Greyhollow', 'Boarhold',
+    'Pinekeep', 'Frosthold', 'Saltguard', 'Eastmarch', 'Westmarch',
+    'Northpost', 'Southpost', 'Larkguard', 'Hartwatch', 'Ravenpost',
+    'Owlhold', 'Cragwatch', 'Foxguard', 'Stonepost',
+    // Cavalleresco italiano (torri, rocchette, vedette)
+    'Torrechiara', 'Borgomale', 'Vallescura', 'Castellaro', 'Rocchetta',
+    'Bastia', 'Vigilia', 'Sentinella', 'Erta', 'Torrelunga',
+    // Mood tolkieniano
+    'Lorenduin', 'Aelith', 'Tharos', 'Calenwood', 'Eithlas', 'Morenost',
   ],
   VILLAGE_NAMES: [
     // Anglo
@@ -83,6 +96,9 @@ const World = {
     'Holloway', 'Cairnside', 'Dunmere', 'Fennwick', 'Greenford', 'Larkhollow',
     'Briarwood', 'Stoneford', 'Hartmere', 'Willowend', 'Crowhill',
     'Marshgate', 'Pineholt', 'Foxglen', 'Stagford', 'Whitebrook',
+    'Beechmere', 'Pinemoor', 'Eelwater', 'Maybrook', 'Roanford',
+    'Sweetwell', 'Acornvale', 'Foxhollow', 'Hartbridge', 'Goldmere',
+    'Birchwell', 'Mireford', 'Plumvale', 'Saltmarsh',
     // Italiano (borghi, alberi, geografia)
     'Borgovecchio', 'Pievebella', 'Olmoreale', 'Castagnara', 'Vallepiana',
     'Sambuco', 'Pratolungo', 'Olmeto', 'Roveto', 'Salice', 'Querceto',
@@ -536,6 +552,27 @@ const World = {
       }
     }
     if (bi >= 0) add(bi % W, (bi / W) | 0);
+
+    // Specials SPARSE: 6-8 luoghi ignoti random sulla terraferma, lontani
+    // dalle altre specials e dalle strutture conosciute → riempie i vuoti
+    // con elementi misteriosi da scoprire viaggiando.
+    const scattered = 6 + Math.floor(rng() * 3);
+    const farFromStruct = (x, y, md) => {
+      const m2 = md * md;
+      for (const s of (this.structures || [])) {
+        const dx = s.x - x, dy = s.y - y;
+        if (dx * dx + dy * dy < m2) return false;
+      }
+      return true;
+    };
+    for (let tries = 0; tries < 4000 && this.specials.length < 3 + scattered; tries++) {
+      const x = 3 + Math.floor(rng() * (W - 6));
+      const y = 3 + Math.floor(rng() * (H - 6));
+      if (!this.isLand(x, y)) continue;
+      if (!far(x, y, 14)) continue;
+      if (!farFromStruct(x, y, 5)) continue;
+      add(x, y);
+    }
   },
 
   _far(x, y, minD) {
@@ -546,38 +583,77 @@ const World = {
     return true;
   },
 
+  // Distanza minima rispetto a un sottoinsieme di tipi.
+  _farFromType(x, y, types, minD) {
+    const m2 = minD * minD;
+    for (const s of this.structures) {
+      if (types.indexOf(s.type) < 0) continue;
+      const dx = s.x - x, dy = s.y - y;
+      if (dx * dx + dy * dy < m2) return false;
+    }
+    return true;
+  },
+
   _placeStructures() {
     const B = this.BIOME;
     const rnd = mulberry32((this.seed ^ 0xC0FFEE) >>> 0);
     this.structures = [];
     const W = this.width, H = this.height;
+    const isPlainAny = (b) => (b === B.PIANURA || b === B.PIANURA_N || b === B.PIANURA_S);
 
-    // Castelli: su collina o pianura, ben distanziati.
+    // CASTELLI MAGGIORI: pochi, ben distanziati, sede dei lord. Su collina o
+    // pianura. Distanza castello-castello ampia (~26 tile).
+    const TARGET_CASTLES = 10;
     let ci = 0;
-    for (let tries = 0; tries < 6000 && ci < 8; tries++) {
+    for (let tries = 0; tries < 8000 && ci < TARGET_CASTLES; tries++) {
       const x = 2 + Math.floor(rnd() * (W - 4));
       const y = 2 + Math.floor(rnd() * (H - 4));
       const b = this.biomeAt(x, y);
-      const isPlainAny = (b === B.PIANURA || b === B.PIANURA_N || b === B.PIANURA_S);
-      if ((b === B.COLLINA || isPlainAny) && this._far(x, y, 22)) {
-        this.structures.push({ type: 'castle', x, y, name: this.CASTLE_NAMES[ci % this.CASTLE_NAMES.length] });
+      if ((b === B.COLLINA || isPlainAny(b)) &&
+          this._farFromType(x, y, ['castle'], 26)) {
+        this.structures.push({ type: 'castle', x, y,
+          name: this.CASTLE_NAMES[ci % this.CASTLE_NAMES.length] });
         ci++;
       }
     }
 
-    // Villaggi: pianura/foresta, preferibilmente vicino all'acqua, distanziati.
-    // Buffer ≥ 2 tile dal bordo mappa (la cornice copre i tile estremi).
-    let vi = 0;
-    for (let tries = 0; tries < 10000 && vi < 22; tries++) {
+    // CASTELLI MINORI / TORRI DI GUARDIA: più numerosi, distanze più strette.
+    // Lontani dai maggiori (~14) e tra loro (~11). Possono stare anche su
+    // ROCCIA o ai confini montani — sono avamposti, non sedi nobiliari.
+    // Buffer ≥ 2 tile dal bordo come per i castelli.
+    const TARGET_KEEPS = 22;
+    let ki = 0;
+    for (let tries = 0; tries < 12000 && ki < TARGET_KEEPS; tries++) {
       const x = 2 + Math.floor(rnd() * (W - 4));
       const y = 2 + Math.floor(rnd() * (H - 4));
       const b = this.biomeAt(x, y);
-      const okBiome = (b === B.PIANURA || b === B.PIANURA_N || b === B.PIANURA_S || b === B.FORESTA);
-      // bonus vicino acqua: accetta sempre se vicino acqua, altrimenti 1 su 2
-      const okPlace = okBiome && this._far(x, y, 8) &&
-                      (this._nearWater(x, y, 2) || rnd() < 0.5);
-      if (okPlace) {
-        this.structures.push({ type: 'village', x, y, name: this.VILLAGE_NAMES[vi % this.VILLAGE_NAMES.length] });
+      const okBiome = (b === B.COLLINA || isPlainAny(b) || b === B.ROCCIA);
+      if (okBiome &&
+          this._farFromType(x, y, ['castle'], 14) &&
+          this._farFromType(x, y, ['keep'], 11)) {
+        this.structures.push({ type: 'keep', x, y,
+          name: this.KEEP_NAMES[ki % this.KEEP_NAMES.length] });
+        ki++;
+      }
+    }
+
+    // VILLAGGI: tanti e fitti. Pianura/foresta, preferibilmente vicino acqua.
+    // Possono stare relativamente vicini a castelli/keep (borghi serviti).
+    // Buffer ≥ 2 tile dal bordo: la cornice copre i tile estremi.
+    const TARGET_VILLAGES = 50;
+    let vi = 0;
+    for (let tries = 0; tries < 25000 && vi < TARGET_VILLAGES; tries++) {
+      const x = 2 + Math.floor(rnd() * (W - 4));
+      const y = 2 + Math.floor(rnd() * (H - 4));
+      const b = this.biomeAt(x, y);
+      const okBiome = (isPlainAny(b) || b === B.FORESTA);
+      if (!okBiome) continue;
+      if (!this._farFromType(x, y, ['village'], 6)) continue;
+      if (!this._farFromType(x, y, ['castle', 'keep'], 4)) continue;
+      // Bonus vicino acqua come prima
+      if (this._nearWater(x, y, 2) || rnd() < 0.5) {
+        this.structures.push({ type: 'village', x, y,
+          name: this.VILLAGE_NAMES[vi % this.VILLAGE_NAMES.length] });
         vi++;
       }
     }
