@@ -57,8 +57,12 @@ Primo passo, vanilla e senza dipendenze. Esposto come oggetto globale `World`.
 - **Noise:** value-noise con hash interi + interpolazione bilineare smoothstep,
   sommato in fBm (5 ottave per l'elevazione, 4 per l'umidità). Seedabile.
 - **Elevazione:** noise + **bias radiale "continente"** (centro alto, bordi
-  mare), poi **normalizzazione min/max** per sfruttare tutto l'intervallo
-  (così compaiono davvero montagne e coste).
+  mare) + **noise ridged** che genera **catene montuose** (creste lineari, non
+  blob), più forti verso l'interno; poi **normalizzazione min/max** per
+  sfruttare tutto l'intervallo. Le montagne risultano in catene fiancheggiate
+  da colline, con foreste/pianure interposte.
+- **Bordi:** oltre i confini del mondo il renderer disegna mare aperto, quindi
+  il continente è circondato da oceano (confine naturale "invalicabile").
 - **Biomi** (da elevazione `en` + umidità `mn`, entrambe normalizzate `[0,1]`):
   acqua `<0.34`, montagna `>0.82`, collina `>0.66`, palude (bassa+umida),
   foresta (umida), sabbia (secca), altrimenti pianura.

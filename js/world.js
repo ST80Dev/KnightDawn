@@ -31,6 +31,20 @@ function _fbm(x, y, seed, octaves, freq) {
   }
   return sum / norm;
 }
+// Ridged multifractal: crea creste/linee → catene montuose (non blob).
+function _ridge(x, y, seed, octaves, freq) {
+  let amp = 1, sum = 0, norm = 0, f = freq;
+  for (let i = 0; i < octaves; i++) {
+    let n = _valueNoise(x * f, y * f, (seed + i * 1013) | 0);
+    n = 1 - Math.abs(2 * n - 1); // cresta
+    n = n * n;                   // affila il profilo
+    sum += amp * n;
+    norm += amp;
+    amp *= 0.5;
+    f *= 2;
+  }
+  return sum / norm;
+}
 
 const World = {
   width: 0,
@@ -56,25 +70,29 @@ const World = {
     this.tiles = new Uint8Array(W * H);
     this.elev = new Float32Array(W * H);
 
-    const freq = 3.2 / Math.max(W, H); // poche, ampie feature
+    const freqE = 4.2 / Math.max(W, H);   // feature medie (mixing maggiore)
+    const freqR = 5.5 / Math.max(W, H);   // creste montuose
+    const freqM = 6.0 / Math.max(W, H);   // umidità a grana più fine
     const seedE = this.seed;
+    const seedR = (this.seed ^ 0x68bc21eb) | 0;
     const seedM = (this.seed ^ 0x5bd1e995) | 0;
 
-    // Passata 1: campi grezzi di elevazione (con falloff costiero) e umidità.
-    // Il value-noise si concentra attorno a 0.5: salviamo min/max per
-    // normalizzare e sfruttare tutto l'intervallo (montagne incluse).
+    // Passata 1: campi grezzi di elevazione (continente + catene montuose) e
+    // umidità. Salviamo min/max per normalizzare su tutto l'intervallo.
     const hum = new Float32Array(W * H);
     let eMin = Infinity, eMax = -Infinity, mMin = Infinity, mMax = -Infinity;
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
-        let e = _fbm(x, y, seedE, 5, freq);
-        // Bias "continente": gradiente radiale (centro alto, bordi mare) scommato
-        // al noise → terra al centro circondata da costa/acqua.
+        const base = _fbm(x, y, seedE, 5, freqE);
         const dx = (x / W - 0.5) * 2;
         const dy = (y / H - 0.5) * 2;
         const d = Math.sqrt(dx * dx + dy * dy);
-        e = e * 0.58 + (1 - d) * 0.55;
-        const m = _fbm(x + 1000, y + 1000, seedM, 4, freq * 1.7);
+        const cont = 1 - d;                 // gradiente continente (centro alto)
+        let e = base * 0.5 + cont * 0.5;
+        // Catene montuose: creste ridged, soprattutto verso l'interno.
+        const r = _ridge(x, y, seedR, 4, freqR);
+        e += r * 0.5 * Math.max(0, cont);
+        const m = _fbm(x + 1000, y + 1000, seedM, 4, freqM);
         const i = y * W + x;
         this.elev[i] = e; hum[i] = m;
         if (e < eMin) eMin = e; if (e > eMax) eMax = e;

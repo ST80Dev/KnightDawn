@@ -39,6 +39,12 @@ const MapRenderer = {
   // ─── Disegno ──────────────────────────────────────────────────────────────
   draw(ctx, area, cam, knightPos) {
     const { ox, oy, t } = this._origin(area, cam);
+
+    // 0. Oceano: tutto ciò che è oltre i confini del mondo è mare aperto
+    //    (confine naturale "invalicabile"). Niente più pergamena vuota.
+    ctx.fillStyle = PALETTE.bluFiume;
+    ctx.fillRect(area.x, area.y, area.w, area.h);
+
     const x0 = Math.floor(ox) - 1;
     const y0 = Math.floor(oy) - 1;
     const x1 = Math.ceil(ox + area.w / t) + 1;
@@ -127,69 +133,87 @@ const MapRenderer = {
     else this._drawVillage(ctx, cx, cy, t, s.name);
   },
 
+  // Le strutture importanti hanno una dimensione MINIMA su schermo (in px
+  // logici) così restano evidenti anche a zoom out massimo, non singole tile.
+  // Tutte hanno un contorno scuro per staccare da qualsiasi bioma sotto.
   _drawCastle(ctx, cx, cy, t, name) {
-    if (t < 10) {
-      const r = Math.max(3, t * 0.7);
-      ctx.fillStyle = PALETTE.grigioPietra;
-      ctx.fillRect(cx - r / 2, cy - r / 2, r, r);
-      ctx.fillStyle = PALETTE.rossoBandiera;
-      ctx.fillRect(cx - 1, cy - r / 2 - r * 0.5, 2, r * 0.5);
-      return;
-    }
-    const u = t * 0.5;
-    ctx.fillStyle = PALETTE.grigioPietra;
-    ctx.fillRect(cx - u, cy - u * 0.6, u * 2, u * 1.2);
-    ctx.fillStyle = PALETTE.grigioPietraSc;
-    ctx.fillRect(cx - u * 1.25, cy - u, u * 0.6, u * 2);
-    ctx.fillRect(cx + u * 0.65, cy - u, u * 0.6, u * 2);
-    // merlature
-    ctx.fillStyle = PALETTE.grigioPietra;
-    for (let i = 0; i < 4; i++) ctx.fillRect(cx - u + i * (u * 0.6), cy - u * 0.85, u * 0.3, u * 0.3);
+    const s = Math.max(S(12), t * 0.95);
+    const w = s, h = s * 0.85;
+    const x = Math.round(cx - w / 2), y = Math.round(cy - h / 2);
+    const o = Math.max(1, s * 0.10);
+
+    ctx.fillStyle = PALETTE.inkNero;                 // contorno
+    ctx.fillRect(x - o, y - o, w + 2 * o, h + 2 * o);
+    ctx.fillStyle = PALETTE.grigioPietra;            // corpo
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = PALETTE.grigioPietraSc;          // ombra a destra
+    ctx.fillRect(x + w * 0.62, y, w * 0.38, h);
+    // merlature (scavate nel contorno in cima)
+    ctx.fillStyle = PALETTE.inkNero;
+    const nw = w / 5;
+    for (let i = 0; i < 2; i++) ctx.fillRect(x + nw * (i * 2 + 1), y - o, nw, o * 1.6);
     // portone
     ctx.fillStyle = PALETTE.inkScuro;
-    ctx.fillRect(cx - u * 0.2, cy + u * 0.1, u * 0.4, u * 0.5);
+    ctx.fillRect(cx - w * 0.13, y + h * 0.45, w * 0.26, h * 0.55);
     // stendardo
+    const fh = h * 0.55;
+    ctx.fillStyle = PALETTE.inkNero;
+    ctx.fillRect(cx - Math.max(1, o * 0.5), y - o - fh, Math.max(1, o), fh);
     ctx.fillStyle = PALETTE.rossoBandiera;
-    ctx.fillRect(cx - 1, cy - u * 1.7, 2, u * 0.7);
-    ctx.fillRect(cx, cy - u * 1.7, u * 0.5, u * 0.3);
-    this._label(ctx, name, cx, cy + u * 1.4, t, true);
+    ctx.fillRect(cx, y - o - fh, w * 0.30, fh * 0.45);
+
+    this._label(ctx, name, cx, y + h + o + S(2), t, true);
   },
 
   _drawVillage(ctx, cx, cy, t, name) {
-    if (t < 10) {
-      const r = Math.max(3, t * 0.55);
-      this._tri(ctx, cx, cy - r * 0.7, cx - r * 0.7, cy + r * 0.4, cx + r * 0.7, cy + r * 0.4, PALETTE.marrTetto);
-      return;
+    const s = Math.max(S(10), t * 0.8);
+    const u = s * 0.5;
+    for (const ox of [-u * 0.85, u * 0.85]) {
+      const hx = cx + ox;
+      const bx = hx - u * 0.5, by = cy - u * 0.1;
+      ctx.fillStyle = PALETTE.inkNero; // contorno casa
+      ctx.fillRect(bx - 1, by - 1, u + 2, u * 0.7 + 2);
+      ctx.fillStyle = PALETTE.pergChiara; // muro
+      ctx.fillRect(bx, by, u, u * 0.7);
+      // tetto con contorno
+      this._tri(ctx, hx, by - u * 0.62, hx - u * 0.72, by, hx + u * 0.72, by, PALETTE.inkNero);
+      this._tri(ctx, hx, by - u * 0.5,  hx - u * 0.6,  by, hx + u * 0.6,  by, PALETTE.marrTetto);
     }
-    const u = t * 0.4;
-    for (let i = -1; i <= 1; i++) {
-      const hx = cx + i * u * 1.1;
-      this._tri(ctx, hx, cy - u * 0.7, hx - u * 0.6, cy, hx + u * 0.6, cy, PALETTE.marrTetto);
-      ctx.fillStyle = PALETTE.pergChiara;
-      ctx.fillRect(hx - u * 0.45, cy, u * 0.9, u * 0.6);
-    }
-    this._label(ctx, name, cx, cy + u * 1.1, t, false);
+    this._label(ctx, name, cx, cy + u + S(2), t, false);
   },
 
   _drawKnight(ctx, x, y, t) {
-    const r = Math.max(3, t * 0.4);
+    const r = Math.max(S(6), t * 0.45);
+    ctx.fillStyle = PALETTE.inkNero;            // alone scuro per stacco
+    ctx.beginPath(); ctx.arc(x, y, r + Math.max(1, r * 0.25), 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = PALETTE.cavMarker;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = PALETTE.inkNero;
-    const w = Math.max(1, r * 0.25);
-    ctx.fillRect(x - r * 1.4, y - w / 2, r * 2.8, w);
-    ctx.fillRect(x - w / 2, y - r * 1.4, w, r * 2.8);
+    const w = Math.max(1, r * 0.3);
+    ctx.fillRect(x - r * 1.5, y - w / 2, r * 3, w);
+    ctx.fillRect(x - w / 2, y - r * 1.5, w, r * 3);
   },
 
-  _label(ctx, text, cx, y, t, strong) {
-    if (t < 12) return;
-    ctx.fillStyle = PALETTE.inkScuro;
-    ctx.font = `${strong ? 'bold ' : ''}italic ${Math.max(9, Math.round(t * 0.55))}px "Courier New", monospace`;
+  // Etichetta su targhetta chiara con bordo scuro: leggibile su qualunque
+  // fondo (mare, foresta, montagna). Mostrata solo da un certo zoom in poi
+  // per non affollare la vista regione.
+  _label(ctx, text, cx, yTop, t, strong) {
+    if (t < 8) return;
+    const fs = Math.max(S(11), t * 0.6);
+    ctx.font = `${strong ? 'bold ' : ''}${fs}px "Courier New", monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillText(text, cx, y);
+    const tw = ctx.measureText(text).width;
+    const padX = fs * 0.45, padY = fs * 0.18;
+    const bw = tw + padX * 2, bh = fs + padY * 2;
+    const bx = cx - bw / 2, by = yTop;
+    ctx.fillStyle = 'rgba(216,200,160,0.88)'; // pergChiara semitrasparente
+    ctx.fillRect(bx, by, bw, bh);
+    ctx.fillStyle = PALETTE.inkScuro;
+    ctx.lineWidth = Math.max(1, fs * 0.07);
+    ctx.strokeStyle = PALETTE.inkScuro;
+    ctx.strokeRect(bx, by, bw, bh);
+    ctx.fillText(text, cx, by + padY);
   },
 
   _tri(ctx, x0, y0, x1, y1, x2, y2, color) {
