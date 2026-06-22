@@ -96,6 +96,65 @@ Il mondo ha **stagioni** che influenzano il gameplay:
 
 ## 3. Meccaniche core
 
+### Tempo e calendario
+
+Il tempo non è misurato in unità "umane" (anno, mese, settimana) ma in una gerarchia
+mitologico-cronachistica propria del mondo di gioco.
+
+#### Gerarchia
+
+```
+Era → Luce → Stagione → Diario → Passo
+```
+
+- **Era** — unità mitologica, scandita da cataclismi e svolte cosmiche.
+  Numerata in ordinale (*Prima Era, Seconda Era…*). Non cambia in una partita
+  normale; è lore di sfondo.
+- **Luce** — sotto-era percepibile dal giocatore. Equivale grossomodo a un "anno"
+  del mondo. Numerata dentro l'Era (*Prima Luce, Seconda Luce…*).
+- **Stagione** — quattro per Luce, nell'ordine: Primavera, Estate, Autunno, Inverno.
+  Modulano viaggio, eventi, propagazione delle notizie, raccolti.
+- **Diario** — 20 per Stagione. Unità di cronaca, numerata (1-20). Cadenza per
+  eventi di fazione, tributi, consigli.
+- **Passo** — 10 per Diario. È il **turno minimo** del gioco. Un'azione narrativa
+  significativa (tratto di viaggio, scontro, interazione lunga) consuma uno o più passi.
+
+#### Conversioni di riferimento
+
+- 1 Stagione = 20 Diari = 200 Passi
+- 1 Luce = 4 Stagioni = 80 Diari = 800 Passi
+- 1 Era = N Luci (numero variabile, definito da eventi narrativi)
+
+[TBD] Ritarare numeri di Passi/Diari/Stagioni quando si definiscono mappa del
+mondo, durata di eventi, evoluzioni di abilità e upgrade strumenti.
+
+#### Età della Veglia (prologo)
+
+Prima della Prima Era esiste l'**Età della Veglia**: periodo di ambientamento e
+addestramento del cavaliere. Caratteristiche:
+
+- Il conteggio formale di passi/diari/stagioni **non è visibile** al giocatore.
+  L'HUD mostra solo *"Veglia · giorno N"* o equivalente.
+- Eventi tutorial: imparare viaggio, combattimento, dialoghi, gestione equipaggiamento.
+- Termina con un **evento di soglia** narrativo (cerimonia, partenza, prima vera
+  battaglia). Da quel turno parte il conteggio ufficiale:
+  *Prima Era · Prima Luce · Primavera · Diario 1 · Passo 1*.
+- Lore in-fiction: periodo "fuori dalla storia", non registrato dai cronisti —
+  coerente col fatto che i Diari sono unità di cronaca.
+
+#### Visualizzazione
+
+Forma estesa (schermate narrative, log eventi):
+> *Passo 5 del Diario 12, Autunno della Seconda Luce, Prima Era*
+
+Forma compatta (HUD):
+> *I · II · Aut 12.5*
+
+Durante la Veglia:
+> *Veglia · giorno 14*
+
+[TBD] Stile font e collocazione esatta nell'HUD → `docs/UI_GUIDE.md`
+
 ### Viaggio
 
 - Click su destinazione nella mappa → A* calcola percorso → viaggio automatico tile-by-tile
