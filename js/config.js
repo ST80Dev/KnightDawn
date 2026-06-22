@@ -23,6 +23,7 @@ const PALETTE = {
   marrMontagna:  '#6a5a3a',
   marrMontCh:    '#7a6a48',
   neveCime:      '#e8e0d0',
+  ghiaccio:      '#bcd0d8',
 
   rossoBandiera: '#8a1010',
   rossoBandCh:   '#aa1818',

@@ -77,6 +77,15 @@ const MapRenderer = {
       this._drawStructure(ctx, s, sx, sy, t);
     }
 
+    // 6b. Zone speciali agli estremi (natura ignota finché non scoperte).
+    for (const sp of World.specials) {
+      const sx = area.x + (sp.x + 0.5 - ox) * t;
+      const sy = area.y + (sp.y + 0.5 - oy) * t;
+      if (sx < area.x - t || sx > area.x + area.w + t ||
+          sy < area.y - t || sy > area.y + area.h + t) continue;
+      this._drawSpecial(ctx, sp, sx, sy, t);
+    }
+
     // 8. Cavaliere
     const kx = area.x + (knightPos.x + 0.5 - ox) * t;
     const ky = area.y + (knightPos.y + 0.5 - oy) * t;
@@ -89,10 +98,13 @@ const MapRenderer = {
     const v = ((tx * 7 + ty * 13) & 3);
     switch (b) {
       case B.ACQUA:    return v < 2 ? PALETTE.bluFiume : PALETTE.bluFiumeCh;
+      case B.FIUME:    return PALETTE.bluFiumeCh;
+      case B.GHIACCIO: return v < 1 ? PALETTE.ghiaccio : PALETTE.neveCime;
       case B.PIANURA:  return v === 0 ? PALETTE.pergMedia : PALETTE.pergChiara;
       case B.COLLINA:  return v < 1 ? PALETTE.pergScura : PALETTE.pergMedia;
       case B.SABBIA:   return PALETTE.sabbia;
       case B.PALUDE:   return PALETTE.verdePalude;
+      case B.NEVE:     return v < 1 ? PALETTE.neveCime : PALETTE.pergChiara;
       case B.FORESTA:  return PALETTE.pergMedia;   // sfondo, l'albero ci va sopra
       case B.MONTAGNA: return PALETTE.pergScura;   // sfondo, il picco ci va sopra
       default:         return PALETTE.pergChiara;
@@ -188,6 +200,28 @@ const MapRenderer = {
     this._label(ctx, name, cx, cy + u + S(2), t, false);
   },
 
+  // Marker di zona speciale: rombo scuro con orlo chiaro. Finché non scoperta
+  // mostra solo un "?" (la natura resta ignota); da scoperta mostrerebbe nome.
+  _drawSpecial(ctx, sp, cx, cy, t) {
+    const r = Math.max(S(7), t * 0.7);
+    // rombo con contorno chiaro per stacco
+    const dia = (rr, col) => {
+      ctx.fillStyle = col;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - rr); ctx.lineTo(cx + rr, cy);
+      ctx.lineTo(cx, cy + rr); ctx.lineTo(cx - rr, cy);
+      ctx.closePath(); ctx.fill();
+    };
+    dia(r + Math.max(1, r * 0.3), PALETTE.pergChiara);
+    dia(r, sp.discovered ? PALETTE.rossoBandiera : PALETTE.inkScuro);
+    ctx.fillStyle = PALETTE.pergChiara;
+    ctx.font = `bold ${Math.max(S(9), r)}px "Courier New", monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(sp.discovered ? '!' : '?', cx, cy + r * 0.08);
+    if (sp.discovered) this._label(ctx, sp.name, cx, cy + r + S(2), t, true);
+  },
+
   _drawKnight(ctx, x, y, t) {
     const r = Math.max(S(6), t * 0.45);
     ctx.fillStyle = PALETTE.inkNero;            // alone scuro per stacco
@@ -242,11 +276,14 @@ const MapRenderer = {
     let hex;
     switch (b) {
       case B.ACQUA:    hex = PALETTE.bluFiume; break;
+      case B.FIUME:    hex = PALETTE.bluFiumeCh; break;
+      case B.GHIACCIO: hex = PALETTE.ghiaccio; break;
       case B.FORESTA:  hex = PALETTE.verdeBosco; break;
       case B.MONTAGNA: hex = PALETTE.marrMontagna; break;
       case B.COLLINA:  hex = PALETTE.pergScura; break;
       case B.PALUDE:   hex = PALETTE.verdePalude; break;
       case B.SABBIA:   hex = PALETTE.sabbia; break;
+      case B.NEVE:     hex = PALETTE.neveCime; break;
       default:         hex = PALETTE.pergChiara;
     }
     return hexToRgb(hex);

@@ -71,17 +71,29 @@ Primo passo, vanilla e senza dipendenze. Esposto come oggetto globale `World`.
   possono essere terra o mare a seconda del noise (es. una catena montuosa che
   arriva fino all'orlo). La camera tiene comunque il mondo inquadrato.
 
+- **Clima (emisfero boreale):** campo di temperatura per **latitudine** (nord
+  freddo, sud caldo) con raffreddamento per quota e variazione a noise. Guida i
+  biomi: estremo nord → **neve/tundra** (NEVE) e **mare ghiacciato** (GHIACCIO);
+  sud caldo e secco → **deserti** (SABBIA); fasce temperate → foreste, pianure,
+  colline, paludi.
+- **Fiumi e laghi:** i fiumi (FIUME) partono dai rilievi e scendono per
+  pendenza fino a mare/lago; in un minimo locale formano un piccolo **lago**.
+- **Zone speciali agli estremi:** alcuni **luoghi ignoti** generati agli estremi
+  (nord, sud, isola remota) con tipo casuale (rovine, tempio, monolite, relitto,
+  cripta, faro, santuario, voragine). La natura resta nascosta
+  (`discovered=false`): si scoprono **giocando** — sulla mappa appaiono solo
+  come "?" finché non raggiunti.
+
 ### Navigazione
 
-L'acqua è pensata come **navigabile via nave** (il cavaliere dovrà affrontare
-tratte marittime): isole e canali rendono il mare parte dell'esplorazione.
-Le rotte/imbarchi e i porti sono un passo successivo (gameplay/`travel.js`).
+L'acqua è **navigabile via nave** (il cavaliere dovrà affrontare tratte
+marittime): isole e canali rendono il mare parte dell'esplorazione. Rotte,
+imbarchi e porti sono un passo successivo (gameplay/`travel.js`).
 
 ### Da fare (prossimi passi mondo)
 
-Fiumi (discesa da montagne) e laghi interni; porti sui litorali; zone speciali
-agli estremi (es. terre ghiacciate a nord / deserto a sud, stile "oltre la
-Barriera"); strade A* tra strutture; fazioni e regioni nominate; fog of war.
+Porti sui litorali; strade A* tra strutture; fazioni e regioni nominate;
+fog of war (che nasconderà davvero le zone speciali finché non scoperte).
 - **Biomi** (da elevazione `en` + umidità `mn`, entrambe normalizzate `[0,1]`):
   acqua `<0.34`, montagna `>0.82`, collina `>0.66`, palude (bassa+umida),
   foresta (umida), sabbia (secca), altrimenti pianura.
