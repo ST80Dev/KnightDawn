@@ -393,53 +393,85 @@ Dettagli in `docs/UI_GUIDE.md`.
 
 ## 5. Roadmap di sviluppo
 
-### Fase 1 — Grafica e rendering ⭐ CORRENTE
+Due binari procedono in parallelo: **Grafica** (Fase G1…Gn, definita in
+`docs/GRAFICA.md`) e **Sistemi** (Fase S1…Sn, definita qui). I sistemi
+seguono dati-prima, UI-dopo: ogni fase deve essere testabile (anche solo
+da console / log testuale) prima di aggiungere la sua UI.
+
+### Binario Grafica
+
+#### Fase G1 — Grafica e rendering ⭐ CORRENTE
 - Palette e costanti
 - Tile procedurali per ogni bioma
 - Renderer con camera e zoom multi-livello
 - Generazione mondo minima per test visivo
+- Dettaglio in `docs/GRAFICA.md`
 
-### Fase 2 — Mondo e navigazione
+#### Fase G2 — HUD e interfaccia
+- Layout HUD a tre pannelli, log eventi, minimappa
+- Pannello stato cavaliere
+- Visualizzazione data calendario (forma estesa + compatta)
+- Dettaglio in `docs/UI_GUIDE.md`
+
+#### Fase G3 — Vista dettaglio laterale
+- Scene contestuali per castelli, taverne, dungeon, luoghi speciali
+- Composizione layered 2D
+
+### Binario Sistemi
+
+#### Fase S1 — Fondamenta di stato
+- Stato cavaliere (attributi, ferite, equipaggiamento — dati, non UI ricca)
+- Sistema turno + calendario (Veglia → Era/Luce/Stagione/Diario/Passo)
+- Save/load minimale (JSON in localStorage)
+- Calendario specificato in §3 *Tempo e calendario* di questo GDD
+
+#### Fase S2 — Mondo dati e viaggio
 - Generazione mondo completa con vincoli
 - Nebbia di guerra
-- Pathfinding e viaggio automatico
-- Sistema turni base
+- Pathfinding A* e viaggio automatico tile-by-tile
+- Costo passi per terreno
+- Dettaglio in `docs/WORLD_GEN.md`
 
-### Fase 3 — HUD e interfaccia
-- Layout HUD a tre pannelli
-- Log eventi
-- Pannello stato cavaliere
-- Minimappa
+#### Fase S3 — Eventi e interazione luoghi
+- Sistema trigger eventi durante viaggio (incontri, meteo, scoperte)
+- Vista dettaglio luoghi (logica scene, dialoghi base, scelte)
+- Sistema scelte narrative stile gamebook (vedi §3 *Modello di gameplay* [TBD])
+- Dettaglio in `docs/EVENTS.md`
 
-### Fase 4 — Cavaliere e interazioni
-- Stato personaggio
-- Inventario e equipaggiamento
-- Incontri casuali durante il viaggio
-- Interazione base con luoghi (vista laterale)
+#### Fase S4 — Combattimento
+- Risoluzione automatica a round
+- Modificatori da attributi, equipaggiamento, terreno, seguito
+- Fuga, ferite, morte
+- Dettaglio in `docs/COMBAT.md`
 
-### Fase 5 — Combattimento
-- Sistema combattimento a round
-- Creature e avversari
-- Loot e conseguenze
+#### Fase S5 — Fazioni e reputazione
+- Lista fazioni concrete + matrice relazioni
+- Reputazione che cambia per azioni
+- NPC e luoghi reagiscono al valore di reputazione
+- Dettaglio in `docs/FACTIONS.md`
 
-### Fase 6 — Fazioni e mondo vivo
-- Sistema reputazione
-- Eventi autonomi del mondo
-- NPC con memoria
-- Propagazione delle informazioni (NewsToken, onde, rumor)
+#### Fase S6 — Propagazione delle informazioni
+- NewsToken, onde, varianti rumor
+- Eventi del mondo che generano news
+- Locande/NPC come canali di lettura news per il giocatore
+- Override (corvi, spie, sogni profetici)
+- Dettaglio in `docs/NEWS_SYSTEM.md`
 
-### Fase 6b — Compagnia e covi
-- Apprendista (slot unico, archi narrativi di acquisizione e uscita)
+#### Fase S7 — Compagnia e covi
+- Apprendista (slot unico, acquisizione e uscita narrativa)
 - Compagni d'arme (Lama / Ombra / Conoscitore) con paga e fedeltà
+- Integrazione nel combattimento (modificatori, niente micromanagement)
 - Sistema covi: fondazione su location esistenti, slot strutture, degrado
-- Integrazione covi ↔ propagazione news (volieria)
+- Integrazione covi ↔ news (volieria), paga (dispensa)
+- Dettaglio in `docs/COMPANIONS.md`
 
-### Fase 7 — Archi narrativi
+#### Fase S8 — Archi narrativi e titoli
 - Sistema missione/profezia
 - Campagna episodica
-- Titoli emergenti
+- Titoli emergenti (osservano pattern dai sistemi precedenti)
 
-### Fase 8 — Polish e salvataggio
-- Save/load
-- Bilanciamento
-- Tutorial/onboarding
+#### Fase S9 — Polish, bilanciamento, retuning
+- Risoluzione dei `[TBD]` numerici (calendario, paga, costi covo, frequenze eventi)
+- Cataloghi concreti (fazioni, oggetti, creature, eventi)
+- Tutorial/onboarding (uscita dall'Età della Veglia)
+- Save/load completo e robusto
