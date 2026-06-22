@@ -113,6 +113,12 @@ const COMPACT_BREAKPOINT = 820; // sotto questa larghezza (CSS px) → layout co
   canvas.addEventListener('pointercancel', () => {
     Scenes.onPointerCancel();
   }, opts);
+  // Rotella del mouse (desktop): zoom mappa. preventDefault per non far
+  // scrollare la pagina; la scena decide se/come usarla.
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    Scenes.onWheel(displayToInternalEvt(e), e.deltaY);
+  }, opts);
   // Evita il menu contestuale da long-press su mobile.
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 

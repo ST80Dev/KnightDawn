@@ -3,21 +3,37 @@
 // passano da S(...)/SF(...) per restare proporzionate al canvas.
 //
 // Layout adattivo:
-//  - desktop (landscape ampio): 3 colonne — stato | mappa+log | contesto
-//  - compatto (UI.compact, tipico mobile portrait): impilato in verticale —
-//    barra alta → mappa → schede (Stato/Contesto/Diario/Regione) → barra azioni.
+//  - desktop (landscape ampio): 3 colonne — stato | mappa+diario | contesto.
+//  - compatto (UI.compact, tipico mobile portrait): mappa grande a tutto
+//    schermo + footer con due righe di mini-pulsanti:
+//      · riga 1 — navigazione aree (Stato/Contesto/Diario/Regione): aprono il
+//        relativo pannello come OVERLAY a tutto schermo sopra la mappa;
+//      · riga 2 — azioni di gioco (Inventario/Mappa/Accampa/Interagisci).
+//
+// Zoom mappa: rotella del mouse (desktop) + pulsanti +/- sulla mappa (mobile).
 // Input via Pointer Events (mouse + touch).
 
 const GameScreen = {
   canvas: null,
   ctx: null,
-  hoverBtn: -1,
-  hoverTab: -1,
-  pressedBtn: -1,
-  pressedTab: -1,
+
+  // hover/press per gruppo di pulsanti (-1 = nessuno)
+  hoverBtn: -1, pressedBtn: -1,     // azioni
+  hoverNav: -1, pressedNav: -1,     // navigazione aree (compatto)
+  hoverZoom: -1, pressedZoom: -1,   // +/- zoom (compatto)
+  hoverClose: false,
+
   actionButtons: [],
-  tabButtons: [],
-  activeTab: 'stato',
+  navButtons: [],
+  zoomButtons: [],
+
+  activeOverlay: null,   // null | 'stato' | 'contesto' | 'log' | 'mini'
+  overlayCard: null,
+  overlayClose: null,
+  overlayPressed: null,
+
+  mapRect: null,
+  mapZoom: 1,
 
   init(canvas) {
     this.canvas = canvas;
@@ -31,13 +47,12 @@ const GameScreen = {
       { label: 'INTERAGISCI', action: 'interagisci', disabled: true },
     ];
 
-    // Schede del layout compatto: ogni scheda mostra a tutta larghezza un
-    // pannello che su desktop sta in una colonna a sé.
-    this.tabButtons = [
-      { label: 'STATO',    tab: 'stato' },
-      { label: 'CONTESTO', tab: 'contesto' },
-      { label: 'DIARIO',   tab: 'log' },
-      { label: 'REGIONE',  tab: 'mini' },
+    // Navigazione aree (compatto): ogni pulsante apre un overlay a tutto schermo.
+    this.navButtons = [
+      { label: 'STATO',    key: 'stato' },
+      { label: 'CONTESTO', key: 'contesto' },
+      { label: 'DIARIO',   key: 'log' },
+      { label: 'REGIONE',  key: 'mini' },
     ];
   },
 
@@ -71,6 +86,7 @@ const GameScreen = {
       meteo: 'Sereno',
       destinazione: 'nessuna',
     };
+    this.activeOverlay = null;
   },
 
   // ─── Layout ───────────────────────────────────────────────────────────────
@@ -127,118 +143,166 @@ const GameScreen = {
     const H = window.UI.h;
     const pad = SF(8);
     const topBarH = SF(56);
-    const tabsH = SF(38);
-    // Barra azioni in basso: 2 righe (2×2) di pulsanti.
-    const actBtnH = SF(40);
-    const actGap = SF(8);
-    const actPad = SF(8);
-    const actionBarH = actBtnH * 2 + actGap + actPad * 2;
+    // Footer: due righe di mini-pulsanti (navigazione aree + azioni).
+    const navH = SF(28);
+    const actH = SF(34);
+    const fGap = SF(6);
+    const fPad = SF(8);
+    const footerH = fPad * 2 + navH + fGap + actH;
 
     const topBar = { x: 0, y: 0, w: W, h: topBarH };
-
-    const contentY = topBarH + pad;
-    const contentH = H - topBarH - actionBarH - pad * 2;
-    // La mappa prende ~46% dello spazio centrale, il pannello a schede il resto.
-    const mapH = Math.floor(contentH * 0.46);
-
-    const map = { x: pad, y: contentY, w: W - pad * 2, h: mapH };
-    const tabs = { x: pad, y: map.y + map.h + pad, w: W - pad * 2, h: tabsH };
-    const panel = {
+    const map = {
       x: pad,
-      y: tabs.y + tabs.h + pad,
+      y: topBarH + pad,
       w: W - pad * 2,
-      h: contentH - mapH - tabsH - pad * 2,
+      h: H - topBarH - footerH - pad * 2,
     };
-    const actionBar = { x: 0, y: H - actionBarH, w: W, h: actionBarH };
+    const footer = { x: 0, y: H - footerH, w: W, h: footerH, navH, actH, fGap, fPad };
 
-    return { compact: true, pad, topBar, map, tabs, panel, actionBar };
+    return { compact: true, pad, topBar, map, footer };
   },
 
-  // Posiziona i pulsanti azione (2 colonne × 2 righe) nell'area indicata,
-  // ancorati in basso a meno di `fill`, nel qual caso riempiono tutta l'area.
-  layoutButtons(area, fill) {
-    const cols = 2;
-    const rows = 2;
+  // Azioni: 2×2 ancorate in basso nell'area (desktop) o riempimento.
+  layoutButtons(area) {
+    const cols = 2, rows = 2;
     const gap = SF(8);
     const padInner = SF(14);
     const bw = (area.w - padInner * 2 - gap * (cols - 1)) / cols;
-    const bh = fill
-      ? (area.h - padInner * 2 - gap * (rows - 1)) / rows
-      : SF(32);
+    const bh = SF(32);
     const startX = area.x + padInner;
-    const startY = fill
-      ? area.y + padInner
-      : area.y + area.h - bh * rows - gap * (rows - 1) - padInner;
+    const startY = area.y + area.h - bh * rows - gap * (rows - 1) - padInner;
     this.actionButtons.forEach((b, i) => {
-      const c = i % cols;
-      const r = Math.floor(i / cols);
+      const c = i % cols, r = Math.floor(i / cols);
       b.x = Math.floor(startX + c * (bw + gap));
       b.y = Math.floor(startY + r * (bh + gap));
       b.w = Math.floor(bw);
-      b.h = Math.floor(bh);
+      b.h = bh;
     });
   },
 
-  layoutTabs(area) {
-    const n = this.tabButtons.length;
-    const gap = SF(4);
-    const bw = (area.w - gap * (n - 1)) / n;
-    this.tabButtons.forEach((t, i) => {
-      t.x = Math.floor(area.x + i * (bw + gap));
-      t.y = area.y;
-      t.w = Math.floor(bw);
-      t.h = area.h;
+  // Footer compatto: nav (riga 1) + azioni (riga 2), ognuna 4 pulsanti in fila.
+  layoutFooter(f) {
+    const gap = f.fGap;
+    const colW = (f.w - f.fPad * 2 - gap * 3) / 4;
+    const x0 = f.x + f.fPad;
+    const navY = f.y + f.fPad;
+    const actY = navY + f.navH + gap;
+    this.navButtons.forEach((b, i) => {
+      b.x = Math.floor(x0 + i * (colW + gap));
+      b.y = navY; b.w = Math.floor(colW); b.h = f.navH;
+    });
+    this.actionButtons.forEach((b, i) => {
+      b.x = Math.floor(x0 + i * (colW + gap));
+      b.y = actY; b.w = Math.floor(colW); b.h = f.actH;
     });
   },
 
   // ─── Input (Pointer Events) ────────────────────────────────────────────────
-  applyHover(btn, tab, updateCursor) {
-    if (btn === this.hoverBtn && tab === this.hoverTab) return;
-    this.hoverBtn = btn;
-    this.hoverTab = tab;
-    if (updateCursor) {
-      const on = btn >= 0 || tab >= 0;
-      document.getElementById('game').style.cursor = on ? 'pointer' : 'default';
-    }
-    window.GameRender.invalidate();
-  },
-
   onPointerMove(p, type) {
     if (Scenes.current !== this) return;
-    if (type === 'touch') return;
-    const tab = window.UI.compact ? btnHitIndex(this.tabButtons, p.x, p.y) : -1;
-    this.applyHover(btnHitIndex(this.actionButtons, p.x, p.y), tab, true);
+    if (type === 'touch') return; // l'hover non esiste su touch
+
+    if (this.activeOverlay) {
+      const over = this.overlayWhere(p) === 'close';
+      document.getElementById('game').style.cursor = over ? 'pointer' : 'default';
+      if (over !== this.hoverClose) { this.hoverClose = over; window.GameRender.invalidate(); }
+      return;
+    }
+
+    const compact = window.UI.compact;
+    const hb = btnHitIndex(this.actionButtons, p.x, p.y);
+    const hn = compact ? btnHitIndex(this.navButtons, p.x, p.y) : -1;
+    const hz = compact ? btnHitIndex(this.zoomButtons, p.x, p.y) : -1;
+    document.getElementById('game').style.cursor =
+      (hb >= 0 || hn >= 0 || hz >= 0) ? 'pointer' : 'default';
+    if (hb !== this.hoverBtn || hn !== this.hoverNav || hz !== this.hoverZoom) {
+      this.hoverBtn = hb; this.hoverNav = hn; this.hoverZoom = hz;
+      window.GameRender.invalidate();
+    }
   },
 
   onPointerDown(p) {
     if (Scenes.current !== this) return;
+    if (this.activeOverlay) {
+      this.overlayPressed = this.overlayWhere(p);
+      return;
+    }
+    const compact = window.UI.compact;
     this.pressedBtn = btnHitIndex(this.actionButtons, p.x, p.y);
-    this.pressedTab = window.UI.compact ? btnHitIndex(this.tabButtons, p.x, p.y) : -1;
-    this.applyHover(this.pressedBtn, this.pressedTab, false);
+    this.pressedNav = compact ? btnHitIndex(this.navButtons, p.x, p.y) : -1;
+    this.pressedZoom = compact ? btnHitIndex(this.zoomButtons, p.x, p.y) : -1;
+    this.hoverBtn = this.pressedBtn;
+    this.hoverNav = this.pressedNav;
+    this.hoverZoom = this.pressedZoom;
+    window.GameRender.invalidate();
   },
 
   onPointerUp(p, type) {
     if (Scenes.current !== this) return;
+
+    if (this.activeOverlay) {
+      const where = this.overlayWhere(p);
+      if ((this.overlayPressed === 'close' && where === 'close') ||
+          (this.overlayPressed === 'outside' && where === 'outside')) {
+        this.activeOverlay = null;
+        this.hoverClose = false;
+        window.GameRender.invalidate();
+      }
+      this.overlayPressed = null;
+      return;
+    }
+
+    const compact = window.UI.compact;
     const bi = btnHitIndex(this.actionButtons, p.x, p.y);
-    const ti = window.UI.compact ? btnHitIndex(this.tabButtons, p.x, p.y) : -1;
-    const fireBtn = bi >= 0 && bi === this.pressedBtn;
-    const fireTab = ti >= 0 && ti === this.pressedTab;
-    this.pressedBtn = -1;
-    this.pressedTab = -1;
-    if (type === 'touch') this.applyHover(-1, -1, false);
-    if (fireTab) {
-      this.activeTab = this.tabButtons[ti].tab;
+    const ni = compact ? btnHitIndex(this.navButtons, p.x, p.y) : -1;
+    const zi = compact ? btnHitIndex(this.zoomButtons, p.x, p.y) : -1;
+    const fireB = bi >= 0 && bi === this.pressedBtn;
+    const fireN = ni >= 0 && ni === this.pressedNav;
+    const fireZ = zi >= 0 && zi === this.pressedZoom;
+    this.pressedBtn = this.pressedNav = this.pressedZoom = -1;
+    if (type === 'touch') { this.hoverBtn = this.hoverNav = this.hoverZoom = -1; }
+
+    if (fireZ) {
+      this.zoomBy(this.zoomButtons[zi].key === 'in' ? 1.25 : 1 / 1.25);
+    } else if (fireN) {
+      const k = this.navButtons[ni].key;
+      this.activeOverlay = (this.activeOverlay === k) ? null : k;
       window.GameRender.invalidate();
-    } else if (fireBtn) {
+    } else if (fireB) {
       const b = this.actionButtons[bi];
       if (!b.disabled) console.log('Azione gioco:', b.action);
+    } else if (type === 'touch') {
+      window.GameRender.invalidate();
     }
   },
 
   onPointerCancel() {
-    this.pressedBtn = -1;
-    this.pressedTab = -1;
-    this.applyHover(-1, -1, false);
+    this.pressedBtn = this.pressedNav = this.pressedZoom = -1;
+    this.hoverBtn = this.hoverNav = this.hoverZoom = -1;
+    this.overlayPressed = null;
+    window.GameRender.invalidate();
+  },
+
+  onWheel(p, deltaY) {
+    if (Scenes.current !== this) return;
+    if (this.activeOverlay) return;
+    const r = this.mapRect;
+    if (!r) return;
+    if (p.x < r.x || p.x > r.x + r.w || p.y < r.y || p.y > r.y + r.h) return;
+    this.zoomBy(deltaY < 0 ? 1.15 : 1 / 1.15);
+  },
+
+  zoomBy(factor) {
+    this.mapZoom = Math.max(0.6, Math.min(this.mapZoom * factor, 4));
+    window.GameRender.invalidate();
+  },
+
+  overlayWhere(p) {
+    const x = this.overlayClose;
+    if (x && p.x >= x.x && p.x <= x.x + x.w && p.y >= x.y && p.y <= x.y + x.h) return 'close';
+    const c = this.overlayCard;
+    if (c && p.x >= c.x && p.x <= c.x + c.w && p.y >= c.y && p.y <= c.y + c.h) return 'inside';
+    return 'outside';
   },
 
   // ─── Draw ───────────────────────────────────────────────────────────────────
@@ -258,7 +322,10 @@ const GameScreen = {
   },
 
   drawDesktop(L) {
-    this.layoutButtons(L.log, false);
+    this.zoomButtons = [];           // niente +/- su desktop (solo rotella)
+    this.activeOverlay = null;       // overlay solo in compatto
+    this.mapRect = L.map;
+    this.layoutButtons(L.log);
     this.drawTopBar(L.topBar, false);
     this.drawPanel(L.left, 'STATO CAVALIERE');
     this.drawKnightStatus(L.left);
@@ -274,50 +341,124 @@ const GameScreen = {
   },
 
   drawCompact(L) {
-    this.layoutTabs(L.tabs);
-    this.layoutButtons(L.actionBar, true);
+    this.mapRect = L.map;
+    this.layoutFooter(L.footer);
 
     this.drawTopBar(L.topBar, true);
-    this.drawMapPanel(L.map);
-    this.drawTabs();
+    this.drawMapPanel(L.map);   // disegna anche i pulsanti +/- (compatto)
 
-    // Pannello della scheda attiva
-    const titleByTab = {
-      stato: 'STATO CAVALIERE',
-      contesto: 'CONTESTO',
-      log: 'DIARIO',
-      mini: 'MINIMAPPA REGIONALE',
-    };
-    this.drawPanel(L.panel, titleByTab[this.activeTab] || '');
-    if (this.activeTab === 'stato')    this.drawKnightStatus(L.panel);
-    if (this.activeTab === 'contesto') this.drawContext(L.panel);
-    if (this.activeTab === 'log')      this.drawLog(L.panel, L.panel.y + L.panel.h - SF(10));
-    if (this.activeTab === 'mini')     this.drawMinimap(L.panel);
-
-    // Barra azioni
+    // Footer
     const ctx = this.ctx;
+    const f = L.footer;
     ctx.fillStyle = PALETTE.inkScuro;
-    ctx.fillRect(L.actionBar.x, L.actionBar.y, L.actionBar.w, L.actionBar.h);
+    ctx.fillRect(f.x, f.y, f.w, f.h);
     ctx.fillStyle = PALETTE.hudTitolo;
-    ctx.fillRect(L.actionBar.x, L.actionBar.y, L.actionBar.w, PIXEL);
+    ctx.fillRect(f.x, f.y, f.w, PIXEL);
+    this.drawNavButtons();
     this.drawActionButtons();
+
+    if (this.activeOverlay) this.drawOverlay();
   },
 
-  drawTabs() {
+  drawNavButtons() {
     const ctx = this.ctx;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    this.tabButtons.forEach((t, i) => {
-      const active = t.tab === this.activeTab;
-      const hovered = i === this.hoverTab;
-      ctx.fillStyle = active ? PALETTE.pergMedia : (hovered ? PALETTE.pergScura : PALETTE.inkScuro);
-      ctx.fillRect(t.x, t.y, t.w, t.h);
-      drawPixelRectStroke(ctx, t.x, t.y, t.w, t.h,
+    this.navButtons.forEach((b, i) => {
+      const active = this.activeOverlay === b.key;
+      const hovered = i === this.hoverNav;
+      ctx.fillStyle = active ? PALETTE.pergMedia : (hovered ? PALETTE.pergScura : PALETTE.hudSfondo);
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+      drawPixelRectStroke(ctx, b.x, b.y, b.w, b.h,
                           active ? PALETTE.hudTitolo : PALETTE.hudBordo);
       ctx.fillStyle = active ? PALETTE.inkNero : PALETTE.hudTitolo;
-      ctx.font = `${active ? 'bold ' : ''}${SF(13)}px "Courier New", monospace`;
-      ctx.fillText(t.label, t.x + t.w / 2, t.y + t.h / 2);
+      ctx.font = `${active ? 'bold ' : ''}${SF(12)}px "Courier New", monospace`;
+      ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2);
     });
+  },
+
+  drawActionButtons() {
+    const ctx = this.ctx;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    this.actionButtons.forEach((b, i) => {
+      const hovered = i === this.hoverBtn;
+      ctx.fillStyle = hovered ? PALETTE.pergMedia : PALETTE.inkScuro;
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+      drawPixelRectStroke(ctx, b.x, b.y, b.w, b.h,
+                          hovered ? PALETTE.hudTitolo : PALETTE.hudBordo);
+      ctx.fillStyle = b.disabled
+        ? PALETTE.hudDim
+        : (hovered ? PALETTE.inkNero : PALETTE.hudTitolo);
+      ctx.font = `${hovered ? 'bold ' : ''}${SF(13)}px "Courier New", monospace`;
+      ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2);
+    });
+  },
+
+  drawZoomButtons(area) {
+    const ctx = this.ctx;
+    const s = SF(36), gap = SF(6), m = SF(10);
+    const bx = area.x + area.w - m - s;
+    const byIn = area.y + area.h - m - s * 2 - gap;
+    const byOut = area.y + area.h - m - s;
+    this.zoomButtons = [
+      { key: 'in',  label: '+', x: bx, y: byIn,  w: s, h: s },
+      { key: 'out', label: '−', x: bx, y: byOut, w: s, h: s },
+    ];
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    this.zoomButtons.forEach((b, i) => {
+      const hovered = i === this.hoverZoom;
+      ctx.fillStyle = hovered ? PALETTE.pergMedia : PALETTE.pergScura;
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+      drawPixelRectStroke(ctx, b.x, b.y, b.w, b.h, PALETTE.inkScuro);
+      ctx.fillStyle = PALETTE.inkScuro;
+      ctx.font = `bold ${SF(22)}px "Courier New", monospace`;
+      ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 + PIXEL);
+    });
+  },
+
+  drawOverlay() {
+    const ctx = this.ctx;
+    const W = window.UI.w, H = window.UI.h;
+    // Velo scuro sopra la mappa
+    ctx.fillStyle = 'rgba(10,6,2,0.72)';
+    ctx.fillRect(0, 0, W, H);
+
+    const m = SF(16);
+    const card = { x: m, y: m, w: W - m * 2, h: H - m * 2 };
+    this.overlayCard = card;
+
+    const titleByKey = {
+      stato: 'STATO CAVALIERE',
+      contesto: 'CONTESTO',
+      log: 'DIARIO EVENTI',
+      mini: 'MINIMAPPA REGIONALE',
+    };
+    this.drawPanel(card, titleByKey[this.activeOverlay] || '');
+
+    if (this.activeOverlay === 'stato')    this.drawKnightStatus(card);
+    if (this.activeOverlay === 'contesto') this.drawContext(card);
+    if (this.activeOverlay === 'log')      this.drawLog(card, card.y + card.h - SF(16));
+    if (this.activeOverlay === 'mini')     this.drawMinimap(card);
+
+    // Pulsante chiudi (X) nella banda titolo, a destra
+    const bandH = SF(26);
+    const cs = SF(20);
+    const close = {
+      x: card.x + card.w - PIXEL * 8 - cs,
+      y: card.y + PIXEL * 4 + Math.floor((bandH - cs) / 2),
+      w: cs, h: cs,
+    };
+    this.overlayClose = close;
+    ctx.fillStyle = this.hoverClose ? PALETTE.rossoBandCh : PALETTE.rossoBandiera;
+    ctx.fillRect(close.x, close.y, close.w, close.h);
+    drawPixelRectStroke(ctx, close.x, close.y, close.w, close.h, PALETTE.inkScuro);
+    ctx.fillStyle = PALETTE.pergChiara;
+    ctx.font = `bold ${SF(14)}px "Courier New", monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('X', close.x + close.w / 2, close.y + close.h / 2 + PIXEL);
   },
 
   drawPanel(area, title) {
@@ -354,7 +495,6 @@ const GameScreen = {
     ctx.fillStyle = PALETTE.hudNormale;
     ctx.textAlign = 'right';
     if (compact) {
-      // Una riga compatta a destra; niente rosa dei venti per risparmiare spazio.
       ctx.font = `${SF(12)}px "Courier New", monospace`;
       ctx.fillText(`A.${meta.anno} · T.${meta.turno}`, area.w - SF(12), area.h / 2 - SF(8));
       ctx.fillText(`${meta.stagione} · ${meta.meteo}`, area.w - SF(12), area.h / 2 + SF(8));
@@ -453,19 +593,26 @@ const GameScreen = {
     const tex = getParchmentTexture(area.w, area.h, 9999);
     ctx.drawImage(tex, area.x, area.y);
     drawCartographicBorder(ctx, area.x, area.y, area.w, area.h);
-    // Contiene i tile demo dentro la cornice (in compatto l'area è piccola e
-    // gli offset assoluti sborderebbero sui pannelli sottostanti).
+
+    // Tile demo: clip alla cornice + zoom attorno al centro mappa.
     ctx.save();
     ctx.beginPath();
     ctx.rect(area.x, area.y, area.w, area.h);
     ctx.clip();
+    const cx = area.x + area.w / 2, cy = area.y + area.h / 2;
+    ctx.translate(cx, cy);
+    ctx.scale(this.mapZoom, this.mapZoom);
+    ctx.translate(-cx, -cy);
     this.drawDemoTiles(area);
     ctx.restore();
+
     ctx.fillStyle = PALETTE.inkScuro;
     ctx.font = `italic bold ${SF(15)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText('Le Marche di Vorn', area.x + SF(14), area.y + SF(14));
+
+    if (window.UI.compact) this.drawZoomButtons(area);
   },
 
   drawDemoTiles(area) {
@@ -633,24 +780,6 @@ const GameScreen = {
       ctx.fillText('> ' + recent[i], x, yy);
       yy -= lineH;
     }
-  },
-
-  drawActionButtons() {
-    const ctx = this.ctx;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    this.actionButtons.forEach((b, i) => {
-      const hovered = i === this.hoverBtn;
-      ctx.fillStyle = hovered ? PALETTE.pergMedia : PALETTE.inkScuro;
-      ctx.fillRect(b.x, b.y, b.w, b.h);
-      drawPixelRectStroke(ctx, b.x, b.y, b.w, b.h,
-                          hovered ? PALETTE.hudTitolo : PALETTE.hudBordo);
-      ctx.fillStyle = b.disabled
-        ? PALETTE.hudDim
-        : (hovered ? PALETTE.inkNero : PALETTE.hudTitolo);
-      ctx.font = `${hovered ? 'bold ' : ''}${SF(14)}px "Courier New", monospace`;
-      ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2);
-    });
   },
 
   drawMinimap(area) {

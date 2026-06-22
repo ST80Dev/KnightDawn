@@ -39,13 +39,27 @@ scaling — affrontate qui.
 
 `COMPACT_BREAKPOINT = 820` (CSS px). Sotto questa larghezza → **layout compatto**.
 
-- **Desktop:** 3 colonne — `stato | mappa+diario | contesto` + minimappa.
-- **Compatto (mobile):** impilato in verticale —
-  `barra alta compatta → mappa → schede → barra azioni in basso`.
-  Le 4 schede (Stato / Contesto / Diario / Regione) mostrano a turno, a tutta
-  larghezza, ciò che su desktop sta nelle colonne laterali.
+- **Desktop:** 3 colonne — `stato | mappa+diario | contesto` + minimappa
+  (sempre visibili).
+- **Compatto (mobile):** `barra alta compatta → mappa grande → footer`.
+  Il footer ha due righe di mini-pulsanti:
+  - **navigazione aree** (Stato / Contesto / Diario / Regione): ognuno apre il
+    relativo pannello come **overlay a tutto schermo** sopra la mappa (velo
+    scuro + carta-pergamena + pulsante chiudi `X`; ri-tap sullo stesso pulsante
+    o tap fuori dalla carta = chiudi). Così l'area centrale resta dedicata alla
+    mappa e le info sono on-demand.
+  - **azioni di gioco** (Inventario / Mappa / Accampa / Interagisci).
 
 `UI` espone: `scale, w, h, dpr, isPortrait, compact` (dimensioni **logiche**).
+
+## Zoom mappa
+
+- **Desktop:** rotella del mouse (`wheel`) quando il puntatore è sopra l'area
+  mappa; `preventDefault` per non scrollare la pagina.
+- **Mobile (compatto):** pulsanti `+` / `−` nell'angolo della mappa.
+- Stato condiviso `mapZoom` (clamp `[0.6, 4]`), applicato come trasformazione
+  attorno al centro mappa; il contenuto è clippato dentro la cornice. È la base
+  per la futura camera/pan vera della mappa.
 
 ## Input unificato (Pointer Events)
 
@@ -68,8 +82,10 @@ scaling — affrontate qui.
 
 ## Da fare in seguito
 
-- Dimensioni minime dei target touch (≥ ~44px) verificate su tutte le schede.
-- Mappa: pan/zoom con gesture (drag + pinch) quando la mappa sarà navigabile.
-- "Carta del cronista" e carte-evento in layout portrait dedicato.
+- Dimensioni minime dei target touch (≥ ~44px) verificate su footer e overlay.
+- Mappa: pan (drag) e pinch-zoom con gesture quando la mappa sarà navigabile
+  (lo zoom attuale è il primo mattone).
+- "Carta del cronista" e carte-evento in layout portrait dedicato (riuso del
+  sistema overlay).
 - Test reali su iOS Safari e Android Chrome (barra URL che cambia altezza →
   valutare `100dvh` / gestione `resize`).

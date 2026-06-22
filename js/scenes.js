@@ -43,6 +43,10 @@ const Scenes = {
   onPointerCancel() {
     if (this.current && this.current.onPointerCancel) this.current.onPointerCancel();
   },
+
+  onWheel(p, deltaY) {
+    if (this.current && this.current.onWheel) this.current.onWheel(p, deltaY);
+  },
 };
 
 // ─── Utility condivisa: hit-test di una lista di pulsanti {x,y,w,h,disabled} ──
