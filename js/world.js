@@ -61,9 +61,12 @@ const World = {
     SABBIA: 6, NEVE: 7, GHIACCIO: 8, FIUME: 9,
   },
 
-  CASTLE_NAMES: ['Vornkeep', 'Ashford', 'Greymoor', 'Duncairn', 'Highrock', 'Carthwall'],
+  CASTLE_NAMES: ['Vornkeep', 'Ashford', 'Greymoor', 'Duncairn', 'Highrock',
+                 'Carthwall', 'Stonereach', 'Blackmere', 'Ravensgate', 'Ironhold'],
   VILLAGE_NAMES: ['Lyhall', 'Brackmere', 'Oakford', 'Mosswell', 'Thornby', 'Reedmoor',
-                  'Holloway', 'Cairnside', 'Dunmere', 'Fennwick', 'Greenford', 'Larkhollow'],
+                  'Holloway', 'Cairnside', 'Dunmere', 'Fennwick', 'Greenford', 'Larkhollow',
+                  'Briarwood', 'Stoneford', 'Hartmere', 'Willowend', 'Crowhill',
+                  'Marshgate', 'Pineholt', 'Foxglen', 'Stagford', 'Whitebrook'],
 
   generate(seed) {
     this.seed = (seed >>> 0) || 1;
@@ -118,11 +121,24 @@ const World = {
     const N = sorted.length;
     const q = (f) => sorted[Math.max(0, Math.min(N - 1, Math.floor(f * N)))];
     const rng = mulberry32((this.seed ^ 0xBEEFCAFE) >>> 0);
-    const seaFrac = 0.26 + rng() * 0.16;   // 26%–42% di mare (variabile per seed)
+    // Meno mare aperto: la frazione resta variabile per seed ma più bassa.
+    const seaFrac = 0.16 + rng() * 0.10;   // 16%–26% di mare
     const seaLevel   = q(seaFrac);
     const coastLevel = q(seaFrac + 0.06);  // bassopiano costiero → paludi
-    const hillLevel  = q(0.80);            // ~20% terreni alti (colline+)
+    const hillLevel  = q(0.78);            // ~22% terreni alti (colline+)
     const mountLevel = q(0.93);            // ~7% montagne (le creste)
+
+    // Rumore a bassa frequenza per "macchie di bosco" sparse ovunque: si
+    // somma alla umidità così foreste compaiono anche in pianura asciutta e
+    // tra le montagne, evitando ampie zone monocrome di montagna o pianura.
+    const seedF = (this.seed ^ 0x71f3a9d5) | 0;
+    const freqF1 = 7.0 / Math.max(W, H);    // macchie medie
+    const freqF2 = 14.0 / Math.max(W, H);   // dettaglio macchie
+    // Rumore "roccia/dosso": macchie di collina sparse anche in pianura,
+    // così evita la monotonia di lunghi stretch piatti dello stesso bioma.
+    const seedH = (this.seed ^ 0x2a7c11f9) | 0;
+    const freqH1 = 8.0 / Math.max(W, H);
+    const freqH2 = 16.0 / Math.max(W, H);
 
     const mSpan = (mMax - mMin) || 1;
     const eSpanE = (eMax - eMin) || 1;
@@ -140,21 +156,36 @@ const World = {
         temp += (tN - 0.5) * 0.16;
         temp = Math.max(0, Math.min(1, temp));
 
+        // "Macchie di bosco": noise dedicato a media frequenza. Indipendente
+        // dall'umidità climatica → boschi anche in zone secche e in quota.
+        const f = _fbm(x + 2000, y + 7000, seedF, 3, freqF1) * 0.7 +
+                  _fbm(x + 7000, y + 2000, seedF + 1, 2, freqF2) * 0.3;
+        const forestScore = mn * 0.55 + f * 0.45;
+        // "Dossi": noise indipendente per macchie rocciose/collinari sparse
+        // anche in pianura → micro-zone mischiate, niente monotonia.
+        const hPatch = _fbm(x + 3000, y + 9000, seedH, 3, freqH1) * 0.6 +
+                       _fbm(x + 9000, y + 3000, seedH + 1, 2, freqH2) * 0.4;
+
         let b;
         if (e < seaLevel) {
           b = (temp < 0.10) ? B.GHIACCIO : B.ACQUA; // mare ghiacciato solo all'estremo nord
         } else if (e >= mountLevel) {
-          b = B.MONTAGNA;
+          // Macchie di foresta alpina anche tra le montagne, dove la macchia
+          // di bosco è marcata e il clima non è polare.
+          b = (forestScore > 0.62 && temp > 0.20) ? B.FORESTA : B.MONTAGNA;
         } else if (temp < 0.15) {
           b = B.NEVE;                                // neve/tundra solo nelle terre più fredde
         } else if (e >= hillLevel) {
-          b = B.COLLINA;
+          // Colline boscose dove la macchia è alta.
+          b = (forestScore > 0.50) ? B.FORESTA : B.COLLINA;
         } else if (e < coastLevel && mn > 0.55 && temp > 0.35) {
           b = B.PALUDE;                              // paludi nelle basse terre umide
-        } else if (temp > 0.66 && mn < 0.38) {
-          b = B.SABBIA;                              // deserti caldi e secchi (sud)
-        } else if (mn > 0.56) {
-          b = B.FORESTA;
+        } else if (temp > 0.66 && mn < 0.32 && f < 0.40) {
+          b = B.SABBIA;                              // deserti: caldi, secchi e senza macchie boscose
+        } else if (forestScore > 0.42) {
+          b = B.FORESTA;                             // boschi diffusi, a macchie ovunque
+        } else if (hPatch > 0.62) {
+          b = B.COLLINA;                             // dossi/collinette anche in pianura
         } else {
           b = B.PIANURA;
         }
@@ -204,13 +235,20 @@ const World = {
   _carveRivers() {
     const W = this.width, H = this.height, B = this.BIOME;
     const rng = mulberry32((this.seed ^ 0x9e3779b9) >>> 0);
+    // Sorgenti: tutte le terre alte (montagna, collina) E pianure/foreste
+    // d'altura: così i fiumi nascono ovunque sia abbastanza elevato.
     const sources = [];
     for (let i = 0; i < this.tiles.length; i++) {
       const b = this.tiles[i];
       if (b === B.MONTAGNA || b === B.COLLINA) sources.push(i);
+      else if ((b === B.PIANURA || b === B.FORESTA) && this.elev[i] > 0 && rng() < 0.04) {
+        sources.push(i);
+      }
     }
     if (!sources.length) return;
-    const N = 10 + Math.floor(rng() * 7);
+    // Molti più fiumi, proporzionali alla superficie del mondo.
+    const baseN = Math.round((W * H) / 800);   // ~54 per 240×180
+    const N = baseN + Math.floor(rng() * baseN * 0.4);
     for (let s = 0; s < N; s++) {
       let idx = sources[Math.floor(rng() * sources.length)];
       let x = idx % W, y = (idx / W) | 0;
@@ -317,7 +355,7 @@ const World = {
 
     // Castelli: su collina o pianura, ben distanziati.
     let ci = 0;
-    for (let tries = 0; tries < 4000 && ci < 5; tries++) {
+    for (let tries = 0; tries < 6000 && ci < 8; tries++) {
       const x = 2 + Math.floor(rnd() * (W - 4));
       const y = 2 + Math.floor(rnd() * (H - 4));
       const b = this.biomeAt(x, y);
@@ -329,7 +367,7 @@ const World = {
 
     // Villaggi: pianura/foresta, preferibilmente vicino all'acqua, distanziati.
     let vi = 0;
-    for (let tries = 0; tries < 6000 && vi < 12; tries++) {
+    for (let tries = 0; tries < 10000 && vi < 22; tries++) {
       const x = 1 + Math.floor(rnd() * (W - 2));
       const y = 1 + Math.floor(rnd() * (H - 2));
       const b = this.biomeAt(x, y);
