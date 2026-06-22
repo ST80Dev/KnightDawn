@@ -1,19 +1,18 @@
 // FERRO & CENERE — bootstrap
-// Rendering pixel-art: tutto viene disegnato su un canvas interno a bassa
-// risoluzione (INTERNAL_W x INTERNAL_H) poi upscalato nearest-neighbor sul
-// canvas visibile. Questo dà l'aspetto pixel autentico a tutto, font inclusi.
+// Pipeline:
+//  - canvas interno a INTERNAL_W × INTERNAL_H, dove disegnano le scene
+//  - blit sul canvas visibile con nearest-neighbor a scala frazionaria
+//    per riempire l'area utile del browser (window.innerWidth/innerHeight)
+//  - scene manager (Scenes) sceglie cosa disegnare
 
 (function () {
   const displayCanvas = document.getElementById('game');
   const displayCtx = displayCanvas.getContext('2d');
 
-  // Canvas interno a bassa risoluzione: qui disegnano tutti i sistemi.
   const lo = document.createElement('canvas');
   lo.width = INTERNAL_W;
   lo.height = INTERNAL_H;
   const loCtx = lo.getContext('2d');
-
-  // Niente smoothing né su lo-res né sul display (per upscale pixelated).
   loCtx.imageSmoothingEnabled = false;
   displayCtx.imageSmoothingEnabled = false;
 
@@ -23,6 +22,7 @@
   let offsetY = 0;
 
   function resize() {
+    // Usa l'area utile del browser (esclude barre OS/scheda/URL).
     const w = window.innerWidth;
     const h = window.innerHeight;
     displayCanvas.width = w;
@@ -30,9 +30,7 @@
     displayCanvas.style.width = w + 'px';
     displayCanvas.style.height = h + 'px';
 
-    // Scala per riempire il viewport mantenendo l'aspect ratio.
-    // Niente vincolo intero: con imageSmoothingEnabled=false l'upscaling
-    // resta nearest-neighbor (pixel netti) anche a fattori frazionari.
+    // Scala frazionaria mantenendo l'aspect ratio del canvas interno.
     scale = Math.min(w / INTERNAL_W, h / INTERNAL_H);
     const drawW = Math.floor(INTERNAL_W * scale);
     const drawH = Math.floor(INTERNAL_H * scale);
@@ -43,8 +41,6 @@
     needsRedraw = true;
   }
 
-  // Trasforma le coordinate del mouse (in pixel display) in coordinate
-  // del canvas interno a bassa risoluzione.
   function displayToInternal(clientX, clientY) {
     const r = displayCanvas.getBoundingClientRect();
     const x = (clientX - r.left - offsetX) / scale;
@@ -54,7 +50,6 @@
 
   window.addEventListener('resize', resize);
 
-  // Esponiamo il context lo-res e l'helper alle scene.
   window.GameRender = {
     ctx: loCtx,
     canvas: lo,
@@ -64,10 +59,14 @@
     invalidate() { needsRedraw = true; },
   };
 
+  // Registra e inizializza le scene
+  Scenes.register('title', TitleScreen);
+  Scenes.register('game',  GameScreen);
   TitleScreen.init(lo);
+  GameScreen.init(lo);
+  Scenes.switchTo('title');
 
   function blit() {
-    // Sfondo nero attorno al canvas interno (letterbox)
     displayCtx.fillStyle = '#1a0e04';
     displayCtx.fillRect(0, 0, displayCanvas.width, displayCanvas.height);
     displayCtx.imageSmoothingEnabled = false;
@@ -79,15 +78,15 @@
   }
 
   function loop() {
-    if (needsRedraw || TitleScreen.hoverIndex !== TitleScreen._lastHover) {
-      TitleScreen.draw();
-      TitleScreen._lastHover = TitleScreen.hoverIndex;
+    if (needsRedraw) {
+      Scenes.draw();
       blit();
       needsRedraw = false;
     }
     requestAnimationFrame(loop);
   }
 
+  // Le scene chiamano invalidate() quando lo hover cambia ecc.
   displayCanvas.addEventListener('mousemove', () => { needsRedraw = true; });
 
   resize();

@@ -41,6 +41,7 @@ const TitleScreen = {
   },
 
   onMove(e) {
+    if (Scenes.current !== this) return;
     const { x: mx, y: my } = window.GameRender.displayToInternal(e.clientX, e.clientY);
     let h = -1;
     this.buttons.forEach((b, i) => {
@@ -53,10 +54,15 @@ const TitleScreen = {
   },
 
   onClick() {
+    if (Scenes.current !== this) return;
     if (this.hoverIndex < 0) return;
     const b = this.buttons[this.hoverIndex];
     if (b.disabled) return;
-    console.log('Azione titolo:', b.action);
+    if (b.action === 'new') {
+      Scenes.switchTo('game');
+    } else {
+      console.log('Azione titolo:', b.action);
+    }
   },
 
   draw() {
