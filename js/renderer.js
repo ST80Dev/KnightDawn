@@ -172,14 +172,15 @@ const MapRenderer = {
       this._tri(ctx, cx, cy - r, cx + r, cy + r * 0.6, cx + r * 0.15, cy + r * 0.6, PALETTE.marrMontCh);
       this._tri(ctx, cx, cy - r, cx - r * 0.3, cy - r * 0.4, cx + r * 0.3, cy - r * 0.4, PALETTE.neveCime);
     } else if (b === B.ROCCIA) {
-      // Roccia: due "ciottoli" tondeggianti sovrapposti
-      const r = t * 0.30;
+      // Roccia: 3 ciottoli SEPARATI (niente overlap → niente effetto crescente).
+      const r = t * 0.16;
       ctx.fillStyle = PALETTE.grigioPietraSc;
-      ctx.beginPath(); ctx.arc(cx - r * 0.5, cy + r * 0.2, r * 0.85, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx - r * 1.5, cy + r * 0.8, r * 0.9, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + r * 1.5, cy + r * 0.6, r * 0.8, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = PALETTE.grigioPietra;
-      ctx.beginPath(); ctx.arc(cx + r * 0.4, cy - r * 0.1, r * 0.95, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(cx + r * 0.1, cy - r * 0.9, r * 1.05, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = PALETTE.inkScuro;
-      ctx.fillRect(cx + r * 0.05, cy - r * 0.55, Math.max(1, t * 0.06), Math.max(1, t * 0.06));
+      ctx.fillRect(cx - Math.max(1, t * 0.03), cy - r * 1.6, Math.max(1, t * 0.06), Math.max(1, t * 0.06));
     } else if (b === B.COLLINA && t >= 10) {
       // Collina: due gobbe basse marroncine
       const r = t * 0.28;
@@ -194,6 +195,39 @@ const MapRenderer = {
       ctx.beginPath();
       ctx.moveTo(sx + t * 0.3, cy); ctx.lineTo(sx + t * 0.3, cy - t * 0.25);
       ctx.moveTo(sx + t * 0.6, cy); ctx.lineTo(sx + t * 0.6, cy - t * 0.18);
+      ctx.stroke();
+    } else if (b === B.SABBIA && t >= 9) {
+      // Sabbia: due piccole onde-duna stilizzate
+      ctx.strokeStyle = PALETTE.pergMacchia;
+      ctx.lineWidth = Math.max(1, t * 0.05);
+      ctx.beginPath();
+      ctx.moveTo(cx - t * 0.28, cy - t * 0.05);
+      ctx.quadraticCurveTo(cx - t * 0.10, cy - t * 0.20, cx + t * 0.08, cy - t * 0.05);
+      ctx.moveTo(cx - t * 0.02, cy + t * 0.18);
+      ctx.quadraticCurveTo(cx + t * 0.15, cy + t * 0.03, cx + t * 0.30, cy + t * 0.18);
+      ctx.stroke();
+    } else if (b === B.NEVE && t >= 9) {
+      // Neve: 4 fiocchi piccoli sparsi → texture distinguibile dal vuoto bianco
+      ctx.fillStyle = PALETTE.ghiaccio;
+      const d = Math.max(1, Math.floor(t * 0.09));
+      const pts = [
+        [cx - t * 0.22, cy - t * 0.08],
+        [cx + t * 0.18, cy - t * 0.22],
+        [cx + t * 0.08, cy + t * 0.18],
+        [cx - t * 0.16, cy + t * 0.22],
+      ];
+      for (const [px, py] of pts) ctx.fillRect(px, py, d, d);
+    } else if (b === B.GHIACCIO && t >= 9) {
+      // Ghiaccio: crepe sottili (linee spezzate angolate)
+      ctx.strokeStyle = PALETTE.bluFiume;
+      ctx.lineWidth = Math.max(1, t * 0.04);
+      ctx.beginPath();
+      ctx.moveTo(cx - t * 0.25, cy - t * 0.10);
+      ctx.lineTo(cx - t * 0.05, cy + t * 0.05);
+      ctx.lineTo(cx + t * 0.18, cy - t * 0.02);
+      ctx.lineTo(cx + t * 0.28, cy + t * 0.18);
+      ctx.moveTo(cx - t * 0.10, cy + t * 0.20);
+      ctx.lineTo(cx + t * 0.08, cy + t * 0.10);
       ctx.stroke();
     }
   },

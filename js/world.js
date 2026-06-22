@@ -247,19 +247,56 @@ const World = {
       }
     }
 
-    // Passata 5: salt&pepper per micro-varietà a livello di SINGOLA TILE:
-    // alberi isolati, radure, sassi sparsi. Deterministico via hash.
-    for (let i = 0; i < this.tiles.length; i++) {
-      const x = i % W, y = (i / W) | 0;
-      const b = this.tiles[i];
-      const h = _hash2(x, y, this.seed ^ 0x33333333);
-      const isPlain = (b === B.PIANURA || b === B.PIANURA_N || b === B.PIANURA_S);
-      if      (isPlain          && h < 0.012) this.tiles[i] = B.FORESTA;
-      else if (isPlain          && h > 0.988) this.tiles[i] = B.ROCCIA;
-      else if (b === B.COLLINA  && h < 0.018) this.tiles[i] = B.FORESTA;
-      else if (b === B.COLLINA  && h > 0.970) this.tiles[i] = B.ROCCIA;
-      else if (b === B.FORESTA  && h > 0.965) this.tiles[i] = B.PIANURA; // radura
-      else if (b === B.MONTAGNA && h < 0.020) this.tiles[i] = B.ROCCIA;
+    // Passata 5: micro-GRUMI di varietà (niente puntinismo). Pochi "semi"
+    // ma ognuno cresce in mini-BFS di 3-5 tile compatibili sui vicini →
+    // variazioni leggibili in gruppi, mai isolate. Include passaggi che
+    // rompono la monotonia delle zone fredde (roccia/ghiaccio nella neve).
+    const microRng = mulberry32((this.seed ^ 0x33333333) >>> 0);
+    const plainList = [B.PIANURA, B.PIANURA_N, B.PIANURA_S];
+    const growCluster = (sx, sy, fromList, to, sizeMin, sizeMax) => {
+      const startIdx = sy * W + sx;
+      if (fromList.indexOf(this.tiles[startIdx]) < 0) return;
+      const target = sizeMin + Math.floor(microRng() * (sizeMax - sizeMin + 1));
+      const seen = new Set();
+      const queue = [[sx, sy]];
+      let qi = 0, placed = 0;
+      while (qi < queue.length && placed < target) {
+        const [x, y] = queue[qi++];
+        const i = y * W + x;
+        if (seen.has(i)) continue;
+        if (fromList.indexOf(this.tiles[i]) < 0) continue;
+        seen.add(i);
+        this.tiles[i] = to;
+        placed++;
+        const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+        for (let k = dirs.length - 1; k > 0; k--) {
+          const j = Math.floor(microRng() * (k + 1));
+          [dirs[k], dirs[j]] = [dirs[j], dirs[k]];
+        }
+        for (const [dx, dy] of dirs) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+          if (!seen.has(ny * W + nx)) queue.push([nx, ny]);
+        }
+      }
+    };
+
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const b = this.tiles[y * W + x];
+        const h = _hash2(x, y, this.seed ^ 0x33333333);
+        const isPlain = (b === B.PIANURA || b === B.PIANURA_N || b === B.PIANURA_S);
+        if      (isPlain          && h < 0.0030) growCluster(x, y, plainList,    B.FORESTA, 3, 5);
+        else if (isPlain          && h > 0.9970) growCluster(x, y, plainList,    B.ROCCIA,  3, 5);
+        else if (b === B.COLLINA  && h < 0.0045) growCluster(x, y, [B.COLLINA],  B.FORESTA, 3, 5);
+        else if (b === B.COLLINA  && h > 0.9955) growCluster(x, y, [B.COLLINA],  B.ROCCIA,  3, 5);
+        else if (b === B.FORESTA  && h > 0.9925) growCluster(x, y, [B.FORESTA],  B.PIANURA, 3, 5);
+        else if (b === B.MONTAGNA && h < 0.0050) growCluster(x, y, [B.MONTAGNA], B.ROCCIA,  3, 5);
+        // Nord: la distesa di neve riceve grumi di roccia (affioramenti) e
+        // qualche piccolo lago ghiacciato → niente più bianco uniforme.
+        else if (b === B.NEVE     && h < 0.0070) growCluster(x, y, [B.NEVE],     B.ROCCIA,  3, 6);
+        else if (b === B.NEVE     && h > 0.9960) growCluster(x, y, [B.NEVE],     B.GHIACCIO, 4, 7);
+      }
     }
 
     // Isolinee di altitudine: poche soglie ben evidenti (terre alte, vette).
