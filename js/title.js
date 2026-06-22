@@ -27,9 +27,9 @@ const TitleScreen = {
   layout() {
     const w = this.canvas.width;
     const h = this.canvas.height;
-    const btnW = 380;
-    const btnH = 42;
-    const gap = 12;
+    const btnW = 570;
+    const btnH = 63;
+    const gap = 18;
     const startY = Math.floor(h * 0.58);
     const x = Math.floor((w - btnW) / 2);
     this.buttons.forEach((b, i) => {
@@ -87,7 +87,7 @@ const TitleScreen = {
 
     // Ombra (decalata di PIXEL*2)
     ctx.fillStyle = PALETTE.inkMedio;
-    ctx.font = 'bold 96px "Courier New", monospace';
+    ctx.font = 'bold 144px "Courier New", monospace';
     ctx.fillText('KNIGHT DAWN', cx + PIXEL * 2, titleY + PIXEL * 2);
 
     // Titolo
@@ -96,8 +96,8 @@ const TitleScreen = {
 
     // 5. Separatori a rombi
     ctx.fillStyle = PALETTE.inkScuro;
-    const lineW = 520;
-    for (const yOff of [-72, 72]) {
+    const lineW = 780;
+    for (const yOff of [-108, 108]) {
       const ly = titleY + yOff;
       // linea: rettangolo PIXEL alto
       ctx.fillRect(Math.floor(cx - lineW / 2), Math.floor(ly), lineW, PIXEL);
@@ -112,18 +112,18 @@ const TitleScreen = {
 
     // 6. Sottotitolo
     ctx.fillStyle = PALETTE.inkLeggero;
-    ctx.font = 'italic 22px "Courier New", monospace';
-    ctx.fillText('- cronache di un cavaliere errante -', cx, titleY + 116);
+    ctx.font = 'italic 32px "Courier New", monospace';
+    ctx.fillText('- cronache di un cavaliere errante -', cx, titleY + 174);
 
     // 7. Rosa dei venti
-    drawCompassRose(ctx, w - m - 60, m + 60, 42);
+    drawCompassRose(ctx, w - m - 90, m + 90, 64);
 
     // 8. Etichetta "Terra Incognita"
     ctx.save();
     ctx.fillStyle = PALETTE.inkLeggero;
-    ctx.font = 'italic 18px "Courier New", monospace';
+    ctx.font = 'italic 26px "Courier New", monospace';
     ctx.textAlign = 'left';
-    ctx.fillText('Terra Incognita', m + 24, h - m - 24);
+    ctx.fillText('Terra Incognita', m + 36, h - m - 36);
     ctx.restore();
 
     // 9. Pulsanti
@@ -156,14 +156,14 @@ const TitleScreen = {
       ctx.fillStyle = b.disabled
         ? PALETTE.inkLeggero
         : (hovered ? PALETTE.inkNero : PALETTE.inkScuro);
-      ctx.font = `${hovered ? 'bold ' : ''}22px "Courier New", monospace`;
+      ctx.font = `${hovered ? 'bold ' : ''}32px "Courier New", monospace`;
       ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2);
     });
 
     // 10. Footer
     ctx.fillStyle = PALETTE.inkLeggero;
-    ctx.font = '16px "Courier New", monospace';
+    ctx.font = '24px "Courier New", monospace';
     ctx.textAlign = 'right';
-    ctx.fillText('v0.0.4  fase 1  test grafico', w - m - 24, h - m - 24);
+    ctx.fillText('v0.0.5  fase 1  test grafico', w - m - 36, h - m - 36);
   },
 };
