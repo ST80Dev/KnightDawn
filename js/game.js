@@ -1,14 +1,23 @@
 // FERRO & CENERE — schermata gioco principale (bozza pannelli HUD)
-// Disegnata direttamente sul canvas display (vedi main.js).
-// Tutte le dimensioni passano da S(...)/SF(...) per restare proporzionate
-// al canvas attuale.
+// Disegnata direttamente sul canvas display (vedi main.js). Le dimensioni
+// passano da S(...)/SF(...) per restare proporzionate al canvas.
+//
+// Layout adattivo:
+//  - desktop (landscape ampio): 3 colonne — stato | mappa+log | contesto
+//  - compatto (UI.compact, tipico mobile portrait): impilato in verticale —
+//    barra alta → mappa → schede (Stato/Contesto/Diario/Regione) → barra azioni.
+// Input via Pointer Events (mouse + touch).
 
 const GameScreen = {
   canvas: null,
   ctx: null,
   hoverBtn: -1,
-  _lastHover: -1,
+  hoverTab: -1,
+  pressedBtn: -1,
+  pressedTab: -1,
   actionButtons: [],
+  tabButtons: [],
+  activeTab: 'stato',
 
   init(canvas) {
     this.canvas = canvas;
@@ -22,9 +31,14 @@ const GameScreen = {
       { label: 'INTERAGISCI', action: 'interagisci', disabled: true },
     ];
 
-    const display = document.getElementById('game');
-    display.addEventListener('mousemove', (e) => this.onMove(e));
-    display.addEventListener('click', (e) => this.onClick(e));
+    // Schede del layout compatto: ogni scheda mostra a tutta larghezza un
+    // pannello che su desktop sta in una colonna a sé.
+    this.tabButtons = [
+      { label: 'STATO',    tab: 'stato' },
+      { label: 'CONTESTO', tab: 'contesto' },
+      { label: 'DIARIO',   tab: 'log' },
+      { label: 'REGIONE',  tab: 'mini' },
+    ];
   },
 
   onEnter() {
@@ -59,9 +73,14 @@ const GameScreen = {
     };
   },
 
+  // ─── Layout ───────────────────────────────────────────────────────────────
   layout() {
-    const W = this.canvas.width;
-    const H = this.canvas.height;
+    return window.UI.compact ? this.layoutCompact() : this.layoutDesktop();
+  },
+
+  layoutDesktop() {
+    const W = window.UI.w;
+    const H = window.UI.h;
     const pad = SF(12);
     const topBarH = SF(76);
     const leftW = SF(360);
@@ -100,73 +119,205 @@ const GameScreen = {
     };
     const topBar = { x: 0, y: 0, w: W, h: topBarH };
 
-    return { pad, topBar, left, map, right, log, mini };
+    return { compact: false, pad, topBar, left, map, right, log, mini };
   },
 
-  layoutButtons(area) {
+  layoutCompact() {
+    const W = window.UI.w;
+    const H = window.UI.h;
+    const pad = SF(8);
+    const topBarH = SF(56);
+    const tabsH = SF(38);
+    // Barra azioni in basso: 2 righe (2×2) di pulsanti.
+    const actBtnH = SF(40);
+    const actGap = SF(8);
+    const actPad = SF(8);
+    const actionBarH = actBtnH * 2 + actGap + actPad * 2;
+
+    const topBar = { x: 0, y: 0, w: W, h: topBarH };
+
+    const contentY = topBarH + pad;
+    const contentH = H - topBarH - actionBarH - pad * 2;
+    // La mappa prende ~46% dello spazio centrale, il pannello a schede il resto.
+    const mapH = Math.floor(contentH * 0.46);
+
+    const map = { x: pad, y: contentY, w: W - pad * 2, h: mapH };
+    const tabs = { x: pad, y: map.y + map.h + pad, w: W - pad * 2, h: tabsH };
+    const panel = {
+      x: pad,
+      y: tabs.y + tabs.h + pad,
+      w: W - pad * 2,
+      h: contentH - mapH - tabsH - pad * 2,
+    };
+    const actionBar = { x: 0, y: H - actionBarH, w: W, h: actionBarH };
+
+    return { compact: true, pad, topBar, map, tabs, panel, actionBar };
+  },
+
+  // Posiziona i pulsanti azione (2 colonne × 2 righe) nell'area indicata,
+  // ancorati in basso a meno di `fill`, nel qual caso riempiono tutta l'area.
+  layoutButtons(area, fill) {
     const cols = 2;
     const rows = 2;
     const gap = SF(8);
     const padInner = SF(14);
     const bw = (area.w - padInner * 2 - gap * (cols - 1)) / cols;
-    const bh = SF(32);
+    const bh = fill
+      ? (area.h - padInner * 2 - gap * (rows - 1)) / rows
+      : SF(32);
     const startX = area.x + padInner;
-    const startY = area.y + area.h - bh * rows - gap * (rows - 1) - padInner;
+    const startY = fill
+      ? area.y + padInner
+      : area.y + area.h - bh * rows - gap * (rows - 1) - padInner;
     this.actionButtons.forEach((b, i) => {
       const c = i % cols;
       const r = Math.floor(i / cols);
       b.x = Math.floor(startX + c * (bw + gap));
       b.y = Math.floor(startY + r * (bh + gap));
       b.w = Math.floor(bw);
-      b.h = bh;
+      b.h = Math.floor(bh);
     });
   },
 
-  onMove(e) {
-    if (Scenes.current !== this) return;
-    const { x: mx, y: my } = window.GameRender.displayToInternal(e.clientX, e.clientY);
-    let h = -1;
-    this.actionButtons.forEach((b, i) => {
-      if (!b.disabled && mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h) h = i;
+  layoutTabs(area) {
+    const n = this.tabButtons.length;
+    const gap = SF(4);
+    const bw = (area.w - gap * (n - 1)) / n;
+    this.tabButtons.forEach((t, i) => {
+      t.x = Math.floor(area.x + i * (bw + gap));
+      t.y = area.y;
+      t.w = Math.floor(bw);
+      t.h = area.h;
     });
-    if (h !== this.hoverBtn) {
-      this.hoverBtn = h;
-      document.getElementById('game').style.cursor = h >= 0 ? 'pointer' : 'default';
+  },
+
+  // ─── Input (Pointer Events) ────────────────────────────────────────────────
+  applyHover(btn, tab, updateCursor) {
+    if (btn === this.hoverBtn && tab === this.hoverTab) return;
+    this.hoverBtn = btn;
+    this.hoverTab = tab;
+    if (updateCursor) {
+      const on = btn >= 0 || tab >= 0;
+      document.getElementById('game').style.cursor = on ? 'pointer' : 'default';
+    }
+    window.GameRender.invalidate();
+  },
+
+  onPointerMove(p, type) {
+    if (Scenes.current !== this) return;
+    if (type === 'touch') return;
+    const tab = window.UI.compact ? btnHitIndex(this.tabButtons, p.x, p.y) : -1;
+    this.applyHover(btnHitIndex(this.actionButtons, p.x, p.y), tab, true);
+  },
+
+  onPointerDown(p) {
+    if (Scenes.current !== this) return;
+    this.pressedBtn = btnHitIndex(this.actionButtons, p.x, p.y);
+    this.pressedTab = window.UI.compact ? btnHitIndex(this.tabButtons, p.x, p.y) : -1;
+    this.applyHover(this.pressedBtn, this.pressedTab, false);
+  },
+
+  onPointerUp(p, type) {
+    if (Scenes.current !== this) return;
+    const bi = btnHitIndex(this.actionButtons, p.x, p.y);
+    const ti = window.UI.compact ? btnHitIndex(this.tabButtons, p.x, p.y) : -1;
+    const fireBtn = bi >= 0 && bi === this.pressedBtn;
+    const fireTab = ti >= 0 && ti === this.pressedTab;
+    this.pressedBtn = -1;
+    this.pressedTab = -1;
+    if (type === 'touch') this.applyHover(-1, -1, false);
+    if (fireTab) {
+      this.activeTab = this.tabButtons[ti].tab;
       window.GameRender.invalidate();
+    } else if (fireBtn) {
+      const b = this.actionButtons[bi];
+      if (!b.disabled) console.log('Azione gioco:', b.action);
     }
   },
 
-  onClick() {
-    if (Scenes.current !== this) return;
-    if (this.hoverBtn < 0) return;
-    const b = this.actionButtons[this.hoverBtn];
-    if (b.disabled) return;
-    console.log('Azione gioco:', b.action);
+  onPointerCancel() {
+    this.pressedBtn = -1;
+    this.pressedTab = -1;
+    this.applyHover(-1, -1, false);
   },
 
+  // ─── Draw ───────────────────────────────────────────────────────────────────
   draw() {
     const L = this.layout();
-    this.layoutButtons(L.log);
-
     const ctx = this.ctx;
-    const W = this.canvas.width;
-    const H = this.canvas.height;
+    const W = window.UI.w;
+    const H = window.UI.h;
 
     ctx.fillStyle = PALETTE.inkNero;
     ctx.fillRect(0, 0, W, H);
     const parchment = getParchmentTexture(W, H, 4242);
     ctx.drawImage(parchment, 0, 0);
 
-    this.drawTopBar(L.topBar);
+    if (L.compact) this.drawCompact(L);
+    else this.drawDesktop(L);
+  },
+
+  drawDesktop(L) {
+    this.layoutButtons(L.log, false);
+    this.drawTopBar(L.topBar, false);
     this.drawPanel(L.left, 'STATO CAVALIERE');
     this.drawKnightStatus(L.left);
     this.drawMapPanel(L.map);
     this.drawPanel(L.right, 'CONTESTO');
     this.drawContext(L.right);
     this.drawPanel(L.log, 'LOG EVENTI E AZIONI');
-    this.drawLogAndActions(L.log);
+    const buttonsTop = this.actionButtons[0] ? this.actionButtons[0].y - SF(8) : L.log.y + L.log.h;
+    this.drawLog(L.log, buttonsTop);
+    this.drawActionButtons();
     this.drawPanel(L.mini, 'MINIMAPPA REGIONALE');
     this.drawMinimap(L.mini);
+  },
+
+  drawCompact(L) {
+    this.layoutTabs(L.tabs);
+    this.layoutButtons(L.actionBar, true);
+
+    this.drawTopBar(L.topBar, true);
+    this.drawMapPanel(L.map);
+    this.drawTabs();
+
+    // Pannello della scheda attiva
+    const titleByTab = {
+      stato: 'STATO CAVALIERE',
+      contesto: 'CONTESTO',
+      log: 'DIARIO',
+      mini: 'MINIMAPPA REGIONALE',
+    };
+    this.drawPanel(L.panel, titleByTab[this.activeTab] || '');
+    if (this.activeTab === 'stato')    this.drawKnightStatus(L.panel);
+    if (this.activeTab === 'contesto') this.drawContext(L.panel);
+    if (this.activeTab === 'log')      this.drawLog(L.panel, L.panel.y + L.panel.h - SF(10));
+    if (this.activeTab === 'mini')     this.drawMinimap(L.panel);
+
+    // Barra azioni
+    const ctx = this.ctx;
+    ctx.fillStyle = PALETTE.inkScuro;
+    ctx.fillRect(L.actionBar.x, L.actionBar.y, L.actionBar.w, L.actionBar.h);
+    ctx.fillStyle = PALETTE.hudTitolo;
+    ctx.fillRect(L.actionBar.x, L.actionBar.y, L.actionBar.w, PIXEL);
+    this.drawActionButtons();
+  },
+
+  drawTabs() {
+    const ctx = this.ctx;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    this.tabButtons.forEach((t, i) => {
+      const active = t.tab === this.activeTab;
+      const hovered = i === this.hoverTab;
+      ctx.fillStyle = active ? PALETTE.pergMedia : (hovered ? PALETTE.pergScura : PALETTE.inkScuro);
+      ctx.fillRect(t.x, t.y, t.w, t.h);
+      drawPixelRectStroke(ctx, t.x, t.y, t.w, t.h,
+                          active ? PALETTE.hudTitolo : PALETTE.hudBordo);
+      ctx.fillStyle = active ? PALETTE.inkNero : PALETTE.hudTitolo;
+      ctx.font = `${active ? 'bold ' : ''}${SF(13)}px "Courier New", monospace`;
+      ctx.fillText(t.label, t.x + t.w / 2, t.y + t.h / 2);
+    });
   },
 
   drawPanel(area, title) {
@@ -186,7 +337,7 @@ const GameScreen = {
     ctx.fillText(title, area.x + PIXEL * 8, area.y + PIXEL * 4 + bandH / 2);
   },
 
-  drawTopBar(area) {
+  drawTopBar(area, compact) {
     const ctx = this.ctx;
     ctx.fillStyle = PALETTE.inkScuro;
     ctx.fillRect(area.x, area.y, area.w, area.h);
@@ -194,23 +345,26 @@ const GameScreen = {
     ctx.fillRect(area.x, area.y + area.h - PIXEL, area.w, PIXEL);
 
     ctx.fillStyle = PALETTE.hudTitolo;
-    ctx.font = `bold ${SF(36)}px "Courier New", monospace`;
+    ctx.font = `bold ${SF(compact ? 22 : 36)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText('KNIGHT DAWN', SF(18), area.h / 2);
+    ctx.fillText('KNIGHT DAWN', SF(compact ? 12 : 18), area.h / 2);
 
     const meta = this.meta;
     ctx.fillStyle = PALETTE.hudNormale;
-    ctx.font = `${SF(16)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
-    const lines = [
-      `Anno ${meta.anno}  ·  Turno ${meta.turno}`,
-      `${meta.stagione}  ·  ${meta.meteo}  ·  Destinazione: ${meta.destinazione}`,
-    ];
-    ctx.fillText(lines[0], area.w - SF(18), area.h / 2 - SF(10));
-    ctx.fillText(lines[1], area.w - SF(18), area.h / 2 + SF(10));
-
-    drawCompassRose(ctx, area.x + area.w / 2, area.y + area.h / 2, SF(26));
+    if (compact) {
+      // Una riga compatta a destra; niente rosa dei venti per risparmiare spazio.
+      ctx.font = `${SF(12)}px "Courier New", monospace`;
+      ctx.fillText(`A.${meta.anno} · T.${meta.turno}`, area.w - SF(12), area.h / 2 - SF(8));
+      ctx.fillText(`${meta.stagione} · ${meta.meteo}`, area.w - SF(12), area.h / 2 + SF(8));
+    } else {
+      ctx.font = `${SF(16)}px "Courier New", monospace`;
+      ctx.fillText(`Anno ${meta.anno}  ·  Turno ${meta.turno}`, area.w - SF(18), area.h / 2 - SF(10));
+      ctx.fillText(`${meta.stagione}  ·  ${meta.meteo}  ·  Destinazione: ${meta.destinazione}`,
+                   area.w - SF(18), area.h / 2 + SF(10));
+      drawCompassRose(ctx, area.x + area.w / 2, area.y + area.h / 2, SF(26));
+    }
   },
 
   drawKnightStatus(area) {
@@ -299,7 +453,14 @@ const GameScreen = {
     const tex = getParchmentTexture(area.w, area.h, 9999);
     ctx.drawImage(tex, area.x, area.y);
     drawCartographicBorder(ctx, area.x, area.y, area.w, area.h);
+    // Contiene i tile demo dentro la cornice (in compatto l'area è piccola e
+    // gli offset assoluti sborderebbero sui pannelli sottostanti).
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(area.x, area.y, area.w, area.h);
+    ctx.clip();
     this.drawDemoTiles(area);
+    ctx.restore();
     ctx.fillStyle = PALETTE.inkScuro;
     ctx.font = `italic bold ${SF(15)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
@@ -453,14 +614,11 @@ const GameScreen = {
     ]);
   },
 
-  drawLogAndActions(area) {
+  drawLog(area, bottomY) {
     const ctx = this.ctx;
     const x = area.x + PIXEL * 8;
     const yStart = area.y + PIXEL * 4 + SF(26) + SF(4);
-    const buttonsTop = this.actionButtons[0]
-      ? this.actionButtons[0].y - SF(8)
-      : area.y + area.h;
-    const logBottom = buttonsTop - PIXEL * 2;
+    const logBottom = bottomY - PIXEL * 2;
 
     const colors = [PALETTE.hudEvento, PALETTE.hudNormale, PALETTE.hudNormale,
                     PALETTE.hudDim, PALETTE.hudMorto];
@@ -475,7 +633,10 @@ const GameScreen = {
       ctx.fillText('> ' + recent[i], x, yy);
       yy -= lineH;
     }
+  },
 
+  drawActionButtons() {
+    const ctx = this.ctx;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     this.actionButtons.forEach((b, i) => {

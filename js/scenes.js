@@ -1,6 +1,9 @@
 // FERRO & CENERE — scene manager minimale
 // Gestisce il passaggio tra le schermate (titolo, gioco, ecc.).
-// Ogni scena espone: init(canvas), draw(), e opzionalmente onMove/onClick.
+// Ogni scena espone: init(canvas), draw(), e opzionalmente i metodi pointer
+// onPointerMove(p, type) / onPointerDown(p, type) / onPointerUp(p, type) /
+// onPointerCancel(), dove p = { x, y } in coordinate logiche del canvas e
+// type = 'mouse' | 'pen' | 'touch'.
 
 const Scenes = {
   current: null,
@@ -25,11 +28,29 @@ const Scenes = {
     if (this.current && this.current.draw) this.current.draw();
   },
 
-  onMove(e) {
-    if (this.current && this.current.onMove) this.current.onMove(e);
+  onPointerMove(p, type) {
+    if (this.current && this.current.onPointerMove) this.current.onPointerMove(p, type);
   },
 
-  onClick(e) {
-    if (this.current && this.current.onClick) this.current.onClick(e);
+  onPointerDown(p, type) {
+    if (this.current && this.current.onPointerDown) this.current.onPointerDown(p, type);
+  },
+
+  onPointerUp(p, type) {
+    if (this.current && this.current.onPointerUp) this.current.onPointerUp(p, type);
+  },
+
+  onPointerCancel() {
+    if (this.current && this.current.onPointerCancel) this.current.onPointerCancel();
   },
 };
+
+// ─── Utility condivisa: hit-test di una lista di pulsanti {x,y,w,h,disabled} ──
+function btnHitIndex(list, x, y) {
+  for (let i = 0; i < list.length; i++) {
+    const b = list[i];
+    if (b.disabled) continue;
+    if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return i;
+  }
+  return -1;
+}

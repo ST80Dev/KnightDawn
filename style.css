@@ -7,6 +7,11 @@ html, body {
   overflow: hidden;
   font-family: Georgia, 'Times New Roman', serif;
   color: #c8a030;
+  /* Niente evidenziazione blu/grigia al tocco su mobile */
+  -webkit-tap-highlight-color: transparent;
+  /* Disabilita la selezione del testo durante i tap di gioco */
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 #game {
@@ -14,6 +19,9 @@ html, body {
   width: 100vw;
   height: 100vh;
   image-rendering: pixelated;
-  image-rendering: crush-edges;
+  image-rendering: crisp-edges;
   cursor: default;
+  /* Il canvas gestisce da sé i pointer event: niente scroll/zoom/gesture
+     di sistema sopra di esso (lo zoom è già disabilitato dal viewport). */
+  touch-action: none;
 }
