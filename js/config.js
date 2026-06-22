@@ -19,6 +19,7 @@ const PALETTE = {
 
   bluFiume:      '#3a6a9a',
   bluFiumeCh:    '#4a80b4',
+  bluMareSc:     '#2a5078',  // righe d'onda sottili sul mare
 
   marrMontagna:  '#6a5a3a',
   marrMontCh:    '#7a6a48',

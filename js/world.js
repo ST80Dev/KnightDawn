@@ -58,7 +58,7 @@ const World = {
 
   BIOME: {
     ACQUA: 0, PIANURA: 1, FORESTA: 2, COLLINA: 3, MONTAGNA: 4, PALUDE: 5,
-    SABBIA: 6, NEVE: 7, GHIACCIO: 8, FIUME: 9,
+    SABBIA: 6, NEVE: 7, GHIACCIO: 8, FIUME: 9, ROCCIA: 10,
   },
 
   CASTLE_NAMES: ['Vornkeep', 'Ashford', 'Greymoor', 'Duncairn', 'Highrock',
@@ -77,34 +77,42 @@ const World = {
     this.tiles = new Uint8Array(W * H);
     this.elev = new Float32Array(W * H);
 
-    const freqL = 2.2 / Math.max(W, H);   // forma continente a grande scala
-    const freqD = 5.0 / Math.max(W, H);   // dettaglio coste + isole
-    const freqR = 5.5 / Math.max(W, H);   // creste montuose
-    const freqM = 6.0 / Math.max(W, H);   // umidità a grana fine
+    // Per-seed style: ogni mappa ha "carattere" diverso (più mare/più terra,
+    // più catene/poche, foreste sparse/fitte). Le frequenze e le frazioni
+    // variano per seed → mappe distinte tra loro, non sempre la stessa cosa.
+    const styleRng = mulberry32((this.seed ^ 0xA5A5A5A5) >>> 0);
+    const seaFrac     = 0.14 + styleRng() * 0.18;          // 14%–32%
+    const mountFrac   = 0.045 + styleRng() * 0.055;        // 4.5%–10%
+    const forestCover = 0.20 + styleRng() * 0.22;          // 20%–42%
+    const desertBias  = styleRng();                        // 0..1
+    const freqL = (1.8 + styleRng() * 0.9) / Math.max(W, H);
+    const freqD = (4.0 + styleRng() * 2.0) / Math.max(W, H);
+    const freqR = (3.5 + styleRng() * 2.5) / Math.max(W, H);  // ridge
+    const freqM = (5.0 + styleRng() * 2.5) / Math.max(W, H);
+    const freqC = (4.0 + styleRng() * 2.5) / Math.max(W, H);  // grumi foresta
     const seedL = this.seed;
     const seedD = (this.seed ^ 0x27d4eb2f) | 0;
     const seedR = (this.seed ^ 0x68bc21eb) | 0;
     const seedM = (this.seed ^ 0x5bd1e995) | 0;
-    const seedT = (this.seed ^ 0x13579bdf) | 0; // variazione climatica
+    const seedT = (this.seed ^ 0x13579bdf) | 0;
+    const seedFC = (this.seed ^ 0x71f3a9d5) | 0; // grumi foresta
+    const seedFR = (this.seed ^ 0x33a712cc) | 0; // dettaglio bordi grumi
 
-    // Passata 1: elevazione = continente (grande scala) + dettaglio costiero,
-    // SENZA bias radiale forzato → i confini del mondo variano (terra o mare),
-    // con isole, istmi e canali generati dal noise. Più creste montuose.
-    // Un falloff MOLTO leggero solo sull'ultimo anello evita tagli netti.
+    // Passata 1: elevazione + umidità + ridge (separato). Il ridge NON viene
+    // sommato a elev: lo usiamo poi come SELETTORE per le catene montuose,
+    // così le montagne formano linee curve (catene), non blob di altopiano.
     const hum = new Float32Array(W * H);
+    const ridge = new Float32Array(W * H);
     let eMin = Infinity, eMax = -Infinity, mMin = Infinity, mMax = -Infinity;
-    const edge = 6; // tile dell'anello esterno con leggero abbassamento
+    const edge = 6;
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const cont = _fbm(x, y, seedL, 4, freqL);
         const det  = _fbm(x, y, seedD, 4, freqD);
         let e = cont * 0.70 + det * 0.30;
-        // Catene montuose dove l'elevazione è già medio-alta.
-        const r = _ridge(x, y, seedR, 4, freqR);
-        e += r * 0.45 * Math.max(0, e - 0.52);
-        // Falloff leggerissimo sull'orlo estremo (no anello d'acqua forzato).
         const em = Math.min(x, y, W - 1 - x, H - 1 - y);
         if (em < edge) e -= (1 - em / edge) * 0.12;
+        ridge[y * W + x] = _ridge(x, y, seedR, 4, freqR);
 
         const m = _fbm(x + 1000, y + 1000, seedM, 4, freqM);
         const i = y * W + x;
@@ -114,36 +122,27 @@ const World = {
       }
     }
 
-    // Passata 2: soglie per QUANTILE sull'elevazione → quantità di mare,
-    // colline e montagne consistenti tra i seed (sempre mare navigabile e
-    // catene), mentre la FORMA (coste, isole, istmi, canali) resta variabile.
+    // Quantili elev (forma del continente) e ridge (catene).
     const sorted = Float32Array.from(this.elev).sort();
-    const N = sorted.length;
-    const q = (f) => sorted[Math.max(0, Math.min(N - 1, Math.floor(f * N)))];
-    const rng = mulberry32((this.seed ^ 0xBEEFCAFE) >>> 0);
-    // Meno mare aperto: la frazione resta variabile per seed ma più bassa.
-    const seaFrac = 0.16 + rng() * 0.10;   // 16%–26% di mare
+    const Ntot = sorted.length;
+    const q = (f) => sorted[Math.max(0, Math.min(Ntot - 1, Math.floor(f * Ntot)))];
+    const sortedR = Float32Array.from(ridge).sort();
+    const qR = (f) => sortedR[Math.max(0, Math.min(Ntot - 1, Math.floor(f * Ntot)))];
     const seaLevel   = q(seaFrac);
-    const coastLevel = q(seaFrac + 0.06);  // bassopiano costiero → paludi
-    const hillLevel  = q(0.78);            // ~22% terreni alti (colline+)
-    const mountLevel = q(0.93);            // ~7% montagne (le creste)
-
-    // Rumore a bassa frequenza per "macchie di bosco" sparse ovunque: si
-    // somma alla umidità così foreste compaiono anche in pianura asciutta e
-    // tra le montagne, evitando ampie zone monocrome di montagna o pianura.
-    const seedF = (this.seed ^ 0x71f3a9d5) | 0;
-    const freqF1 = 7.0 / Math.max(W, H);    // macchie medie
-    const freqF2 = 14.0 / Math.max(W, H);   // dettaglio macchie
-    // Rumore "roccia/dosso": macchie di collina sparse anche in pianura,
-    // così evita la monotonia di lunghi stretch piatti dello stesso bioma.
-    const seedH = (this.seed ^ 0x2a7c11f9) | 0;
-    const freqH1 = 8.0 / Math.max(W, H);
-    const freqH2 = 16.0 / Math.max(W, H);
+    // Coste pulite: fascia palude STRETTA (+0.015, era +0.06). La palude
+    // diventa eccezione locale dove condizioni di umidità/temperatura sono
+    // estreme, non una fascia continua costiera.
+    const coastLevel = q(Math.min(0.99, seaFrac + 0.015));
+    const hillLevel  = q(0.78);
+    const ridgeMountain = qR(1 - mountFrac);   // top mountFrac → catene
 
     const mSpan = (mMax - mMin) || 1;
     const eSpanE = (eMax - eMin) || 1;
-    // Clima emisfero boreale: nord (y basso) freddo, sud (y alto) caldo;
-    // la quota raffredda; un po' di noise rompe le bande nette.
+    const eSeaSpan = (eMax - seaLevel) || 1;
+
+    // Passata 2: bioma base SENZA foreste. Le montagne sono selezionate dal
+    // RIDGE (catene curve) + soglia di elevazione minima → niente blob
+    // d'altopiano. Le foreste arrivano in passata 4 (grumi).
     for (let y = 0; y < H; y++) {
       for (let x = 0; x < W; x++) {
         const i = y * W + x;
@@ -151,41 +150,22 @@ const World = {
         const mn = (hum[i] - mMin) / mSpan;
         const enorm = (e - eMin) / eSpanE;
         const tN = _fbm(x + 5000, y + 5000, seedT, 3, freqL * 1.6);
-        let temp = (y / (H - 1));               // 0 nord freddo .. 1 sud caldo
-        temp -= Math.max(0, enorm - 0.5) * 0.7; // quota → più freddo
-        temp += (tN - 0.5) * 0.16;
+        let temp = (y / (H - 1)) - Math.max(0, enorm - 0.5) * 0.6 + (tN - 0.5) * 0.16;
         temp = Math.max(0, Math.min(1, temp));
-
-        // "Macchie di bosco": noise dedicato a media frequenza. Indipendente
-        // dall'umidità climatica → boschi anche in zone secche e in quota.
-        const f = _fbm(x + 2000, y + 7000, seedF, 3, freqF1) * 0.7 +
-                  _fbm(x + 7000, y + 2000, seedF + 1, 2, freqF2) * 0.3;
-        const forestScore = mn * 0.55 + f * 0.45;
-        // "Dossi": noise indipendente per macchie rocciose/collinari sparse
-        // anche in pianura → micro-zone mischiate, niente monotonia.
-        const hPatch = _fbm(x + 3000, y + 9000, seedH, 3, freqH1) * 0.6 +
-                       _fbm(x + 9000, y + 3000, seedH + 1, 2, freqH2) * 0.4;
 
         let b;
         if (e < seaLevel) {
-          b = (temp < 0.10) ? B.GHIACCIO : B.ACQUA; // mare ghiacciato solo all'estremo nord
-        } else if (e >= mountLevel) {
-          // Macchie di foresta alpina anche tra le montagne, dove la macchia
-          // di bosco è marcata e il clima non è polare.
-          b = (forestScore > 0.62 && temp > 0.20) ? B.FORESTA : B.MONTAGNA;
-        } else if (temp < 0.15) {
-          b = B.NEVE;                                // neve/tundra solo nelle terre più fredde
+          b = (temp < 0.10) ? B.GHIACCIO : B.ACQUA;
+        } else if (ridge[i] >= ridgeMountain && (e - seaLevel) > eSeaSpan * 0.10) {
+          b = B.MONTAGNA;
+        } else if (temp < 0.13) {
+          b = B.NEVE;
         } else if (e >= hillLevel) {
-          // Colline boscose dove la macchia è alta.
-          b = (forestScore > 0.50) ? B.FORESTA : B.COLLINA;
-        } else if (e < coastLevel && mn > 0.55 && temp > 0.35) {
-          b = B.PALUDE;                              // paludi nelle basse terre umide
-        } else if (temp > 0.66 && mn < 0.32 && f < 0.40) {
-          b = B.SABBIA;                              // deserti: caldi, secchi e senza macchie boscose
-        } else if (forestScore > 0.42) {
-          b = B.FORESTA;                             // boschi diffusi, a macchie ovunque
-        } else if (hPatch > 0.62) {
-          b = B.COLLINA;                             // dossi/collinette anche in pianura
+          b = B.COLLINA;
+        } else if (e < coastLevel && mn > 0.80 && temp > 0.45) {
+          b = B.PALUDE;
+        } else if (temp > 0.66 && mn < (0.26 + desertBias * 0.10)) {
+          b = B.SABBIA;
         } else {
           b = B.PIANURA;
         }
@@ -193,11 +173,82 @@ const World = {
       }
     }
 
-    // Isolinee di altitudine simboliche: 4 soglie quantili sopra il livello
-    // del mare. Il renderer disegna un tratto fine sul bordo tra due tile la
-    // cui elevazione attraversa una di queste soglie → cartografia "a vista"
-    // delle zone rialzate, senza numeri.
-    this.contourLevels = [q(0.55), q(0.70), q(0.82), q(0.92)];
+    // Passata 3: ROCCIA come "piedi" delle catene. I tile alti adiacenti a
+    // due o più montagne diventano roccia → affioramenti grigi attorno alle
+    // catene, niente più verde/marrone monolitico.
+    const tilesCopy = new Uint8Array(this.tiles);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        const b = tilesCopy[i];
+        if (b !== B.PIANURA && b !== B.COLLINA && b !== B.NEVE) continue;
+        if ((this.elev[i] - seaLevel) < eSeaSpan * 0.18) continue;
+        let adj = 0;
+        for (let dy = -1; dy <= 1 && adj < 2; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (!dx && !dy) continue;
+            const nx = x + dx, ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+            if (tilesCopy[ny * W + nx] === B.MONTAGNA) { adj++; if (adj >= 2) break; }
+          }
+        }
+        if (adj >= 2) this.tiles[i] = B.ROCCIA;
+      }
+    }
+
+    // Passata 4: FORESTE A GRUMI. Noise low-freq con soglia hard → cluster
+    // discreti (cartografia fantasy: gruppi di alberi, non tappeto verde).
+    // Possibili anche sui fianchi di montagna/roccia se molto marcate.
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        const b = this.tiles[i];
+        if (b === B.ACQUA || b === B.GHIACCIO || b === B.FIUME ||
+            b === B.PALUDE || b === B.SABBIA) continue;
+        const e = this.elev[i];
+        const mn = (hum[i] - mMin) / mSpan;
+        const enorm = (e - eMin) / eSpanE;
+        const tN = _fbm(x + 5000, y + 5000, seedT, 3, freqL * 1.6);
+        let temp = (y / (H - 1)) - Math.max(0, enorm - 0.5) * 0.6 + (tN - 0.5) * 0.16;
+        temp = Math.max(0, Math.min(1, temp));
+        if (temp < 0.18) continue;
+
+        const c1 = _fbm(x + 2000, y + 7000, seedFC, 3, freqC);
+        const c2 = _fbm(x + 9000, y + 3000, seedFR, 2, freqC * 2.2);
+        const score = c1 * 0.55 + mn * 0.25 + c2 * 0.20;
+        const thr = 0.62 - forestCover * 0.35;
+        if (score > thr) {
+          if (b === B.MONTAGNA) {
+            // Solo fianchi (ridge non al top) e grumo deciso.
+            if (score > thr + 0.06 &&
+                ridge[i] < ridgeMountain + (sortedR[Ntot - 1] - ridgeMountain) * 0.3) {
+              this.tiles[i] = B.FORESTA;
+            }
+          } else if (b === B.ROCCIA) {
+            if (score > thr + 0.08) this.tiles[i] = B.FORESTA;
+          } else {
+            this.tiles[i] = B.FORESTA;
+          }
+        }
+      }
+    }
+
+    // Passata 5: salt&pepper per micro-varietà a livello di SINGOLA TILE:
+    // alberi isolati, radure, sassi sparsi. Deterministico via hash.
+    for (let i = 0; i < this.tiles.length; i++) {
+      const x = i % W, y = (i / W) | 0;
+      const b = this.tiles[i];
+      const h = _hash2(x, y, this.seed ^ 0x33333333);
+      if      (b === B.PIANURA  && h < 0.012) this.tiles[i] = B.FORESTA;
+      else if (b === B.PIANURA  && h > 0.988) this.tiles[i] = B.ROCCIA;
+      else if (b === B.COLLINA  && h < 0.018) this.tiles[i] = B.FORESTA;
+      else if (b === B.COLLINA  && h > 0.970) this.tiles[i] = B.ROCCIA;
+      else if (b === B.FORESTA  && h > 0.965) this.tiles[i] = B.PIANURA;
+      else if (b === B.MONTAGNA && h < 0.020) this.tiles[i] = B.ROCCIA;
+    }
+
+    // Isolinee di altitudine: poche soglie ben evidenti (terre alte, vette).
+    this.contourLevels = [q(0.65), q(0.88)];
 
     this._carveRivers();
     this._placeStructures();
@@ -241,47 +292,94 @@ const World = {
     return false;
   },
 
-  // Fiumi: dai rilievi scendono per pendenza fino a mare/lago o minimo locale
-  // (dove formano un piccolo lago). Marcati come FIUME; i laghi come ACQUA.
+  // Fiumi: random walk guidato dalla DISTANZA-DAL-MARE (BFS in tile), non
+  // dal gradiente di elevazione. Risultato: percorsi serpeggianti, vari,
+  // con meandri e curve, ma sempre in direzione del mare (mai si allontanano).
   _carveRivers() {
     const W = this.width, H = this.height, B = this.BIOME;
     const rng = mulberry32((this.seed ^ 0x9e3779b9) >>> 0);
-    // Sorgenti: tutte le terre alte (montagna, collina) E pianure/foreste
-    // d'altura: così i fiumi nascono ovunque sia abbastanza elevato.
+
+    // BFS multi-sorgente da tutte le acque → distanza in tile dal mare.
+    const dist = new Int32Array(W * H);
+    for (let i = 0; i < dist.length; i++) dist[i] = -1;
+    const queue = [];
+    for (let i = 0; i < this.tiles.length; i++) {
+      if (this.isWater(this.tiles[i])) { dist[i] = 0; queue.push(i); }
+    }
+    let head = 0;
+    while (head < queue.length) {
+      const i = queue[head++];
+      const x = i % W, y = (i / W) | 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue;
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+          const ni = ny * W + nx;
+          if (dist[ni] !== -1) continue;
+          dist[ni] = dist[i] + 1;
+          queue.push(ni);
+        }
+      }
+    }
+
+    // Sorgenti: terre alte e qualche pianura/foresta in quota.
     const sources = [];
     for (let i = 0; i < this.tiles.length; i++) {
       const b = this.tiles[i];
-      if (b === B.MONTAGNA || b === B.COLLINA) sources.push(i);
+      if (b === B.MONTAGNA || b === B.COLLINA || b === B.ROCCIA) sources.push(i);
       else if ((b === B.PIANURA || b === B.FORESTA) && this.elev[i] > 0 && rng() < 0.04) {
         sources.push(i);
       }
     }
     if (!sources.length) return;
-    // Molti più fiumi, proporzionali alla superficie del mondo.
-    const baseN = Math.round((W * H) / 800);   // ~54 per 240×180
+    const baseN = Math.round((W * H) / 800);
     const N = baseN + Math.floor(rng() * baseN * 0.4);
+
     for (let s = 0; s < N; s++) {
-      let idx = sources[Math.floor(rng() * sources.length)];
+      const idx = sources[Math.floor(rng() * sources.length)];
+      if (dist[idx] < 0) continue;     // isolata dal mare: salta
       let x = idx % W, y = (idx / W) | 0;
       const visited = new Set();
+      let lastDx = 0, lastDy = 0;
       let steps = 0;
-      while (steps++ < W + H) {
+      while (steps++ < (W + H) * 2) {
         const i = y * W + x;
-        if (this.isWater(this.tiles[i])) break;          // raggiunto mare/lago
+        if (this.isWater(this.tiles[i])) break;
         if (this.tiles[i] !== B.MONTAGNA) this.tiles[i] = B.FIUME;
         visited.add(i);
-        let bx = -1, by = -1, be = this.elev[i];
-        for (let dy = -1; dy <= 1; dy++)
+        const di = dist[i];
+
+        // Vicini: ammessi solo quelli che NON si allontanano dal mare.
+        // Tra "uguali" (stessa distanza) il random walk crea meandri.
+        const cands = [];
+        let totalW = 0;
+        for (let dy = -1; dy <= 1; dy++) {
           for (let dx = -1; dx <= 1; dx++) {
             if (!dx && !dy) continue;
             const nx = x + dx, ny = y + dy;
             if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
             const ni = ny * W + nx;
             if (visited.has(ni)) continue;
-            if (this.elev[ni] < be) { be = this.elev[ni]; bx = nx; by = ny; }
+            const dn = dist[ni];
+            if (dn < 0 || dn > di) continue;          // mai indietro
+            // Peso: chi avvicina al mare è preferito, ma "uguale" è
+            // ammesso → meandri. Bonus per continuità di direzione
+            // (curve morbide) e jitter casuale per varieta'.
+            let w = (dn < di) ? 1.6 : 0.9;
+            if (dx * lastDx + dy * lastDy > 0) w *= 1.5;     // stessa direz
+            else if (dx * lastDx + dy * lastDy < 0) w *= 0.3; // backtrack
+            w *= 0.5 + rng() * 1.0;
+            cands.push({ nx, ny, dx, dy, w });
+            totalW += w;
           }
-        if (bx < 0) { this._makeLake(x, y); break; }      // minimo locale → lago
-        x = bx; y = by;
+        }
+        if (!cands.length) { this._makeLake(x, y); break; }
+        let r = rng() * totalW;
+        let pick = cands[cands.length - 1];
+        for (const c of cands) { r -= c.w; if (r <= 0) { pick = c; break; } }
+        lastDx = pick.dx; lastDy = pick.dy;
+        x = pick.nx; y = pick.ny;
       }
     }
   },

@@ -114,8 +114,9 @@ const MapRenderer = {
 
   _baseColor(b) {
     const B = World.BIOME;
-    // Tono piatto unico per bioma: niente chiaroscuro a strisce su grandi
-    // aree. La varietà visiva è data dalla micro-texture 2×2 e dalle icone.
+    // Un solo tono per bioma: niente micro-texture intra-tile. La varietà
+    // visiva nasce dalla MESCOLANZA di tile diversi (grumi di foresta,
+    // chiazze di roccia, radure) non da accenti dentro al singolo tile.
     switch (b) {
       case B.ACQUA:    return PALETTE.bluFiume;
       case B.FIUME:    return PALETTE.bluFiumeCh;
@@ -127,82 +128,39 @@ const MapRenderer = {
       case B.NEVE:     return PALETTE.neveCime;
       case B.FORESTA:  return PALETTE.verdeBosco;
       case B.MONTAGNA: return PALETTE.marrMontagna;
+      case B.ROCCIA:   return PALETTE.grigioPietra;
       default:         return PALETTE.pergChiara;
     }
   },
 
-  // Hash deterministico per tile (no flicker tra frame).
-  _tileHash(tx, ty) {
-    let h = (Math.imul(tx | 0, 374761393) + Math.imul(ty | 0, 668265263)) | 0;
-    h = Math.imul(h ^ (h >>> 13), 1274126177);
-    return (h ^ (h >>> 16)) >>> 0;
-  },
-
-  // Restituisce 4 colori per i sub-quadranti 2×2 (NW, NE, SW, SE) del tile.
-  // Pattern deterministico per (tx,ty) → micro-texture stabile, mai uniforme.
-  // Gli ACCENTI sono sempre vicini al tono base così la mappa non diventa
-  // rumorosa: variazione locale ma palette coerente per bioma.
-  _microPalette(b, h) {
-    const B = World.BIOME;
-    const P = PALETTE;
-    const base = this._baseColor(b);
-    // sceglie due accenti (chiaro/scuro) per bioma
-    let light, dark, rare;
-    switch (b) {
-      case B.PIANURA:  light = P.pergMedia;   dark = P.pergScura;    rare = P.verdeBosco; break;
-      case B.COLLINA:  light = P.pergMedia;   dark = P.marrMontagna; rare = P.verdeBoscoSc; break;
-      case B.FORESTA:  light = P.verdePalude; dark = P.verdeBoscoSc; rare = P.pergScura; break;
-      case B.MONTAGNA: light = P.marrMontCh;  dark = P.inkScuro;     rare = P.neveCime; break;
-      case B.NEVE:     light = P.pergChiara;  dark = P.ghiaccio;     rare = P.bluFiumeCh; break;
-      case B.SABBIA:   light = P.pergChiara;  dark = P.pergMedia;    rare = P.pergScura; break;
-      case B.PALUDE:   light = P.verdeBoscoSc;dark = P.bluFiume;     rare = P.pergMacchia; break;
-      case B.GHIACCIO: light = P.neveCime;    dark = P.bluFiumeCh;   rare = P.bluFiume; break;
-      // Acqua: micro-texture neutra (quasi invisibile) → mare resta piatto.
-      case B.ACQUA:    light = P.bluFiume;    dark = P.bluFiume;     rare = P.bluFiume; break;
-      case B.FIUME:    light = P.bluFiumeCh;  dark = P.bluFiumeCh;   rare = P.bluFiumeCh; break;
-      default:         light = base;          dark = base;           rare = base;
-    }
-    const out = [base, base, base, base];
-    const mask = h & 0xF;             // 4 bit → uno per quadrante
-    const accent = (h >>> 4) & 0xF;   // sceglie chiaro/scuro per quadrante
-    const rareBit = (h >>> 8) & 0xFF; // accenti "rari" radi
-    for (let i = 0; i < 4; i++) {
-      if ((mask >> i) & 1) out[i] = (accent >> i) & 1 ? dark : light;
-    }
-    // Accento raro (cespuglio/roccia/pozza): 1 quadrante ogni ~16 tile.
-    if (rareBit < 24) out[rareBit & 3] = rare;
-    return out;
-  },
-
   _drawTile(ctx, b, sx, sy, cell, t, tx, ty) {
     const B = World.BIOME;
-    // Acqua/fiume/ghiaccio: campitura piatta (niente micro-texture chiassosa).
-    if (b === B.ACQUA || b === B.FIUME) {
-      ctx.fillStyle = this._baseColor(b);
-      ctx.fillRect(sx, sy, cell, cell);
-      return;
+    // Campitura piatta: il bioma è leggibile dal colore + (a zoom) dall'icona.
+    ctx.fillStyle = this._baseColor(b);
+    ctx.fillRect(sx, sy, cell, cell);
+
+    // Mare: sottili righe blu scure orizzontali per dare senso d'onda.
+    // Pattern deterministico per tile, sfalsato così le righe sembrano
+    // ondulare invece di formare bande nette.
+    if (b === B.ACQUA && t >= 4) {
+      ctx.fillStyle = PALETTE.bluMareSc;
+      const stripeH = Math.max(1, Math.floor(t * 0.08));
+      const ph = ((tx * 3 + ty * 5) & 3);  // 0..3 fase orizzontale
+      const pv = ((tx + ty * 2) & 1);      // alternanza verticale
+      const yy = sy + Math.floor(t * (pv ? 0.32 : 0.62));
+      const x1 = sx + Math.floor(t * (ph * 0.12));
+      const x2 = sx + Math.floor(t * (0.55 + ph * 0.10));
+      ctx.fillRect(x1, yy, Math.floor(t * 0.32), stripeH);
+      if (t >= 8) ctx.fillRect(x2, yy + stripeH * 2, Math.floor(t * 0.22), stripeH);
     }
 
-    // Sub-quadranti 2×2 → micro-texture intra-tile.
-    const h = this._tileHash(tx, ty);
-    const sub = this._microPalette(b, h);
-    const half = Math.max(1, Math.floor(cell / 2));
-    const w0 = half, h0 = half, w1 = cell - half, h1 = cell - half;
-    ctx.fillStyle = sub[0]; ctx.fillRect(sx,         sy,         w0, h0);
-    ctx.fillStyle = sub[1]; ctx.fillRect(sx + w0,    sy,         w1, h0);
-    ctx.fillStyle = sub[2]; ctx.fillRect(sx,         sy + h0,    w0, h1);
-    ctx.fillStyle = sub[3]; ctx.fillRect(sx + w0,    sy + h0,    w1, h1);
-
-    if (t < 7) {
-      // Zoom out: niente icone (la micro-texture 2×2 basta a leggere il bioma).
-      return;
-    }
+    if (t < 7) return; // zoom out: solo colore
 
     // Zoom in: icone cartografiche stilizzate centrate nel tile.
     const cx = sx + t / 2, cy = sy + t / 2;
     if (b === B.FORESTA) {
       const r = t * 0.34;
-      this._tri(ctx, cx, cy - r, cx - r * 0.8, cy + r * 0.7, cx + r * 0.8, cy + r * 0.7, PALETTE.verdeBosco);
+      this._tri(ctx, cx, cy - r, cx - r * 0.8, cy + r * 0.7, cx + r * 0.8, cy + r * 0.7, PALETTE.verdeBoscoSc);
       this._tri(ctx, cx, cy - r * 1.4, cx - r * 0.6, cy + r * 0.2, cx + r * 0.6, cy + r * 0.2, PALETTE.verdeBoscoSc);
       ctx.fillStyle = PALETTE.inkScuro;
       ctx.fillRect(cx - Math.max(1, t * 0.04), cy + r * 0.6, Math.max(2, t * 0.08), Math.max(2, t * 0.18));
@@ -211,6 +169,23 @@ const MapRenderer = {
       this._tri(ctx, cx, cy - r, cx - r, cy + r * 0.6, cx + r, cy + r * 0.6, PALETTE.marrMontagna);
       this._tri(ctx, cx, cy - r, cx + r, cy + r * 0.6, cx + r * 0.15, cy + r * 0.6, PALETTE.marrMontCh);
       this._tri(ctx, cx, cy - r, cx - r * 0.3, cy - r * 0.4, cx + r * 0.3, cy - r * 0.4, PALETTE.neveCime);
+    } else if (b === B.ROCCIA) {
+      // Roccia: due "ciottoli" tondeggianti sovrapposti
+      const r = t * 0.30;
+      ctx.fillStyle = PALETTE.grigioPietraSc;
+      ctx.beginPath(); ctx.arc(cx - r * 0.5, cy + r * 0.2, r * 0.85, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = PALETTE.grigioPietra;
+      ctx.beginPath(); ctx.arc(cx + r * 0.4, cy - r * 0.1, r * 0.95, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = PALETTE.inkScuro;
+      ctx.fillRect(cx + r * 0.05, cy - r * 0.55, Math.max(1, t * 0.06), Math.max(1, t * 0.06));
+    } else if (b === B.COLLINA && t >= 10) {
+      // Collina: due gobbe basse marroncine
+      const r = t * 0.28;
+      ctx.fillStyle = PALETTE.pergMacchia;
+      ctx.beginPath();
+      ctx.arc(cx - r * 0.6, cy + r * 0.2, r * 0.9, Math.PI, 0); ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx + r * 0.6, cy + r * 0.2, r * 0.75, Math.PI, 0); ctx.fill();
     } else if (b === B.PALUDE && t >= 10) {
       ctx.strokeStyle = PALETTE.verdeBoscoSc;
       ctx.lineWidth = Math.max(1, t * 0.05);
@@ -229,9 +204,9 @@ const MapRenderer = {
     const elev = World.elev;
     const levels = World.contourLevels;
     const nL = levels.length;
-    // Inchiostro tenue da cartografo: appena visibile, non disturba la mappa.
-    ctx.strokeStyle = 'rgba(58, 32, 16, 0.45)'; // inkScuro semitrasparente
-    ctx.lineWidth = Math.max(1, Math.floor(t * 0.06));
+    // Inchiostro da cartografo: più evidente, righe meno fitte (poche soglie).
+    ctx.strokeStyle = 'rgba(58, 32, 16, 0.85)'; // inkScuro quasi pieno
+    ctx.lineWidth = Math.max(1, Math.floor(t * 0.10));
     ctx.lineCap = 'butt';
     const isWater = (b) => World.isWater(b);
     for (let ty = Math.max(0, y0); ty < Math.min(H, y1); ty++) {
@@ -418,6 +393,7 @@ const MapRenderer = {
       case B.PALUDE:   hex = PALETTE.verdePalude; break;
       case B.SABBIA:   hex = PALETTE.sabbia; break;
       case B.NEVE:     hex = PALETTE.neveCime; break;
+      case B.ROCCIA:   hex = PALETTE.grigioPietra; break;
       default:         hex = PALETTE.pergChiara;
     }
     return hexToRgb(hex);
