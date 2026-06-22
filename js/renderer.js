@@ -9,14 +9,29 @@
 const MapRenderer = {
   tilePx(cam) { return MAP_ZOOM_STEPS[cam.step]; },
 
+  // Passo di zoom-out minimo: il più piccolo livello in cui il mondo COPRE
+  // l'intera area. Sotto questo, ai bordi comparirebbe l'oltre-confine
+  // indefinito; capparlo lega i confini del mondo alla cornice della mappa.
+  minStep(area) {
+    const need = Math.max(area.w / World.width, area.h / World.height);
+    for (let i = 0; i < MAP_ZOOM_STEPS.length; i++) {
+      if (MAP_ZOOM_STEPS[i] >= need) return i;
+    }
+    return MAP_ZOOM_STEPS.length - 1;
+  },
+
   // Tiene il centro camera così che il mondo resti inquadrato: niente pan nel
-  // vuoto oltre i confini. Se il mondo è più piccolo della vista, lo centra.
+  // vuoto oltre i confini. Limita anche lo zoom-out al cap (minStep) così i
+  // bordi del mondo restano legati alla cornice. Se il mondo è più piccolo
+  // della vista (caso limite), lo centra.
   clampCam(cam, area) {
+    const ms = this.minStep(area);
+    if (cam.step < ms) cam.step = ms;
     const t = this.tilePx(cam);
     const halfW = (area.w / 2) / t, halfH = (area.h / 2) / t;
-    cam.cx = World.width  <= halfW * 2 ? World.width  / 2
+    cam.cx = World.width  * t <= area.w ? World.width  / 2
            : Math.min(Math.max(cam.cx, halfW), World.width  - halfW);
-    cam.cy = World.height <= halfH * 2 ? World.height / 2
+    cam.cy = World.height * t <= area.h ? World.height / 2
            : Math.min(Math.max(cam.cy, halfH), World.height - halfH);
   },
 

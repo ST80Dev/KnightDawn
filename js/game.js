@@ -101,16 +101,26 @@ const GameScreen = {
     const topBarH = SF(76);
     const leftW = SF(360);
     const rightW = SF(310);
-    const bottomH = SF(240);
+    const logH = SF(220);    // cronaca eventi → in basso nella sidebar sinistra
+    const miniH = SF(240);   // minimappa     → in basso nella sidebar destra
 
-    const map = { x: leftW + pad, y: topBarH + pad, w: W - leftW - rightW - pad * 3, h: H - topBarH - bottomH - pad * 3 };
-    const left = { x: pad, y: topBarH + pad, w: leftW - pad, h: H - topBarH - pad * 2 };
-    const right = { x: W - rightW, y: topBarH + pad, w: rightW - pad, h: H - topBarH - bottomH - pad * 3 };
-    const log = { x: leftW + pad, y: H - bottomH - pad, w: map.w * 0.62, h: bottomH };
-    const mini = { x: log.x + log.w + pad, y: H - bottomH - pad, w: map.w - log.w - pad, h: bottomH };
-    const topBar = { x: 0, y: 0, w: W, h: topBarH };
+    // Barra superiore divisa in due soli segmenti (sinistro e destro): la
+    // fascia centrale resta libera così la mappa risale fino al bordo alto.
+    const topBarLeft  = { x: 0,         y: 0, w: leftW,  h: topBarH };
+    const topBarRight = { x: W - rightW, y: 0, w: rightW, h: topBarH };
 
-    return { compact: false, pad, topBar, left, map, right, log, mini };
+    // Mappa centrale: occupa tutta l'altezza utile, dal bordo alto a quello basso.
+    const map = { x: leftW + pad, y: pad, w: W - leftW - rightW - pad * 2, h: H - pad * 2 };
+
+    // Sidebar sinistra: STATO (alto) + CRONACA (basso).
+    const log  = { x: pad, y: H - pad - logH, w: leftW - pad, h: logH };
+    const left = { x: pad, y: topBarH + pad, w: leftW - pad, h: log.y - (topBarH + pad) - pad };
+
+    // Sidebar destra: CONTESTO (alto) + MINIMAPPA (basso).
+    const mini  = { x: W - rightW, y: H - pad - miniH, w: rightW - pad, h: miniH };
+    const right = { x: W - rightW, y: topBarH + pad, w: rightW - pad, h: mini.y - (topBarH + pad) - pad };
+
+    return { compact: false, pad, topBarLeft, topBarRight, left, map, right, log, mini };
   },
 
   layoutCompact() {
@@ -125,20 +135,6 @@ const GameScreen = {
     const footer = { x: 0, y: H - footerH, w: W, h: footerH, navH, actH, fGap, fPad };
 
     return { compact: true, pad, topBar, map, footer };
-  },
-
-  layoutButtons(area) {
-    const cols = 2, rows = 2, gap = SF(8), padInner = SF(14);
-    const bw = (area.w - padInner * 2 - gap * (cols - 1)) / cols;
-    const bh = SF(32);
-    const startX = area.x + padInner;
-    const startY = area.y + area.h - bh * rows - gap * (rows - 1) - padInner;
-    this.actionButtons.forEach((b, i) => {
-      const c = i % cols, r = Math.floor(i / cols);
-      b.x = Math.floor(startX + c * (bw + gap));
-      b.y = Math.floor(startY + r * (bh + gap));
-      b.w = Math.floor(bw); b.h = bh;
-    });
   },
 
   layoutFooter(f) {
@@ -159,6 +155,12 @@ const GameScreen = {
   inMap(p) {
     const r = this.mapRect;
     return !!r && p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+  },
+
+  inActionCard(p) {
+    const c = this.actionCard;
+    return !!c && !window.UI.compact &&
+      p.x >= c.x && p.x <= c.x + c.w && p.y >= c.y && p.y <= c.y + c.h;
   },
 
   onPointerMove(p, type) {
@@ -188,7 +190,7 @@ const GameScreen = {
     const hz = compact ? btnHitIndex(this.zoomButtons, p.x, p.y) : -1;
     const onBtn = hb >= 0 || hn >= 0 || hz >= 0;
     document.getElementById('game').style.cursor =
-      onBtn ? 'pointer' : (this.inMap(p) ? 'grab' : 'default');
+      onBtn ? 'pointer' : (this.inMap(p) && !this.inActionCard(p) ? 'grab' : 'default');
     if (hb !== this.hoverBtn || hn !== this.hoverNav || hz !== this.hoverZoom) {
       this.hoverBtn = hb; this.hoverNav = hn; this.hoverZoom = hz;
       window.GameRender.invalidate();
@@ -204,7 +206,8 @@ const GameScreen = {
     this.pressedNav = compact ? btnHitIndex(this.navButtons, p.x, p.y) : -1;
     this.pressedZoom = compact ? btnHitIndex(this.zoomButtons, p.x, p.y) : -1;
 
-    if (this.pressedBtn < 0 && this.pressedNav < 0 && this.pressedZoom < 0 && this.inMap(p)) {
+    if (this.pressedBtn < 0 && this.pressedNav < 0 && this.pressedZoom < 0 &&
+        this.inMap(p) && !this.inActionCard(p)) {
       // Nessun pulsante: inizia il pan della mappa.
       this.dragging = true;
       this.dragLast = { x: p.x, y: p.y };
@@ -301,19 +304,18 @@ const GameScreen = {
     this.zoomButtons = [];           // niente +/- su desktop (solo rotella)
     this.activeOverlay = null;       // overlay solo in compatto
     this.mapRect = L.map;
-    this.layoutButtons(L.log);
-    this.drawTopBar(L.topBar, false);
+    this.drawTopBarSplit(L.topBarLeft, L.topBarRight);
     this.drawPanel(L.left, 'STATO CAVALIERE');
     this.drawKnightStatus(L.left);
     this.drawMapPanel(L.map);
     this.drawPanel(L.right, 'CONTESTO');
     this.drawContext(L.right);
-    this.drawPanel(L.log, 'LOG EVENTI E AZIONI');
-    const buttonsTop = this.actionButtons[0] ? this.actionButtons[0].y - SF(8) : L.log.y + L.log.h;
-    this.drawLog(L.log, buttonsTop);
-    this.drawActionButtons();
+    this.drawPanel(L.log, 'CRONACA EVENTI');
+    this.drawLog(L.log, L.log.y + L.log.h - SF(12));
     this.drawPanel(L.mini, 'MINIMAPPA REGIONALE');
     this.drawMinimap(L.mini);
+    // Comandi e azioni: card sovrapposta nella parte bassa della mappa.
+    this.drawActionCard(L.map);
   },
 
   drawCompact(L) {
@@ -470,6 +472,68 @@ const GameScreen = {
       ctx.fillText(`${meta.stagione}  ·  ${meta.meteo}  ·  Destinazione: ${meta.destinazione}`, area.w - SF(18), area.h / 2 + SF(10));
       drawCompassRose(ctx, area.x + area.w / 2, area.y + area.h / 2, SF(26));
     }
+  },
+
+  // Barra superiore desktop: due soli segmenti (titolo a sx, meta a dx); la
+  // fascia centrale è libera, lì la mappa risale fino in cima.
+  drawTopBarSplit(left, right) {
+    const ctx = this.ctx;
+    this._drawBarSeg(left);
+    ctx.fillStyle = PALETTE.hudTitolo;
+    ctx.font = `bold ${SF(32)}px "Courier New", monospace`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('KNIGHT DAWN', left.x + SF(18), left.y + left.h / 2);
+
+    this._drawBarSeg(right);
+    const meta = this.meta;
+    const rx = right.x + right.w - SF(14);
+    const ry = right.y + right.h / 2;
+    ctx.fillStyle = PALETTE.hudNormale;
+    ctx.font = `${SF(13)}px "Courier New", monospace`;
+    ctx.textAlign = 'right';
+    ctx.fillText(`Anno ${meta.anno}  ·  Turno ${meta.turno}`, rx, ry - SF(16));
+    ctx.fillText(`${meta.stagione}  ·  ${meta.meteo}`, rx, ry);
+    ctx.fillText(`Destinazione: ${meta.destinazione}`, rx, ry + SF(16));
+  },
+
+  _drawBarSeg(area) {
+    const ctx = this.ctx;
+    ctx.fillStyle = PALETTE.inkScuro;
+    ctx.fillRect(area.x, area.y, area.w, area.h);
+    ctx.fillStyle = PALETTE.hudTitolo;
+    ctx.fillRect(area.x, area.y + area.h - PIXEL, area.w, PIXEL);
+  },
+
+  // Card comandi sovrapposta nella parte bassa della mappa: una riga di
+  // pulsanti azione su fondo scuro semitrasparente, così la mappa guadagna
+  // tutta l'altezza utile senza un pannello dedicato.
+  drawActionCard(map) {
+    const ctx = this.ctx;
+    const m = SF(12);
+    const bh = SF(34);
+    const cardPad = SF(10);
+    const cardH = bh + cardPad * 2;
+    const card = { x: map.x + m, y: map.y + map.h - m - cardH, w: map.w - m * 2, h: cardH };
+    this.actionCard = card;
+
+    ctx.fillStyle = 'rgba(26,14,4,0.82)';
+    ctx.fillRect(card.x, card.y, card.w, card.h);
+    drawPixelRectStroke(ctx, card.x, card.y, card.w, card.h, PALETTE.hudBordo);
+    drawPixelRectStroke(ctx, card.x + PIXEL, card.y + PIXEL, card.w - PIXEL * 2, card.h - PIXEL * 2, PALETTE.inkScuro);
+
+    const n = this.actionButtons.length;
+    const gap = SF(8);
+    const bw = (card.w - cardPad * 2 - gap * (n - 1)) / n;
+    const x0 = card.x + cardPad;
+    const by = card.y + cardPad;
+    this.actionButtons.forEach((b, i) => {
+      b.x = Math.floor(x0 + i * (bw + gap));
+      b.y = by;
+      b.w = Math.floor(bw);
+      b.h = bh;
+    });
+    this.drawActionButtons();
   },
 
   drawKnightStatus(area) {
