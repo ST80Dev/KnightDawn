@@ -51,8 +51,8 @@ const TILE_BASE = 16;
 const ZOOM_LEVELS = [4, 8, 16, 32]; // livelli semantici di riferimento (GRAFICA.md)
 
 // Dimensioni del mondo (griglia di tile)
-const WORLD_W = 160;
-const WORLD_H = 120;
+const WORLD_W = 240;
+const WORLD_H = 180;
 
 // Zoom mappa: passi discreti ravvicinati (px per tile), NON i 4 livelli
 // semantici regione/zona/locale. Lo zoom è centrato sul centro camera, che

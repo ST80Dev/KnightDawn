@@ -83,6 +83,11 @@ const MapRenderer = {
       }
     }
 
+    // 4. Isolinee di altitudine (cartografia a vista delle zone rialzate).
+    if (t >= 5 && World.contourLevels && World.contourLevels.length) {
+      this._drawContours(ctx, area, ox, oy, t, x0, y0, x1, y1);
+    }
+
     // 5-6. Strutture + etichette
     for (const s of World.structures) {
       const sx = area.x + (s.x + 0.5 - ox) * t;
@@ -107,34 +112,89 @@ const MapRenderer = {
     this._drawKnight(ctx, kx, ky, t);
   },
 
-  _baseColor(b, tx, ty) {
+  _baseColor(b) {
     const B = World.BIOME;
-    // Leggera variazione di tono per evitare campiture piatte.
-    const v = ((tx * 7 + ty * 13) & 3);
+    // Tono piatto unico per bioma: niente chiaroscuro a strisce su grandi
+    // aree. La varietà visiva è data dalla micro-texture 2×2 e dalle icone.
     switch (b) {
-      case B.ACQUA:    return v < 2 ? PALETTE.bluFiume : PALETTE.bluFiumeCh;
+      case B.ACQUA:    return PALETTE.bluFiume;
       case B.FIUME:    return PALETTE.bluFiumeCh;
-      case B.GHIACCIO: return v < 1 ? PALETTE.ghiaccio : PALETTE.neveCime;
-      case B.PIANURA:  return v === 0 ? PALETTE.pergMedia : PALETTE.pergChiara;
-      case B.COLLINA:  return v < 1 ? PALETTE.pergScura : PALETTE.pergMedia;
+      case B.GHIACCIO: return PALETTE.ghiaccio;
+      case B.PIANURA:  return PALETTE.pergChiara;
+      case B.COLLINA:  return PALETTE.pergScura;
       case B.SABBIA:   return PALETTE.sabbia;
       case B.PALUDE:   return PALETTE.verdePalude;
-      case B.NEVE:     return v < 1 ? PALETTE.neveCime : PALETTE.pergChiara;
-      case B.FORESTA:  return PALETTE.pergMedia;   // sfondo, l'albero ci va sopra
-      case B.MONTAGNA: return PALETTE.pergScura;   // sfondo, il picco ci va sopra
+      case B.NEVE:     return PALETTE.neveCime;
+      case B.FORESTA:  return PALETTE.verdeBosco;
+      case B.MONTAGNA: return PALETTE.marrMontagna;
       default:         return PALETTE.pergChiara;
     }
   },
 
+  // Hash deterministico per tile (no flicker tra frame).
+  _tileHash(tx, ty) {
+    let h = (Math.imul(tx | 0, 374761393) + Math.imul(ty | 0, 668265263)) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return (h ^ (h >>> 16)) >>> 0;
+  },
+
+  // Restituisce 4 colori per i sub-quadranti 2×2 (NW, NE, SW, SE) del tile.
+  // Pattern deterministico per (tx,ty) → micro-texture stabile, mai uniforme.
+  // Gli ACCENTI sono sempre vicini al tono base così la mappa non diventa
+  // rumorosa: variazione locale ma palette coerente per bioma.
+  _microPalette(b, h) {
+    const B = World.BIOME;
+    const P = PALETTE;
+    const base = this._baseColor(b);
+    // sceglie due accenti (chiaro/scuro) per bioma
+    let light, dark, rare;
+    switch (b) {
+      case B.PIANURA:  light = P.pergMedia;   dark = P.pergScura;    rare = P.verdeBosco; break;
+      case B.COLLINA:  light = P.pergMedia;   dark = P.marrMontagna; rare = P.verdeBoscoSc; break;
+      case B.FORESTA:  light = P.verdePalude; dark = P.verdeBoscoSc; rare = P.pergScura; break;
+      case B.MONTAGNA: light = P.marrMontCh;  dark = P.inkScuro;     rare = P.neveCime; break;
+      case B.NEVE:     light = P.pergChiara;  dark = P.ghiaccio;     rare = P.bluFiumeCh; break;
+      case B.SABBIA:   light = P.pergChiara;  dark = P.pergMedia;    rare = P.pergScura; break;
+      case B.PALUDE:   light = P.verdeBoscoSc;dark = P.bluFiume;     rare = P.pergMacchia; break;
+      case B.GHIACCIO: light = P.neveCime;    dark = P.bluFiumeCh;   rare = P.bluFiume; break;
+      // Acqua: micro-texture neutra (quasi invisibile) → mare resta piatto.
+      case B.ACQUA:    light = P.bluFiume;    dark = P.bluFiume;     rare = P.bluFiume; break;
+      case B.FIUME:    light = P.bluFiumeCh;  dark = P.bluFiumeCh;   rare = P.bluFiumeCh; break;
+      default:         light = base;          dark = base;           rare = base;
+    }
+    const out = [base, base, base, base];
+    const mask = h & 0xF;             // 4 bit → uno per quadrante
+    const accent = (h >>> 4) & 0xF;   // sceglie chiaro/scuro per quadrante
+    const rareBit = (h >>> 8) & 0xFF; // accenti "rari" radi
+    for (let i = 0; i < 4; i++) {
+      if ((mask >> i) & 1) out[i] = (accent >> i) & 1 ? dark : light;
+    }
+    // Accento raro (cespuglio/roccia/pozza): 1 quadrante ogni ~16 tile.
+    if (rareBit < 24) out[rareBit & 3] = rare;
+    return out;
+  },
+
   _drawTile(ctx, b, sx, sy, cell, t, tx, ty) {
     const B = World.BIOME;
-    ctx.fillStyle = this._baseColor(b, tx, ty);
-    ctx.fillRect(sx, sy, cell, cell);
+    // Acqua/fiume/ghiaccio: campitura piatta (niente micro-texture chiassosa).
+    if (b === B.ACQUA || b === B.FIUME) {
+      ctx.fillStyle = this._baseColor(b);
+      ctx.fillRect(sx, sy, cell, cell);
+      return;
+    }
+
+    // Sub-quadranti 2×2 → micro-texture intra-tile.
+    const h = this._tileHash(tx, ty);
+    const sub = this._microPalette(b, h);
+    const half = Math.max(1, Math.floor(cell / 2));
+    const w0 = half, h0 = half, w1 = cell - half, h1 = cell - half;
+    ctx.fillStyle = sub[0]; ctx.fillRect(sx,         sy,         w0, h0);
+    ctx.fillStyle = sub[1]; ctx.fillRect(sx + w0,    sy,         w1, h0);
+    ctx.fillStyle = sub[2]; ctx.fillRect(sx,         sy + h0,    w0, h1);
+    ctx.fillStyle = sub[3]; ctx.fillRect(sx + w0,    sy + h0,    w1, h1);
 
     if (t < 7) {
-      // Zoom out: niente icone, solo macchia di colore per foresta/montagna.
-      if (b === B.FORESTA)  { ctx.fillStyle = PALETTE.verdeBosco;  ctx.fillRect(sx, sy, cell, cell); }
-      if (b === B.MONTAGNA) { ctx.fillStyle = PALETTE.marrMontagna; ctx.fillRect(sx, sy, cell, cell); }
+      // Zoom out: niente icone (la micro-texture 2×2 basta a leggere il bioma).
       return;
     }
 
@@ -158,6 +218,65 @@ const MapRenderer = {
       ctx.moveTo(sx + t * 0.3, cy); ctx.lineTo(sx + t * 0.3, cy - t * 0.25);
       ctx.moveTo(sx + t * 0.6, cy); ctx.lineTo(sx + t * 0.6, cy - t * 0.18);
       ctx.stroke();
+    }
+  },
+
+  // Disegna isolinee fra tile la cui elevazione attraversa una soglia. Più
+  // soglie attraversate → più tratti vicini → terreno più ripido. Salta i
+  // tile d'acqua (niente isolinee in mare/fiume).
+  _drawContours(ctx, area, ox, oy, t, x0, y0, x1, y1) {
+    const W = World.width, H = World.height;
+    const elev = World.elev;
+    const levels = World.contourLevels;
+    const nL = levels.length;
+    // Inchiostro tenue da cartografo: appena visibile, non disturba la mappa.
+    ctx.strokeStyle = 'rgba(58, 32, 16, 0.45)'; // inkScuro semitrasparente
+    ctx.lineWidth = Math.max(1, Math.floor(t * 0.06));
+    ctx.lineCap = 'butt';
+    const isWater = (b) => World.isWater(b);
+    for (let ty = Math.max(0, y0); ty < Math.min(H, y1); ty++) {
+      for (let tx = Math.max(0, x0); tx < Math.min(W, x1); tx++) {
+        const i = ty * W + tx;
+        const b = World.tiles[i];
+        if (isWater(b)) continue;
+        const e = elev[i];
+        const sx = area.x + (tx - ox) * t;
+        const sy = area.y + (ty - oy) * t;
+        // Bordo destro: confronto con il vicino a destra.
+        if (tx + 1 < W) {
+          const j = i + 1;
+          if (!isWater(World.tiles[j])) {
+            const en = elev[j];
+            for (let k = 0; k < nL; k++) {
+              const L = levels[k];
+              if ((e >= L) !== (en >= L)) {
+                ctx.beginPath();
+                ctx.moveTo(sx + t, sy);
+                ctx.lineTo(sx + t, sy + t);
+                ctx.stroke();
+                break;
+              }
+            }
+          }
+        }
+        // Bordo inferiore: confronto con il vicino sotto.
+        if (ty + 1 < H) {
+          const j = i + W;
+          if (!isWater(World.tiles[j])) {
+            const en = elev[j];
+            for (let k = 0; k < nL; k++) {
+              const L = levels[k];
+              if ((e >= L) !== (en >= L)) {
+                ctx.beginPath();
+                ctx.moveTo(sx,     sy + t);
+                ctx.lineTo(sx + t, sy + t);
+                ctx.stroke();
+                break;
+              }
+            }
+          }
+        }
+      }
     }
   },
 
