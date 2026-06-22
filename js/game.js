@@ -101,16 +101,19 @@ const GameScreen = {
     const topBarH = SF(76);
     const leftW = SF(360);
     const rightW = SF(310);
-    const logH = SF(220);    // cronaca eventi → in basso nella sidebar sinistra
-    const miniH = SF(240);   // minimappa     → in basso nella sidebar destra
+    const logH = SF(220);     // cronaca eventi → in basso nella sidebar sinistra
+    const miniH = SF(240);    // minimappa     → in basso nella sidebar destra
+    const bottomH = SF(110);  // barra azioni e info di gioco sotto la mappa
 
     // Barra superiore divisa in due soli segmenti (sinistro e destro): la
     // fascia centrale resta libera così la mappa risale fino al bordo alto.
     const topBarLeft  = { x: 0,         y: 0, w: leftW,  h: topBarH };
     const topBarRight = { x: W - rightW, y: 0, w: rightW, h: topBarH };
 
-    // Mappa centrale: occupa tutta l'altezza utile, dal bordo alto a quello basso.
-    const map = { x: leftW + pad, y: pad, w: W - leftW - rightW - pad * 2, h: H - pad * 2 };
+    // Mappa centrale: altezza ridotta per lasciare spazio alla barra azioni.
+    const mapW = W - leftW - rightW - pad * 2;
+    const bottom = { x: leftW + pad, y: H - pad - bottomH, w: mapW, h: bottomH };
+    const map = { x: leftW + pad, y: pad, w: mapW, h: bottom.y - pad - pad };
 
     // Sidebar sinistra: STATO (alto) + CRONACA (basso).
     const log  = { x: pad, y: H - pad - logH, w: leftW - pad, h: logH };
@@ -120,7 +123,7 @@ const GameScreen = {
     const mini  = { x: W - rightW, y: H - pad - miniH, w: rightW - pad, h: miniH };
     const right = { x: W - rightW, y: topBarH + pad, w: rightW - pad, h: mini.y - (topBarH + pad) - pad };
 
-    return { compact: false, pad, topBarLeft, topBarRight, left, map, right, log, mini };
+    return { compact: false, pad, topBarLeft, topBarRight, left, map, right, log, mini, bottom };
   },
 
   layoutCompact() {
@@ -157,12 +160,6 @@ const GameScreen = {
     return !!r && p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
   },
 
-  inActionCard(p) {
-    const c = this.actionCard;
-    return !!c && !window.UI.compact &&
-      p.x >= c.x && p.x <= c.x + c.w && p.y >= c.y && p.y <= c.y + c.h;
-  },
-
   onPointerMove(p, type) {
     if (Scenes.current !== this) return;
 
@@ -190,7 +187,7 @@ const GameScreen = {
     const hz = compact ? btnHitIndex(this.zoomButtons, p.x, p.y) : -1;
     const onBtn = hb >= 0 || hn >= 0 || hz >= 0;
     document.getElementById('game').style.cursor =
-      onBtn ? 'pointer' : (this.inMap(p) && !this.inActionCard(p) ? 'grab' : 'default');
+      onBtn ? 'pointer' : (this.inMap(p) ? 'grab' : 'default');
     if (hb !== this.hoverBtn || hn !== this.hoverNav || hz !== this.hoverZoom) {
       this.hoverBtn = hb; this.hoverNav = hn; this.hoverZoom = hz;
       window.GameRender.invalidate();
@@ -206,8 +203,7 @@ const GameScreen = {
     this.pressedNav = compact ? btnHitIndex(this.navButtons, p.x, p.y) : -1;
     this.pressedZoom = compact ? btnHitIndex(this.zoomButtons, p.x, p.y) : -1;
 
-    if (this.pressedBtn < 0 && this.pressedNav < 0 && this.pressedZoom < 0 &&
-        this.inMap(p) && !this.inActionCard(p)) {
+    if (this.pressedBtn < 0 && this.pressedNav < 0 && this.pressedZoom < 0 && this.inMap(p)) {
       // Nessun pulsante: inizia il pan della mappa.
       this.dragging = true;
       this.dragLast = { x: p.x, y: p.y };
@@ -314,8 +310,8 @@ const GameScreen = {
     this.drawLog(L.log, L.log.y + L.log.h - SF(12));
     this.drawPanel(L.mini, 'MINIMAPPA REGIONALE');
     this.drawMinimap(L.mini);
-    // Comandi e azioni: card sovrapposta nella parte bassa della mappa.
-    this.drawActionCard(L.map);
+    // Barra inferiore: comandi azione + informazioni di gioco.
+    this.drawBottomBar(L.bottom);
   },
 
   drawCompact(L) {
@@ -505,35 +501,84 @@ const GameScreen = {
     ctx.fillRect(area.x, area.y + area.h - PIXEL, area.w, PIXEL);
   },
 
-  // Card comandi sovrapposta nella parte bassa della mappa: una riga di
-  // pulsanti azione su fondo scuro semitrasparente, così la mappa guadagna
-  // tutta l'altezza utile senza un pannello dedicato.
-  drawActionCard(map) {
+  // Barra inferiore desktop: pannello dedicato sotto la mappa con i comandi
+  // azione a destra e un'area informativa a sinistra per testo/funzioni di
+  // gioco (luogo, destinazione, suggerimenti, eventi imminenti…).
+  drawBottomBar(area) {
     const ctx = this.ctx;
-    const m = SF(12);
-    const bh = SF(34);
-    const cardPad = SF(10);
-    const cardH = bh + cardPad * 2;
-    const card = { x: map.x + m, y: map.y + map.h - m - cardH, w: map.w - m * 2, h: cardH };
-    this.actionCard = card;
+    this.drawPanel(area, 'COMANDI E AZIONI');
 
-    ctx.fillStyle = 'rgba(26,14,4,0.82)';
-    ctx.fillRect(card.x, card.y, card.w, card.h);
-    drawPixelRectStroke(ctx, card.x, card.y, card.w, card.h, PALETTE.hudBordo);
-    drawPixelRectStroke(ctx, card.x + PIXEL, card.y + PIXEL, card.w - PIXEL * 2, card.h - PIXEL * 2, PALETTE.inkScuro);
+    const innerPad = SF(12);
+    const titleBand = SF(26);
+    const inner = {
+      x: area.x + innerPad,
+      y: area.y + PIXEL * 4 + titleBand + SF(6),
+      w: area.w - innerPad * 2,
+      h: area.h - PIXEL * 4 - titleBand - SF(6) - innerPad,
+    };
 
+    // Pulsanti azione: riga unica allineata a destra, dimensionata sul testo.
     const n = this.actionButtons.length;
+    const bh = SF(34);
     const gap = SF(8);
-    const bw = (card.w - cardPad * 2 - gap * (n - 1)) / n;
-    const x0 = card.x + cardPad;
-    const by = card.y + cardPad;
+    const btnW = SF(150);
+    const btnsW = btnW * n + gap * (n - 1);
+    const btnsX = inner.x + inner.w - btnsW;
+    const btnsY = inner.y + Math.floor((inner.h - bh) / 2);
     this.actionButtons.forEach((b, i) => {
-      b.x = Math.floor(x0 + i * (bw + gap));
-      b.y = by;
-      b.w = Math.floor(bw);
+      b.x = Math.floor(btnsX + i * (btnW + gap));
+      b.y = btnsY;
+      b.w = btnW;
       b.h = bh;
     });
     this.drawActionButtons();
+
+    // Area info a sinistra dei pulsanti: separatore + righe di testo.
+    const infoR = { x: inner.x, y: inner.y, w: btnsX - inner.x - SF(14), h: inner.h };
+    ctx.fillStyle = PALETTE.inkScuro;
+    ctx.fillRect(btnsX - SF(10), inner.y, PIXEL, inner.h);
+
+    if (infoR.w > SF(80)) this.drawBottomInfo(infoR);
+  },
+
+  // Informazioni di gioco nella barra inferiore. Pensata per crescere con il
+  // gioco (suggerimenti, prossima azione disponibile, costi turno…); per ora
+  // mostra luogo, destinazione e ultimo evento.
+  drawBottomInfo(area) {
+    const ctx = this.ctx;
+    const meta = this.meta;
+    const last = this.log[this.log.length - 1] || '';
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    let y = area.y;
+
+    ctx.fillStyle = PALETTE.hudTitolo;
+    ctx.font = `bold ${SF(12)}px "Courier New", monospace`;
+    ctx.fillText('LUOGO', area.x, y);
+    ctx.fillStyle = PALETTE.hudNormale;
+    ctx.font = `${SF(13)}px "Courier New", monospace`;
+    ctx.fillText('Pianura, Marche di Vorn', area.x + SF(64), y - SF(1));
+    y += SF(20);
+
+    ctx.fillStyle = PALETTE.hudTitolo;
+    ctx.font = `bold ${SF(12)}px "Courier New", monospace`;
+    ctx.fillText('META', area.x, y);
+    ctx.fillStyle = PALETTE.hudNormale;
+    ctx.font = `${SF(13)}px "Courier New", monospace`;
+    ctx.fillText(meta.destinazione, area.x + SF(64), y - SF(1));
+    y += SF(20);
+
+    ctx.fillStyle = PALETTE.hudTitolo;
+    ctx.font = `bold ${SF(12)}px "Courier New", monospace`;
+    ctx.fillText('ULTIMO', area.x, y);
+    ctx.fillStyle = PALETTE.hudEvento;
+    ctx.font = `italic ${SF(13)}px "Courier New", monospace`;
+    const maxW = area.w - SF(64);
+    let s = last;
+    while (s.length && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
+    if (s.length < last.length) s += '…';
+    ctx.fillText(s, area.x + SF(64), y - SF(1));
   },
 
   drawKnightStatus(area) {
