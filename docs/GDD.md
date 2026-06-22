@@ -226,17 +226,33 @@ con ciascuna. La reputazione apre e chiude porte.
 
 ### Interazione con luoghi
 
-Quando entri in un castello, villaggio, dungeon o luogo speciale, la vista passa
-dalla mappa cartografica top-down a una **vista laterale 2D dettagliata** in pixel art.
+Quando entri in un castello, villaggio, dungeon o luogo speciale, la vista
+cartografica si oscura e appare una **Carta del cronista**: una composizione
+statica in stile manoscritto miniato medievale (cornice ornata, miniatura
+centrale, testo sotto, pulsanti tematici).
 
-In questa vista:
-- Vedi l'ambiente interno (sala del trono, taverna, cella, biblioteca…)
-- NPC presenti con cui puoi interagire
-- Oggetti esaminabili
-- Il tempo non scorre liberamente — ogni interazione consuma tempo/turni
-- Non c'è movimento libero del personaggio — è una scena contestuale
+**Non** è una scena navigabile point&click. Si interagisce *per scelta*,
+non *per click su posizione*.
 
-[TBD] Lista tipi di luogo con descrizione della scena
+- **Miniatura** in alto: illuminazione singola (sala del trono, taverna,
+  cella, biblioteca…) coerente con lo stile della mappa.
+- **Pannello narrativo** sotto: descrizione testuale generata dal contesto
+  + lista di pulsanti tematici per azioni e NPC presenti.
+- **Pulsanti contestuali**: cambiano in base a chi è presente, ora del giorno,
+  stagione, reputazione del cavaliere, news note al nodo, seguito al fianco.
+- **Tempo**: ogni interazione consuma Passi.
+- **Esplorazione assorbita**: pulsanti come *"Osserva la sala"*, *"Cerca nei
+  dintorni"*, *"Chiedi notizie"* fanno *pescaggi pesati* su tabelle di
+  scoperta (oggetti, persone, eventi). La varietà nasce dalla casualità
+  contestualizzata, non dal click su elementi visivi.
+
+Stesso linguaggio visivo viene riusato per gli eventi di viaggio
+(modalità *Sospesa*), che appaiono come *carte mobili* sopra la mappa.
+
+Dettaglio completo del modello di gameplay → `docs/GAMEPLAY.md`
+Dettaglio architettura testi → `docs/TEXT_SYSTEM.md`
+
+[TBD] Lista tipi di luogo con relativa miniatura
 [TBD] Sistema di interazione NPC
 [TBD] Sistema di commercio
 [TBD] Sistema di quest/missioni locali
@@ -413,9 +429,12 @@ da console / log testuale) prima di aggiungere la sua UI.
 - Visualizzazione data calendario (forma estesa + compatta)
 - Dettaglio in `docs/UI_GUIDE.md`
 
-#### Fase G3 — Vista dettaglio laterale
-- Scene contestuali per castelli, taverne, dungeon, luoghi speciali
-- Composizione layered 2D
+#### Fase G3 — Carta del cronista
+- Componente UI riusabile (carta stanziale per luoghi, mobile per eventi)
+- Cornice ornata in stile manoscritto miniato
+- Catalogo iniziale miniature per tipo di scena
+- Sistema medaglioni-ritratto per NPC
+- Integrazione con il sistema testi (vedi `docs/TEXT_SYSTEM.md`)
 
 ### Binario Sistemi
 
