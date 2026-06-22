@@ -54,9 +54,12 @@ const ZOOM_LEVELS = [4, 8, 16, 32];
 // Risoluzione interna alta per ospitare HUD con molte info,
 // ma i primitivi grafici disegnano in blocchi PIXEL×PIXEL per mantenere
 // l'aspetto "a quadratini" sulle curve e i contorni.
-const INTERNAL_W = 1280;
-const INTERNAL_H = 720;
-const PIXEL = 3; // dimensione del "pixel logico" per la grafica chunky
+// Render interno a Full HD: scala 1:1 su display 1920x1080 (testo crispissimo)
+// e auto-scala intero su display piu piccoli mantenendo il rapporto.
+// PIXEL=3 → griglia logica 640x360, blocco 3x3 sullo schermo: chunky evidente.
+const INTERNAL_W = 1920;
+const INTERNAL_H = 1080;
+const PIXEL = 3;
 
 // Seed RNG semplice (mulberry32) per texture procedurali
 function mulberry32(seed) {
