@@ -35,6 +35,8 @@ const GameScreen = {
   knightPos: { x: 0, y: 0 },
   dragging: false,
   dragLast: { x: 0, y: 0 },
+  dragStart: { x: 0, y: 0 },
+  dragMoved: false,
 
   init(canvas) {
     this.canvas = canvas;
@@ -76,6 +78,8 @@ const GameScreen = {
     this.cam = { cx: this.knightPos.x + 0.5, cy: this.knightPos.y + 0.5, step: MAP_ZOOM_DEFAULT };
     this.activeOverlay = null;
     this.dragging = false;
+    this.dragMoved = false;
+    Travel.stop();
 
     Save.startAutosave();
   },
@@ -155,7 +159,13 @@ const GameScreen = {
 
     // Pan in corso: vale per mouse e touch.
     if (this.dragging) {
-      MapRenderer.pan(this.cam, p.x - this.dragLast.x, p.y - this.dragLast.y);
+      const dx = p.x - this.dragLast.x, dy = p.y - this.dragLast.y;
+      // Soglia di tolleranza per distinguere click da drag: oltre questa
+      // distanza dal punto iniziale il gesto diventa pan, anche se l'utente
+      // poi torna indietro (il viaggio non parte).
+      const adx = p.x - this.dragStart.x, ady = p.y - this.dragStart.y;
+      if (adx * adx + ady * ady > 100) this.dragMoved = true;
+      MapRenderer.pan(this.cam, dx, dy);
       this.dragLast = { x: p.x, y: p.y };
       if (type !== 'touch') document.getElementById('game').style.cursor = 'grabbing';
       window.GameRender.invalidate();
@@ -194,9 +204,13 @@ const GameScreen = {
     this.pressedZoom = compact ? btnHitIndex(this.zoomButtons, p.x, p.y) : -1;
 
     if (this.pressedBtn < 0 && this.pressedNav < 0 && this.pressedZoom < 0 && this.inMap(p)) {
-      // Nessun pulsante: inizia il pan della mappa.
+      // Nessun pulsante: inizia il pan della mappa. Tracciamo anche start e
+      // movimento totale: se l'utente non sposta abbastanza, il pointerup
+      // sarà interpretato come "click sulla tile" per il viaggio.
       this.dragging = true;
       this.dragLast = { x: p.x, y: p.y };
+      this.dragStart = { x: p.x, y: p.y };
+      this.dragMoved = false;
       return;
     }
     this.hoverBtn = this.pressedBtn; this.hoverNav = this.pressedNav; this.hoverZoom = this.pressedZoom;
@@ -207,8 +221,14 @@ const GameScreen = {
     if (Scenes.current !== this) return;
 
     if (this.dragging) {
+      const wasDrag = this.dragMoved;
       this.dragging = false;
+      this.dragMoved = false;
       if (type !== 'touch') document.getElementById('game').style.cursor = this.inMap(p) ? 'grab' : 'default';
+      // Tap/click su tile (nessun pan reale): seleziona destinazione e parte
+      // il viaggio. Se il viaggio è già in corso il click ricalcola; se la
+      // meta coincide con la posizione attuale, ferma il viaggio.
+      if (!wasDrag && this.inMap(p)) this._handleMapClick(p);
       return;
     }
 
@@ -249,6 +269,7 @@ const GameScreen = {
 
   onPointerCancel() {
     this.dragging = false;
+    this.dragMoved = false;
     this.pressedBtn = this.pressedNav = this.pressedZoom = -1;
     this.hoverBtn = this.hoverNav = this.hoverZoom = -1;
     this.overlayPressed = null;
@@ -261,6 +282,82 @@ const GameScreen = {
     if (!this.inMap(p)) return;
     MapRenderer.zoom(this.cam, deltaY < 0 ? 1 : -1); // centrato sul centro camera
     window.GameRender.invalidate();
+  },
+
+  // ─── Viaggio ──────────────────────────────────────────────────────────────
+  _handleMapClick(p) {
+    if (!this.mapRect || !World.tiles) return;
+    const w = MapRenderer.screenToWorld(this.mapRect, this.cam, p.x, p.y);
+    const tx = Math.floor(w.x), ty = Math.floor(w.y);
+    if (tx < 0 || ty < 0 || tx >= World.width || ty >= World.height) return;
+
+    // Click sul tile in cui sei: ferma il viaggio in corso (o no-op).
+    if (tx === this.knightPos.x && ty === this.knightPos.y) {
+      if (Travel.isActive()) {
+        Travel.stop();
+        this.meta.destinazione = 'nessuna';
+        this._logEvent('Viaggio interrotto.');
+        window.GameRender.invalidate();
+      }
+      return;
+    }
+
+    const biome = World.biomeAt(tx, ty);
+    if (TRAVEL_COST[biome] == null) {
+      this._logEvent('Impossibile raggiungere quel luogo.');
+      window.GameRender.invalidate();
+      return;
+    }
+
+    const path = Travel.findPath(this.knightPos.x, this.knightPos.y, tx, ty);
+    if (!path || !path.length) {
+      this._logEvent('Nessuna via per quella meta.');
+      window.GameRender.invalidate();
+      return;
+    }
+    Travel.start(path);
+
+    // Etichetta destinazione: se è una struttura nota usa il nome.
+    const struct = World.structures.find(s => s.x === tx && s.y === ty);
+    const name = struct ? struct.name : `(${tx}, ${ty})`;
+    this.meta.destinazione = name;
+    this._logEvent(`In marcia verso ${name}.`);
+    window.GameRender.invalidate();
+  },
+
+  // Chiamato da main.js a ogni frame. dtMs include la pausa fra frame: senza,
+  // il viaggio si bloccherebbe quando la finestra è inattiva e ripartirebbe
+  // di colpo. Limitiamo il dt a ~250 ms (1 secondo di buffering al massimo)
+  // per evitare maxi-balzi al rientro.
+  update(dtMs) {
+    if (!Travel.isActive()) return;
+    const dt = Math.min(dtMs, 250);
+    Travel.update(dt, this.knightPos, {
+      onStep: (tile, _biome) => {
+        // Pausa automatica su strutture (GAMEPLAY.md §1): il cavaliere si
+        // ferma sopra il luogo, lasciando al giocatore decidere se entrare.
+        const s = World.structures.find(st => st.x === tile.x && st.y === tile.y);
+        if (s && (tile.x !== this.meta._lastStructX || tile.y !== this.meta._lastStructY)) {
+          this.meta._lastStructX = tile.x; this.meta._lastStructY = tile.y;
+          this._logEvent(`Attraversi ${s.name}.`);
+        }
+      },
+      onArrive: () => {
+        this.meta.destinazione = 'nessuna';
+        this._logEvent('Sei giunto a destinazione.');
+      },
+      onBlocked: (reason) => {
+        this.meta.destinazione = 'nessuna';
+        if (reason === 'esausto') this._logEvent('Crolli per la stanchezza: ti fermi.');
+        else this._logEvent('Il cammino si interrompe.');
+      },
+    });
+    window.GameRender.invalidate();
+  },
+
+  _logEvent(msg) {
+    this.log.push(msg);
+    if (this.log.length > 24) this.log.shift();
   },
 
   overlayWhere(p) {
