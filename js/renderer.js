@@ -106,10 +106,43 @@ const MapRenderer = {
       this._drawSpecial(ctx, sp, sx, sy, t);
     }
 
+    // 7. Percorso di viaggio (se in corso): scia di tile + marker meta.
+    if (Travel.isActive() && Travel.path) {
+      this._drawPath(ctx, area, ox, oy, t, Travel.path, Travel.idx);
+    }
+
     // 8. Cavaliere
     const kx = area.x + (knightPos.x + 0.5 - ox) * t;
     const ky = area.y + (knightPos.y + 0.5 - oy) * t;
     this._drawKnight(ctx, kx, ky, t);
+  },
+
+  // Scia di puntini sul percorso ancora da percorrere + bandiera sulla meta.
+  // Disegnata in inchiostro scuro: leggibile su qualsiasi bioma. I tile già
+  // attraversati (idx > i) non vengono mostrati per non sporcare la mappa.
+  _drawPath(ctx, area, ox, oy, t, path, idx) {
+    const dot = Math.max(2, Math.floor(t * 0.20));
+    ctx.fillStyle = PALETTE.inkScuro;
+    for (let i = idx; i < path.length - 1; i++) {
+      const p = path[i];
+      const sx = area.x + (p.x + 0.5 - ox) * t;
+      const sy = area.y + (p.y + 0.5 - oy) * t;
+      if (sx < area.x - t || sx > area.x + area.w + t ||
+          sy < area.y - t || sy > area.y + area.h + t) continue;
+      ctx.fillRect(Math.round(sx - dot / 2), Math.round(sy - dot / 2), dot, dot);
+    }
+    // Bandierina sulla meta.
+    const end = path[path.length - 1];
+    if (!end) return;
+    const ex = area.x + (end.x + 0.5 - ox) * t;
+    const ey = area.y + (end.y + 0.5 - oy) * t;
+    const fh = Math.max(S(10), t * 0.7);
+    const fw = fh * 0.55;
+    const pw = Math.max(1, fh * 0.10);
+    ctx.fillStyle = PALETTE.inkNero;
+    ctx.fillRect(Math.round(ex - pw / 2), Math.round(ey - fh), pw, fh);
+    ctx.fillStyle = PALETTE.rossoBandiera;
+    ctx.fillRect(Math.round(ex), Math.round(ey - fh), Math.round(fw), Math.round(fh * 0.55));
   },
 
   _baseColor(b) {

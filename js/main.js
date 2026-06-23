@@ -133,7 +133,13 @@ const COMPACT_BREAKPOINT = 820; // sotto questa larghezza (CSS px) → layout co
   GameScreen.init(canvas);
   Scenes.switchTo('title');
 
-  function loop() {
+  let lastT = 0;
+  function loop(t) {
+    const dt = lastT ? (t - lastT) : 0;
+    lastT = t;
+    // Tick continuo per scene "vive" (es. viaggio automatico). Le scene che
+    // non hanno bisogno di tempo continuo non definiscono update.
+    if (Scenes.current && Scenes.current.update) Scenes.current.update(dt);
     if (needsRedraw) {
       Scenes.draw();
       needsRedraw = false;
@@ -142,7 +148,7 @@ const COMPACT_BREAKPOINT = 820; // sotto questa larghezza (CSS px) → layout co
   }
 
   resize();
-  loop();
+  requestAnimationFrame(loop);
 })();
 
 // Helper globali per dimensionamento responsivo:
