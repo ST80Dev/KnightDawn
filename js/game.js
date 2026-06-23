@@ -137,14 +137,21 @@ const GameScreen = {
     const W = window.UI.w, H = window.UI.h;
     const pad = SF(8);
     const topBarH = SF(56);
-    const navH = SF(28), actH = SF(34), fGap = SF(6), fPad = SF(8);
+    const statStripH = SF(40);   // strip riassunto attributi cavaliere
+    const navH = SF(32), actH = SF(38), fGap = SF(6), fPad = SF(8);
     const footerH = fPad * 2 + navH + fGap + actH;
 
     const topBar = { x: 0, y: 0, w: W, h: topBarH };
-    const map = { x: pad, y: topBarH + pad, w: W - pad * 2, h: H - topBarH - footerH - pad * 2 };
+    const stat = { x: pad, y: topBarH + pad, w: W - pad * 2, h: statStripH };
+    const map = {
+      x: pad,
+      y: stat.y + stat.h + pad,
+      w: W - pad * 2,
+      h: H - topBarH - statStripH - footerH - pad * 3,
+    };
     const footer = { x: 0, y: H - footerH, w: W, h: footerH, navH, actH, fGap, fPad };
 
-    return { compact: true, pad, topBar, map, footer };
+    return { compact: true, pad, topBar, stat, map, footer };
   },
 
   layoutFooter(f) {
@@ -427,6 +434,8 @@ const GameScreen = {
     this.layoutFooter(L.footer);
 
     this.drawTopBar(L.topBar, true);
+    // Strip riassunto cavaliere sotto il topbar — sempre visibile
+    if (L.stat) this.drawKnightStatStrip(L.stat.x, L.stat.y, L.stat.w, L.stat.h);
     this.drawMapPanel(L.map);   // disegna anche i pulsanti +/-
 
     const ctx = this.ctx;
@@ -452,7 +461,7 @@ const GameScreen = {
       ctx.fillRect(b.x, b.y, b.w, b.h);
       drawPixelRectStroke(ctx, b.x, b.y, b.w, b.h, active ? PALETTE.hudTitolo : PALETTE.hudBordo);
       ctx.fillStyle = active ? PALETTE.inkNero : PALETTE.hudTitolo;
-      ctx.font = `${active ? 'bold ' : ''}${SF(12)}px "Courier New", monospace`;
+      ctx.font = `${active ? 'bold ' : ''}${SF(15)}px "Courier New", monospace`;
       ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2);
     });
   },
@@ -528,7 +537,7 @@ const GameScreen = {
     ctx.fillRect(close.x, close.y, close.w, close.h);
     drawPixelRectStroke(ctx, close.x, close.y, close.w, close.h, PALETTE.inkScuro);
     ctx.fillStyle = PALETTE.pergChiara;
-    ctx.font = `bold ${SF(14)}px "Courier New", monospace`;
+    ctx.font = `bold ${SF(15)}px "Courier New", monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('X', close.x + close.w / 2, close.y + close.h / 2 + PIXEL);
@@ -589,22 +598,23 @@ const GameScreen = {
     ctx.textBaseline = 'middle';
     ctx.fillText('KNIGHT DAWN', SF(compact ? 12 : 18), area.h / 2);
 
-    ctx.fillStyle = PALETTE.hudNormale;
+    ctx.fillStyle = '#e8d8b0';
     ctx.textAlign = 'right';
     if (compact) {
-      ctx.font = `${SF(12)}px "Courier New", monospace`;
-      ctx.fillText(Calendar.formatCompatto(), area.w - SF(12), area.h / 2 - SF(8));
-      ctx.fillText(`${Calendar.nomeStagione()} · ${this.meta.meteo}`, area.w - SF(12), area.h / 2 + SF(8));
+      ctx.font = `${SF(15)}px "Courier New", monospace`;
+      ctx.fillText(Calendar.formatCompatto(), area.w - SF(12), area.h / 2 - SF(10));
+      ctx.fillText(`${Calendar.nomeStagione()} · ${this.meta.meteo}`, area.w - SF(12), area.h / 2 + SF(10));
     } else {
-      ctx.font = `${SF(16)}px "Courier New", monospace`;
-      ctx.fillText(Calendar.formatCompatto(), area.w - SF(18), area.h / 2 - SF(10));
-      ctx.fillText(`${Calendar.nomeStagione()}  ·  ${this.meta.meteo}  ·  Destinazione: ${this.meta.destinazione}`, area.w - SF(18), area.h / 2 + SF(10));
+      ctx.font = `${SF(17)}px "Courier New", monospace`;
+      ctx.fillText(Calendar.formatCompatto(), area.w - SF(18), area.h / 2 - SF(12));
+      ctx.fillText(`${Calendar.nomeStagione()}  ·  ${this.meta.meteo}  ·  Destinazione: ${this.meta.destinazione}`, area.w - SF(18), area.h / 2 + SF(12));
       drawCompassRose(ctx, area.x + area.w / 2, area.y + area.h / 2, SF(26));
     }
   },
 
-  // Barra superiore desktop: due soli segmenti (titolo a sx, meta a dx); la
-  // fascia centrale è libera, lì la mappa risale fino in cima.
+  // Barra superiore desktop: tre segmenti — titolo a sx, strip riassunto al
+  // centro (sempre visibile a prescindere dalla tab attiva nella sidebar),
+  // meta del calendario/meteo/destinazione a dx.
   drawTopBarSplit(left, right) {
     const ctx = this.ctx;
     this._drawBarSeg(left);
@@ -617,12 +627,33 @@ const GameScreen = {
     this._drawBarSeg(right);
     const rx = right.x + right.w - SF(14);
     const ry = right.y + right.h / 2;
-    ctx.fillStyle = PALETTE.hudNormale;
-    ctx.font = `${SF(13)}px "Courier New", monospace`;
+    ctx.fillStyle = '#e8d8b0';
+    ctx.font = `${SF(15)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
-    ctx.fillText(Calendar.formatCompatto(), rx, ry - SF(16));
+    ctx.fillText(Calendar.formatCompatto(), rx, ry - SF(18));
     ctx.fillText(`${Calendar.nomeStagione()}  ·  ${this.meta.meteo}`, rx, ry);
-    ctx.fillText(`Destinazione: ${this.meta.destinazione}`, rx, ry + SF(16));
+    ctx.fillText(`Destinazione: ${this.meta.destinazione}`, rx, ry + SF(18));
+
+    // Strip riassunto attributi nel centro del topbar
+    const cx0 = left.x + left.w;
+    const cx1 = right.x;
+    const cy0 = left.y;
+    const ch  = left.h;
+    if (cx1 - cx0 > SF(280)) {
+      // Banda di sfondo dietro lo strip
+      ctx.fillStyle = PALETTE.inkScuro;
+      ctx.fillRect(cx0, cy0, cx1 - cx0, ch);
+      ctx.fillStyle = PALETTE.hudTitolo;
+      ctx.fillRect(cx0, cy0 + ch - PIXEL, cx1 - cx0, PIXEL);
+
+      // Centra lo strip nella fascia disponibile (con margini interni)
+      const stripPad = SF(20);
+      const stripW = Math.min(cx1 - cx0 - stripPad * 2, SF(540));
+      const stripX = Math.floor(cx0 + (cx1 - cx0 - stripW) / 2);
+      const cellH = SF(40);
+      const stripY = Math.floor(cy0 + (ch - cellH) / 2);
+      this.drawKnightStatStrip(stripX, stripY, stripW, cellH);
+    }
   },
 
   _drawBarSeg(area) {
@@ -684,8 +715,8 @@ const GameScreen = {
     ctx.textBaseline = 'top';
     let y = area.y;
     const labelW = SF(80);
-    const lbFs = SF(13);
-    const vlFs = SF(15);
+    const lbFs = SF(15);
+    const vlFs = SF(17);
     const rowH = SF(24);
 
     ctx.fillStyle = '#e8c050';
@@ -733,20 +764,17 @@ const GameScreen = {
 
     // Nome + titolo: header su sfondo scuro → crema e oro vivo
     ctx.fillStyle = '#f0e0b8';   // crema chiara, alta leggibilità
-    ctx.font = `bold ${SF(20)}px "Courier New", monospace`;
+    ctx.font = `bold ${SF(22)}px "Courier New", monospace`;
     ctx.fillText(k.nome, innerX, y);
-    y += SF(26);
+    y += SF(28);
     ctx.fillStyle = '#e8a838';   // oro vivo per il titolo cavalleresco
-    ctx.font = `italic bold ${SF(15)}px "Courier New", monospace`;
+    ctx.font = `italic bold ${SF(17)}px "Courier New", monospace`;
     ctx.fillText(k.titolo, innerX, y);
-    y += SF(24);
+    y += SF(28);
 
-    // Strip riassunto attributi: sempre visibile, indipendente dalla tab
-    // attiva. Mostra abbreviazione + valore colorato per livello, così
-    // anche da EQUIP/FAZIONI/DIARIO il giocatore ha a colpo d'occhio le
-    // condizioni del cavaliere.
-    y = this.drawKnightStatStrip(innerX, y, innerW);
-    y += SF(12);
+    // (strip riassunto attributi: spostata nel topbar globale, vedi
+    // drawTopBarSplit / drawTopBar — sempre visibile a prescindere dalla
+    // scena/tab attiva)
 
     // Tab bar orizzontale (4 icone con label sotto)
     y = this.drawKnightTabs(area, innerX, y, innerW);
@@ -812,10 +840,12 @@ const GameScreen = {
     return y + tabH;
   },
 
-  // Riepilogo permanente delle 4 caratteristiche, sempre visibile sopra le
-  // tab. Ogni pillola: abbreviazione (oro spento) + valore con colore
-  // semantico in base al livello (critico/basso/medio/buono/alto).
-  drawKnightStatStrip(x, y, w) {
+  // Riepilogo permanente delle 4 caratteristiche del cavaliere. Disegnata
+  // nella fascia centrale del topbar (desktop) o in una banda dedicata sotto
+  // il topbar (compact), così è sempre visibile a prescindere dalla scena/
+  // tab attiva. Ogni pillola: abbreviazione + valore con colore semantico.
+  // cellHOpt opzionale: se omesso usa il default.
+  drawKnightStatStrip(x, y, w, cellHOpt) {
     const ctx = this.ctx;
     const k = this.knight;
     const items = [
@@ -825,9 +855,11 @@ const GameScreen = {
       { abbr: 'ONO', cur: k.onore,       max: 5, signed: true },
     ];
     const n = items.length;
-    const gap = SF(4);
+    const gap = SF(6);
     const cellW = Math.floor((w - gap * (n - 1)) / n);
-    const cellH = SF(30);
+    const cellH = cellHOpt || SF(34);
+    const abbrFs = Math.max(12, Math.floor(cellH * 0.36));
+    const valFs  = Math.max(14, Math.floor(cellH * 0.50));
 
     ctx.textBaseline = 'middle';
     items.forEach((it, i) => {
@@ -835,40 +867,39 @@ const GameScreen = {
       // Sfondo: marrone leggermente più chiaro del pannello per separare
       ctx.fillStyle = '#2a1808';
       ctx.fillRect(cx, y, cellW, cellH);
-      drawPixelRectStroke(ctx, cx, y, cellW, cellH, '#5a3a18');
+      drawPixelRectStroke(ctx, cx, y, cellW, cellH, '#8a6030');
 
-      // Colore semantico in base al livello (0..100% per attributi normali,
-      // -5..+5 per onore)
+      // Colore semantico in base al livello
       let color;
       if (it.signed) {
-        color = it.cur >= 3 ? '#6ce06a'      // alto: verde brillante
-              : it.cur >= 1 ? '#a8e878'      // buono: verde-giallo
-              : it.cur === 0 ? '#e8d8b0'     // neutro: crema
-              : it.cur >= -2 ? '#ffa040'     // basso: arancio
-              :                '#ff5050';    // critico: rosso
+        color = it.cur >= 3 ? '#6ce06a'
+              : it.cur >= 1 ? '#a8e878'
+              : it.cur === 0 ? '#e8d8b0'
+              : it.cur >= -2 ? '#ffa040'
+              :                '#ff5050';
       } else {
         const pct = it.max > 0 ? it.cur / it.max : 0;
-        color = pct >= 0.8 ? '#6ce06a'       // alto
-              : pct >= 0.6 ? '#a8e878'       // buono
-              : pct >= 0.4 ? '#e8c050'       // medio: oro
-              : pct >= 0.2 ? '#ffa040'       // basso: arancio
-              :              '#ff5050';      // critico: rosso
+        color = pct >= 0.8 ? '#6ce06a'
+              : pct >= 0.6 ? '#a8e878'
+              : pct >= 0.4 ? '#e8c050'
+              : pct >= 0.2 ? '#ffa040'
+              :              '#ff5050';
       }
 
-      // Etichetta abbreviata a sinistra (oro spento)
-      ctx.fillStyle = '#a08038';
-      ctx.font = `bold ${SF(11)}px "Courier New", monospace`;
+      // Etichetta abbreviata a sinistra (oro brillante)
+      ctx.fillStyle = '#e8c050';
+      ctx.font = `bold ${abbrFs}px "Courier New", monospace`;
       ctx.textAlign = 'left';
-      ctx.fillText(it.abbr, cx + SF(6), y + cellH / 2);
+      ctx.fillText(it.abbr, cx + SF(8), y + cellH / 2);
 
-      // Valore a destra, colorato per livello
+      // Valore a destra, grande e colorato per livello
       const valText = it.signed
         ? (it.cur > 0 ? '+' + it.cur : String(it.cur))
         : String(Math.ceil(it.cur));
       ctx.fillStyle = color;
-      ctx.font = `bold ${SF(14)}px "Courier New", monospace`;
+      ctx.font = `bold ${valFs}px "Courier New", monospace`;
       ctx.textAlign = 'right';
-      ctx.fillText(valText, cx + cellW - SF(6), y + cellH / 2);
+      ctx.fillText(valText, cx + cellW - SF(8), y + cellH / 2);
     });
     return y + cellH;
   },
@@ -888,12 +919,12 @@ const GameScreen = {
 
     // Riepilogo: ORO e STATO con label oro e valori vivaci sullo scuro
     ctx.fillStyle = '#e8c050';
-    ctx.font = `bold ${SF(14)}px "Courier New", monospace`;
+    ctx.font = `bold ${SF(15)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText('ORO', x, y);
     ctx.fillStyle = '#ffd060';   // oro brillante per le monete
-    ctx.font = `bold ${SF(14)}px "Courier New", monospace`;
+    ctx.font = `bold ${SF(15)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     ctx.fillText(`◉ ${k.oro} mo`, x + w, y);
     y += SF(22);
@@ -912,11 +943,11 @@ const GameScreen = {
                      : (isExh || isTired || isBrk) ? '#ffa030'  // arancio
                      :                                 '#6ce06a'; // verde brillante
     ctx.fillStyle = '#e8c050';
-    ctx.font = `bold ${SF(14)}px "Courier New", monospace`;
+    ctx.font = `bold ${SF(15)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.fillText('STATO', x, y);
     ctx.fillStyle = statoColor;
-    ctx.font = `bold italic ${SF(14)}px "Courier New", monospace`;
+    ctx.font = `bold italic ${SF(15)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     ctx.fillText(stato, x + w, y);
   },
@@ -963,12 +994,12 @@ const GameScreen = {
 
       // Label: oro brillante
       ctx.fillStyle = '#e8c050';
-      ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
+      ctx.font = `bold ${SF(15)}px "Courier New", monospace`;
       ctx.fillText(label.toUpperCase(), x + SF(28), cy);
 
       // Valore: crema se presente, oro spento italic se vuoto
       ctx.fillStyle = val ? '#e8d8b0' : '#7a5a2a';
-      ctx.font = `${val ? '' : 'italic '}${SF(14)}px "Courier New", monospace`;
+      ctx.font = `${val ? '' : 'italic '}${SF(15)}px "Courier New", monospace`;
       ctx.textAlign = 'right';
       ctx.fillText(val || '— vuoto —', x + w - SF(8), cy);
 
@@ -978,11 +1009,11 @@ const GameScreen = {
     y += SF(14);
     ctx.textBaseline = 'top';
     ctx.fillStyle = '#e8c050';
-    ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
+    ctx.font = `bold ${SF(15)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.fillText('CAPIENZA SACCA', x, y);
     ctx.fillStyle = '#e8d8b0';
-    ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
+    ctx.font = `bold ${SF(15)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     ctx.fillText('3 / 8 oggetti', x + w, y);
   },
@@ -999,7 +1030,7 @@ const GameScreen = {
     for (const r of k.reputazione) {
       // Etichetta nome in oro brillante
       ctx.fillStyle = '#e8c050';
-      ctx.font = `bold ${SF(14)}px "Courier New", monospace`;
+      ctx.font = `bold ${SF(15)}px "Courier New", monospace`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       ctx.fillText(r.nome, x, y);
@@ -1007,7 +1038,7 @@ const GameScreen = {
       // Valore numerico in verde/rosso brillanti su scuro
       const sign = r.val > 0 ? '+' : '';
       ctx.fillStyle = r.val > 0 ? '#6ce06a' : (r.val < 0 ? '#ff5050' : '#e8d8b0');
-      ctx.font = `bold ${SF(14)}px "Courier New", monospace`;
+      ctx.font = `bold ${SF(15)}px "Courier New", monospace`;
       ctx.textAlign = 'right';
       ctx.fillText(sign + r.val, x + w, y);
 
@@ -1046,7 +1077,7 @@ const GameScreen = {
     let y = area.y;
 
     ctx.fillStyle = '#e8c050';   // oro brillante
-    ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
+    ctx.font = `bold ${SF(15)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText('ULTIMI AVVENIMENTI', x, y);
@@ -1087,12 +1118,12 @@ const GameScreen = {
     const ctx = this.ctx;
     // Label: oro brillante su scuro
     ctx.fillStyle = '#e8c050';
-    ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
+    ctx.font = `bold ${SF(15)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.fillText(label, x, y);
     // Numeri: crema chiara
     ctx.fillStyle = '#f0e0b8';
-    ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
+    ctx.font = `bold ${SF(15)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     ctx.fillText(`${Math.ceil(value.cur)}/${value.max}`, x + w, y);
     const barY = y + SF(16), barH = SF(11);
@@ -1111,7 +1142,7 @@ const GameScreen = {
   drawOnore(x, y, w, val) {
     const ctx = this.ctx;
     ctx.fillStyle = '#e8c050';
-    ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
+    ctx.font = `bold ${SF(15)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText('ONORE', x, y);
@@ -1119,7 +1150,7 @@ const GameScreen = {
     const sign = val > 0 ? '+' : '';
     // Verde/rosso brillanti sul fondo scuro
     ctx.fillStyle = val > 0 ? '#6ce06a' : val < 0 ? '#e83838' : '#f0e0b8';
-    ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
+    ctx.font = `bold ${SF(15)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     ctx.fillText(sign + val + ' / ±5', x + w, y);
 
@@ -1187,13 +1218,13 @@ const GameScreen = {
     const drawSection = (title, body) => {
       // Titolo sezione: oro brillante su scuro
       ctx.fillStyle = '#e8c050';
-      ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
+      ctx.font = `bold ${SF(15)}px "Courier New", monospace`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       ctx.fillText(title, x, y); y += SF(20);
       // Corpo: crema chiara
       ctx.fillStyle = '#e8d8b0';
-      ctx.font = `${SF(14)}px "Courier New", monospace`;
+      ctx.font = `${SF(15)}px "Courier New", monospace`;
       const lines = Array.isArray(body) ? body : [body];
       for (const line of lines) { ctx.fillText(line, x, y); y += SF(18); }
       y += SF(10);
@@ -1310,7 +1341,7 @@ const GameScreen = {
     ctx.fillRect(kx - PIXEL, ky - PIXEL, PIXEL * 2, PIXEL * 2);
 
     ctx.fillStyle = PALETTE.hudNormale;
-    ctx.font = `italic ${SF(12)}px "Courier New", monospace`;
+    ctx.font = `italic ${SF(15)}px "Courier New", monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     ctx.fillText('Sei qui · Marche di Vorn', area.x + area.w / 2, area.y + area.h - SF(8));
