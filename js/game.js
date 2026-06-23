@@ -56,21 +56,8 @@ const GameScreen = {
   },
 
   onEnter() {
-    this.knight = {
-      nome: 'Sir Aldric di Vorn',
-      titolo: 'Cavaliere Errante',
-      vigore: { cur: 14, max: 20 },
-      volonta: { cur: 11, max: 16 },
-      onore: { cur: 8, max: 10 },
-      ferite: { cur: 2, max: 12 },
-      equip: ['Spada bastarda', 'Scudo araldico', 'Cotta di maglia', 'Mantello scuro'],
-      reputazione: [
-        { nome: 'Casata Vorn',      val: 3 },
-        { nome: 'Ordine del Cervo', val: 1 },
-        { nome: 'Mercanti Liberi',  val: 0 },
-        { nome: 'Banditi del Sud',  val: -2 },
-      ],
-    };
+    Knight.init();
+    this.knight = Knight;
     this.log = [
       'Inizi il tuo viaggio nelle Marche di Vorn.',
       'Il vento dell\'alba porta odore di pioggia.',
@@ -78,8 +65,9 @@ const GameScreen = {
       'Egli ti racconta di rovine a est.',
       'Una taverna si scorge a sud-ovest.',
     ];
+    Calendar.init();
     this.meta = {
-      anno: 1042, turno: 1, stagione: 'Primavera', meteo: 'Sereno', destinazione: 'nessuna',
+      meteo: 'Sereno', destinazione: 'nessuna',
     };
 
     // Genera il mondo e posiziona camera/cavaliere.
@@ -455,17 +443,16 @@ const GameScreen = {
     ctx.textBaseline = 'middle';
     ctx.fillText('KNIGHT DAWN', SF(compact ? 12 : 18), area.h / 2);
 
-    const meta = this.meta;
     ctx.fillStyle = PALETTE.hudNormale;
     ctx.textAlign = 'right';
     if (compact) {
       ctx.font = `${SF(12)}px "Courier New", monospace`;
-      ctx.fillText(`A.${meta.anno} · T.${meta.turno}`, area.w - SF(12), area.h / 2 - SF(8));
-      ctx.fillText(`${meta.stagione} · ${meta.meteo}`, area.w - SF(12), area.h / 2 + SF(8));
+      ctx.fillText(Calendar.formatCompatto(), area.w - SF(12), area.h / 2 - SF(8));
+      ctx.fillText(`${Calendar.nomeStagione()} · ${this.meta.meteo}`, area.w - SF(12), area.h / 2 + SF(8));
     } else {
       ctx.font = `${SF(16)}px "Courier New", monospace`;
-      ctx.fillText(`Anno ${meta.anno}  ·  Turno ${meta.turno}`, area.w - SF(18), area.h / 2 - SF(10));
-      ctx.fillText(`${meta.stagione}  ·  ${meta.meteo}  ·  Destinazione: ${meta.destinazione}`, area.w - SF(18), area.h / 2 + SF(10));
+      ctx.fillText(Calendar.formatCompatto(), area.w - SF(18), area.h / 2 - SF(10));
+      ctx.fillText(`${Calendar.nomeStagione()}  ·  ${this.meta.meteo}  ·  Destinazione: ${this.meta.destinazione}`, area.w - SF(18), area.h / 2 + SF(10));
       drawCompassRose(ctx, area.x + area.w / 2, area.y + area.h / 2, SF(26));
     }
   },
@@ -482,15 +469,14 @@ const GameScreen = {
     ctx.fillText('KNIGHT DAWN', left.x + SF(18), left.y + left.h / 2);
 
     this._drawBarSeg(right);
-    const meta = this.meta;
     const rx = right.x + right.w - SF(14);
     const ry = right.y + right.h / 2;
     ctx.fillStyle = PALETTE.hudNormale;
     ctx.font = `${SF(13)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
-    ctx.fillText(`Anno ${meta.anno}  ·  Turno ${meta.turno}`, rx, ry - SF(16));
-    ctx.fillText(`${meta.stagione}  ·  ${meta.meteo}`, rx, ry);
-    ctx.fillText(`Destinazione: ${meta.destinazione}`, rx, ry + SF(16));
+    ctx.fillText(Calendar.formatCompatto(), rx, ry - SF(16));
+    ctx.fillText(`${Calendar.nomeStagione()}  ·  ${this.meta.meteo}`, rx, ry);
+    ctx.fillText(`Destinazione: ${this.meta.destinazione}`, rx, ry + SF(16));
   },
 
   _drawBarSeg(area) {
@@ -546,7 +532,6 @@ const GameScreen = {
   // mostra luogo, destinazione e ultimo evento.
   drawBottomInfo(area) {
     const ctx = this.ctx;
-    const meta = this.meta;
     const last = this.log[this.log.length - 1] || '';
 
     ctx.textAlign = 'left';
@@ -566,7 +551,7 @@ const GameScreen = {
     ctx.fillText('META', area.x, y);
     ctx.fillStyle = PALETTE.hudNormale;
     ctx.font = `${SF(13)}px "Courier New", monospace`;
-    ctx.fillText(meta.destinazione, area.x + SF(64), y - SF(1));
+    ctx.fillText(this.meta.destinazione, area.x + SF(64), y - SF(1));
     y += SF(20);
 
     ctx.fillStyle = PALETTE.hudTitolo;
@@ -600,17 +585,26 @@ const GameScreen = {
     y += SF(28);
 
     const barW = area.w - PIXEL * 16;
-    this.drawAttrBar(innerX, y, barW, 'VIGORE',  k.vigore,  '#2a7a1a', '#3a9a22'); y += SF(28);
+    this.drawAttrBar(innerX, y, barW, 'FORZA',   k.forza,   '#2a7a1a', '#3a9a22'); y += SF(28);
     this.drawAttrBar(innerX, y, barW, 'VOLONTÀ', k.volonta, '#4a3ab0', '#6050c8'); y += SF(28);
-    this.drawAttrBar(innerX, y, barW, 'ONORE',   k.onore,   '#b07a18', '#d09820'); y += SF(28);
-    this.drawAttrBar(innerX, y, barW, 'FERITE',  k.ferite,  '#aa2020', '#cc2828'); y += SF(34);
+    this.drawAttrBar(innerX, y, barW, 'SALUTE',  k.salute,  '#aa2020', '#cc2828'); y += SF(28);
+    this.drawOnore(innerX, y, barW, k.onore); y += SF(28);
 
     ctx.fillStyle = PALETTE.hudTitolo;
     ctx.font = `bold ${SF(15)}px "Courier New", monospace`;
     ctx.fillText('EQUIPAGGIAMENTO', innerX, y); y += SF(22);
     ctx.fillStyle = PALETTE.hudNormale;
     ctx.font = `${SF(14)}px "Courier New", monospace`;
-    for (const item of k.equip) { ctx.fillText('· ' + item, innerX, y); y += SF(20); }
+    const equipSlots = [
+      ['arma', 'Arma'], ['armatura', 'Armatura'], ['scudo', 'Scudo'],
+      ['speciale', 'Speciale'], ['viaggio', 'Viaggio'],
+    ];
+    for (const [slot, label] of equipSlots) {
+      const val = k.equip[slot];
+      ctx.fillStyle = val ? PALETTE.hudNormale : PALETTE.hudDim;
+      ctx.fillText((val ? '· ' : '  ') + label + ': ' + (val || '—'), innerX, y);
+      y += SF(20);
+    }
     y += SF(10);
 
     ctx.fillStyle = PALETTE.hudTitolo;
@@ -641,7 +635,7 @@ const GameScreen = {
     ctx.fillStyle = PALETTE.hudNormale;
     ctx.font = `${SF(12)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
-    ctx.fillText(`${value.cur}/${value.max}`, x + w, y);
+    ctx.fillText(`${Math.ceil(value.cur)}/${value.max}`, x + w, y);
     const barY = y + SF(14), barH = SF(10);
     ctx.fillStyle = '#0e0804';
     ctx.fillRect(x, barY, w, barH);
@@ -651,6 +645,47 @@ const GameScreen = {
     ctx.fillRect(x + PIXEL, barY + PIXEL, fillW, barH - PIXEL * 2);
     ctx.fillStyle = colorHi;
     ctx.fillRect(x + PIXEL, barY + PIXEL, fillW, PIXEL);
+  },
+
+  // Onore: scala -5/+5, barra centrata. Metà sinistra = negativo (rosso),
+  // metà destra = positivo (verde). Il tratto centrale = 0.
+  drawOnore(x, y, w, val) {
+    const ctx = this.ctx;
+    ctx.fillStyle = PALETTE.hudTitolo;
+    ctx.font = `bold ${SF(12)}px "Courier New", monospace`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText('ONORE', x, y);
+
+    const sign = val > 0 ? '+' : '';
+    ctx.fillStyle = val > 0 ? '#3a9a22' : val < 0 ? '#aa2020' : PALETTE.hudNormale;
+    ctx.font = `${SF(12)}px "Courier New", monospace`;
+    ctx.textAlign = 'right';
+    ctx.fillText(sign + val + ' / ±5', x + w, y);
+
+    // Barra centrata: 11 segmenti, il centrale è lo zero.
+    const barY = y + SF(14), barH = SF(10);
+    const segN = 11, gap = PIXEL;
+    const segW = Math.floor((w - gap * (segN - 1)) / segN);
+    for (let i = 0; i < segN; i++) {
+      const segVal = i - 5;   // -5 … +5
+      const bx = x + i * (segW + gap);
+      // Sfondo
+      ctx.fillStyle = '#0e0804';
+      ctx.fillRect(bx, barY, segW, barH);
+      // Riempimento se "attivo"
+      const active = (val > 0 && segVal > 0 && segVal <= val) ||
+                     (val < 0 && segVal < 0 && segVal >= val);
+      if (active) {
+        ctx.fillStyle = val > 0 ? '#2a7a1a' : '#aa2020';
+        ctx.fillRect(bx + PIXEL, barY + PIXEL, segW - PIXEL * 2, barH - PIXEL * 2);
+        ctx.fillStyle = val > 0 ? '#3a9a22' : '#cc2828';
+        ctx.fillRect(bx + PIXEL, barY + PIXEL, segW - PIXEL * 2, PIXEL);
+      }
+      // Bordo: il segmento centrale (zero) è più chiaro
+      drawPixelRectStroke(ctx, bx, barY, segW, barH,
+        segVal === 0 ? PALETTE.hudNormale : PALETTE.inkScuro);
+    }
   },
 
   drawMapPanel(area) {
