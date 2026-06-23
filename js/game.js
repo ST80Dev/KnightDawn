@@ -18,6 +18,52 @@
 // anche quando UI.scale e' < 1.
 function SFmin(n) { return Math.max(n, SF(n)); }
 
+// ─── Scala tipografica UI ────────────────────────────────────────────────
+// Token unici da riusare ovunque per coerenza tra sezioni e schermate.
+// Tutti i token rispettano un MINIMO assoluto in CSS px (via SFmin) per
+// garantire leggibilita anche su mobile dove UI.scale puo' essere < 1.
+// Usare: ctx.font = FONT.body();  (sempre invocato, non assegnato)
+//
+// Regole:
+//  - display:  titolo cinematico (logo gioco)
+//  - title:    titoli pannello, nomi propri (cavaliere)
+//  - heading:  titoli di sezione (LUOGO ATTUALE, NOTIZIE...)
+//  - body:     corpo di testo lungo (cronaca, diario, contesto)
+//  - label:    etichette compatte campi (FOR/VOL/SAL, ARMA, fazioni)
+//  - value:    valori associati a label (100/100, +3, ecc.)
+//  - button:   testo dei pulsanti azione/nav/tab
+//  - caption:  testo secondario, sottotitoli, footer
+//  - tiny:     solo per micro-tag decorativi
+// Mai usare numeri SF "magici" per il testo dell'UI; aggiungere un nuovo
+// token a questa tabella se serve un nuovo registro.
+const FONT_FAMILY = '"Courier New", monospace';
+const FONT = {
+  display: () => `bold ${SFmin(28)}px ${FONT_FAMILY}`,
+  title:   () => `bold ${SFmin(22)}px ${FONT_FAMILY}`,
+  heading: () => `bold ${SFmin(18)}px ${FONT_FAMILY}`,
+  body:    () => `${SFmin(18)}px ${FONT_FAMILY}`,
+  bodyB:   () => `bold ${SFmin(18)}px ${FONT_FAMILY}`,
+  bodyI:   () => `italic ${SFmin(18)}px ${FONT_FAMILY}`,
+  label:   () => `bold ${SFmin(16)}px ${FONT_FAMILY}`,
+  value:   () => `bold ${SFmin(17)}px ${FONT_FAMILY}`,
+  valueI:  () => `bold italic ${SFmin(17)}px ${FONT_FAMILY}`,
+  button:  () => `bold ${SFmin(17)}px ${FONT_FAMILY}`,
+  caption: () => `italic ${SFmin(14)}px ${FONT_FAMILY}`,
+  captionB:() => `bold ${SFmin(14)}px ${FONT_FAMILY}`,
+  tiny:    () => `bold ${SFmin(12)}px ${FONT_FAMILY}`,
+};
+// Altezze di riga di riferimento (1.3x il font, usabili per spacing
+// verticale coerente: usare LINEH.body, LINEH.heading, ecc.).
+const LINEH = {
+  display: () => SFmin(36),
+  title:   () => SFmin(28),
+  heading: () => SFmin(24),
+  body:    () => SFmin(24),
+  label:   () => SFmin(20),
+  value:   () => SFmin(22),
+  caption: () => SFmin(18),
+};
+
 const GameScreen = {
   canvas: null,
   ctx: null,
@@ -467,7 +513,7 @@ const GameScreen = {
       ctx.fillRect(b.x, b.y, b.w, b.h);
       drawPixelRectStroke(ctx, b.x, b.y, b.w, b.h, active ? PALETTE.hudTitolo : PALETTE.hudBordo);
       ctx.fillStyle = active ? PALETTE.inkNero : PALETTE.hudTitolo;
-      ctx.font = `${active ? 'bold ' : ''}${SFmin(16)}px "Courier New", monospace`;
+      ctx.font = FONT.button();
       ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2);
     });
   },
@@ -482,7 +528,7 @@ const GameScreen = {
       ctx.fillRect(b.x, b.y, b.w, b.h);
       drawPixelRectStroke(ctx, b.x, b.y, b.w, b.h, hovered ? PALETTE.hudTitolo : PALETTE.hudBordo);
       ctx.fillStyle = b.disabled ? PALETTE.hudDim : (hovered ? PALETTE.inkNero : PALETTE.hudTitolo);
-      ctx.font = `${hovered ? 'bold ' : ''}${SFmin(16)}px "Courier New", monospace`;
+      ctx.font = FONT.button();
       ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2);
     });
   },
@@ -505,7 +551,7 @@ const GameScreen = {
       ctx.fillRect(b.x, b.y, b.w, b.h);
       drawPixelRectStroke(ctx, b.x, b.y, b.w, b.h, PALETTE.inkScuro);
       ctx.fillStyle = PALETTE.inkScuro;
-      ctx.font = `bold ${SFmin(22)}px "Courier New", monospace`;
+      ctx.font = FONT.title();
       ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 + PIXEL);
     });
   },
@@ -543,7 +589,7 @@ const GameScreen = {
     ctx.fillRect(close.x, close.y, close.w, close.h);
     drawPixelRectStroke(ctx, close.x, close.y, close.w, close.h, PALETTE.inkScuro);
     ctx.fillStyle = PALETTE.pergChiara;
-    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
+    ctx.font = FONT.button();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('X', close.x + close.w / 2, close.y + close.h / 2 + PIXEL);
@@ -578,7 +624,7 @@ const GameScreen = {
     ctx.fillRect(bandX, bandY + bandH, bandW, PIXEL);
     // Titolo: oro brillante
     ctx.fillStyle = '#e8c050';
-    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
+    ctx.font = FONT.heading();
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(title, area.x + PIXEL * 10, bandY + bandH / 2);
@@ -599,7 +645,7 @@ const GameScreen = {
     ctx.fillRect(area.x, area.y + area.h - PIXEL, area.w, PIXEL);
 
     ctx.fillStyle = PALETTE.hudTitolo;
-    ctx.font = `bold ${SF(compact ? 22 : 36)}px "Courier New", monospace`;
+    ctx.font = compact ? FONT.title() : FONT.display();
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText('KNIGHT DAWN', SF(compact ? 12 : 18), area.h / 2);
@@ -607,11 +653,11 @@ const GameScreen = {
     ctx.fillStyle = '#e8d8b0';
     ctx.textAlign = 'right';
     if (compact) {
-      ctx.font = `${SFmin(16)}px "Courier New", monospace`;
+      ctx.font = FONT.body();
       ctx.fillText(Calendar.formatCompatto(), area.w - SF(12), area.h / 2 - SF(10));
       ctx.fillText(`${Calendar.nomeStagione()} · ${this.meta.meteo}`, area.w - SF(12), area.h / 2 + SF(10));
     } else {
-      ctx.font = `${SFmin(17)}px "Courier New", monospace`;
+      ctx.font = FONT.body();
       ctx.fillText(Calendar.formatCompatto(), area.w - SF(18), area.h / 2 - SF(12));
       ctx.fillText(`${Calendar.nomeStagione()}  ·  ${this.meta.meteo}  ·  Destinazione: ${this.meta.destinazione}`, area.w - SF(18), area.h / 2 + SF(12));
       drawCompassRose(ctx, area.x + area.w / 2, area.y + area.h / 2, SF(26));
@@ -625,7 +671,7 @@ const GameScreen = {
     const ctx = this.ctx;
     this._drawBarSeg(left);
     ctx.fillStyle = PALETTE.hudTitolo;
-    ctx.font = `bold ${SF(32)}px "Courier New", monospace`;
+    ctx.font = FONT.display();
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText('KNIGHT DAWN', left.x + SF(18), left.y + left.h / 2);
@@ -634,7 +680,7 @@ const GameScreen = {
     const rx = right.x + right.w - SF(14);
     const ry = right.y + right.h / 2;
     ctx.fillStyle = '#e8d8b0';
-    ctx.font = `${SFmin(16)}px "Courier New", monospace`;
+    ctx.font = FONT.body();
     ctx.textAlign = 'right';
     ctx.fillText(Calendar.formatCompatto(), rx, ry - SF(18));
     ctx.fillText(`${Calendar.nomeStagione()}  ·  ${this.meta.meteo}`, rx, ry);
@@ -721,32 +767,30 @@ const GameScreen = {
     ctx.textBaseline = 'top';
     let y = area.y;
     const labelW = SF(80);
-    const lbFs = SF(16);
-    const vlFs = SF(18);
-    const rowH = SF(24);
+    const rowH = SF(26);
 
     ctx.fillStyle = '#e8c050';
-    ctx.font = `bold ${lbFs}px "Courier New", monospace`;
+    ctx.font = FONT.label();
     ctx.fillText('LUOGO', area.x, y + SF(2));
     ctx.fillStyle = '#e8d8b0';
-    ctx.font = `${vlFs}px "Courier New", monospace`;
+    ctx.font = FONT.value();
     ctx.fillText('Pianura, Marche di Vorn', area.x + labelW, y);
     y += rowH;
 
     ctx.fillStyle = '#e8c050';
-    ctx.font = `bold ${lbFs}px "Courier New", monospace`;
+    ctx.font = FONT.label();
     ctx.fillText('META', area.x, y + SF(2));
     ctx.fillStyle = '#e8d8b0';
-    ctx.font = `${vlFs}px "Courier New", monospace`;
+    ctx.font = FONT.value();
     ctx.fillText(this.meta.destinazione, area.x + labelW, y);
     y += rowH;
 
     ctx.fillStyle = '#e8c050';
-    ctx.font = `bold ${lbFs}px "Courier New", monospace`;
+    ctx.font = FONT.label();
     ctx.fillText('ULTIMO', area.x, y + SF(2));
     // L'ultimo evento è evidenziato in arancio caldo (richiamo cronaca)
     ctx.fillStyle = '#ffa040';
-    ctx.font = `italic ${vlFs}px "Courier New", monospace`;
+    ctx.font = FONT.valueI();
     const maxW = area.w - labelW;
     let s = last;
     while (s.length && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
@@ -770,11 +814,11 @@ const GameScreen = {
 
     // Nome + titolo: header su sfondo scuro → crema e oro vivo
     ctx.fillStyle = '#f0e0b8';   // crema chiara, alta leggibilità
-    ctx.font = `bold ${SFmin(22)}px "Courier New", monospace`;
+    ctx.font = FONT.title();
     ctx.fillText(k.nome, innerX, y);
-    y += SF(28);
+    y += LINEH.title();
     ctx.fillStyle = '#e8a838';   // oro vivo per il titolo cavalleresco
-    ctx.font = `italic bold ${SFmin(17)}px "Courier New", monospace`;
+    ctx.font = FONT.valueI();
     ctx.fillText(k.titolo, innerX, y);
     y += SF(28);
 
@@ -838,7 +882,7 @@ const GameScreen = {
       // Label: sempre bold per peso visivo, attiva in crema viva, inattiva
       // in oro spento. Posizione sotto l'icona.
       ctx.fillStyle = active ? '#f0e0b8' : '#a08038';
-      ctx.font = `bold ${labelSize}px "Courier New", monospace`;
+      ctx.font = FONT.button();
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(t.label, tx + tabW / 2, y + tabH - SF(12));
@@ -925,12 +969,12 @@ const GameScreen = {
 
     // Riepilogo: ORO e STATO con label oro e valori vivaci sullo scuro
     ctx.fillStyle = '#e8c050';
-    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
+    ctx.font = FONT.label();
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText('ORO', x, y);
     ctx.fillStyle = '#ffd060';   // oro brillante per le monete
-    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
+    ctx.font = FONT.value();
     ctx.textAlign = 'right';
     ctx.fillText(`◉ ${k.oro} mo`, x + w, y);
     y += SF(22);
@@ -949,11 +993,11 @@ const GameScreen = {
                      : (isExh || isTired || isBrk) ? '#ffa030'  // arancio
                      :                                 '#6ce06a'; // verde brillante
     ctx.fillStyle = '#e8c050';
-    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
+    ctx.font = FONT.label();
     ctx.textAlign = 'left';
     ctx.fillText('STATO', x, y);
     ctx.fillStyle = statoColor;
-    ctx.font = `bold italic ${SFmin(16)}px "Courier New", monospace`;
+    ctx.font = FONT.valueI();
     ctx.textAlign = 'right';
     ctx.fillText(stato, x + w, y);
   },
@@ -994,18 +1038,18 @@ const GameScreen = {
 
       // Glyph araldico colorato (brillante su scuro)
       ctx.fillStyle = accent;
-      ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
+      ctx.font = FONT.heading();   // glyph araldico: heading per dargli peso
       ctx.textAlign = 'left';
       ctx.fillText(glyph, x + SF(10), cy);
 
-      // Label: oro brillante
+      // Label: oro brillante (token label)
       ctx.fillStyle = '#e8c050';
-      ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
+      ctx.font = FONT.label();
       ctx.fillText(label.toUpperCase(), x + SF(28), cy);
 
       // Valore: crema se presente, oro spento italic se vuoto
       ctx.fillStyle = val ? '#e8d8b0' : '#7a5a2a';
-      ctx.font = `${val ? '' : 'italic '}${SFmin(16)}px "Courier New", monospace`;
+      ctx.font = val ? FONT.body() : FONT.bodyI();
       ctx.textAlign = 'right';
       ctx.fillText(val || '— vuoto —', x + w - SF(8), cy);
 
@@ -1015,11 +1059,11 @@ const GameScreen = {
     y += SF(14);
     ctx.textBaseline = 'top';
     ctx.fillStyle = '#e8c050';
-    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
+    ctx.font = FONT.label();
     ctx.textAlign = 'left';
     ctx.fillText('CAPIENZA SACCA', x, y);
     ctx.fillStyle = '#e8d8b0';
-    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
+    ctx.font = FONT.value();
     ctx.textAlign = 'right';
     ctx.fillText('3 / 8 oggetti', x + w, y);
   },
@@ -1036,7 +1080,7 @@ const GameScreen = {
     for (const r of k.reputazione) {
       // Etichetta nome in oro brillante
       ctx.fillStyle = '#e8c050';
-      ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
+      ctx.font = FONT.label();
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       ctx.fillText(r.nome, x, y);
@@ -1044,7 +1088,7 @@ const GameScreen = {
       // Valore numerico in verde/rosso brillanti su scuro
       const sign = r.val > 0 ? '+' : '';
       ctx.fillStyle = r.val > 0 ? '#6ce06a' : (r.val < 0 ? '#ff5050' : '#e8d8b0');
-      ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
+      ctx.font = FONT.value();
       ctx.textAlign = 'right';
       ctx.fillText(sign + r.val, x + w, y);
 
@@ -1083,18 +1127,18 @@ const GameScreen = {
     let y = area.y;
 
     ctx.fillStyle = '#e8c050';   // oro brillante
-    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
+    ctx.font = FONT.heading();
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText('ULTIMI AVVENIMENTI', x, y);
     // sottolineatura decorativa rossa
     ctx.fillStyle = '#ff5050';
-    ctx.fillRect(x, y + SF(16), SF(72), PIXEL);
-    y += SF(24);
+    ctx.fillRect(x, y + SF(18), SF(80), PIXEL);
+    y += LINEH.heading();
 
     const fs = SFmin(18);
-    ctx.font = `${fs}px "Courier New", monospace`;
-    const lineH = SFmin(24);
+    ctx.font = FONT.body();
+    const lineH = LINEH.body();
     const recent = this.log.slice().reverse();
     const maxBottom = area.y + area.h - SF(8);
 
@@ -1110,7 +1154,7 @@ const GameScreen = {
       ctx.fillStyle = i === 0 ? '#ff5050' : '#a08038';
       ctx.fillRect(x, y + Math.floor(fs / 2) - PIXEL, PIXEL * 2, PIXEL * 2);
       ctx.fillStyle = color;
-      ctx.font = `${i === 0 ? 'bold ' : ''}${fs}px "Courier New", monospace`;
+      ctx.font = i === 0 ? FONT.bodyB() : FONT.body();
       for (let j = 0; j < lines.length; j++) {
         if (y >= maxBottom) break;
         ctx.fillText(lines[j], x + SF(12), y);
@@ -1124,12 +1168,12 @@ const GameScreen = {
     const ctx = this.ctx;
     // Label: oro brillante su scuro
     ctx.fillStyle = '#e8c050';
-    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
+    ctx.font = FONT.label();
     ctx.textAlign = 'left';
     ctx.fillText(label, x, y);
     // Numeri: crema chiara
     ctx.fillStyle = '#f0e0b8';
-    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
+    ctx.font = FONT.value();
     ctx.textAlign = 'right';
     ctx.fillText(`${Math.ceil(value.cur)}/${value.max}`, x + w, y);
     const barY = y + SF(16), barH = SF(11);
@@ -1148,7 +1192,7 @@ const GameScreen = {
   drawOnore(x, y, w, val) {
     const ctx = this.ctx;
     ctx.fillStyle = '#e8c050';
-    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
+    ctx.font = FONT.label();
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText('ONORE', x, y);
@@ -1156,7 +1200,7 @@ const GameScreen = {
     const sign = val > 0 ? '+' : '';
     // Verde/rosso brillanti sul fondo scuro
     ctx.fillStyle = val > 0 ? '#6ce06a' : val < 0 ? '#e83838' : '#f0e0b8';
-    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
+    ctx.font = FONT.value();
     ctx.textAlign = 'right';
     ctx.fillText(sign + val + ' / ±5', x + w, y);
 
@@ -1224,15 +1268,15 @@ const GameScreen = {
     const drawSection = (title, body) => {
       // Titolo sezione: oro brillante su scuro
       ctx.fillStyle = '#e8c050';
-      ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
+      ctx.font = FONT.heading();
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
-      ctx.fillText(title, x, y); y += SFmin(22);
+      ctx.fillText(title, x, y); y += LINEH.heading();
       // Corpo: crema chiara
       ctx.fillStyle = '#e8d8b0';
-      ctx.font = `${SFmin(16)}px "Courier New", monospace`;
+      ctx.font = FONT.body();
       const lines = Array.isArray(body) ? body : [body];
-      for (const line of lines) { ctx.fillText(line, x, y); y += SFmin(20); }
+      for (const line of lines) { ctx.fillText(line, x, y); y += LINEH.body(); }
       y += SF(12);
     };
 
@@ -1258,11 +1302,12 @@ const GameScreen = {
     const yStart = area.y + PIXEL * 4 + SF(26) + SF(8);
     const logBottom = bottomY - PIXEL * 2;
 
-    const fs = SF(16);
-    ctx.font = `${fs}px "Courier New", monospace`;
+    // Cronaca eventi: testo body standard (token FONT.body) per leggibilità
+    const fs = SFmin(18);
+    ctx.font = FONT.body();
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    const lineH = SF(21);
+    const lineH = LINEH.body();
     const eventGap = SF(7);
 
     // Scala di colori su sfondo SCURO: rosso brillante per l'evento appena
@@ -1308,7 +1353,7 @@ const GameScreen = {
       ctx.fillStyle = ln.color;
       // Bold solo per la riga piu recente per dare gerarchia
       const isMostRecent = ln.color === '#ff5050';
-      ctx.font = `${isMostRecent ? 'bold ' : ''}${fs}px "Courier New", monospace`;
+      ctx.font = isMostRecent ? FONT.bodyB() : FONT.body();
       ctx.fillText(ln.text, x + indentX, y);
       y += lineH;
     }
@@ -1347,7 +1392,7 @@ const GameScreen = {
     ctx.fillRect(kx - PIXEL, ky - PIXEL, PIXEL * 2, PIXEL * 2);
 
     ctx.fillStyle = PALETTE.hudNormale;
-    ctx.font = `italic ${SFmin(16)}px "Courier New", monospace`;
+    ctx.font = FONT.caption();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     ctx.fillText('Sei qui · Marche di Vorn', area.x + area.w / 2, area.y + area.h - SF(8));
