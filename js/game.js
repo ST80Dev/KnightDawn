@@ -65,8 +65,9 @@ const GameScreen = {
       'Egli ti racconta di rovine a est.',
       'Una taverna si scorge a sud-ovest.',
     ];
+    Calendar.init();
     this.meta = {
-      anno: 1042, turno: 1, stagione: 'Primavera', meteo: 'Sereno', destinazione: 'nessuna',
+      meteo: 'Sereno', destinazione: 'nessuna',
     };
 
     // Genera il mondo e posiziona camera/cavaliere.
@@ -442,17 +443,16 @@ const GameScreen = {
     ctx.textBaseline = 'middle';
     ctx.fillText('KNIGHT DAWN', SF(compact ? 12 : 18), area.h / 2);
 
-    const meta = this.meta;
     ctx.fillStyle = PALETTE.hudNormale;
     ctx.textAlign = 'right';
     if (compact) {
       ctx.font = `${SF(12)}px "Courier New", monospace`;
-      ctx.fillText(`A.${meta.anno} · T.${meta.turno}`, area.w - SF(12), area.h / 2 - SF(8));
-      ctx.fillText(`${meta.stagione} · ${meta.meteo}`, area.w - SF(12), area.h / 2 + SF(8));
+      ctx.fillText(Calendar.formatCompatto(), area.w - SF(12), area.h / 2 - SF(8));
+      ctx.fillText(`${Calendar.nomeStagione()} · ${this.meta.meteo}`, area.w - SF(12), area.h / 2 + SF(8));
     } else {
       ctx.font = `${SF(16)}px "Courier New", monospace`;
-      ctx.fillText(`Anno ${meta.anno}  ·  Turno ${meta.turno}`, area.w - SF(18), area.h / 2 - SF(10));
-      ctx.fillText(`${meta.stagione}  ·  ${meta.meteo}  ·  Destinazione: ${meta.destinazione}`, area.w - SF(18), area.h / 2 + SF(10));
+      ctx.fillText(Calendar.formatCompatto(), area.w - SF(18), area.h / 2 - SF(10));
+      ctx.fillText(`${Calendar.nomeStagione()}  ·  ${this.meta.meteo}  ·  Destinazione: ${this.meta.destinazione}`, area.w - SF(18), area.h / 2 + SF(10));
       drawCompassRose(ctx, area.x + area.w / 2, area.y + area.h / 2, SF(26));
     }
   },
@@ -469,15 +469,14 @@ const GameScreen = {
     ctx.fillText('KNIGHT DAWN', left.x + SF(18), left.y + left.h / 2);
 
     this._drawBarSeg(right);
-    const meta = this.meta;
     const rx = right.x + right.w - SF(14);
     const ry = right.y + right.h / 2;
     ctx.fillStyle = PALETTE.hudNormale;
     ctx.font = `${SF(13)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
-    ctx.fillText(`Anno ${meta.anno}  ·  Turno ${meta.turno}`, rx, ry - SF(16));
-    ctx.fillText(`${meta.stagione}  ·  ${meta.meteo}`, rx, ry);
-    ctx.fillText(`Destinazione: ${meta.destinazione}`, rx, ry + SF(16));
+    ctx.fillText(Calendar.formatCompatto(), rx, ry - SF(16));
+    ctx.fillText(`${Calendar.nomeStagione()}  ·  ${this.meta.meteo}`, rx, ry);
+    ctx.fillText(`Destinazione: ${this.meta.destinazione}`, rx, ry + SF(16));
   },
 
   _drawBarSeg(area) {
@@ -533,7 +532,6 @@ const GameScreen = {
   // mostra luogo, destinazione e ultimo evento.
   drawBottomInfo(area) {
     const ctx = this.ctx;
-    const meta = this.meta;
     const last = this.log[this.log.length - 1] || '';
 
     ctx.textAlign = 'left';
@@ -553,7 +551,7 @@ const GameScreen = {
     ctx.fillText('META', area.x, y);
     ctx.fillStyle = PALETTE.hudNormale;
     ctx.font = `${SF(13)}px "Courier New", monospace`;
-    ctx.fillText(meta.destinazione, area.x + SF(64), y - SF(1));
+    ctx.fillText(this.meta.destinazione, area.x + SF(64), y - SF(1));
     y += SF(20);
 
     ctx.fillStyle = PALETTE.hudTitolo;

@@ -63,10 +63,11 @@ Si definisce attraverso le scelte di gioco:
   "L'Ombra del Cervo", "Il Pellegrino Silenzioso")
 
 **Attributi base:**
-- **Vigore** — salute fisica, resistenza al viaggio e al combattimento
-- **Volontà** — forza mentale, resistenza alla magia e alla paura
-- **Onore** — reputazione morale, influisce su come NPC e fazioni reagiscono
-- **Ferite** — danno accumulato, non si resetta facilmente
+- **Forza** (0-100) — energia di viaggio e combattimento; si consuma tile per tile
+  secondo il bioma (costi frazionari su pianura, interi su terreni ostili)
+- **Volontà** (0-100) — forza mentale; cala con eventi oscuri, paura, magia nemica
+- **Salute** (0-100) — integrità corporea; cala in combattimento (0 = morte)
+- **Onore** (-5/+5) — statura morale bipolare; apre e chiude porte con fazioni e NPC
 
 [TBD] Sistema di progressione dettagliato
 [TBD] Equipaggiamento e inventario (pesi, slot, durabilità?)
@@ -134,26 +135,41 @@ mitologico-cronachistica propria del mondo di gioco.
 Era → Luce → Stagione → Diario → Passo
 ```
 
-- **Era** — unità mitologica, scandita da cataclismi e svolte cosmiche.
-  Numerata in ordinale (*Prima Era, Seconda Era…*). Non cambia in una partita
-  normale; è lore di sfondo.
-- **Luce** — sotto-era percepibile dal giocatore. Equivale grossomodo a un "anno"
-  del mondo. Numerata dentro l'Era (*Prima Luce, Seconda Luce…*).
-- **Stagione** — quattro per Luce, nell'ordine: Primavera, Estate, Autunno, Inverno.
-  Modulano viaggio, eventi, propagazione delle notizie, raccolti.
-- **Diario** — 20 per Stagione. Unità di cronaca, numerata (1-20). Cadenza per
-  eventi di fazione, tributi, consigli.
-- **Passo** — 10 per Diario. È il **turno minimo** del gioco. Un'azione narrativa
-  significativa (tratto di viaggio, scontro, interazione lunga) consuma uno o più passi.
+- **Passo** — turno minimo del gioco. Corrisponde a **1 tile di viaggio**
+  (~2-3 ore in-fiction). Ogni passo può generare eventi, consumare Forza,
+  avviare combattimenti. Velocità di scorrimento regolabile: 4–30 sec/passo.
+- **Diario** — **200 Passi** (~25 giorni in-fiction, "un mese"). Unità di cronaca,
+  cadenza per eventi di fazione, tributi, consigli. Numerato dentro la Stagione (1-3).
+- **Stagione** — **3 Diari = 600 Passi** (~2,5 mesi). Quattro per Luce, nell'ordine:
+  Primavera, Estate, Autunno, Inverno. Modulano viaggio, eventi, raccolti.
+- **Luce** — **4 Stagioni = 12 Diari = 2.400 Passi** (~10 mesi, "un anno").
+  Numerata dentro l'Era (*Prima Luce, Seconda Luce…*).
+- **Era** — **5 Luci = 60 Diari = 12.000 Passi** ("un lustro", ~5 anni).
+  Scandita da svolte cosmiche o cataclismi. Numerata in ordinale.
 
 #### Conversioni di riferimento
 
-- 1 Stagione = 20 Diari = 200 Passi
-- 1 Luce = 4 Stagioni = 80 Diari = 800 Passi
-- 1 Era = N Luci (numero variabile, definito da eventi narrativi)
+| Unità    | Passi  | Tempo appross. |
+|----------|--------|----------------|
+| Passo    | 1      | ~3 ore         |
+| Diario   | 200    | ~25 giorni     |
+| Stagione | 600    | ~2,5 mesi      |
+| Luce     | 2.400  | ~10 mesi       |
+| Era      | 12.000 | ~5 anni        |
 
-[TBD] Ritarare numeri di Passi/Diari/Stagioni quando si definiscono mappa del
-mondo, durata di eventi, evoluzioni di abilità e upgrade strumenti.
+#### Velocità di gioco e tempo reale
+
+Il giocatore può regolare la velocità da 4 a 30 secondi per Passo.
+A velocità massima una Luce dura ~2,7 ore reali, un'Era ~13 ore.
+A velocità minima una Luce dura ~20 ore reali, un'Era ~100 ore.
+Le pause per eventi, combattimento e scelte allungano la sessione reale
+senza far avanzare i Passi.
+
+#### Corrispondenza con viaggio medievale
+
+Un tragitto tipico castello-castello (~40 tile) corrisponde a ~5 giorni
+a cavallo (40 Passi × 3 ore = 120 ore). Coerente con tempi di viaggio
+medievali per distanze medie.
 
 #### Età della Veglia (prologo)
 
