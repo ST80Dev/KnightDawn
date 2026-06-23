@@ -12,6 +12,12 @@
 // camera (rotella su desktop, +/- su mobile).
 // Input via Pointer Events (mouse + touch).
 
+// SFmin(n) = font scalato come SF(n) ma con minimo assoluto in CSS px
+// pari a n stesso (cioe' il font NON puo' scendere sotto il valore di
+// design). Serve per i body text che devono restare leggibili su mobile
+// anche quando UI.scale e' < 1.
+function SFmin(n) { return Math.max(n, SF(n)); }
+
 const GameScreen = {
   canvas: null,
   ctx: null,
@@ -461,7 +467,7 @@ const GameScreen = {
       ctx.fillRect(b.x, b.y, b.w, b.h);
       drawPixelRectStroke(ctx, b.x, b.y, b.w, b.h, active ? PALETTE.hudTitolo : PALETTE.hudBordo);
       ctx.fillStyle = active ? PALETTE.inkNero : PALETTE.hudTitolo;
-      ctx.font = `${active ? 'bold ' : ''}${SF(16)}px "Courier New", monospace`;
+      ctx.font = `${active ? 'bold ' : ''}${SFmin(16)}px "Courier New", monospace`;
       ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2);
     });
   },
@@ -476,7 +482,7 @@ const GameScreen = {
       ctx.fillRect(b.x, b.y, b.w, b.h);
       drawPixelRectStroke(ctx, b.x, b.y, b.w, b.h, hovered ? PALETTE.hudTitolo : PALETTE.hudBordo);
       ctx.fillStyle = b.disabled ? PALETTE.hudDim : (hovered ? PALETTE.inkNero : PALETTE.hudTitolo);
-      ctx.font = `${hovered ? 'bold ' : ''}${SF(16)}px "Courier New", monospace`;
+      ctx.font = `${hovered ? 'bold ' : ''}${SFmin(16)}px "Courier New", monospace`;
       ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2);
     });
   },
@@ -499,7 +505,7 @@ const GameScreen = {
       ctx.fillRect(b.x, b.y, b.w, b.h);
       drawPixelRectStroke(ctx, b.x, b.y, b.w, b.h, PALETTE.inkScuro);
       ctx.fillStyle = PALETTE.inkScuro;
-      ctx.font = `bold ${SF(22)}px "Courier New", monospace`;
+      ctx.font = `bold ${SFmin(22)}px "Courier New", monospace`;
       ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 + PIXEL);
     });
   },
@@ -537,7 +543,7 @@ const GameScreen = {
     ctx.fillRect(close.x, close.y, close.w, close.h);
     drawPixelRectStroke(ctx, close.x, close.y, close.w, close.h, PALETTE.inkScuro);
     ctx.fillStyle = PALETTE.pergChiara;
-    ctx.font = `bold ${SF(16)}px "Courier New", monospace`;
+    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('X', close.x + close.w / 2, close.y + close.h / 2 + PIXEL);
@@ -572,7 +578,7 @@ const GameScreen = {
     ctx.fillRect(bandX, bandY + bandH, bandW, PIXEL);
     // Titolo: oro brillante
     ctx.fillStyle = '#e8c050';
-    ctx.font = `bold ${SF(16)}px "Courier New", monospace`;
+    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     ctx.fillText(title, area.x + PIXEL * 10, bandY + bandH / 2);
@@ -601,11 +607,11 @@ const GameScreen = {
     ctx.fillStyle = '#e8d8b0';
     ctx.textAlign = 'right';
     if (compact) {
-      ctx.font = `${SF(16)}px "Courier New", monospace`;
+      ctx.font = `${SFmin(16)}px "Courier New", monospace`;
       ctx.fillText(Calendar.formatCompatto(), area.w - SF(12), area.h / 2 - SF(10));
       ctx.fillText(`${Calendar.nomeStagione()} · ${this.meta.meteo}`, area.w - SF(12), area.h / 2 + SF(10));
     } else {
-      ctx.font = `${SF(17)}px "Courier New", monospace`;
+      ctx.font = `${SFmin(17)}px "Courier New", monospace`;
       ctx.fillText(Calendar.formatCompatto(), area.w - SF(18), area.h / 2 - SF(12));
       ctx.fillText(`${Calendar.nomeStagione()}  ·  ${this.meta.meteo}  ·  Destinazione: ${this.meta.destinazione}`, area.w - SF(18), area.h / 2 + SF(12));
       drawCompassRose(ctx, area.x + area.w / 2, area.y + area.h / 2, SF(26));
@@ -628,7 +634,7 @@ const GameScreen = {
     const rx = right.x + right.w - SF(14);
     const ry = right.y + right.h / 2;
     ctx.fillStyle = '#e8d8b0';
-    ctx.font = `${SF(16)}px "Courier New", monospace`;
+    ctx.font = `${SFmin(16)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     ctx.fillText(Calendar.formatCompatto(), rx, ry - SF(18));
     ctx.fillText(`${Calendar.nomeStagione()}  ·  ${this.meta.meteo}`, rx, ry);
@@ -764,11 +770,11 @@ const GameScreen = {
 
     // Nome + titolo: header su sfondo scuro → crema e oro vivo
     ctx.fillStyle = '#f0e0b8';   // crema chiara, alta leggibilità
-    ctx.font = `bold ${SF(22)}px "Courier New", monospace`;
+    ctx.font = `bold ${SFmin(22)}px "Courier New", monospace`;
     ctx.fillText(k.nome, innerX, y);
     y += SF(28);
     ctx.fillStyle = '#e8a838';   // oro vivo per il titolo cavalleresco
-    ctx.font = `italic bold ${SF(17)}px "Courier New", monospace`;
+    ctx.font = `italic bold ${SFmin(17)}px "Courier New", monospace`;
     ctx.fillText(k.titolo, innerX, y);
     y += SF(28);
 
@@ -919,12 +925,12 @@ const GameScreen = {
 
     // Riepilogo: ORO e STATO con label oro e valori vivaci sullo scuro
     ctx.fillStyle = '#e8c050';
-    ctx.font = `bold ${SF(16)}px "Courier New", monospace`;
+    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText('ORO', x, y);
     ctx.fillStyle = '#ffd060';   // oro brillante per le monete
-    ctx.font = `bold ${SF(16)}px "Courier New", monospace`;
+    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     ctx.fillText(`◉ ${k.oro} mo`, x + w, y);
     y += SF(22);
@@ -943,11 +949,11 @@ const GameScreen = {
                      : (isExh || isTired || isBrk) ? '#ffa030'  // arancio
                      :                                 '#6ce06a'; // verde brillante
     ctx.fillStyle = '#e8c050';
-    ctx.font = `bold ${SF(16)}px "Courier New", monospace`;
+    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.fillText('STATO', x, y);
     ctx.fillStyle = statoColor;
-    ctx.font = `bold italic ${SF(16)}px "Courier New", monospace`;
+    ctx.font = `bold italic ${SFmin(16)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     ctx.fillText(stato, x + w, y);
   },
@@ -988,18 +994,18 @@ const GameScreen = {
 
       // Glyph araldico colorato (brillante su scuro)
       ctx.fillStyle = accent;
-      ctx.font = `bold ${SF(16)}px "Courier New", monospace`;
+      ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
       ctx.textAlign = 'left';
       ctx.fillText(glyph, x + SF(10), cy);
 
       // Label: oro brillante
       ctx.fillStyle = '#e8c050';
-      ctx.font = `bold ${SF(16)}px "Courier New", monospace`;
+      ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
       ctx.fillText(label.toUpperCase(), x + SF(28), cy);
 
       // Valore: crema se presente, oro spento italic se vuoto
       ctx.fillStyle = val ? '#e8d8b0' : '#7a5a2a';
-      ctx.font = `${val ? '' : 'italic '}${SF(16)}px "Courier New", monospace`;
+      ctx.font = `${val ? '' : 'italic '}${SFmin(16)}px "Courier New", monospace`;
       ctx.textAlign = 'right';
       ctx.fillText(val || '— vuoto —', x + w - SF(8), cy);
 
@@ -1009,11 +1015,11 @@ const GameScreen = {
     y += SF(14);
     ctx.textBaseline = 'top';
     ctx.fillStyle = '#e8c050';
-    ctx.font = `bold ${SF(16)}px "Courier New", monospace`;
+    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.fillText('CAPIENZA SACCA', x, y);
     ctx.fillStyle = '#e8d8b0';
-    ctx.font = `bold ${SF(16)}px "Courier New", monospace`;
+    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     ctx.fillText('3 / 8 oggetti', x + w, y);
   },
@@ -1030,7 +1036,7 @@ const GameScreen = {
     for (const r of k.reputazione) {
       // Etichetta nome in oro brillante
       ctx.fillStyle = '#e8c050';
-      ctx.font = `bold ${SF(16)}px "Courier New", monospace`;
+      ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       ctx.fillText(r.nome, x, y);
@@ -1038,7 +1044,7 @@ const GameScreen = {
       // Valore numerico in verde/rosso brillanti su scuro
       const sign = r.val > 0 ? '+' : '';
       ctx.fillStyle = r.val > 0 ? '#6ce06a' : (r.val < 0 ? '#ff5050' : '#e8d8b0');
-      ctx.font = `bold ${SF(16)}px "Courier New", monospace`;
+      ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
       ctx.textAlign = 'right';
       ctx.fillText(sign + r.val, x + w, y);
 
@@ -1077,7 +1083,7 @@ const GameScreen = {
     let y = area.y;
 
     ctx.fillStyle = '#e8c050';   // oro brillante
-    ctx.font = `bold ${SF(16)}px "Courier New", monospace`;
+    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText('ULTIMI AVVENIMENTI', x, y);
@@ -1086,9 +1092,9 @@ const GameScreen = {
     ctx.fillRect(x, y + SF(16), SF(72), PIXEL);
     y += SF(24);
 
-    const fs = SF(16);
+    const fs = SFmin(18);
     ctx.font = `${fs}px "Courier New", monospace`;
-    const lineH = SF(21);
+    const lineH = SFmin(24);
     const recent = this.log.slice().reverse();
     const maxBottom = area.y + area.h - SF(8);
 
@@ -1118,12 +1124,12 @@ const GameScreen = {
     const ctx = this.ctx;
     // Label: oro brillante su scuro
     ctx.fillStyle = '#e8c050';
-    ctx.font = `bold ${SF(16)}px "Courier New", monospace`;
+    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.fillText(label, x, y);
     // Numeri: crema chiara
     ctx.fillStyle = '#f0e0b8';
-    ctx.font = `bold ${SF(16)}px "Courier New", monospace`;
+    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     ctx.fillText(`${Math.ceil(value.cur)}/${value.max}`, x + w, y);
     const barY = y + SF(16), barH = SF(11);
@@ -1142,7 +1148,7 @@ const GameScreen = {
   drawOnore(x, y, w, val) {
     const ctx = this.ctx;
     ctx.fillStyle = '#e8c050';
-    ctx.font = `bold ${SF(16)}px "Courier New", monospace`;
+    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText('ONORE', x, y);
@@ -1150,7 +1156,7 @@ const GameScreen = {
     const sign = val > 0 ? '+' : '';
     // Verde/rosso brillanti sul fondo scuro
     ctx.fillStyle = val > 0 ? '#6ce06a' : val < 0 ? '#e83838' : '#f0e0b8';
-    ctx.font = `bold ${SF(16)}px "Courier New", monospace`;
+    ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     ctx.fillText(sign + val + ' / ±5', x + w, y);
 
@@ -1218,15 +1224,15 @@ const GameScreen = {
     const drawSection = (title, body) => {
       // Titolo sezione: oro brillante su scuro
       ctx.fillStyle = '#e8c050';
-      ctx.font = `bold ${SF(16)}px "Courier New", monospace`;
+      ctx.font = `bold ${SFmin(16)}px "Courier New", monospace`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
-      ctx.fillText(title, x, y); y += SF(22);
+      ctx.fillText(title, x, y); y += SFmin(22);
       // Corpo: crema chiara
       ctx.fillStyle = '#e8d8b0';
-      ctx.font = `${SF(16)}px "Courier New", monospace`;
+      ctx.font = `${SFmin(16)}px "Courier New", monospace`;
       const lines = Array.isArray(body) ? body : [body];
-      for (const line of lines) { ctx.fillText(line, x, y); y += SF(20); }
+      for (const line of lines) { ctx.fillText(line, x, y); y += SFmin(20); }
       y += SF(12);
     };
 
@@ -1341,7 +1347,7 @@ const GameScreen = {
     ctx.fillRect(kx - PIXEL, ky - PIXEL, PIXEL * 2, PIXEL * 2);
 
     ctx.fillStyle = PALETTE.hudNormale;
-    ctx.font = `italic ${SF(16)}px "Courier New", monospace`;
+    ctx.font = `italic ${SFmin(16)}px "Courier New", monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     ctx.fillText('Sei qui · Marche di Vorn', area.x + area.w / 2, area.y + area.h - SF(8));
