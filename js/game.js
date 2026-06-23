@@ -534,20 +534,46 @@ const GameScreen = {
     ctx.fillText('X', close.x + close.w / 2, close.y + close.h / 2 + PIXEL);
   },
 
+  // Pannello stile "cartiglio scuro su pergamena": fondo marrone inchiostro,
+  // bordo esterno doppio, band del titolo in oro pieno con sottolineatura
+  // rossa per richiamo araldico. Tutto il testo dei contenuti userà toni
+  // chiari (crema / oro / accenti vivi) per massimo contrasto sullo scuro.
   drawPanel(area, title) {
     const ctx = this.ctx;
-    ctx.fillStyle = PALETTE.pergScura;
+    // Fondo scuro pieno
+    ctx.fillStyle = PALETTE.hudSfondo;  // #1e1008 — cuoio inchiostrato
     ctx.fillRect(area.x, area.y, area.w, area.h);
-    drawPixelRectStroke(ctx, area.x, area.y, area.w, area.h, PALETTE.inkScuro);
-    drawPixelRectStroke(ctx, area.x + PIXEL * 2, area.y + PIXEL * 2, area.w - PIXEL * 4, area.h - PIXEL * 4, PALETTE.inkMedio);
-    const bandH = SF(26);
-    ctx.fillStyle = PALETTE.inkScuro;
-    ctx.fillRect(area.x + PIXEL * 4, area.y + PIXEL * 4, area.w - PIXEL * 8, bandH);
-    ctx.fillStyle = PALETTE.hudTitolo;
+    // Bordo esterno: oro scuro per stacco netto sulla pergamena
+    drawPixelRectStroke(ctx, area.x, area.y, area.w, area.h, '#8a6030');
+    // Bordo interno: nero per cornice cesellata
+    drawPixelRectStroke(ctx, area.x + PIXEL * 2, area.y + PIXEL * 2,
+      area.w - PIXEL * 4, area.h - PIXEL * 4, '#3a2010');
+    // Band titolo: gradiente piatto verso il marrone più scuro
+    const bandH = SF(28);
+    const bandX = area.x + PIXEL * 4;
+    const bandW = area.w - PIXEL * 8;
+    const bandY = area.y + PIXEL * 4;
+    ctx.fillStyle = '#120a04';   // ancora più scuro per la band
+    ctx.fillRect(bandX, bandY, bandW, bandH);
+    // Sottolineatura oro brillante sotto il titolo (mezzaluna decorativa)
+    ctx.fillStyle = '#e8c050';
+    ctx.fillRect(bandX, bandY + bandH - PIXEL, bandW, PIXEL);
+    // Sottolineatura rossa accento (1 blocco sotto l'oro)
+    ctx.fillStyle = '#8a1010';
+    ctx.fillRect(bandX, bandY + bandH, bandW, PIXEL);
+    // Titolo: oro brillante
+    ctx.fillStyle = '#e8c050';
     ctx.font = `bold ${SF(16)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
-    ctx.fillText(title, area.x + PIXEL * 8, area.y + PIXEL * 4 + bandH / 2);
+    ctx.fillText(title, area.x + PIXEL * 10, bandY + bandH / 2);
+    // Decorazione: rombo oro a destra del titolo
+    const dx = area.x + area.w - PIXEL * 12;
+    const dy = bandY + bandH / 2;
+    ctx.fillStyle = '#e8c050';
+    ctx.fillRect(dx, dy - PIXEL, PIXEL, PIXEL);
+    ctx.fillRect(dx - PIXEL, dy, PIXEL * 3, PIXEL);
+    ctx.fillRect(dx, dy + PIXEL, PIXEL, PIXEL);
   },
 
   drawTopBar(area, compact) {
@@ -662,26 +688,27 @@ const GameScreen = {
     const vlFs = SF(15);
     const rowH = SF(24);
 
-    ctx.fillStyle = PALETTE.hudTitolo;
+    ctx.fillStyle = '#e8c050';
     ctx.font = `bold ${lbFs}px "Courier New", monospace`;
     ctx.fillText('LUOGO', area.x, y + SF(2));
-    ctx.fillStyle = PALETTE.hudNormale;
+    ctx.fillStyle = '#e8d8b0';
     ctx.font = `${vlFs}px "Courier New", monospace`;
     ctx.fillText('Pianura, Marche di Vorn', area.x + labelW, y);
     y += rowH;
 
-    ctx.fillStyle = PALETTE.hudTitolo;
+    ctx.fillStyle = '#e8c050';
     ctx.font = `bold ${lbFs}px "Courier New", monospace`;
     ctx.fillText('META', area.x, y + SF(2));
-    ctx.fillStyle = PALETTE.hudNormale;
+    ctx.fillStyle = '#e8d8b0';
     ctx.font = `${vlFs}px "Courier New", monospace`;
     ctx.fillText(this.meta.destinazione, area.x + labelW, y);
     y += rowH;
 
-    ctx.fillStyle = PALETTE.hudTitolo;
+    ctx.fillStyle = '#e8c050';
     ctx.font = `bold ${lbFs}px "Courier New", monospace`;
     ctx.fillText('ULTIMO', area.x, y + SF(2));
-    ctx.fillStyle = PALETTE.hudEvento;
+    // L'ultimo evento è evidenziato in arancio caldo (richiamo cronaca)
+    ctx.fillStyle = '#ffa040';
     ctx.font = `italic ${vlFs}px "Courier New", monospace`;
     const maxW = area.w - labelW;
     let s = last;
@@ -704,12 +731,12 @@ const GameScreen = {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
 
-    // Nome + titolo: header sempre visibile, su pergamena → ink scuro/nero
-    ctx.fillStyle = PALETTE.inkNero;
+    // Nome + titolo: header su sfondo scuro → crema e oro vivo
+    ctx.fillStyle = '#f0e0b8';   // crema chiara, alta leggibilità
     ctx.font = `bold ${SF(20)}px "Courier New", monospace`;
     ctx.fillText(k.nome, innerX, y);
     y += SF(26);
-    ctx.fillStyle = '#8a1010'; // rosso bandiera scuro, accento titolo
+    ctx.fillStyle = '#e8a838';   // oro vivo per il titolo cavalleresco
     ctx.font = `italic bold ${SF(15)}px "Courier New", monospace`;
     ctx.fillText(k.titolo, innerX, y);
     y += SF(22);
@@ -748,21 +775,23 @@ const GameScreen = {
       const active = this.knightTab === t.key;
       const hovered = this.hoverKnightTab === i;
 
-      // Sfondo: attiva pergamena chiara, altrimenti scura. Hover = un tono su.
-      ctx.fillStyle = active ? PALETTE.pergMedia
-                              : (hovered ? PALETTE.pergScura : PALETTE.hudSfondo);
+      // Sfondo: attiva = bronzo caldo (tab "illuminata"), inattiva = molto
+      // scura; hover una via di mezzo.
+      ctx.fillStyle = active ? '#5a3018'              // bronzo caldo
+                             : (hovered ? '#3a2010' : '#120a04');
       ctx.fillRect(tx, y, tabW, tabH);
+      // Bordo: oro brillante per la attiva, marrone scuro per le altre
       drawPixelRectStroke(ctx, tx, y, tabW, tabH,
-        active ? PALETTE.hudTitolo : PALETTE.hudBordo);
+        active ? '#e8c050' : '#3a2010');
 
-      // Icona
+      // Icona — sempre multicolore (drawTabIcon ignora il colore se l'icona
+      // ha già la sua palette). Funziona bene su entrambi i fondi.
       const iconX = tx + Math.floor((tabW - iconSize) / 2);
       const iconY = y + SF(4);
-      drawTabIcon(ctx, t.key, iconX, iconY, iconSize,
-        active ? PALETTE.inkNero : PALETTE.hudTitolo);
+      drawTabIcon(ctx, t.key, iconX, iconY, iconSize);
 
-      // Label sotto
-      ctx.fillStyle = active ? PALETTE.inkNero : PALETTE.hudTitolo;
+      // Label sotto: oro brillante quando attiva, oro spento quando no
+      ctx.fillStyle = active ? '#f0e0b8' : '#a08038';
       ctx.font = `${active ? 'bold ' : ''}${labelSize}px "Courier New", monospace`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
@@ -784,20 +813,19 @@ const GameScreen = {
     this.drawAttrBar(x, y, w, 'SALUTE',  k.salute,  '#aa2020', '#cc2828'); y += SF(40);
     this.drawOnore(x, y, w, k.onore); y += SF(48);
 
-    // Riepilogo veloce: oro e stato sintetico, label in nero, valori colorati
-    ctx.fillStyle = PALETTE.inkNero;
+    // Riepilogo: ORO e STATO con label oro e valori vivaci sullo scuro
+    ctx.fillStyle = '#e8c050';
     ctx.font = `bold ${SF(14)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText('ORO', x, y);
-    // Oro: simbolo + numero in giallo/oro vivo, leggibile su pergamena
-    ctx.fillStyle = '#b07a08';
+    ctx.fillStyle = '#ffd060';   // oro brillante per le monete
     ctx.font = `bold ${SF(14)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     ctx.fillText(`◉ ${k.oro} mo`, x + w, y);
     y += SF(22);
 
-    // Stato sintetico: colore semantico in base alla condizione
+    // Stato sintetico: colori vivaci su scuro
     const isDead = k.isDead(), isExh = k.isExhausted(), isBrk = k.isBroken();
     const isWounded = k.salute.cur < k.salute.max * 0.4;
     const isTired = k.forza.cur < k.forza.max * 0.3;
@@ -807,10 +835,10 @@ const GameScreen = {
                 : isWounded ? 'Gravemente ferito'
                 : isTired   ? 'Stanco'
                 :             'In forze';
-    const statoColor = (isDead || isWounded) ? '#8a1010'   // rosso
-                     : (isExh || isTired || isBrk) ? '#b06010'  // ambra
-                     :                                 '#1a6a14'; // verde
-    ctx.fillStyle = PALETTE.inkNero;
+    const statoColor = (isDead || isWounded) ? '#ff5050'   // rosso brillante
+                     : (isExh || isTired || isBrk) ? '#ffa030'  // arancio
+                     :                                 '#6ce06a'; // verde brillante
+    ctx.fillStyle = '#e8c050';
     ctx.font = `bold ${SF(14)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.fillText('STATO', x, y);
@@ -844,8 +872,9 @@ const GameScreen = {
     for (const [slot, label, glyph, accent] of slots) {
       const val = k.equip[slot];
 
-      // Riga: sfondo pergamena macchia (più scura della base)
-      ctx.fillStyle = PALETTE.pergMacchia;
+      // Riga: marrone leggermente piu chiaro del fondo pannello (#1e1008)
+      // per evidenziare la riga senza spezzare il tema scuro.
+      ctx.fillStyle = '#2a1808';
       ctx.fillRect(x, y, w, rowH - SF(2));
       // bordo sottile a sinistra colorato (accento araldico)
       ctx.fillStyle = accent;
@@ -853,19 +882,19 @@ const GameScreen = {
 
       const cy = y + (rowH - SF(2)) / 2;
 
-      // Glyph araldico colorato
+      // Glyph araldico colorato (brillante su scuro)
       ctx.fillStyle = accent;
       ctx.font = `bold ${SF(16)}px "Courier New", monospace`;
       ctx.textAlign = 'left';
       ctx.fillText(glyph, x + SF(10), cy);
 
-      // Label in nero
-      ctx.fillStyle = PALETTE.inkNero;
+      // Label: oro brillante
+      ctx.fillStyle = '#e8c050';
       ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
       ctx.fillText(label.toUpperCase(), x + SF(28), cy);
 
-      // Valore: marrone scuro se presente, ink medio italic se vuoto
-      ctx.fillStyle = val ? PALETTE.inkScuro : PALETTE.inkMedio;
+      // Valore: crema se presente, oro spento italic se vuoto
+      ctx.fillStyle = val ? '#e8d8b0' : '#7a5a2a';
       ctx.font = `${val ? '' : 'italic '}${SF(14)}px "Courier New", monospace`;
       ctx.textAlign = 'right';
       ctx.fillText(val || '— vuoto —', x + w - SF(8), cy);
@@ -874,13 +903,12 @@ const GameScreen = {
     }
 
     y += SF(14);
-    // Capacità inventario placeholder
     ctx.textBaseline = 'top';
-    ctx.fillStyle = PALETTE.inkNero;
+    ctx.fillStyle = '#e8c050';
     ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.fillText('CAPIENZA SACCA', x, y);
-    ctx.fillStyle = '#6a3a18';   // marrone cuoio
+    ctx.fillStyle = '#e8d8b0';
     ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     ctx.fillText('3 / 8 oggetti', x + w, y);
@@ -896,16 +924,16 @@ const GameScreen = {
 
     const rowH = SF(46);
     for (const r of k.reputazione) {
-      // Etichetta nome in nero
-      ctx.fillStyle = PALETTE.inkNero;
+      // Etichetta nome in oro brillante
+      ctx.fillStyle = '#e8c050';
       ctx.font = `bold ${SF(14)}px "Courier New", monospace`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       ctx.fillText(r.nome, x, y);
 
-      // Valore numerico a destra, colore semantico scuro per leggibilità
+      // Valore numerico in verde/rosso brillanti su scuro
       const sign = r.val > 0 ? '+' : '';
-      ctx.fillStyle = r.val > 0 ? '#1a6a14' : (r.val < 0 ? '#8a1010' : PALETTE.inkMedio);
+      ctx.fillStyle = r.val > 0 ? '#6ce06a' : (r.val < 0 ? '#ff5050' : '#e8d8b0');
       ctx.font = `bold ${SF(14)}px "Courier New", monospace`;
       ctx.textAlign = 'right';
       ctx.fillText(sign + r.val, x + w, y);
@@ -944,13 +972,13 @@ const GameScreen = {
     const w = area.w;
     let y = area.y;
 
-    ctx.fillStyle = PALETTE.inkNero;
+    ctx.fillStyle = '#e8c050';   // oro brillante
     ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText('ULTIMI AVVENIMENTI', x, y);
     // sottolineatura decorativa rossa
-    ctx.fillStyle = '#8a1010';
+    ctx.fillStyle = '#ff5050';
     ctx.fillRect(x, y + SF(16), SF(72), PIXEL);
     y += SF(24);
 
@@ -960,15 +988,16 @@ const GameScreen = {
     const recent = this.log.slice().reverse();
     const maxBottom = area.y + area.h - SF(8);
 
-    // Scala di colori "su pergamena": dal piu vivo (rosso) al piu spento (medio).
+    // Scala di colori su SCURO: rosso brillante per il piu recente, crema /
+    // oro spento / bruno a degradare per i piu vecchi.
     for (let i = 0; i < recent.length && y < maxBottom; i++) {
       const lines = wrapText(ctx, recent[i], w - SF(14));
-      const color = i === 0 ? '#8a1010'         // rosso bandiera (piu recente)
-                  : i < 3   ? PALETTE.inkNero
-                  : i < 6   ? PALETTE.inkScuro
-                  :           PALETTE.inkMedio;
-      // bullet rosso accentato per il piu recente, ink per gli altri
-      ctx.fillStyle = i === 0 ? '#8a1010' : PALETTE.inkScuro;
+      const color = i === 0 ? '#ff5050'      // appena accaduto
+                  : i < 3   ? '#f0e0b8'      // recenti: crema
+                  : i < 6   ? '#c8a878'      // vecchi: oro spento
+                  :           '#7a5a2a';     // molto vecchi: bruno
+      // bullet rosso per il piu recente, oro spento per gli altri
+      ctx.fillStyle = i === 0 ? '#ff5050' : '#a08038';
       ctx.fillRect(x, y + Math.floor(fs / 2) - PIXEL, PIXEL * 2, PIXEL * 2);
       ctx.fillStyle = color;
       ctx.font = `${i === 0 ? 'bold ' : ''}${fs}px "Courier New", monospace`;
@@ -983,20 +1012,21 @@ const GameScreen = {
 
   drawAttrBar(x, y, w, label, value, color, colorHi) {
     const ctx = this.ctx;
-    // Label: nero pieno su pergamena (massimo contrasto)
-    ctx.fillStyle = PALETTE.inkNero;
+    // Label: oro brillante su scuro
+    ctx.fillStyle = '#e8c050';
     ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.fillText(label, x, y);
-    // Numeri: marrone scuro, leggibili
-    ctx.fillStyle = PALETTE.inkScuro;
+    // Numeri: crema chiara
+    ctx.fillStyle = '#f0e0b8';
     ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     ctx.fillText(`${Math.ceil(value.cur)}/${value.max}`, x + w, y);
     const barY = y + SF(16), barH = SF(11);
-    ctx.fillStyle = '#0e0804';
+    // Scocca della barra: nero più scuro del pannello, bordo oro spento
+    ctx.fillStyle = '#000000';
     ctx.fillRect(x, barY, w, barH);
-    drawPixelRectStroke(this.ctx, x, barY, w, barH, PALETTE.inkScuro);
+    drawPixelRectStroke(this.ctx, x, barY, w, barH, '#5a3a18');
     const fillW = Math.floor((w - PIXEL * 2) * value.cur / value.max);
     ctx.fillStyle = color;
     ctx.fillRect(x + PIXEL, barY + PIXEL, fillW, barH - PIXEL * 2);
@@ -1004,19 +1034,18 @@ const GameScreen = {
     ctx.fillRect(x + PIXEL, barY + PIXEL, fillW, PIXEL);
   },
 
-  // Onore: scala -5/+5, barra centrata. Metà sinistra = negativo (rosso),
-  // metà destra = positivo (verde). Il tratto centrale = 0.
+  // Onore: scala -5/+5, barra centrata.
   drawOnore(x, y, w, val) {
     const ctx = this.ctx;
-    ctx.fillStyle = PALETTE.inkNero;
+    ctx.fillStyle = '#e8c050';
     ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText('ONORE', x, y);
 
     const sign = val > 0 ? '+' : '';
-    // Verde/rosso scuri per restare leggibili anche sulla pergamena chiara
-    ctx.fillStyle = val > 0 ? '#1a6a14' : val < 0 ? '#8a1010' : PALETTE.inkScuro;
+    // Verde/rosso brillanti sul fondo scuro
+    ctx.fillStyle = val > 0 ? '#6ce06a' : val < 0 ? '#e83838' : '#f0e0b8';
     ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     ctx.fillText(sign + val + ' / ±5', x + w, y);
@@ -1026,23 +1055,20 @@ const GameScreen = {
     const segN = 11, gap = PIXEL;
     const segW = Math.floor((w - gap * (segN - 1)) / segN);
     for (let i = 0; i < segN; i++) {
-      const segVal = i - 5;   // -5 … +5
+      const segVal = i - 5;
       const bx = x + i * (segW + gap);
-      // Sfondo
-      ctx.fillStyle = '#0e0804';
+      ctx.fillStyle = '#000000';
       ctx.fillRect(bx, barY, segW, barH);
-      // Riempimento se "attivo"
       const active = (val > 0 && segVal > 0 && segVal <= val) ||
                      (val < 0 && segVal < 0 && segVal >= val);
       if (active) {
-        ctx.fillStyle = val > 0 ? '#2a7a1a' : '#aa2020';
-        ctx.fillRect(bx + PIXEL, barY + PIXEL, segW - PIXEL * 2, barH - PIXEL * 2);
         ctx.fillStyle = val > 0 ? '#3a9a22' : '#cc2828';
+        ctx.fillRect(bx + PIXEL, barY + PIXEL, segW - PIXEL * 2, barH - PIXEL * 2);
+        ctx.fillStyle = val > 0 ? '#6ce06a' : '#ff5050';
         ctx.fillRect(bx + PIXEL, barY + PIXEL, segW - PIXEL * 2, PIXEL);
       }
-      // Bordo: il segmento centrale (zero) è oro vivo per evidenziarlo
       drawPixelRectStroke(ctx, bx, barY, segW, barH,
-        segVal === 0 ? '#e8c050' : PALETTE.inkScuro);
+        segVal === 0 ? '#e8c050' : '#5a3a18');
     }
   },
 
@@ -1086,12 +1112,14 @@ const GameScreen = {
     let y = area.y + PIXEL * 4 + SF(26) + SF(10);
 
     const drawSection = (title, body) => {
-      ctx.fillStyle = PALETTE.hudTitolo;
+      // Titolo sezione: oro brillante su scuro
+      ctx.fillStyle = '#e8c050';
       ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       ctx.fillText(title, x, y); y += SF(20);
-      ctx.fillStyle = PALETTE.hudNormale;
+      // Corpo: crema chiara
+      ctx.fillStyle = '#e8d8b0';
       ctx.font = `${SF(14)}px "Courier New", monospace`;
       const lines = Array.isArray(body) ? body : [body];
       for (const line of lines) { ctx.fillText(line, x, y); y += SF(18); }
@@ -1127,16 +1155,17 @@ const GameScreen = {
     const lineH = SF(19);
     const eventGap = SF(7);
 
-    // Scala di colori su pergamena: rosso vivo per piu recente, poi ink scuri
-    // a degradare. Garantisce massima leggibilita anche per gli eventi vecchi.
+    // Scala di colori su sfondo SCURO: rosso brillante per l'evento appena
+    // accaduto, poi crema viva, e oro spento a degradare per gli eventi
+    // vecchi. Tutti scelti per restare leggibili sul fondo cuoio inchiostrato.
     const colors = [
-      '#8a1010',          // appena successo: rosso bandiera
-      PALETTE.inkNero,    // recenti: nero pieno
-      PALETTE.inkNero,
-      PALETTE.inkScuro,
-      PALETTE.inkScuro,
-      PALETTE.inkMedio,
-      PALETTE.inkMedio,
+      '#ff5050',   // appena accaduto: rosso brillante
+      '#f0e0b8',   // recenti: crema chiara
+      '#e8d8b0',
+      '#c8a878',   // mezzo-vecchio: oro spento
+      '#c8a878',
+      '#8a7048',   // vecchio: bruno chiaro
+      '#7a5a2a',   // molto vecchio: bruno spento
     ];
     const indentX = SF(14);
     const wrapW = w - indentX;
@@ -1160,14 +1189,15 @@ const GameScreen = {
       if (ln.separator) { y += eventGap; continue; }
       if (y + lineH > logBottom) break;
       if (ln.isFirst) {
-        // bullet a inizio evento: rosso per gli eventi piu recenti
-        const bulletCol = ln.color === '#8a1010' ? '#8a1010' : PALETTE.inkScuro;
+        // bullet: rosso brillante se è l'evento appena accaduto, oro spento
+        // per gli altri (entrambi ben visibili sul fondo scuro).
+        const bulletCol = ln.color === '#ff5050' ? '#ff5050' : '#a08038';
         ctx.fillStyle = bulletCol;
         ctx.fillRect(x, y + Math.floor(fs / 2) - PIXEL, PIXEL * 3, PIXEL * 2);
       }
       ctx.fillStyle = ln.color;
       // Bold solo per la riga piu recente per dare gerarchia
-      const isMostRecent = ln.color === '#8a1010';
+      const isMostRecent = ln.color === '#ff5050';
       ctx.font = `${isMostRecent ? 'bold ' : ''}${fs}px "Courier New", monospace`;
       ctx.fillText(ln.text, x + indentX, y);
       y += lineH;
