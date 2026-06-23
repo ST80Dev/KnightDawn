@@ -76,6 +76,8 @@ const GameScreen = {
     this.cam = { cx: this.knightPos.x + 0.5, cy: this.knightPos.y + 0.5, step: MAP_ZOOM_DEFAULT };
     this.activeOverlay = null;
     this.dragging = false;
+
+    Save.startAutosave();
   },
 
   // ─── Layout ───────────────────────────────────────────────────────────────
