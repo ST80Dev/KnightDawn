@@ -256,3 +256,125 @@ function drawCompassRose(ctx, cx, cy, r) {
   ctx.fillStyle = PALETTE.inkScuro;
   ctx.fillRect(snap(cx) - PIXEL, snap(cy) - PIXEL, PIXEL * 2, PIXEL * 2);
 }
+
+// ─── Word wrap su testo ──────────────────────────────────────────────────
+// Spezza una stringa in righe la cui larghezza misurata col font corrente
+// di ctx non superi maxWidth. Gestisce parole singole più lunghe del
+// margine spezzandole a forza.
+function wrapText(ctx, text, maxWidth) {
+  if (!text) return [''];
+  const out = [];
+  const paragraphs = String(text).split('\n');
+  for (const para of paragraphs) {
+    if (!para.length) { out.push(''); continue; }
+    const words = para.split(/\s+/);
+    let cur = '';
+    for (const w of words) {
+      if (!w) continue;
+      const test = cur ? cur + ' ' + w : w;
+      if (ctx.measureText(test).width <= maxWidth) {
+        cur = test;
+      } else {
+        if (cur) { out.push(cur); cur = ''; }
+        // parola sola più lunga del margine: spezza a forza
+        if (ctx.measureText(w).width > maxWidth) {
+          let chunk = '';
+          for (const ch of w) {
+            if (ctx.measureText(chunk + ch).width > maxWidth) {
+              out.push(chunk); chunk = ch;
+            } else chunk += ch;
+          }
+          cur = chunk;
+        } else {
+          cur = w;
+        }
+      }
+    }
+    if (cur) out.push(cur);
+  }
+  return out;
+}
+
+// ─── Icone pixel-art per tab/HUD ─────────────────────────────────────────
+// Ogni icona è definita come pattern di stringhe: '#' = blocco pieno, '.' = vuoto.
+// drawPixelPattern() scala ogni char in un blocco quadrato (size/cols x size/rows).
+
+function drawPixelPattern(ctx, pattern, x, y, size, color) {
+  const rows = pattern.length;
+  const cols = pattern[0].length;
+  const bw = Math.max(1, Math.floor(size / cols));
+  const bh = Math.max(1, Math.floor(size / rows));
+  const offX = x + Math.floor((size - bw * cols) / 2);
+  const offY = y + Math.floor((size - bh * rows) / 2);
+  ctx.fillStyle = color;
+  for (let r = 0; r < rows; r++) {
+    const row = pattern[r];
+    for (let c = 0; c < cols; c++) {
+      if (row[c] === '#') ctx.fillRect(offX + c * bw, offY + r * bh, bw, bh);
+    }
+  }
+}
+
+const ICON_SHIELD = [
+  '..######..',
+  '.########.',
+  '##########',
+  '##########',
+  '####..####',
+  '###....###',
+  '##########',
+  '.########.',
+  '..######..',
+  '...####...',
+];
+
+const ICON_SWORDS = [
+  '#........#',
+  '##......##',
+  '###....###',
+  '.###..###.',
+  '..######..',
+  '..######..',
+  '.###..###.',
+  '###....###',
+  '##......##',
+  '#........#',
+];
+
+const ICON_CROWN = [
+  '..........',
+  '#...##...#',
+  '##..##..##',
+  '###.##.###',
+  '##########',
+  '##########',
+  '##########',
+  '##########',
+  '##########',
+  '..........',
+];
+
+const ICON_SCROLL = [
+  '.########.',
+  '##########',
+  '##......##',
+  '##.####.##',
+  '##......##',
+  '##.####.##',
+  '##......##',
+  '##.####.##',
+  '##########',
+  '.########.',
+];
+
+const ICON_PROFILE_TABS = {
+  profilo: ICON_SHIELD,
+  equip:   ICON_SWORDS,
+  reput:   ICON_CROWN,
+  diario:  ICON_SCROLL,
+};
+
+function drawTabIcon(ctx, key, x, y, size, color) {
+  const pat = ICON_PROFILE_TABS[key];
+  if (pat) drawPixelPattern(ctx, pat, x, y, size, color);
+}

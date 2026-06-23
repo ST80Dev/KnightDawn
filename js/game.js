@@ -55,6 +55,19 @@ const GameScreen = {
       { label: 'DIARIO',   key: 'log' },
       { label: 'REGIONE',  key: 'mini' },
     ];
+
+    // Tab del pannello STATO CAVALIERE: una sottosezione alla volta per
+    // garantire leggibilità (font generosi, niente wrap brutale).
+    this.knightTab = 'profilo';
+    this.knightTabs = [
+      { key: 'profilo', label: 'PROFILO' },
+      { key: 'equip',   label: 'EQUIP'   },
+      { key: 'reput',   label: 'FAZIONI' },
+      { key: 'diario',  label: 'DIARIO'  },
+    ];
+    this.knightTabRects = [];
+    this.hoverKnightTab = -1;
+    this.pressedKnightTab = -1;
   },
 
   onEnter() {
@@ -185,11 +198,12 @@ const GameScreen = {
     const hb = btnHitIndex(this.actionButtons, p.x, p.y);
     const hn = compact ? btnHitIndex(this.navButtons, p.x, p.y) : -1;
     const hz = compact ? btnHitIndex(this.zoomButtons, p.x, p.y) : -1;
-    const onBtn = hb >= 0 || hn >= 0 || hz >= 0;
+    const hk = !compact ? btnHitIndex(this.knightTabRects, p.x, p.y) : -1;
+    const onBtn = hb >= 0 || hn >= 0 || hz >= 0 || hk >= 0;
     document.getElementById('game').style.cursor =
       onBtn ? 'pointer' : (this.inMap(p) ? 'grab' : 'default');
-    if (hb !== this.hoverBtn || hn !== this.hoverNav || hz !== this.hoverZoom) {
-      this.hoverBtn = hb; this.hoverNav = hn; this.hoverZoom = hz;
+    if (hb !== this.hoverBtn || hn !== this.hoverNav || hz !== this.hoverZoom || hk !== this.hoverKnightTab) {
+      this.hoverBtn = hb; this.hoverNav = hn; this.hoverZoom = hz; this.hoverKnightTab = hk;
       window.GameRender.invalidate();
     }
   },
@@ -202,8 +216,9 @@ const GameScreen = {
     this.pressedBtn = btnHitIndex(this.actionButtons, p.x, p.y);
     this.pressedNav = compact ? btnHitIndex(this.navButtons, p.x, p.y) : -1;
     this.pressedZoom = compact ? btnHitIndex(this.zoomButtons, p.x, p.y) : -1;
+    this.pressedKnightTab = !compact ? btnHitIndex(this.knightTabRects, p.x, p.y) : -1;
 
-    if (this.pressedBtn < 0 && this.pressedNav < 0 && this.pressedZoom < 0 && this.inMap(p)) {
+    if (this.pressedBtn < 0 && this.pressedNav < 0 && this.pressedZoom < 0 && this.pressedKnightTab < 0 && this.inMap(p)) {
       // Nessun pulsante: inizia il pan della mappa. Tracciamo anche start e
       // movimento totale: se l'utente non sposta abbastanza, il pointerup
       // sarà interpretato come "click sulla tile" per il viaggio.
@@ -213,7 +228,8 @@ const GameScreen = {
       this.dragMoved = false;
       return;
     }
-    this.hoverBtn = this.pressedBtn; this.hoverNav = this.pressedNav; this.hoverZoom = this.pressedZoom;
+    this.hoverBtn = this.pressedBtn; this.hoverNav = this.pressedNav;
+    this.hoverZoom = this.pressedZoom; this.hoverKnightTab = this.pressedKnightTab;
     window.GameRender.invalidate();
   },
 
@@ -246,13 +262,18 @@ const GameScreen = {
     const bi = btnHitIndex(this.actionButtons, p.x, p.y);
     const ni = compact ? btnHitIndex(this.navButtons, p.x, p.y) : -1;
     const zi = compact ? btnHitIndex(this.zoomButtons, p.x, p.y) : -1;
+    const ki = !compact ? btnHitIndex(this.knightTabRects, p.x, p.y) : -1;
     const fireB = bi >= 0 && bi === this.pressedBtn;
     const fireN = ni >= 0 && ni === this.pressedNav;
     const fireZ = zi >= 0 && zi === this.pressedZoom;
-    this.pressedBtn = this.pressedNav = this.pressedZoom = -1;
-    if (type === 'touch') { this.hoverBtn = this.hoverNav = this.hoverZoom = -1; }
+    const fireK = ki >= 0 && ki === this.pressedKnightTab;
+    this.pressedBtn = this.pressedNav = this.pressedZoom = this.pressedKnightTab = -1;
+    if (type === 'touch') { this.hoverBtn = this.hoverNav = this.hoverZoom = this.hoverKnightTab = -1; }
 
-    if (fireZ) {
+    if (fireK) {
+      this.knightTab = this.knightTabs[ki].key;
+      window.GameRender.invalidate();
+    } else if (fireZ) {
       MapRenderer.zoom(this.cam, this.zoomButtons[zi].key === 'in' ? 1 : -1);
       window.GameRender.invalidate();
     } else if (fireN) {
@@ -270,8 +291,8 @@ const GameScreen = {
   onPointerCancel() {
     this.dragging = false;
     this.dragMoved = false;
-    this.pressedBtn = this.pressedNav = this.pressedZoom = -1;
-    this.hoverBtn = this.hoverNav = this.hoverZoom = -1;
+    this.pressedBtn = this.pressedNav = this.pressedZoom = this.pressedKnightTab = -1;
+    this.hoverBtn = this.hoverNav = this.hoverZoom = this.hoverKnightTab = -1;
     this.overlayPressed = null;
     window.GameRender.invalidate();
   },
@@ -446,7 +467,7 @@ const GameScreen = {
       ctx.fillRect(b.x, b.y, b.w, b.h);
       drawPixelRectStroke(ctx, b.x, b.y, b.w, b.h, hovered ? PALETTE.hudTitolo : PALETTE.hudBordo);
       ctx.fillStyle = b.disabled ? PALETTE.hudDim : (hovered ? PALETTE.inkNero : PALETTE.hudTitolo);
-      ctx.font = `${hovered ? 'bold ' : ''}${SF(13)}px "Courier New", monospace`;
+      ctx.font = `${hovered ? 'bold ' : ''}${SF(15)}px "Courier New", monospace`;
       ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2);
     });
   },
@@ -636,44 +657,54 @@ const GameScreen = {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     let y = area.y;
+    const labelW = SF(80);
+    const lbFs = SF(13);
+    const vlFs = SF(15);
+    const rowH = SF(24);
 
     ctx.fillStyle = PALETTE.hudTitolo;
-    ctx.font = `bold ${SF(12)}px "Courier New", monospace`;
-    ctx.fillText('LUOGO', area.x, y);
+    ctx.font = `bold ${lbFs}px "Courier New", monospace`;
+    ctx.fillText('LUOGO', area.x, y + SF(2));
     ctx.fillStyle = PALETTE.hudNormale;
-    ctx.font = `${SF(13)}px "Courier New", monospace`;
-    ctx.fillText('Pianura, Marche di Vorn', area.x + SF(64), y - SF(1));
-    y += SF(20);
+    ctx.font = `${vlFs}px "Courier New", monospace`;
+    ctx.fillText('Pianura, Marche di Vorn', area.x + labelW, y);
+    y += rowH;
 
     ctx.fillStyle = PALETTE.hudTitolo;
-    ctx.font = `bold ${SF(12)}px "Courier New", monospace`;
-    ctx.fillText('META', area.x, y);
+    ctx.font = `bold ${lbFs}px "Courier New", monospace`;
+    ctx.fillText('META', area.x, y + SF(2));
     ctx.fillStyle = PALETTE.hudNormale;
-    ctx.font = `${SF(13)}px "Courier New", monospace`;
-    ctx.fillText(this.meta.destinazione, area.x + SF(64), y - SF(1));
-    y += SF(20);
+    ctx.font = `${vlFs}px "Courier New", monospace`;
+    ctx.fillText(this.meta.destinazione, area.x + labelW, y);
+    y += rowH;
 
     ctx.fillStyle = PALETTE.hudTitolo;
-    ctx.font = `bold ${SF(12)}px "Courier New", monospace`;
-    ctx.fillText('ULTIMO', area.x, y);
+    ctx.font = `bold ${lbFs}px "Courier New", monospace`;
+    ctx.fillText('ULTIMO', area.x, y + SF(2));
     ctx.fillStyle = PALETTE.hudEvento;
-    ctx.font = `italic ${SF(13)}px "Courier New", monospace`;
-    const maxW = area.w - SF(64);
+    ctx.font = `italic ${vlFs}px "Courier New", monospace`;
+    const maxW = area.w - labelW;
     let s = last;
     while (s.length && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
     if (s.length < last.length) s += '…';
-    ctx.fillText(s, area.x + SF(64), y - SF(1));
+    ctx.fillText(s, area.x + labelW, y);
   },
 
+  // Pannello STATO CAVALIERE: nome+titolo in alto, tab bar con icone, poi
+  // il contenuto della tab attiva (PROFILO/EQUIP/FAZIONI/DIARIO). Una sola
+  // sezione alla volta = font generosi, nessun affollamento, ogni info ha
+  // il suo posto.
   drawKnightStatus(area) {
     const ctx = this.ctx;
     const k = this.knight;
     const innerX = area.x + PIXEL * 8;
+    const innerW = area.w - PIXEL * 16;
     let y = area.y + PIXEL * 4 + SF(26) + SF(12);
 
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
 
+    // Nome + titolo: header sempre visibile
     ctx.fillStyle = PALETTE.hudTitolo;
     ctx.font = `bold ${SF(20)}px "Courier New", monospace`;
     ctx.fillText(k.nome, innerX, y);
@@ -681,47 +712,245 @@ const GameScreen = {
     ctx.fillStyle = PALETTE.hudNormale;
     ctx.font = `italic ${SF(15)}px "Courier New", monospace`;
     ctx.fillText(k.titolo, innerX, y);
-    y += SF(28);
+    y += SF(22);
 
-    const barW = area.w - PIXEL * 16;
-    this.drawAttrBar(innerX, y, barW, 'FORZA',   k.forza,   '#2a7a1a', '#3a9a22'); y += SF(28);
-    this.drawAttrBar(innerX, y, barW, 'VOLONTÀ', k.volonta, '#4a3ab0', '#6050c8'); y += SF(28);
-    this.drawAttrBar(innerX, y, barW, 'SALUTE',  k.salute,  '#aa2020', '#cc2828'); y += SF(28);
-    this.drawOnore(innerX, y, barW, k.onore); y += SF(28);
+    // Tab bar orizzontale (4 icone con label sotto)
+    y = this.drawKnightTabs(area, innerX, y, innerW);
+    y += SF(14);
 
-    ctx.fillStyle = PALETTE.hudTitolo;
-    ctx.font = `bold ${SF(15)}px "Courier New", monospace`;
-    ctx.fillText('EQUIPAGGIAMENTO', innerX, y); y += SF(22);
-    ctx.fillStyle = PALETTE.hudNormale;
-    ctx.font = `${SF(14)}px "Courier New", monospace`;
-    const equipSlots = [
-      ['arma', 'Arma'], ['armatura', 'Armatura'], ['scudo', 'Scudo'],
-      ['speciale', 'Speciale'], ['viaggio', 'Viaggio'],
-    ];
-    for (const [slot, label] of equipSlots) {
-      const val = k.equip[slot];
-      ctx.fillStyle = val ? PALETTE.hudNormale : PALETTE.hudDim;
-      ctx.fillText((val ? '· ' : '  ') + label + ': ' + (val || '—'), innerX, y);
-      y += SF(20);
+    // Contenuto della tab attiva
+    const contentArea = { x: innerX, y, w: innerW, h: area.y + area.h - y - PIXEL * 8 };
+    switch (this.knightTab) {
+      case 'profilo': this.drawTabProfilo(contentArea); break;
+      case 'equip':   this.drawTabEquip(contentArea);   break;
+      case 'reput':   this.drawTabReput(contentArea);   break;
+      case 'diario':  this.drawTabDiario(contentArea);  break;
     }
+  },
+
+  // Disegna la tab bar e popola this.knightTabRects per hit-test.
+  // Ogni tab: icona al centro + label sotto. Stato attivo evidenziato.
+  drawKnightTabs(area, innerX, y, innerW) {
+    const ctx = this.ctx;
+    const n = this.knightTabs.length;
+    const gap = SF(4);
+    const tabW = Math.floor((innerW - gap * (n - 1)) / n);
+    const tabH = SF(48);
+    const iconSize = SF(22);
+    const labelSize = SF(10);
+
+    this.knightTabRects = [];
+    this.knightTabs.forEach((t, i) => {
+      const tx = innerX + i * (tabW + gap);
+      const rect = { x: tx, y, w: tabW, h: tabH, key: t.key };
+      this.knightTabRects.push(rect);
+
+      const active = this.knightTab === t.key;
+      const hovered = this.hoverKnightTab === i;
+
+      // Sfondo: attiva pergamena chiara, altrimenti scura. Hover = un tono su.
+      ctx.fillStyle = active ? PALETTE.pergMedia
+                              : (hovered ? PALETTE.pergScura : PALETTE.hudSfondo);
+      ctx.fillRect(tx, y, tabW, tabH);
+      drawPixelRectStroke(ctx, tx, y, tabW, tabH,
+        active ? PALETTE.hudTitolo : PALETTE.hudBordo);
+
+      // Icona
+      const iconX = tx + Math.floor((tabW - iconSize) / 2);
+      const iconY = y + SF(4);
+      drawTabIcon(ctx, t.key, iconX, iconY, iconSize,
+        active ? PALETTE.inkNero : PALETTE.hudTitolo);
+
+      // Label sotto
+      ctx.fillStyle = active ? PALETTE.inkNero : PALETTE.hudTitolo;
+      ctx.font = `${active ? 'bold ' : ''}${labelSize}px "Courier New", monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(t.label, tx + tabW / 2, y + tabH - SF(13));
+    });
+    return y + tabH;
+  },
+
+  // PROFILO: 4 attributi (Forza/Volontà/Salute/Onore) con barre grandi.
+  drawTabProfilo(area) {
+    const ctx = this.ctx;
+    const k = this.knight;
+    let y = area.y;
+    const x = area.x;
+    const w = area.w;
+
+    this.drawAttrBar(x, y, w, 'FORZA',   k.forza,   '#2a7a1a', '#3a9a22'); y += SF(40);
+    this.drawAttrBar(x, y, w, 'VOLONTÀ', k.volonta, '#4a3ab0', '#6050c8'); y += SF(40);
+    this.drawAttrBar(x, y, w, 'SALUTE',  k.salute,  '#aa2020', '#cc2828'); y += SF(40);
+    this.drawOnore(x, y, w, k.onore); y += SF(48);
+
+    // Riepilogo veloce: oro e stato sintetico
+    ctx.fillStyle = PALETTE.hudTitolo;
+    ctx.font = `bold ${SF(14)}px "Courier New", monospace`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText('ORO', x, y);
+    ctx.fillStyle = PALETTE.hudEvento;
+    ctx.font = `${SF(14)}px "Courier New", monospace`;
+    ctx.textAlign = 'right';
+    ctx.fillText(`${k.oro} mo`, x + w, y);
+    y += SF(22);
+
+    // Stato sintetico (se applicabile)
+    const stato = k.isDead() ? 'MORTO'
+                : k.isExhausted() ? 'Esausto'
+                : k.isBroken() ? 'Spezzato nello spirito'
+                : k.salute.cur < k.salute.max * 0.4 ? 'Gravemente ferito'
+                : k.forza.cur < k.forza.max * 0.3 ? 'Stanco'
+                : 'In forze';
+    ctx.fillStyle = PALETTE.hudTitolo;
+    ctx.font = `bold ${SF(14)}px "Courier New", monospace`;
+    ctx.textAlign = 'left';
+    ctx.fillText('STATO', x, y);
+    ctx.fillStyle = PALETTE.hudNormale;
+    ctx.font = `italic ${SF(14)}px "Courier New", monospace`;
+    ctx.textAlign = 'right';
+    ctx.fillText(stato, x + w, y);
+  },
+
+  // EQUIP: 5 slot di equipaggiamento, ognuno con etichetta a sinistra e
+  // contenuto a destra, font generoso.
+  drawTabEquip(area) {
+    const ctx = this.ctx;
+    const k = this.knight;
+    const x = area.x;
+    const w = area.w;
+    let y = area.y;
+
+    const slots = [
+      ['arma',     'Arma',     '⚔'],
+      ['armatura', 'Armatura', '◇'],
+      ['scudo',    'Scudo',    '◈'],
+      ['speciale', 'Speciale', '✦'],
+      ['viaggio',  'Viaggio',  '◊'],
+    ];
+    const rowH = SF(30);
+    ctx.textBaseline = 'middle';
+    for (const [slot, label] of slots) {
+      const val = k.equip[slot];
+
+      // Riga: sfondo alternato leggero
+      ctx.fillStyle = PALETTE.hudSfondoAlt;
+      ctx.fillRect(x, y, w, rowH - SF(2));
+
+      // Label
+      ctx.fillStyle = PALETTE.hudTitolo;
+      ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
+      ctx.textAlign = 'left';
+      ctx.fillText(label.toUpperCase(), x + SF(8), y + (rowH - SF(2)) / 2);
+
+      // Valore
+      ctx.fillStyle = val ? PALETTE.hudNormale : PALETTE.hudDim;
+      ctx.font = `${val ? '' : 'italic '}${SF(14)}px "Courier New", monospace`;
+      ctx.textAlign = 'right';
+      ctx.fillText(val || '— vuoto —', x + w - SF(8), y + (rowH - SF(2)) / 2);
+
+      y += rowH;
+    }
+
     y += SF(10);
+    // Capacità inventario placeholder (riassunto per ora)
+    ctx.fillStyle = PALETTE.hudTitolo;
+    ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
+    ctx.textAlign = 'left';
+    ctx.fillText('CAPIENZA SACCA', x, y);
+    ctx.fillStyle = PALETTE.hudNormale;
+    ctx.font = `${SF(13)}px "Courier New", monospace`;
+    ctx.textAlign = 'right';
+    ctx.fillText('3 / 8 oggetti', x + w, y);
+  },
+
+  // FAZIONI: ognuna su una riga con la sua barra -5/+5 ben visibile.
+  drawTabReput(area) {
+    const ctx = this.ctx;
+    const k = this.knight;
+    const x = area.x;
+    const w = area.w;
+    let y = area.y;
+
+    const rowH = SF(46);
+    for (const r of k.reputazione) {
+      // Etichetta nome
+      ctx.fillStyle = PALETTE.hudTitolo;
+      ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillText(r.nome, x, y);
+
+      // Valore numerico a destra
+      const sign = r.val > 0 ? '+' : '';
+      ctx.fillStyle = r.val > 0 ? '#3a9a22' : (r.val < 0 ? '#aa2020' : PALETTE.hudNormale);
+      ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
+      ctx.textAlign = 'right';
+      ctx.fillText(sign + r.val, x + w, y);
+
+      // Mini-barra orizzontale a 11 segmenti (-5..+5)
+      const barY = y + SF(18), barH = SF(10);
+      const segN = 11, gap = PIXEL;
+      const segW = Math.floor((w - gap * (segN - 1)) / segN);
+      for (let i = 0; i < segN; i++) {
+        const segVal = i - 5;
+        const bx = x + i * (segW + gap);
+        ctx.fillStyle = '#0e0804';
+        ctx.fillRect(bx, barY, segW, barH);
+        const active = (r.val > 0 && segVal > 0 && segVal <= r.val) ||
+                       (r.val < 0 && segVal < 0 && segVal >= r.val);
+        if (active) {
+          ctx.fillStyle = r.val > 0 ? '#2a7a1a' : '#aa2020';
+          ctx.fillRect(bx + PIXEL, barY + PIXEL, segW - PIXEL * 2, barH - PIXEL * 2);
+          ctx.fillStyle = r.val > 0 ? '#3a9a22' : '#cc2828';
+          ctx.fillRect(bx + PIXEL, barY + PIXEL, segW - PIXEL * 2, PIXEL);
+        }
+        drawPixelRectStroke(ctx, bx, barY, segW, barH,
+          segVal === 0 ? PALETTE.hudNormale : PALETTE.inkScuro);
+      }
+      y += rowH;
+    }
+  },
+
+  // DIARIO: gli ultimi eventi personali del cavaliere, word-wrappati.
+  // Per ora condivide la stessa fonte di cronaca eventi (this.log) ma con
+  // formattazione differente (timeline, etichetta turno futuro).
+  drawTabDiario(area) {
+    const ctx = this.ctx;
+    const x = area.x;
+    const w = area.w;
+    let y = area.y;
 
     ctx.fillStyle = PALETTE.hudTitolo;
-    ctx.font = `bold ${SF(15)}px "Courier New", monospace`;
-    ctx.fillText('REPUTAZIONE', innerX, y); y += SF(22);
-    ctx.font = `${SF(14)}px "Courier New", monospace`;
-    for (const r of k.reputazione) {
-      ctx.fillStyle = PALETTE.hudNormale;
-      ctx.fillText(r.nome, innerX, y);
-      const dotW = SF(9);
-      const dotsX = area.x + area.w - PIXEL * 8 - dotW * 7;
-      for (let i = -3; i <= 3; i++) {
-        const filled = (r.val >= 0 && i > 0 && i <= r.val) || (r.val < 0 && i < 0 && i >= r.val);
-        ctx.fillStyle = i === 0 ? PALETTE.inkMedio : (filled ? (r.val > 0 ? '#3a9a22' : '#aa2020') : PALETTE.inkMedio);
-        const dx = dotsX + (i + 3) * dotW;
-        ctx.fillRect(dx, y + SF(3), dotW - PIXEL, dotW - PIXEL);
+    ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText('ULTIMI AVVENIMENTI', x, y);
+    y += SF(22);
+
+    const fs = SF(13);
+    ctx.font = `${fs}px "Courier New", monospace`;
+    const lineH = SF(17);
+    const recent = this.log.slice().reverse();
+    const maxBottom = area.y + area.h - SF(8);
+
+    for (let i = 0; i < recent.length && y < maxBottom; i++) {
+      // Pallino + testo wrappato
+      const lines = wrapText(ctx, recent[i], w - SF(14));
+      const color = i === 0 ? PALETTE.hudEvento
+                  : i < 3   ? PALETTE.hudNormale
+                  : i < 6   ? PALETTE.hudDim
+                  :           PALETTE.hudMorto;
+      ctx.fillStyle = color;
+      // bullet
+      ctx.fillRect(x, y + Math.floor(fs / 2) - PIXEL, PIXEL * 2, PIXEL * 2);
+      for (let j = 0; j < lines.length; j++) {
+        if (y >= maxBottom) break;
+        ctx.fillText(lines[j], x + SF(12), y);
+        y += lineH;
       }
-      y += SF(20);
+      y += SF(4); // separatore fra eventi
     }
   },
 
@@ -849,23 +1078,57 @@ const GameScreen = {
     ]);
   },
 
+  // CRONACA EVENTI: log scorrevole dal più recente al più vecchio.
+  // Word-wrap automatico sulla larghezza del pannello, font generoso,
+  // colori sfumati per anzianità. Disegnato dal basso verso l'alto
+  // (riga più recente in alto, riga più vecchia in basso).
   drawLog(area, bottomY) {
     const ctx = this.ctx;
-    const x = area.x + PIXEL * 8;
-    const yStart = area.y + PIXEL * 4 + SF(26) + SF(4);
+    const innerPad = SF(12);
+    const x = area.x + innerPad;
+    const w = area.w - innerPad * 2;
+    const yStart = area.y + PIXEL * 4 + SF(26) + SF(8);
     const logBottom = bottomY - PIXEL * 2;
 
-    const colors = [PALETTE.hudEvento, PALETTE.hudNormale, PALETTE.hudNormale, PALETTE.hudDim, PALETTE.hudMorto];
-    ctx.font = `${SF(14)}px "Courier New", monospace`;
+    const fs = SF(15);
+    ctx.font = `${fs}px "Courier New", monospace`;
     ctx.textAlign = 'left';
-    ctx.textBaseline = 'bottom';
-    const lineH = SF(20);
+    ctx.textBaseline = 'top';
+    const lineH = SF(19);
+    const eventGap = SF(6);
+
+    // Costruisco le righe wrap dal piu recente: ognuna ha (text, color)
+    // Smetto quando ho riempito la zona.
+    const colors = [PALETTE.hudEvento, PALETTE.hudNormale, PALETTE.hudNormale,
+                    PALETTE.hudDim, PALETTE.hudDim, PALETTE.hudMorto, PALETTE.hudMorto];
+    const indentX = SF(14);
+    const wrapW = w - indentX;
     const recent = this.log.slice().reverse();
-    let yy = logBottom;
-    for (let i = 0; i < recent.length && yy > yStart; i++) {
-      ctx.fillStyle = colors[Math.min(i, colors.length - 1)];
-      ctx.fillText('> ' + recent[i], x, yy);
-      yy -= lineH;
+    const lines = []; // {text, color, isFirst}
+    let used = 0;
+    for (let i = 0; i < recent.length; i++) {
+      const color = colors[Math.min(i, colors.length - 1)];
+      const ws = wrapText(ctx, recent[i], wrapW);
+      const blockH = ws.length * lineH + eventGap;
+      if (used + blockH > (logBottom - yStart) && lines.length > 0) break;
+      for (let j = 0; j < ws.length; j++) {
+        lines.push({ text: ws[j], color, isFirst: j === 0 });
+      }
+      lines.push({ separator: true });
+      used += blockH;
+    }
+
+    let y = yStart;
+    for (const ln of lines) {
+      if (ln.separator) { y += eventGap; continue; }
+      if (y + lineH > logBottom) break;
+      ctx.fillStyle = ln.color;
+      if (ln.isFirst) {
+        // bullet a inizio evento (quadratino pieno)
+        ctx.fillRect(x, y + Math.floor(fs / 2) - PIXEL, PIXEL * 2, PIXEL * 2);
+      }
+      ctx.fillText(ln.text, x + indentX, y);
+      y += lineH;
     }
   },
 
