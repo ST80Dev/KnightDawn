@@ -704,13 +704,13 @@ const GameScreen = {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
 
-    // Nome + titolo: header sempre visibile
-    ctx.fillStyle = PALETTE.hudTitolo;
+    // Nome + titolo: header sempre visibile, su pergamena → ink scuro/nero
+    ctx.fillStyle = PALETTE.inkNero;
     ctx.font = `bold ${SF(20)}px "Courier New", monospace`;
     ctx.fillText(k.nome, innerX, y);
     y += SF(26);
-    ctx.fillStyle = PALETTE.hudNormale;
-    ctx.font = `italic ${SF(15)}px "Courier New", monospace`;
+    ctx.fillStyle = '#8a1010'; // rosso bandiera scuro, accento titolo
+    ctx.font = `italic bold ${SF(15)}px "Courier New", monospace`;
     ctx.fillText(k.titolo, innerX, y);
     y += SF(22);
 
@@ -784,31 +784,38 @@ const GameScreen = {
     this.drawAttrBar(x, y, w, 'SALUTE',  k.salute,  '#aa2020', '#cc2828'); y += SF(40);
     this.drawOnore(x, y, w, k.onore); y += SF(48);
 
-    // Riepilogo veloce: oro e stato sintetico
-    ctx.fillStyle = PALETTE.hudTitolo;
+    // Riepilogo veloce: oro e stato sintetico, label in nero, valori colorati
+    ctx.fillStyle = PALETTE.inkNero;
     ctx.font = `bold ${SF(14)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText('ORO', x, y);
-    ctx.fillStyle = PALETTE.hudEvento;
-    ctx.font = `${SF(14)}px "Courier New", monospace`;
+    // Oro: simbolo + numero in giallo/oro vivo, leggibile su pergamena
+    ctx.fillStyle = '#b07a08';
+    ctx.font = `bold ${SF(14)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
-    ctx.fillText(`${k.oro} mo`, x + w, y);
+    ctx.fillText(`◉ ${k.oro} mo`, x + w, y);
     y += SF(22);
 
-    // Stato sintetico (se applicabile)
-    const stato = k.isDead() ? 'MORTO'
-                : k.isExhausted() ? 'Esausto'
-                : k.isBroken() ? 'Spezzato nello spirito'
-                : k.salute.cur < k.salute.max * 0.4 ? 'Gravemente ferito'
-                : k.forza.cur < k.forza.max * 0.3 ? 'Stanco'
-                : 'In forze';
-    ctx.fillStyle = PALETTE.hudTitolo;
+    // Stato sintetico: colore semantico in base alla condizione
+    const isDead = k.isDead(), isExh = k.isExhausted(), isBrk = k.isBroken();
+    const isWounded = k.salute.cur < k.salute.max * 0.4;
+    const isTired = k.forza.cur < k.forza.max * 0.3;
+    const stato = isDead ? 'MORTO'
+                : isExh  ? 'Esausto'
+                : isBrk  ? 'Spezzato nello spirito'
+                : isWounded ? 'Gravemente ferito'
+                : isTired   ? 'Stanco'
+                :             'In forze';
+    const statoColor = (isDead || isWounded) ? '#8a1010'   // rosso
+                     : (isExh || isTired || isBrk) ? '#b06010'  // ambra
+                     :                                 '#1a6a14'; // verde
+    ctx.fillStyle = PALETTE.inkNero;
     ctx.font = `bold ${SF(14)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.fillText('STATO', x, y);
-    ctx.fillStyle = PALETTE.hudNormale;
-    ctx.font = `italic ${SF(14)}px "Courier New", monospace`;
+    ctx.fillStyle = statoColor;
+    ctx.font = `bold italic ${SF(14)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     ctx.fillText(stato, x + w, y);
   },
@@ -822,45 +829,59 @@ const GameScreen = {
     const w = area.w;
     let y = area.y;
 
+    // Slot: ogni slot ha un colore "araldico" del simbolo, con etichetta nera
+    // e valore in marrone scuro. Sfondo riga = banda pergamena macchia, ben
+    // contrastata col testo dark.
     const slots = [
-      ['arma',     'Arma',     '⚔'],
-      ['armatura', 'Armatura', '◇'],
-      ['scudo',    'Scudo',    '◈'],
-      ['speciale', 'Speciale', '✦'],
-      ['viaggio',  'Viaggio',  '◊'],
+      ['arma',     'Arma',     '⚔', '#8a1010'],   // rosso bandiera
+      ['armatura', 'Armatura', '◇', '#3a5a80'],   // blu acciaio
+      ['scudo',    'Scudo',    '◈', '#1a6a14'],   // verde araldico
+      ['speciale', 'Speciale', '✦', '#7030a0'],   // viola arcano
+      ['viaggio',  'Viaggio',  '◊', '#6a3a18'],   // marrone cuoio
     ];
     const rowH = SF(30);
     ctx.textBaseline = 'middle';
-    for (const [slot, label] of slots) {
+    for (const [slot, label, glyph, accent] of slots) {
       const val = k.equip[slot];
 
-      // Riga: sfondo alternato leggero
-      ctx.fillStyle = PALETTE.hudSfondoAlt;
+      // Riga: sfondo pergamena macchia (più scura della base)
+      ctx.fillStyle = PALETTE.pergMacchia;
       ctx.fillRect(x, y, w, rowH - SF(2));
+      // bordo sottile a sinistra colorato (accento araldico)
+      ctx.fillStyle = accent;
+      ctx.fillRect(x, y, SF(3), rowH - SF(2));
 
-      // Label
-      ctx.fillStyle = PALETTE.hudTitolo;
-      ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
+      const cy = y + (rowH - SF(2)) / 2;
+
+      // Glyph araldico colorato
+      ctx.fillStyle = accent;
+      ctx.font = `bold ${SF(16)}px "Courier New", monospace`;
       ctx.textAlign = 'left';
-      ctx.fillText(label.toUpperCase(), x + SF(8), y + (rowH - SF(2)) / 2);
+      ctx.fillText(glyph, x + SF(10), cy);
 
-      // Valore
-      ctx.fillStyle = val ? PALETTE.hudNormale : PALETTE.hudDim;
+      // Label in nero
+      ctx.fillStyle = PALETTE.inkNero;
+      ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
+      ctx.fillText(label.toUpperCase(), x + SF(28), cy);
+
+      // Valore: marrone scuro se presente, ink medio italic se vuoto
+      ctx.fillStyle = val ? PALETTE.inkScuro : PALETTE.inkMedio;
       ctx.font = `${val ? '' : 'italic '}${SF(14)}px "Courier New", monospace`;
       ctx.textAlign = 'right';
-      ctx.fillText(val || '— vuoto —', x + w - SF(8), y + (rowH - SF(2)) / 2);
+      ctx.fillText(val || '— vuoto —', x + w - SF(8), cy);
 
       y += rowH;
     }
 
-    y += SF(10);
-    // Capacità inventario placeholder (riassunto per ora)
-    ctx.fillStyle = PALETTE.hudTitolo;
+    y += SF(14);
+    // Capacità inventario placeholder
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = PALETTE.inkNero;
     ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.fillText('CAPIENZA SACCA', x, y);
-    ctx.fillStyle = PALETTE.hudNormale;
-    ctx.font = `${SF(13)}px "Courier New", monospace`;
+    ctx.fillStyle = '#6a3a18';   // marrone cuoio
+    ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     ctx.fillText('3 / 8 oggetti', x + w, y);
   },
@@ -875,22 +896,22 @@ const GameScreen = {
 
     const rowH = SF(46);
     for (const r of k.reputazione) {
-      // Etichetta nome
-      ctx.fillStyle = PALETTE.hudTitolo;
-      ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
+      // Etichetta nome in nero
+      ctx.fillStyle = PALETTE.inkNero;
+      ctx.font = `bold ${SF(14)}px "Courier New", monospace`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
       ctx.fillText(r.nome, x, y);
 
-      // Valore numerico a destra
+      // Valore numerico a destra, colore semantico scuro per leggibilità
       const sign = r.val > 0 ? '+' : '';
-      ctx.fillStyle = r.val > 0 ? '#3a9a22' : (r.val < 0 ? '#aa2020' : PALETTE.hudNormale);
-      ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
+      ctx.fillStyle = r.val > 0 ? '#1a6a14' : (r.val < 0 ? '#8a1010' : PALETTE.inkMedio);
+      ctx.font = `bold ${SF(14)}px "Courier New", monospace`;
       ctx.textAlign = 'right';
       ctx.fillText(sign + r.val, x + w, y);
 
       // Mini-barra orizzontale a 11 segmenti (-5..+5)
-      const barY = y + SF(18), barH = SF(10);
+      const barY = y + SF(20), barH = SF(11);
       const segN = 11, gap = PIXEL;
       const segW = Math.floor((w - gap * (segN - 1)) / segN);
       for (let i = 0; i < segN; i++) {
@@ -906,8 +927,9 @@ const GameScreen = {
           ctx.fillStyle = r.val > 0 ? '#3a9a22' : '#cc2828';
           ctx.fillRect(bx + PIXEL, barY + PIXEL, segW - PIXEL * 2, PIXEL);
         }
+        // Bordo: oro per il segmento zero, scuro per gli altri
         drawPixelRectStroke(ctx, bx, barY, segW, barH,
-          segVal === 0 ? PALETTE.hudNormale : PALETTE.inkScuro);
+          segVal === 0 ? '#e8c050' : PALETTE.inkScuro);
       }
       y += rowH;
     }
@@ -922,29 +944,34 @@ const GameScreen = {
     const w = area.w;
     let y = area.y;
 
-    ctx.fillStyle = PALETTE.hudTitolo;
+    ctx.fillStyle = PALETTE.inkNero;
     ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText('ULTIMI AVVENIMENTI', x, y);
-    y += SF(22);
+    // sottolineatura decorativa rossa
+    ctx.fillStyle = '#8a1010';
+    ctx.fillRect(x, y + SF(16), SF(72), PIXEL);
+    y += SF(24);
 
-    const fs = SF(13);
+    const fs = SF(14);
     ctx.font = `${fs}px "Courier New", monospace`;
-    const lineH = SF(17);
+    const lineH = SF(18);
     const recent = this.log.slice().reverse();
     const maxBottom = area.y + area.h - SF(8);
 
+    // Scala di colori "su pergamena": dal piu vivo (rosso) al piu spento (medio).
     for (let i = 0; i < recent.length && y < maxBottom; i++) {
-      // Pallino + testo wrappato
       const lines = wrapText(ctx, recent[i], w - SF(14));
-      const color = i === 0 ? PALETTE.hudEvento
-                  : i < 3   ? PALETTE.hudNormale
-                  : i < 6   ? PALETTE.hudDim
-                  :           PALETTE.hudMorto;
-      ctx.fillStyle = color;
-      // bullet
+      const color = i === 0 ? '#8a1010'         // rosso bandiera (piu recente)
+                  : i < 3   ? PALETTE.inkNero
+                  : i < 6   ? PALETTE.inkScuro
+                  :           PALETTE.inkMedio;
+      // bullet rosso accentato per il piu recente, ink per gli altri
+      ctx.fillStyle = i === 0 ? '#8a1010' : PALETTE.inkScuro;
       ctx.fillRect(x, y + Math.floor(fs / 2) - PIXEL, PIXEL * 2, PIXEL * 2);
+      ctx.fillStyle = color;
+      ctx.font = `${i === 0 ? 'bold ' : ''}${fs}px "Courier New", monospace`;
       for (let j = 0; j < lines.length; j++) {
         if (y >= maxBottom) break;
         ctx.fillText(lines[j], x + SF(12), y);
@@ -956,15 +983,17 @@ const GameScreen = {
 
   drawAttrBar(x, y, w, label, value, color, colorHi) {
     const ctx = this.ctx;
-    ctx.fillStyle = PALETTE.hudTitolo;
-    ctx.font = `bold ${SF(12)}px "Courier New", monospace`;
+    // Label: nero pieno su pergamena (massimo contrasto)
+    ctx.fillStyle = PALETTE.inkNero;
+    ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.fillText(label, x, y);
-    ctx.fillStyle = PALETTE.hudNormale;
-    ctx.font = `${SF(12)}px "Courier New", monospace`;
+    // Numeri: marrone scuro, leggibili
+    ctx.fillStyle = PALETTE.inkScuro;
+    ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     ctx.fillText(`${Math.ceil(value.cur)}/${value.max}`, x + w, y);
-    const barY = y + SF(14), barH = SF(10);
+    const barY = y + SF(16), barH = SF(11);
     ctx.fillStyle = '#0e0804';
     ctx.fillRect(x, barY, w, barH);
     drawPixelRectStroke(this.ctx, x, barY, w, barH, PALETTE.inkScuro);
@@ -979,15 +1008,16 @@ const GameScreen = {
   // metà destra = positivo (verde). Il tratto centrale = 0.
   drawOnore(x, y, w, val) {
     const ctx = this.ctx;
-    ctx.fillStyle = PALETTE.hudTitolo;
-    ctx.font = `bold ${SF(12)}px "Courier New", monospace`;
+    ctx.fillStyle = PALETTE.inkNero;
+    ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText('ONORE', x, y);
 
     const sign = val > 0 ? '+' : '';
-    ctx.fillStyle = val > 0 ? '#3a9a22' : val < 0 ? '#aa2020' : PALETTE.hudNormale;
-    ctx.font = `${SF(12)}px "Courier New", monospace`;
+    // Verde/rosso scuri per restare leggibili anche sulla pergamena chiara
+    ctx.fillStyle = val > 0 ? '#1a6a14' : val < 0 ? '#8a1010' : PALETTE.inkScuro;
+    ctx.font = `bold ${SF(13)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     ctx.fillText(sign + val + ' / ±5', x + w, y);
 
@@ -1010,9 +1040,9 @@ const GameScreen = {
         ctx.fillStyle = val > 0 ? '#3a9a22' : '#cc2828';
         ctx.fillRect(bx + PIXEL, barY + PIXEL, segW - PIXEL * 2, PIXEL);
       }
-      // Bordo: il segmento centrale (zero) è più chiaro
+      // Bordo: il segmento centrale (zero) è oro vivo per evidenziarlo
       drawPixelRectStroke(ctx, bx, barY, segW, barH,
-        segVal === 0 ? PALETTE.hudNormale : PALETTE.inkScuro);
+        segVal === 0 ? '#e8c050' : PALETTE.inkScuro);
     }
   },
 
@@ -1095,12 +1125,19 @@ const GameScreen = {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     const lineH = SF(19);
-    const eventGap = SF(6);
+    const eventGap = SF(7);
 
-    // Costruisco le righe wrap dal piu recente: ognuna ha (text, color)
-    // Smetto quando ho riempito la zona.
-    const colors = [PALETTE.hudEvento, PALETTE.hudNormale, PALETTE.hudNormale,
-                    PALETTE.hudDim, PALETTE.hudDim, PALETTE.hudMorto, PALETTE.hudMorto];
+    // Scala di colori su pergamena: rosso vivo per piu recente, poi ink scuri
+    // a degradare. Garantisce massima leggibilita anche per gli eventi vecchi.
+    const colors = [
+      '#8a1010',          // appena successo: rosso bandiera
+      PALETTE.inkNero,    // recenti: nero pieno
+      PALETTE.inkNero,
+      PALETTE.inkScuro,
+      PALETTE.inkScuro,
+      PALETTE.inkMedio,
+      PALETTE.inkMedio,
+    ];
     const indentX = SF(14);
     const wrapW = w - indentX;
     const recent = this.log.slice().reverse();
@@ -1122,11 +1159,16 @@ const GameScreen = {
     for (const ln of lines) {
       if (ln.separator) { y += eventGap; continue; }
       if (y + lineH > logBottom) break;
-      ctx.fillStyle = ln.color;
       if (ln.isFirst) {
-        // bullet a inizio evento (quadratino pieno)
-        ctx.fillRect(x, y + Math.floor(fs / 2) - PIXEL, PIXEL * 2, PIXEL * 2);
+        // bullet a inizio evento: rosso per gli eventi piu recenti
+        const bulletCol = ln.color === '#8a1010' ? '#8a1010' : PALETTE.inkScuro;
+        ctx.fillStyle = bulletCol;
+        ctx.fillRect(x, y + Math.floor(fs / 2) - PIXEL, PIXEL * 3, PIXEL * 2);
       }
+      ctx.fillStyle = ln.color;
+      // Bold solo per la riga piu recente per dare gerarchia
+      const isMostRecent = ln.color === '#8a1010';
+      ctx.font = `${isMostRecent ? 'bold ' : ''}${fs}px "Courier New", monospace`;
       ctx.fillText(ln.text, x + indentX, y);
       y += lineH;
     }

@@ -296,8 +296,16 @@ function wrapText(ctx, text, maxWidth) {
 }
 
 // ─── Icone pixel-art per tab/HUD ─────────────────────────────────────────
-// Ogni icona è definita come pattern di stringhe: '#' = blocco pieno, '.' = vuoto.
-// drawPixelPattern() scala ogni char in un blocco quadrato (size/cols x size/rows).
+// Due formati supportati:
+//
+// 1) Monocromatico (legacy): pattern = array di stringhe con '#' (pieno) e
+//    '.' (vuoto). Disegnato da drawPixelPattern(ctx, pattern, x, y, size, color).
+//
+// 2) Multicolore: oggetto { pattern, palette } dove palette mappa ogni char
+//    diverso da '.' (o ' ') a un colore esadecimale. Disegnato da
+//    drawColoredPattern(ctx, icon, x, y, size).
+//
+// drawTabIcon() seleziona automaticamente il formato giusto.
 
 function drawPixelPattern(ctx, pattern, x, y, size, color) {
   const rows = pattern.length;
@@ -315,57 +323,115 @@ function drawPixelPattern(ctx, pattern, x, y, size, color) {
   }
 }
 
-const ICON_SHIELD = [
-  '..######..',
-  '.########.',
-  '##########',
-  '##########',
-  '####..####',
-  '###....###',
-  '##########',
-  '.########.',
-  '..######..',
-  '...####...',
-];
+function drawColoredPattern(ctx, icon, x, y, size) {
+  const pattern = icon.pattern;
+  const palette = icon.palette;
+  const rows = pattern.length;
+  const cols = pattern[0].length;
+  const bw = Math.max(1, Math.floor(size / cols));
+  const bh = Math.max(1, Math.floor(size / rows));
+  const offX = x + Math.floor((size - bw * cols) / 2);
+  const offY = y + Math.floor((size - bh * rows) / 2);
+  for (let r = 0; r < rows; r++) {
+    const row = pattern[r];
+    for (let c = 0; c < cols; c++) {
+      const ch = row[c];
+      if (ch === '.' || ch === ' ') continue;
+      const col = palette[ch];
+      if (!col) continue;
+      ctx.fillStyle = col;
+      ctx.fillRect(offX + c * bw, offY + r * bh, bw, bh);
+    }
+  }
+}
 
-const ICON_SWORDS = [
-  '#........#',
-  '##......##',
-  '###....###',
-  '.###..###.',
-  '..######..',
-  '..######..',
-  '.###..###.',
-  '###....###',
-  '##......##',
-  '#........#',
-];
+// Scudo araldico: bordo nero scuro, corpo verde con ombra, croce d'oro
+const ICON_SHIELD = {
+  pattern: [
+    '..DDDDDD..',
+    '.DggggggD.',
+    'DggggGggdD',
+    'DggGGGGgdD',
+    'DggggGggdD',
+    'DggggGggdD',
+    'DggggGggdD',
+    '.DggggggD.',
+    '..DggggD..',
+    '...DDDD...',
+  ],
+  palette: {
+    D: '#1a0a04',   // outline nero
+    g: '#3a8a30',   // verde corpo
+    d: '#1a5a18',   // verde ombra (lato destro)
+    G: '#e8c050',   // oro croce
+  },
+};
 
-const ICON_CROWN = [
-  '..........',
-  '#...##...#',
-  '##..##..##',
-  '###.##.###',
-  '##########',
-  '##########',
-  '##########',
-  '##########',
-  '##########',
-  '..........',
-];
+// Spade incrociate: lame argentate con bordo nero, elsa marrone, gemma rossa
+const ICON_SWORDS = {
+  pattern: [
+    'D........D',
+    'DS......SD',
+    '.DS....SD.',
+    '..DS..SD..',
+    '...DSrSD..',
+    '..BBrrrBB.',
+    '.BSSSSSSB.',
+    'BSDrrrrDSB',
+    'BSD.rr.DSB',
+    'D..BB.BB..',
+  ],
+  palette: {
+    D: '#1a0a04',   // outline
+    S: '#c8c8d0',   // argento lame
+    B: '#6a3a18',   // marrone elsa
+    r: '#cc1818',   // rosso gemma centrale
+  },
+};
 
-const ICON_SCROLL = [
-  '.########.',
-  '##########',
-  '##......##',
-  '##.####.##',
-  '##......##',
-  '##.####.##',
-  '##......##',
-  '##.####.##',
-  '##########',
-  '.########.',
-];
+// Corona reale: corpo dorato con 3 punte rosse (gemme), bordo nero,
+// banda di base con dettaglio
+const ICON_CROWN = {
+  pattern: [
+    '..........',
+    'r...rr...r',
+    'GrDDrrDDrG',
+    'GGGDrrDGGG',
+    'GGGGrrGGGG',
+    'DGGGGGGGGD',
+    'DGGGgGGGGD',
+    'DGgGGGgGGD',
+    'DGGgGGgGGD',
+    'DDDDDDDDDD',
+  ],
+  palette: {
+    D: '#1a0a04',   // outline / banda base
+    G: '#e8c050',   // oro
+    g: '#a07020',   // oro scuro (ombra)
+    r: '#cc1818',   // gemme rosse
+  },
+};
+
+// Pergamena scritta: corpo crema, righe d'inchiostro, estremità arrotolate scure
+const ICON_SCROLL = {
+  pattern: [
+    'BBBBBBBBBB',
+    'BCCCCCCCCB',
+    'CCDDDDDDCC',
+    'CCCCCCCCCC',
+    'CCDDDDDDCC',
+    'CCCCCCCCCC',
+    'CCDDDDDDCC',
+    'CCCCCCCCCC',
+    'BCCCCCCCCB',
+    'BBBBBBBBBB',
+  ],
+  palette: {
+    B: '#5a3a18',   // marrone arrotolato (estremità)
+    C: '#f0e4c0',   // crema pergamena
+    D: '#1a0a04',   // inchiostro nero
+  },
+};
 
 const ICON_PROFILE_TABS = {
   profilo: ICON_SHIELD,
@@ -374,7 +440,9 @@ const ICON_PROFILE_TABS = {
   diario:  ICON_SCROLL,
 };
 
-function drawTabIcon(ctx, key, x, y, size, color) {
-  const pat = ICON_PROFILE_TABS[key];
-  if (pat) drawPixelPattern(ctx, pat, x, y, size, color);
+function drawTabIcon(ctx, key, x, y, size, _legacyColor) {
+  const icon = ICON_PROFILE_TABS[key];
+  if (!icon) return;
+  if (icon.pattern && icon.palette) drawColoredPattern(ctx, icon, x, y, size);
+  else drawPixelPattern(ctx, icon, x, y, size, _legacyColor || '#000');
 }
