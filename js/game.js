@@ -739,7 +739,14 @@ const GameScreen = {
     ctx.fillStyle = '#e8a838';   // oro vivo per il titolo cavalleresco
     ctx.font = `italic bold ${SF(15)}px "Courier New", monospace`;
     ctx.fillText(k.titolo, innerX, y);
-    y += SF(22);
+    y += SF(24);
+
+    // Strip riassunto attributi: sempre visibile, indipendente dalla tab
+    // attiva. Mostra abbreviazione + valore colorato per livello, così
+    // anche da EQUIP/FAZIONI/DIARIO il giocatore ha a colpo d'occhio le
+    // condizioni del cavaliere.
+    y = this.drawKnightStatStrip(innerX, y, innerW);
+    y += SF(12);
 
     // Tab bar orizzontale (4 icone con label sotto)
     y = this.drawKnightTabs(area, innerX, y, innerW);
@@ -762,9 +769,9 @@ const GameScreen = {
     const n = this.knightTabs.length;
     const gap = SF(4);
     const tabW = Math.floor((innerW - gap * (n - 1)) / n);
-    const tabH = SF(48);
-    const iconSize = SF(22);
-    const labelSize = SF(10);
+    const tabH = SF(72);          // più alta per ospitare icone e label grandi
+    const iconSize = SF(38);      // icone visibilmente più grandi (era 22)
+    const labelSize = SF(13);     // label più grande (era 10) + bold sempre
 
     this.knightTabRects = [];
     this.knightTabs.forEach((t, i) => {
@@ -777,27 +784,93 @@ const GameScreen = {
 
       // Sfondo: attiva = bronzo caldo (tab "illuminata"), inattiva = molto
       // scura; hover una via di mezzo.
-      ctx.fillStyle = active ? '#5a3018'              // bronzo caldo
+      ctx.fillStyle = active ? '#5a3018'
                              : (hovered ? '#3a2010' : '#120a04');
       ctx.fillRect(tx, y, tabW, tabH);
-      // Bordo: oro brillante per la attiva, marrone scuro per le altre
+      // Bordo doppio per la tab attiva, semplice per le altre
       drawPixelRectStroke(ctx, tx, y, tabW, tabH,
         active ? '#e8c050' : '#3a2010');
+      if (active) {
+        drawPixelRectStroke(ctx, tx + PIXEL, y + PIXEL, tabW - PIXEL * 2, tabH - PIXEL * 2,
+          '#8a6030');
+      }
 
-      // Icona — sempre multicolore (drawTabIcon ignora il colore se l'icona
-      // ha già la sua palette). Funziona bene su entrambi i fondi.
+      // Icona centrata orizzontalmente, posizionata leggermente più in alto
+      // per lasciare spazio alla label grande sotto.
       const iconX = tx + Math.floor((tabW - iconSize) / 2);
-      const iconY = y + SF(4);
+      const iconY = y + SF(6);
       drawTabIcon(ctx, t.key, iconX, iconY, iconSize);
 
-      // Label sotto: oro brillante quando attiva, oro spento quando no
+      // Label: sempre bold per peso visivo, attiva in crema viva, inattiva
+      // in oro spento. Posizione sotto l'icona.
       ctx.fillStyle = active ? '#f0e0b8' : '#a08038';
-      ctx.font = `${active ? 'bold ' : ''}${labelSize}px "Courier New", monospace`;
+      ctx.font = `bold ${labelSize}px "Courier New", monospace`;
       ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.fillText(t.label, tx + tabW / 2, y + tabH - SF(13));
+      ctx.textBaseline = 'middle';
+      ctx.fillText(t.label, tx + tabW / 2, y + tabH - SF(12));
     });
     return y + tabH;
+  },
+
+  // Riepilogo permanente delle 4 caratteristiche, sempre visibile sopra le
+  // tab. Ogni pillola: abbreviazione (oro spento) + valore con colore
+  // semantico in base al livello (critico/basso/medio/buono/alto).
+  drawKnightStatStrip(x, y, w) {
+    const ctx = this.ctx;
+    const k = this.knight;
+    const items = [
+      { abbr: 'FOR', cur: k.forza.cur,   max: k.forza.max },
+      { abbr: 'VOL', cur: k.volonta.cur, max: k.volonta.max },
+      { abbr: 'SAL', cur: k.salute.cur,  max: k.salute.max },
+      { abbr: 'ONO', cur: k.onore,       max: 5, signed: true },
+    ];
+    const n = items.length;
+    const gap = SF(4);
+    const cellW = Math.floor((w - gap * (n - 1)) / n);
+    const cellH = SF(30);
+
+    ctx.textBaseline = 'middle';
+    items.forEach((it, i) => {
+      const cx = x + i * (cellW + gap);
+      // Sfondo: marrone leggermente più chiaro del pannello per separare
+      ctx.fillStyle = '#2a1808';
+      ctx.fillRect(cx, y, cellW, cellH);
+      drawPixelRectStroke(ctx, cx, y, cellW, cellH, '#5a3a18');
+
+      // Colore semantico in base al livello (0..100% per attributi normali,
+      // -5..+5 per onore)
+      let color;
+      if (it.signed) {
+        color = it.cur >= 3 ? '#6ce06a'      // alto: verde brillante
+              : it.cur >= 1 ? '#a8e878'      // buono: verde-giallo
+              : it.cur === 0 ? '#e8d8b0'     // neutro: crema
+              : it.cur >= -2 ? '#ffa040'     // basso: arancio
+              :                '#ff5050';    // critico: rosso
+      } else {
+        const pct = it.max > 0 ? it.cur / it.max : 0;
+        color = pct >= 0.8 ? '#6ce06a'       // alto
+              : pct >= 0.6 ? '#a8e878'       // buono
+              : pct >= 0.4 ? '#e8c050'       // medio: oro
+              : pct >= 0.2 ? '#ffa040'       // basso: arancio
+              :              '#ff5050';      // critico: rosso
+      }
+
+      // Etichetta abbreviata a sinistra (oro spento)
+      ctx.fillStyle = '#a08038';
+      ctx.font = `bold ${SF(11)}px "Courier New", monospace`;
+      ctx.textAlign = 'left';
+      ctx.fillText(it.abbr, cx + SF(6), y + cellH / 2);
+
+      // Valore a destra, colorato per livello
+      const valText = it.signed
+        ? (it.cur > 0 ? '+' + it.cur : String(it.cur))
+        : String(Math.ceil(it.cur));
+      ctx.fillStyle = color;
+      ctx.font = `bold ${SF(14)}px "Courier New", monospace`;
+      ctx.textAlign = 'right';
+      ctx.fillText(valText, cx + cellW - SF(6), y + cellH / 2);
+    });
+    return y + cellH;
   },
 
   // PROFILO: 4 attributi (Forza/Volontà/Salute/Onore) con barre grandi.
