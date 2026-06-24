@@ -952,8 +952,8 @@ const GameScreen = {
     const W = World.width, H = World.height;
     const B = World.BIOME;
     const b = World.tiles[y * W + x];
-    let fullR = 2;
-    let dimR  = 5;
+    let fullR = 3;
+    let dimR  = 7;
     if (b === B.MONTAGNA || b === B.COLLINA) dimR += 2;       // vista dall'alto
     else if (b === B.FORESTA || b === B.PALUDE || b === B.NEVE) dimR -= 2;  // ostruita
     World.explore(x, y, fullR, dimR);
@@ -969,7 +969,7 @@ const GameScreen = {
         if (nb === B.ACQUA || nb === B.GHIACCIO) touchesSea = true;
       }
     }
-    if (touchesSea) World.revealSeaFlood(x, y, 10);
+    if (touchesSea) World.revealSeaFlood(x, y, 12);
   },
 
   // Chiamato da main.js a ogni frame. dtMs include la pausa fra frame: senza,
@@ -2080,8 +2080,8 @@ const GameScreen = {
             const f = World.fog[ty * WW + tx];
             if (f >= 2) continue;
             const i = (py * fw + px) * 4;
-            d[i] = 10; d[i + 1] = 6; d[i + 2] = 2;
-            d[i + 3] = (f === 1) ? 130 : 240;
+            d[i] = 0; d[i + 1] = 0; d[i + 2] = 0;
+            d[i + 3] = (f === 1) ? 160 : 255;
           }
         }
         fctx.putImageData(id, 0, 0);
