@@ -47,6 +47,35 @@ Events.register({
 });
 
 Events.register({
+  id: 'loc.castello.mercato',
+  kind: 'location',
+  where: 'castle',
+  // Solo da cavaliere investito: durante la Veglia il mercato si raggiunge
+  // dall'hub del garzone (vedi events_veglia.js).
+  condition: () => !(typeof Calendar !== 'undefined' && Calendar.inVeglia),
+  weight: 2,
+  title: 'Il mercato del castello',
+  text: 'Sotto i portici, armaioli e rigattieri espongono ferro vecchio e nuovo. Un banco tratta usato d\'ogni sorta: si compra e si vende.',
+  tone: 'neutro',
+  portata: 'marginale',
+  options: [
+    {
+      text: 'Visitare il mercato',
+      effects: [
+        () => {
+          if (typeof GameScreen !== 'undefined' && GameScreen.openMarket) GameScreen.openMarket();
+        },
+      ],
+    },
+    {
+      text: 'Tirare dritto',
+      effects: [],
+      reply: 'Lasci i banchi alle spalle. Avrai altre occasioni.',
+    },
+  ],
+});
+
+Events.register({
   id: 'loc.villaggio.mercante',
   kind: 'location',
   where: 'village',

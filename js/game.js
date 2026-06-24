@@ -174,6 +174,7 @@ const GameScreen = {
     this._chronicleBtns = [];      // rect dei pulsanti scelta + chiudi
     this.combat = null;            // Scena di combattimento (scontro attivo)
     this._combatBtns = [];         // rect dei pulsanti azione del Round
+    this.market = null;            // Overlay mercato (compra/vendi)
     this.camAnchor = { x: this.knightPos.x, y: this.knightPos.y };
     this.camTarget = null;         // quando non-null la cam si avvicina qui
     this.dragging = false;
@@ -235,6 +236,189 @@ const GameScreen = {
     const onStruct = !!(World.structures &&
       World.structures.find(st => st.x === this.knightPos.x && st.y === this.knightPos.y));
     b.disabled = !(inVeglia || onStruct);
+  },
+
+  // ─── Mercato (compra/vendi usato) ─────────────────────────────────────────
+  // Overlay modale. Economia semplice: prezzi uguali ovunque, rivendita a
+  // frazione fissa (vedi js/data/items.js e docs/EARLY_GAME.md §4). Lavora con
+  // l'equip a stringhe: comprare in uno slot occupato rivende il vecchio pezzo.
+  openMarket(opts) {
+    if (typeof Items === 'undefined') return false;
+    opts = opts || {};
+    this.chronicle = null;     // chiude un'eventuale Carta del cronista aperta
+    let name = opts.name;
+    if (!name) {
+      const s = World.structures &&
+        World.structures.find(st => st.x === this.knightPos.x && st.y === this.knightPos.y);
+      name = s ? s.name : 'castello';
+    }
+    this.market = { tab: 'buy', name };
+    window.GameRender.invalidate();
+    return true;
+  },
+
+  // Oggetti equipaggiati rivendibili (in catalogo), in ordine di slot.
+  _sellList() {
+    const out = [];
+    for (const slot of Items.SLOT_ORDER) {
+      const nome = Knight.equip[slot];
+      if (!nome) continue;
+      out.push({ nome, slot, glyph: Items.glyphOf(nome), back: Items.rivendita(nome) });
+    }
+    return out;
+  },
+
+  _marketBuy(nome) {
+    const it = Items.catalog[nome];
+    if (!it) return;
+    if (Knight.equip[it.slot] === nome) { this._logEvent('Lo possiedi già.'); return; }
+    if (Knight.oro < it.prezzo) { this._logEvent('Non hai abbastanza oro.'); return; }
+    Knight.oro -= it.prezzo;
+    const old = Knight.equip[it.slot];
+    if (old) {
+      const back = Items.rivendita(old);
+      Knight.oro += back;
+      this._logEvent(`Cedi ${old} (+${back} mo) e acquisti ${nome} per ${it.prezzo} mo.`);
+    } else {
+      this._logEvent(`Acquisti ${nome} per ${it.prezzo} mo.`);
+    }
+    Knight.equip[it.slot] = nome;
+  },
+
+  _marketSell(slot) {
+    const nome = Knight.equip[slot];
+    if (!nome) return;
+    const back = Items.rivendita(nome);
+    Knight.equip[slot] = null;
+    Knight.oro += back;
+    this._logEvent(`Vendi ${nome} per ${back} mo.`);
+  },
+
+  _marketUp(p) {
+    const mk = this.market;
+    if (!mk) return;
+    if (this._marketClose && hitRect(this._marketClose, p.x, p.y)) {
+      this.market = null; window.GameRender.invalidate(); return;
+    }
+    for (const t of (this._marketTabs || [])) {
+      if (hitRect(t, p.x, p.y)) { mk.tab = t.tab; window.GameRender.invalidate(); return; }
+    }
+    for (const row of (this._marketRows || [])) {
+      if (!row.disabled && hitRect(row.rect, p.x, p.y)) { row.act(); window.GameRender.invalidate(); return; }
+    }
+    // Tap fuori dal pannello: chiude.
+    if (this._marketPanel && !hitRect(this._marketPanel, p.x, p.y)) {
+      this.market = null;
+    }
+    window.GameRender.invalidate();
+  },
+
+  drawMarket() {
+    const ctx = this.ctx;
+    const W = window.UI.w, H = window.UI.h;
+    const mk = this.market;
+    const list = mk.tab === 'buy' ? Items.buyList() : this._sellList();
+
+    const headerH = SF(38), tabH = SF(30), rowH = SF(30), rowGap = SF(4);
+    const cw = Math.min(SF(440), W - SF(24));
+    const listH = Math.max(rowH, list.length * (rowH + rowGap));
+    const chWanted = headerH + tabH + SF(8) + listH + SF(12);
+    const ch = Math.min(chWanted, H - SF(24));
+    const cx = Math.round((W - cw) / 2), cy = Math.round((H - ch) / 2);
+    this._marketPanel = { x: cx, y: cy, w: cw, h: ch };
+
+    // Backdrop + pannello
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = PALETTE.hudSfondo || '#1a1208';
+    ctx.fillRect(cx, cy, cw, ch);
+
+    // Header: titolo + oro + chiudi
+    ctx.fillStyle = '#3a2810';
+    ctx.fillRect(cx, cy, cw, headerH);
+    ctx.fillStyle = '#e8c050';
+    ctx.font = FONT.heading();
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('Mercato — ' + (mk.name || 'castello'), cx + SF(12), cy + headerH / 2);
+    ctx.textAlign = 'right'; ctx.fillStyle = '#ffd060';
+    ctx.font = FONT.value();
+    ctx.fillText('◉ ' + Knight.oro + ' mo', cx + cw - SF(44), cy + headerH / 2);
+
+    const xb = { x: cx + cw - SF(32), y: cy + SF(8), w: SF(22), h: SF(22) };
+    this._marketClose = xb;
+    ctx.fillStyle = '#2a1c08'; ctx.fillRect(xb.x, xb.y, xb.w, xb.h);
+    drawPixelRectStroke(ctx, xb.x, xb.y, xb.w, xb.h, '#a08050');
+    ctx.fillStyle = '#e8d8b0'; ctx.font = FONT.button();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('✕', xb.x + xb.w / 2, xb.y + xb.h / 2);
+
+    // Tab ACQUISTA / VENDI
+    this._marketTabs = [];
+    const tabGap = SF(8);
+    const tabW = Math.floor((cw - SF(24) - tabGap) / 2);
+    const ty = cy + headerH + SF(4);
+    [['buy', 'ACQUISTA'], ['sell', 'VENDI']].forEach(([key, label], i) => {
+      const r = { x: cx + SF(12) + i * (tabW + tabGap), y: ty, w: tabW, h: tabH, tab: key };
+      const active = mk.tab === key;
+      ctx.fillStyle = active ? '#3a2810' : '#201408';
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      drawPixelRectStroke(ctx, r.x, r.y, r.w, r.h, active ? '#e8c050' : '#a08050');
+      ctx.fillStyle = active ? '#ffd060' : '#a08850';
+      ctx.font = FONT.button(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2);
+      this._marketTabs.push(r);
+    });
+
+    // Righe
+    this._marketRows = [];
+    const rowX = cx + SF(12), rowW = cw - SF(24);
+    let yy = ty + tabH + SF(8);
+    const limitY = cy + ch - SF(6);
+
+    if (!list.length) {
+      ctx.fillStyle = '#a08850'; ctx.font = FONT.bodyI();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const msg = mk.tab === 'buy' ? 'Nessuna merce in vendita.' : 'Non hai nulla da vendere.';
+      ctx.fillText(msg, cx + cw / 2, yy + SF(12));
+    }
+
+    for (const item of list) {
+      if (yy + rowH > limitY) break;   // clip se il pannello è pieno
+      const r = { x: rowX, y: yy, w: rowW, h: rowH };
+      let disabled = false, leftTxt, rightTxt, accent = '#a08050', act;
+
+      if (mk.tab === 'buy') {
+        const owned = Knight.equip[item.slot] === item.nome;
+        const afford = Knight.oro >= item.prezzo;
+        disabled = owned || !afford;
+        leftTxt = item.glyph + '  ' + item.nome + (owned ? '  (in uso)' : '');
+        rightTxt = owned ? '—' : item.prezzo + ' mo';
+        if (!disabled) act = () => this._marketBuy(item.nome);
+      } else {
+        disabled = item.back <= 0;
+        leftTxt = item.glyph + '  ' + item.nome;
+        rightTxt = item.back > 0 ? '+' + item.back + ' mo' : '—';
+        if (!disabled) act = () => this._marketSell(item.slot);
+      }
+
+      ctx.fillStyle = disabled ? '#180f06' : '#2a1808';
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      drawPixelRectStroke(ctx, r.x, r.y, r.w, r.h, disabled ? '#3a2c18' : accent);
+      const cyR = r.y + r.h / 2;
+      ctx.fillStyle = disabled ? '#6a5638' : '#e8d8b0';
+      ctx.font = FONT.body(); ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(leftTxt, r.x + SF(10), cyR);
+      ctx.fillStyle = mk.tab === 'buy'
+        ? (disabled ? '#6a5638' : '#ffd060')
+        : (disabled ? '#6a5638' : '#8ce06a');
+      ctx.textAlign = 'right';
+      ctx.fillText(rightTxt, r.x + r.w - SF(10), cyR);
+
+      this._marketRows.push({ rect: r, disabled, act: act || (() => {}) });
+      yy += rowH + rowGap;
+    }
+
+    drawPixelRectStroke(ctx, cx, cy, cw, ch, '#5a4020');
   },
 
   // ─── Layout ───────────────────────────────────────────────────────────────
@@ -345,6 +529,12 @@ const GameScreen = {
 
     if (type === 'touch') return; // hover solo su mouse
 
+    if (this.market) {
+      // Overlay modale: niente hover sui pulsanti sottostanti.
+      document.getElementById('game').style.cursor = 'default';
+      return;
+    }
+
     if (this.activeOverlay) {
       const over = this.overlayWhere(p) === 'close';
       document.getElementById('game').style.cursor = over ? 'pointer' : 'default';
@@ -378,6 +568,7 @@ const GameScreen = {
   onPointerDown(p) {
     if (Scenes.current !== this) return;
     if (SaveUI.isOpen()) { SaveUI.onPointerDown(p); return; }
+    if (this.market)    { return; }   // overlay modale: agisce sul pointerup
     if (this.combat) { this._combatDown(p); return; }
     if (this.chronicle) { this._chronicleDown(p); return; }
     if (this.poiPause)  { this._poiPauseDown(p); return; }
@@ -412,6 +603,7 @@ const GameScreen = {
     if (Scenes.current !== this) return;
     if (SaveUI.isOpen()) { SaveUI.onPointerUp(p, type); return; }
 
+    if (this.market)    { this._marketUp(p); return; }
     if (this.combat)    { this._combatUp(p); return; }
     if (this.chronicle) { this._chronicleUp(p); return; }
     if (this.poiPause)  { this._poiPauseUp(p); return; }
@@ -1432,6 +1624,7 @@ const GameScreen = {
     if (this.poiPause)  this.drawPOIPause();
     if (this.chronicle) this.drawChronicle();
     if (this.combat)    this.drawCombat();
+    if (this.market)    this.drawMarket();
 
     // SaveUI overlay sopra tutto il resto, sia desktop che compatto.
     if (SaveUI.isOpen()) SaveUI.draw(ctx);

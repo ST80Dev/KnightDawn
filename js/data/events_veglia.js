@@ -67,6 +67,15 @@ Events.register({
              'Le mani imparano, lo spirito si tempra.',
     },
     {
+      text: 'Visitare il mercato',
+      effects: [
+        () => {
+          if (typeof GameScreen !== 'undefined' && GameScreen.openMarket) GameScreen.openMarket();
+        },
+      ],
+      // Nessun reply: la Carta si chiude e si apre l'overlay mercato.
+    },
+    {
       text: 'Presentarti per l\'investitura',
       prereq: ctx => ctx.knight.oro >= VEGLIA_SOGLIA_INVESTITURA,
       prereqLabel: '(servono ' + VEGLIA_SOGLIA_INVESTITURA + ' oro)',
