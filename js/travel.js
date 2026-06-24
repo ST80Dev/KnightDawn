@@ -17,10 +17,14 @@
 
 const Travel = {
   // Quanto dura un Passo in tempo reale, in ms. Per la fase corrente uso un
-  // valore "da debug" leggibile (~280 ms). Il GDD definisce 4–30 s per Passo:
-  // questa costante verrà sostituita dal collegamento a Calendar.velocita
-  // quando arriverà la UI di controllo della velocità.
-  msPerStep: 280,
+  // Velocità di viaggio: durata in secondi di un Passo (1 tile).
+  // GDD: range 0.3 s (veloce, debug) → 30 s (lento, simulazione).
+  SPEED_PRESETS: [0.3, 1.5, 5, 15, 30],
+  speedIdx: 1,  // default: 1.5 s/passo (ritmo narrativo confortevole)
+  speedMs()   { return this.SPEED_PRESETS[this.speedIdx] * 1000; },
+  speedSec()  { return this.SPEED_PRESETS[this.speedIdx]; },
+  speedUp()   { this.speedIdx = Math.min(this.speedIdx + 1, this.SPEED_PRESETS.length - 1); },
+  speedDown() { this.speedIdx = Math.max(this.speedIdx - 1, 0); },
 
   state: 'idle',     // 'idle' | 'traveling'
   path: null,        // [{x,y}, ...] dopo la sorgente, fino alla meta inclusa
@@ -53,8 +57,9 @@ const Travel = {
     if (this.state !== 'traveling' || !this.path) return;
     hooks = hooks || {};
     this.accum += dtMs;
-    while (this.state === 'traveling' && this.accum >= this.msPerStep) {
-      this.accum -= this.msPerStep;
+    const stepMs = this.speedMs();
+    while (this.state === 'traveling' && this.accum >= stepMs) {
+      this.accum -= stepMs;
       const next = this.path[this.idx++];
       if (!next) { this.stop(); if (hooks.onArrive) hooks.onArrive(); return; }
       const biome = World.biomeAt(next.x, next.y);

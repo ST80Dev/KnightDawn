@@ -140,6 +140,7 @@ const GameScreen = {
     // Genera il mondo e posiziona camera/cavaliere.
     World.generate((Math.random() * 0xFFFFFFFF) >>> 0);
     this.knightPos = { x: World.knightStart.x, y: World.knightStart.y };
+    if (World.fog) World.explore(this.knightPos.x, this.knightPos.y, 5);
     this.cam = { cx: this.knightPos.x + 0.5, cy: this.knightPos.y + 0.5, step: MAP_ZOOM_DEFAULT };
     this.activeOverlay = null;
     this.dragging = false;
@@ -317,6 +318,14 @@ const GameScreen = {
       return;
     }
 
+    // Controllo velocità viaggio
+    if (this._speedBtnMinus && hitRect(this._speedBtnMinus, p.x, p.y)) {
+      Travel.speedDown(); window.GameRender.invalidate(); return;
+    }
+    if (this._speedBtnPlus && hitRect(this._speedBtnPlus, p.x, p.y)) {
+      Travel.speedUp(); window.GameRender.invalidate(); return;
+    }
+
     const compact = window.UI.compact;
     const bi = btnHitIndex(this.actionButtons, p.x, p.y);
     const ni = compact ? btnHitIndex(this.navButtons, p.x, p.y) : -1;
@@ -414,12 +423,18 @@ const GameScreen = {
     const dt = Math.min(dtMs, 250);
     Travel.update(dt, this.knightPos, {
       onStep: (tile, _biome) => {
-        // Pausa automatica su strutture (GAMEPLAY.md §1): il cavaliere si
-        // ferma sopra il luogo, lasciando al giocatore decidere se entrare.
+        // Esplora intorno alla nuova posizione (nebbia di guerra).
+        if (World.fog) World.explore(tile.x, tile.y, 4);
+
+        // Pausa automatica su strutture (GAMEPLAY.md §1 "Calmo"):
+        // il cavaliere si ferma al luogo, lasciando al giocatore decidere.
         const s = World.structures.find(st => st.x === tile.x && st.y === tile.y);
         if (s && (tile.x !== this.meta._lastStructX || tile.y !== this.meta._lastStructY)) {
           this.meta._lastStructX = tile.x; this.meta._lastStructY = tile.y;
-          this._logEvent(`Attraversi ${s.name}.`);
+          Travel.stop();
+          this.meta.destinazione = 'nessuna';
+          this._logEvent(`Arrivi a ${s.name}.`);
+          return;
         }
       },
       onArrive: () => {
@@ -432,6 +447,14 @@ const GameScreen = {
         else this._logEvent('Il cammino si interrompe.');
       },
     });
+
+    // Camera follow: lerp morbido verso il cavaliere mentre è in marcia.
+    if (Travel.isActive()) {
+      const tx = this.knightPos.x + 0.5, ty = this.knightPos.y + 0.5;
+      this.cam.cx += (tx - this.cam.cx) * 0.10;
+      this.cam.cy += (ty - this.cam.cy) * 0.10;
+    }
+
     window.GameRender.invalidate();
   },
 
@@ -796,6 +819,54 @@ const GameScreen = {
     while (s.length && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
     if (s.length < last.length) s += '…';
     ctx.fillText(s, area.x + labelW, y);
+    y += rowH;
+
+    // Controllo velocità viaggio: [-] [◀◀  1.5 s  ▶▶] [+]
+    ctx.fillStyle = '#e8c050';
+    ctx.font = FONT.label();
+    ctx.fillText('VELOCITÀ', area.x, y + SF(2));
+
+    const btnW = SF(22), btnH = SF(20);
+    const vx = area.x + labelW;
+    const btnY = y + SF(3);
+    const sec = Travel.speedSec();
+    const secTxt = sec < 1 ? (sec * 1000 | 0) + ' ms' : sec + ' s';
+
+    // Bottone [-]
+    const r1 = { x: vx, y: btnY, w: btnW, h: btnH };
+    ctx.fillStyle = Travel.speedIdx > 0 ? '#4a3820' : '#2a2010';
+    ctx.fillRect(r1.x, r1.y, r1.w, r1.h);
+    ctx.fillStyle = Travel.speedIdx > 0 ? '#e8c050' : '#5a5040';
+    ctx.font = FONT.button();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('−', r1.x + r1.w / 2, r1.y + r1.h / 2);
+
+    // Valore centrale
+    const valX = vx + btnW + SF(4);
+    const valW = SF(60);
+    ctx.fillStyle = '#e8d8b0';
+    ctx.font = FONT.value();
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(secTxt + '/passo', valX, y);
+
+    // Bottone [+]
+    const maxIdx = Travel.SPEED_PRESETS.length - 1;
+    const r2 = { x: valX + valW, y: btnY, w: btnW, h: btnH };
+    ctx.fillStyle = Travel.speedIdx < maxIdx ? '#4a3820' : '#2a2010';
+    ctx.fillRect(r2.x, r2.y, r2.w, r2.h);
+    ctx.fillStyle = Travel.speedIdx < maxIdx ? '#e8c050' : '#5a5040';
+    ctx.font = FONT.button();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('+', r2.x + r2.w / 2, r2.y + r2.h / 2);
+
+    this._speedBtnMinus = r1;
+    this._speedBtnPlus  = r2;
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
   },
 
   // Pannello STATO CAVALIERE: nome+titolo in alto, tab bar con icone, poi
@@ -1374,6 +1445,30 @@ const GameScreen = {
     if (World.tiles) {
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(MapRenderer.thumbnail(), inner.x, inner.y, inner.w, inner.h);
+
+      // Nebbia di guerra sulla minimappa.
+      if (World.fog) {
+        const WW = World.width, WH = World.height;
+        const fw = Math.floor(inner.w), fh = Math.floor(inner.h);
+        const fc = document.createElement('canvas');
+        fc.width = fw; fc.height = fh;
+        const fctx = fc.getContext('2d');
+        const id = fctx.createImageData(fw, fh);
+        const d = id.data;
+        for (let py = 0; py < fh; py++) {
+          const ty = Math.min(WH - 1, Math.floor(py / fh * WH));
+          for (let px = 0; px < fw; px++) {
+            const tx = Math.min(WW - 1, Math.floor(px / fw * WW));
+            if (!World.fog[ty * WW + tx]) {
+              const i = (py * fw + px) * 4;
+              d[i] = 10; d[i + 1] = 6; d[i + 2] = 2; d[i + 3] = 224;
+            }
+          }
+        }
+        fctx.putImageData(id, 0, 0);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(fc, inner.x, inner.y);
+      }
 
       const t = MapRenderer.tilePx(this.cam);
       const vw = (this.mapRect ? this.mapRect.w / t : 0) / World.width * inner.w;

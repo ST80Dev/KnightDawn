@@ -50,6 +50,10 @@ const Scenes = {
 };
 
 // ─── Utility condivisa: hit-test di una lista di pulsanti {x,y,w,h,disabled} ──
+function hitRect(r, x, y) {
+  return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+}
+
 function btnHitIndex(list, x, y) {
   for (let i = 0; i < list.length; i++) {
     const b = list[i];
