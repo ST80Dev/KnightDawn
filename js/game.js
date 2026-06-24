@@ -153,6 +153,8 @@ const GameScreen = {
     this._dismissedPOIs = new Set(); // specials già notificate in questa tratta
     this.chronicle = null;         // Carta del cronista (evento attivo)
     this._chronicleBtns = [];      // rect dei pulsanti scelta + chiudi
+    this.combat = null;            // Scena di combattimento (scontro attivo)
+    this._combatBtns = [];         // rect dei pulsanti azione del Round
     if (typeof Events !== 'undefined') Events.reset();
     this.camAnchor = { x: World.knightStart.x, y: World.knightStart.y };
     this.camTarget = null;         // quando non-null la cam si avvicina qui
@@ -304,6 +306,7 @@ const GameScreen = {
   onPointerDown(p) {
     if (Scenes.current !== this) return;
     if (SaveUI.isOpen()) { SaveUI.onPointerDown(p); return; }
+    if (this.combat) { this._combatDown(p); return; }
     if (this.chronicle) { this._chronicleDown(p); return; }
     if (this.poiPause)  { this._poiPauseDown(p); return; }
     if (this.preRecap)  { this._preRecapDown(p); return; }
@@ -337,6 +340,7 @@ const GameScreen = {
     if (Scenes.current !== this) return;
     if (SaveUI.isOpen()) { SaveUI.onPointerUp(p, type); return; }
 
+    if (this.combat)    { this._combatUp(p); return; }
     if (this.chronicle) { this._chronicleUp(p); return; }
     if (this.poiPause)  { this._poiPauseUp(p); return; }
     if (this.preRecap)  { this._preRecapUp(p); return; }
@@ -705,6 +709,219 @@ const GameScreen = {
 
   _chronicleCtxForPrereq() {
     return { knight: Knight, world: World, meta: this.meta };
+  },
+
+  // ─── Scena di combattimento (overlay 3 colonne) ───────────────────────────
+  // Etichette italiane per le scelte del Round (vedi js/combat.js).
+  // Avvia uno scontro. enemy = id stringa del catalogo o oggetto nemico.
+  // Pilotabile da console: GameScreen.openCombat('casata.cavaliere').
+  openCombat(enemy, opts) {
+    if (typeof Combat === 'undefined') return false;
+    opts = opts || {};
+    let remainingPath = null, savedDest = null;
+    if (typeof Travel !== 'undefined' && Travel.isActive && Travel.isActive()) {
+      remainingPath = Travel.path ? Travel.path.slice(Travel.idx) : null;
+      savedDest = this.meta ? this.meta.destinazione : null;
+      Travel.stop();
+    }
+    let terrain = opts.terrain;
+    if (terrain == null && typeof World !== 'undefined' && World.biomeAt) {
+      terrain = World.biomeAt(this.knightPos.x, this.knightPos.y);
+    }
+    this.combat = {
+      state: Combat.start({ enemy, terrain, knight: Knight }),
+      remainingPath, savedDest,
+      resumeTravel: !!remainingPath && opts.resumeAfter !== false,
+    };
+    this._combatBtns = [];
+    this._combatPressed = null;
+    window.GameRender.invalidate();
+    return true;
+  },
+
+  _combatDown(p) {
+    if (!this._combatBtns) return;
+    this._combatPressed = null;
+    for (let i = 0; i < this._combatBtns.length; i++) {
+      const r = this._combatBtns[i];
+      if (r && !r.disabled && hitRect(r, p.x, p.y)) { this._combatPressed = i; return; }
+    }
+  },
+
+  _combatUp(p) {
+    const i = this._combatPressed;
+    this._combatPressed = null;
+    if (i == null || !this._combatBtns[i]) { window.GameRender.invalidate(); return; }
+    const r = this._combatBtns[i];
+    if (r.disabled || !hitRect(r, p.x, p.y)) { window.GameRender.invalidate(); return; }
+    const c = this.combat;
+    if (c.state.finito) { this._closeCombat(); window.GameRender.invalidate(); return; }
+    Combat.step(c.state, r.choice);   // avanza il Round (muta lo stato)
+    window.GameRender.invalidate();
+  },
+
+  _closeCombat() {
+    const c = this.combat;
+    this.combat = null;
+    // Riprende il viaggio se sospeso (lo step C applichera' qui il ramo esito).
+    if (c && c.resumeTravel && c.remainingPath && c.remainingPath.length
+        && typeof Travel !== 'undefined') {
+      Travel.start(c.remainingPath);
+      if (this.meta) this.meta.destinazione = c.savedDest || this.meta.destinazione;
+    }
+  },
+
+  drawCombat() {
+    const ctx = this.ctx;
+    const W = window.UI.w, H = window.UI.h;
+    const st = this.combat.state;
+    const enemy = st.enemy;
+
+    // Pannello centrale
+    const pw = Math.min(SF(760), W - SF(28));
+    const ph = Math.min(SF(470), H - SF(28));
+    const px = Math.round((W - pw) / 2), py = Math.round((H - ph) / 2);
+    const headerH = SF(38);
+
+    // Backdrop + pannello
+    ctx.fillStyle = 'rgba(0,0,0,0.62)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = PALETTE.hudSfondo || '#1a1208';
+    ctx.fillRect(px, py, pw, ph);
+    ctx.fillStyle = '#3a2810';
+    ctx.fillRect(px, py, pw, headerH);
+    ctx.fillStyle = '#e8c050';
+    ctx.font = FONT.heading ? FONT.heading() : FONT.label();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('Scontro — ' + (enemy.nome || 'Avversario'), px + pw / 2, py + headerH / 2);
+
+    const gap = SF(12);
+    const innerY = py + headerH + SF(10);
+    const innerH = ph - headerH - SF(20);
+    const innerX = px + SF(12);
+    const innerW = pw - SF(24);
+    const leftW = Math.round(innerW * 0.28);
+    const rightW = Math.round(innerW * 0.28);
+    const centerW = innerW - leftW - rightW - gap * 2;
+    const leftX = innerX;
+    const centerX = leftX + leftW + gap;
+    const rightX = centerX + centerW + gap;
+
+    this._combatBtns = [];
+
+    // ── Colonna SINISTRA: cavaliere + info ──
+    this._combatActorPanel(leftX, innerY, leftW, innerH, {
+      key: 'cavaliere', nome: Knight.nome || 'Cavaliere', sub: Knight.titolo || '',
+      flip: false,
+    });
+    let by = innerY + SF(118);
+    this.drawAttrBar(leftX, by, leftW, 'SALUTE',  Knight.salute,  '#c83838', '#e85858'); by += SF(34);
+    this.drawAttrBar(leftX, by, leftW, 'FORZA',   Knight.forza,   '#c8a030', '#e8c050'); by += SF(34);
+    this.drawAttrBar(leftX, by, leftW, 'VOLONTÀ', Knight.volonta, '#5a8ad8', '#7aaaf8'); by += SF(34);
+
+    // ── Colonna DESTRA: nemico + info ──
+    this._combatActorPanel(rightX, innerY, rightW, innerH, {
+      key: (typeof Sprites !== 'undefined' ? Sprites.keyFor(enemy) : 'umano'),
+      nome: enemy.nome || 'Avversario', sub: enemy.numerosita || '', flip: true,
+    });
+    ctx.fillStyle = '#c8b890';
+    ctx.font = FONT.body ? FONT.body() : FONT.value();
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    let dy = innerY + SF(122);
+    for (const line of this._wrapText(ctx, enemy.descr || '', rightW)) {
+      ctx.fillText(line, rightX, dy); dy += SF(15);
+    }
+
+    // ── Colonna CENTRO: Slancio + cronaca + azioni ──
+    this._combatSlancio(centerX, innerY, centerW, st.slancio);
+    // Cronaca (ultime righe)
+    ctx.fillStyle = '#d8c890';
+    ctx.font = FONT.body ? FONT.body() : FONT.value();
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    let cy = innerY + SF(44);
+    const cronaca = st.cronaca.slice(-5);
+    for (const line of cronaca) {
+      for (const wl of this._wrapText(ctx, line, centerW)) {
+        ctx.fillText(wl, centerX, cy); cy += SF(14);
+      }
+    }
+    // Pulsanti azione (in basso nella colonna centro)
+    const CHOICE_LABELS = {
+      continua: 'Continua', fuga: 'Tenta la fuga', resa: 'Arrenditi',
+      parlamento: 'Parlamento', colpoDisperato: 'Colpo disperato',
+    };
+    const btnH = SF(30);
+    let choices;
+    if (st.finito) {
+      choices = [{ choice: '__close', label: 'Prosegui  (esito: ' + st.esito + ')' }];
+    } else {
+      choices = Combat.scelteDisponibili(st).map(ch => ({ choice: ch, label: CHOICE_LABELS[ch] || ch }));
+    }
+    let yy = innerY + innerH - choices.length * (btnH + SF(6)) + SF(2);
+    for (let i = 0; i < choices.length; i++) {
+      const r = { x: centerX, y: yy, w: centerW, h: btnH, choice: choices[i].choice };
+      this._combatBtns.push(r);
+      const pressed = this._combatPressed === i;
+      ctx.fillStyle = pressed ? '#3a2810' : '#2a1c08';
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      drawPixelRectStroke(ctx, r.x, r.y, r.w, r.h, '#a08050');
+      ctx.fillStyle = '#e8d8b0';
+      ctx.font = FONT.button ? FONT.button() : FONT.value();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(choices[i].label, r.x + r.w / 2, r.y + r.h / 2);
+      yy += btnH + SF(6);
+    }
+
+    drawPixelRectStroke(ctx, px, py, pw, ph, '#5a4020');
+  },
+
+  // Pannello attore (cavaliere/nemico): cornice + silhouette + nome.
+  _combatActorPanel(x, y, w, h, info) {
+    const ctx = this.ctx;
+    const boxH = SF(96);
+    ctx.fillStyle = '#120c04';
+    ctx.fillRect(x, y, w, boxH);
+    drawPixelRectStroke(ctx, x, y, w, boxH, '#5a4020');
+    if (typeof Sprites !== 'undefined') {
+      Sprites.drawInBox(ctx, info.key, { x: x, y: y, w: w, h: boxH },
+        { margin: SF(8), flip: info.flip });
+    }
+    ctx.fillStyle = '#e8c050';
+    ctx.font = FONT.label ? FONT.label() : FONT.value();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText(info.nome, x + w / 2, y + boxH + SF(4));
+    if (info.sub) {
+      ctx.fillStyle = '#a08850';
+      ctx.font = FONT.small ? FONT.small() : FONT.value();
+      ctx.fillText(info.sub, x + w / 2, y + boxH + SF(20));
+    }
+  },
+
+  // Indicatore Slancio: barra simbolica "tiro alla fune" (nemico ↔ cavaliere).
+  _combatSlancio(x, y, w, slancio) {
+    const ctx = this.ctx;
+    ctx.fillStyle = '#e8c050';
+    ctx.font = FONT.label ? FONT.label() : FONT.value();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText('SLANCIO', x + w / 2, y);
+    const barY = y + SF(18), barH = SF(12);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(x, barY, w, barH);
+    const MAX = 6;
+    const s = Math.max(-MAX, Math.min(MAX, slancio));
+    const mid = x + w / 2;
+    if (s >= 0) {
+      ctx.fillStyle = '#c8a030';
+      ctx.fillRect(mid, barY + PIXEL, (w / 2) * (s / MAX), barH - PIXEL * 2);
+    } else {
+      const fw = (w / 2) * (-s / MAX);
+      ctx.fillStyle = '#c83838';
+      ctx.fillRect(mid - fw, barY + PIXEL, fw, barH - PIXEL * 2);
+    }
+    drawPixelRectStroke(ctx, x, barY, w, barH, '#5a3a18');
+    // Tacca centrale
+    ctx.fillStyle = '#e8c050';
+    ctx.fillRect(Math.round(mid) - PIXEL, barY - SF(2), PIXEL * 2, barH + SF(4));
   },
 
   _wrapText(ctx, text, maxW) {
@@ -1140,6 +1357,7 @@ const GameScreen = {
     if (this.preRecap)  this.drawPreRecap();
     if (this.poiPause)  this.drawPOIPause();
     if (this.chronicle) this.drawChronicle();
+    if (this.combat)    this.drawCombat();
 
     // SaveUI overlay sopra tutto il resto, sia desktop che compatto.
     if (SaveUI.isOpen()) SaveUI.draw(ctx);

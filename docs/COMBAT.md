@@ -36,9 +36,12 @@ Numero indicativo di Round totali per archetipo (N):
 | Battaglia in esercito                         |  10–20  | 1–3 giorni      |
 | Assedio prolungato                            |  30–60  | 4–8 giorni      |
 
-Scontri da **1 Round** (ladro, animaletto) si risolvono inline nell'evento
-gamebook: scelte morali (*Combatti / Fuggi / Parla*) all'incontro, esito
-immediato, niente scena combat dedicata.
+**Nessuno scontro si auto-risolve** al posto del giocatore: anche uno scontro
+da 1 Round apre la scena di combattimento e richiede almeno un'azione (es.
+*Continua*). La scelta morale resta all'evento (*Combatti / Evita / Parla*);
+una volta scelto *Combatti*, lo scontro è sempre interattivo. La risoluzione
+automatica (`Combat.resolveAuto`) esiste solo come fallback per test headless,
+mai nel gioco reale.
 
 Battaglie e assedi lunghi sono suddivisi in **fasi narrative** (es.
 schieramento → urto → mischia → rotta), con scelte diverse per fase.
@@ -162,12 +165,17 @@ poi applicare gli effetti del ramo-esito al ritorno. Schema dettagliato in
 
 ## 9. Visualizzazione
 
-Vista combattimento dedicata in `scenes.js`, attiva per scontri di **≥2 Round**.
-Per scontri da 1 Round la risoluzione resta inline nella Carta dell'evento
-gamebook che li ha originati.
+Overlay di combattimento sulla mappa, attivo per **ogni** scontro (anche da
+1 Round). Layout desktop a tre colonne:
 
-- Carta del cronista per il Round corrente (narrazione + miniatura)
-- Indicatore Slancio (barra simbolica, non numerica)
-- Pulsantiera scelte (sempre + contestuali del Round)
-- Cronaca scorrevole dei Round precedenti
-- Niente sprite animate dei combattenti — la narrazione regge la scena
+- **Sinistra** — il cavaliere: silhouette pixel (vedi `js/sprites.js`),
+  eventuali compagni, e le info che contano in combattimento (Salute, Forza,
+  Volontà, equipaggiamento).
+- **Centro** — pulsantiera azioni del Round (sempre: Continua/Fuga/Resa;
+  contestuali: Parlamento, Colpo disperato…) + indicatore **Slancio** come
+  barra simbolica "tiro alla fune" tra cavaliere e nemico.
+- **Destra** — il nemico: silhouette, nome, numerosità, descrizione.
+
+In basso, la cronaca scorrevole dei Round. Niente sprite animate: le
+silhouette statiche + la narrazione reggono la scena. La variante mobile
+(compact) impila i pannelli — affrontata dopo il desktop.
