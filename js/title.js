@@ -17,9 +17,25 @@ const TitleScreen = {
     this.buttons = [
       { label: 'NUOVA PARTITA',    action: 'new' },
       { label: 'CONTINUA',         action: 'continue', disabled: true },
-      { label: 'CARICA / IMPORTA', action: 'load',     disabled: true },
+      { label: 'CARICA / IMPORTA', action: 'load' },
       { label: 'CREDITI',          action: 'credits',  disabled: true },
     ];
+
+    // Probe iniziale: abilita CONTINUA se esiste l'autosave (slot 0).
+    this._probeAutosave();
+  },
+
+  async _probeAutosave() {
+    try {
+      const meta = await Save.hasSave(Save.AUTOSAVE_SLOT);
+      const btn = this.buttons.find(b => b.action === 'continue');
+      if (btn) {
+        btn.disabled = !meta;
+        window.GameRender && window.GameRender.invalidate();
+      }
+    } catch (e) {
+      console.error('Probe autosave fallito:', e);
+    }
   },
 
   layout() {
@@ -54,18 +70,21 @@ const TitleScreen = {
 
   onPointerMove(p, type) {
     if (Scenes.current !== this) return;
+    if (SaveUI.isOpen()) { SaveUI.onPointerMove(p, type); return; }
     if (type === 'touch') return; // l'hover non esiste finché il dito non preme
     this.setHover(btnHitIndex(this.buttons, p.x, p.y), true);
   },
 
   onPointerDown(p) {
     if (Scenes.current !== this) return;
+    if (SaveUI.isOpen()) { SaveUI.onPointerDown(p); return; }
     this.pressed = btnHitIndex(this.buttons, p.x, p.y);
     this.setHover(this.pressed, false);
   },
 
   onPointerUp(p, type) {
     if (Scenes.current !== this) return;
+    if (SaveUI.isOpen()) { SaveUI.onPointerUp(p, type); return; }
     const i = btnHitIndex(this.buttons, p.x, p.y);
     const fire = i >= 0 && i === this.pressed;
     this.pressed = -1;
@@ -74,14 +93,34 @@ const TitleScreen = {
   },
 
   onPointerCancel() {
+    if (SaveUI.isOpen()) { SaveUI.onPointerCancel(); return; }
     this.pressed = -1;
     this.setHover(-1, false);
   },
 
   activate(b) {
     if (!b || b.disabled) return;
-    if (b.action === 'new') Scenes.switchTo('game');
-    else console.log('Azione titolo:', b.action);
+    if (b.action === 'new') {
+      Scenes.switchTo('game');
+      return;
+    }
+    if (b.action === 'continue') {
+      this._continueAutosave();
+      return;
+    }
+    if (b.action === 'load') {
+      SaveUI.open('title', {
+        onLoaded: () => Scenes.switchTo('game'),
+      });
+      return;
+    }
+    console.log('Azione titolo:', b.action);
+  },
+
+  async _continueAutosave() {
+    const ok = await Save.load(Save.AUTOSAVE_SLOT);
+    if (ok) Scenes.switchTo('game');
+    else console.warn('Autosave non disponibile.');
   },
 
   // Riduce la dimensione del font finché il testo non sta in maxWidth.
@@ -198,5 +237,8 @@ const TitleScreen = {
     ctx.font = `${SF(compact ? 14 : 22)}px "Courier New", monospace`;
     ctx.textAlign = 'right';
     ctx.fillText('v0.0.7  fase 1  adattivo', w - m - SF(24), h - m - SF(28));
+
+    // SaveUI overlay (gestione slot dal titolo)
+    if (SaveUI.isOpen()) SaveUI.draw(ctx);
   },
 };
