@@ -335,8 +335,8 @@ const MapRenderer = {
   _drawFog(ctx, area, ox, oy, t, x0, y0, x1, y1) {
     const W = World.width, H = World.height;
     const cell = Math.ceil(t) + 1;
-    const FOG_DARK = 'rgba(10, 6, 2, 0.97)';   // ignoto: copertura quasi piena
-    const FOG_DIM  = 'rgba(10, 6, 2, 0.55)';   // intravisto: bioma desaturato
+    const FOG_DARK = '#000000';                  // ignoto: nero pieno opaco
+    const FOG_DIM  = 'rgba(0, 0, 0, 0.62)';      // intravisto: bioma desaturato
     for (let ty = Math.max(0, y0); ty < Math.min(H, y1); ty++) {
       for (let tx = Math.max(0, x0); tx < Math.min(W, x1); tx++) {
         const f = World.fog[ty * W + tx];
