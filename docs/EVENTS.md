@@ -213,9 +213,74 @@ viaggio per bioma, 20+ per ogni tipo struttura, 30+ POI.
 
 ### Luoghi mancanti
 
-Attualmente solo `castle`/`village`/`keep`. Da aggiungere: **taverna**,
-**monastero**, **dungeon** (con generazione propria, non procedurale-tile
-ma scena narrativa).
+Architettura allineata alla spec grafica **L1 (layout cliccabile) + L2
+(Carta del cronista)**: entrando in un luogo complesso si apre prima un
+layout schematico in pixel-art cartografica con edifici/aree cliccabili,
+e ogni click apre una chronicle. Modulo dedicato previsto: `locations.js`.
+
+**Taverna.** Non struttura sulla mappa, ma **edificio cliccabile**
+dentro il layout L1 di villaggi (e futuri tipi urbani: città, porti).
+Catalogo: namespace condiviso `loc.taverna.*` (assoldare compagno,
+ascoltare voci/news, dadi, rissa, mercante curiosità, ubriaco con segreto,
+ecc.). Effetti tipici: -oro, +volontà, +news, occasionalmente quest con
+scadenza.
+
+**Monastero.** Nuova struttura mondo (`type:'monastery'`), isolata in
+collina/foresta/montagna, 3–6 per mondo. Funzione meccanica: recupero
+Volontà (come la locanda per la Forza), guarigione spirituale, scrittura
+e lettura di pergamene (lore/news antiche). Layout L1 proprio con aree:
+
+```
+loc.monastero.cappella.*
+loc.monastero.foresteria.*
+loc.monastero.infermeria.*
+loc.monastero.biblioteca.*
+loc.monastero.scriptorium.*   (variabile)
+loc.monastero.cripta.*        (variabile, può aprire dungeon)
+loc.monastero.giardino.*      (variabile)
+```
+
+Render mondo: icona dedicata (simbolo croce/torre piccola). Generazione
+in `world.js` accanto a `placeStructures()`.
+
+**Dungeon.** Caso speciale — non un tipo di luogo, ma una **modalità a
+grafo di stanze che si svelano progressivamente**. Riusa
+`openChronicle()` per ogni stanza, ma con modulo dedicato `dungeon.js`
+che tiene la mappa delle stanze, quali sono scoperte e gli archi fra
+loro. Trigger: POI esistenti (`cripta`, `rovine`, `voragine`, `tempio`),
+oppure scelta dentro una `loc.*.cripta` di castello/monastero. Da
+definire in fase propria; per ora basta lo stub di principio.
+
+**Rovine.** Caso intermedio: niente layout L1 con edifici cliccabili,
+ma un pannello di azioni — "Esplora sezione nord", "Scava macerie",
+"Cerca ingresso nascosto" — ognuna apre una chronicle. Chiamiamolo
+**L1-light**.
+
+**Regola architetturale: namespace per edificio, non per struttura.**
+Taverna, fabbro, cappella, mercante compaiono in più tipi di luogo.
+Per evitare duplicazione il catalogo è organizzato così:
+
+- Namespace **per edificio condiviso**: `loc.taverna.*`, `loc.fabbro.*`,
+  `loc.cappella.*`, `loc.mercante.*`, `loc.guaritore.*`.
+- Namespace **per area unica** dove serve: `loc.castello.salatrono.*`,
+  `loc.castello.cameraconsiglio.*`, `loc.monastero.scriptorium.*`.
+
+Il layout L1 di ogni struttura mappa le sue aree a questi pool senza
+duplicare contenuto.
+
+**Regola "una stanza = un pool distinto"** (autoriale): se due aree
+avrebbero lo stesso pool eventi, vanno **fuse** anche a livello layout.
+Il catalogo guida il layout, non viceversa.
+
+**Migrazione del trigger.** L'attuale `Events.pickLocation(structureType)`
+(scheletro S3, pesca su `loc.castello.*`/`loc.villaggio.*`/`loc.keep.*`)
+sarà sostituito da `Events.pickArea(structureType, areaKey)` quando arriva
+`locations.js`. Fino ad allora resta come fallback: il click su una
+struttura apre direttamente una chronicle pescata dal pool generico.
+
+**Priorità di lavoro.** Espandere prima il catalogo eventi per i namespace
+per-area, in modo che all'implementazione del layout L1 le scene esistano
+già. Layout senza catalogo è inerte.
 
 ### Integrazione news
 
