@@ -69,87 +69,106 @@ const Sprites = {
       '..tttt....tttt..',
       '..oot......too..',
     ],
-    // Lupo: quadrupede di profilo, testa a destra, occhio ambra.
-    // Quadrupede di PROFILO, testa a destra (muso, orecchio, occhio),
-    // coda a sinistra, quattro zampe.
+    // Lupo: quadrupede di PROFILO, testa a destra (muso, orecchio, occhio),
+    // coda a sinistra, quattro zampe (24x14).
     lupo: [
-      '....................',
-      '.............oo.....',
-      '...ooo......odddo...',
-      '..odmmmoooooodmmmno.',
-      '.odmmmmmmmmmmmmmmedo',
-      '.odmmmmmmmmmmmmmmmwo',
-      '.odllmmmmmmmmmmllmdo',
-      '.oddmmmmmmmmmmmmmddo',
-      '..odo.odo...odo.odo.',
-      '..odo.odo...odo.odo.',
-      '..ono.ono...ono.ono.',
-      '....................',
+      '........................',
+      '....................oo..',
+      '....ooo...........odddo.',
+      '...odddo.........odmmmno',
+      '..odmmmdoooooooooodmmmedo',
+      '.odmmmmmmmmmmmmmmmmmmmwwo',
+      '.odmmmmmmmmmmmmmmmmmmmmmo',
+      '.odllmmmmmmmmmmmmmmmmllmo',
+      '.oddmmmmmmmmmmmmmmmmmmddo',
+      '..odo...odo....odo..odo..',
+      '..odo...odo....odo..odo..',
+      '..ono...ono....ono..ono..',
+      '........................',
+      '........................',
     ],
-    // Orso: mole eretta, piccole orecchie, artigli chiari.
+    // Orso: quadrupede di PROFILO, gobba sul dorso, testa a destra (24x14).
     orso: [
-      '...oo......oo...',
-      '..odmo....odmo..',
-      '..odmmoooodmmo..',
-      '.odmmmmmmmmmmmo.',
-      '.odmleemmmeelmo.',
-      '.odmmmmwwmmmmmo.',
-      'odmmmmmmmmmmmmmo',
-      'odmmmmmmmmmmmmmo',
-      'odmmmmllmmmmmmmo',
-      'odmmmmmmmmmmmmmo',
-      '.odmmmmmmmmmmdo.',
-      '.oddmmmmmmmmddo.',
-      '.aoodmmmmmmdooa.',
-      '.aa.oddo.oddo.aa',
+      '........................',
+      '..................oo....',
+      '...oooo..........odddo..',
+      '..odddmoooooooooodmmmno.',
+      '.odmmmmmmmmmmmmmmmmmeedo.',
+      '.odmmmmmmmmmmmmmmmmmmwwo',
+      'odmmmmmmmmmmmmmmmmmmmmmo',
+      'odmllmmmmmmmmmmmmmmmllmo',
+      'odmmmmmmmmmmmmmmmmmmmmdo',
+      '.oddmmmmmmmmmmmmmmmmddo.',
+      '..odo...odo....odo.odo..',
+      '..odo...odo....odo.odo..',
+      '..owo...owo....owo.owo..',
+      '........................',
     ],
-    // Ragno: corpo tondo bilobato, otto zampe, occhi rossi.
+    // Ragno: corpo tondo, otto zampe radiali, occhi rossi (20x13).
     ragno: [
-      'o..o........o..o',
-      '.oo.oo....oo.oo.',
-      '..oo.oo..oo.oo..',
-      '....odmmmmdo....',
-      '...odmeemeedmo..',
-      '...odmmmmmmmdo..',
-      '....odmmmmdo....',
-      '..oo.oo..oo.oo..',
-      '.oo.oo....oo.oo.',
-      'o..o........o..o',
+      '..o....o..o....o....',
+      '...oo..o..o..oo......',
+      '....oo.oo.oo.oo......',
+      '......odmmmmdo.......',
+      '.....odmeemeedo......',
+      '....odmmmmmmmmdo.....',
+      '....odmmmmmmmmdo.....',
+      '.....odmmmmmmdo......',
+      '......odmmmmdo.......',
+      '....oo.oo.oo.oo......',
+      '...oo..o..o..oo......',
+      '..o....o..o....o....',
+      '....................',
     ],
-    // Gigante (troll): spalle enormi, mole massiccia.
+    // Gigante (troll): mole massiccia, spalle enormi (18x24).
     gigante: [
-      '....oddddo......',
-      '...odmmmmmdo....',
-      '...odmlllmmdo...',
-      '...odmeemmmdo...',
-      '...oodmmmmddo...',
-      '.oodmmmmmmmmdo..',
-      'odmmmmmmmmmmmmdo',
-      'odmmmmmmmmmmmmdo',
-      'odmmmllmmmmmmmdo',
-      '.oddmmmmmmmmddo.',
-      '..odmmmmmmmmdo..',
-      '..odmmmddmmmdo..',
-      '..odmmo..odmmdo.',
-      '..oddo....oddo..',
+      '......oddddo......',
+      '.....odmmmmmdo....',
+      '....odmlllllmdo...',
+      '....odmeemmeemdo..',
+      '....odmmmwwmmmdo..',
+      '....oodmmmmmmddo..',
+      '...odmmmmmmmmmmdo.',
+      '..odmmmmmmmmmmmmdo',
+      '.odmmmmmmmmmmmmmmdo'.slice(0,18),
+      'odmmmmllmmmmmmmmmdo',
+      'odmmmmmmmmmmmmmmmdo',
+      'odmmmmmmmmmmmmmmmdo',
+      '.odmmmmmmmmmmmmmdo.',
+      '..oddmmmmmmmmmddo..',
+      '..odmmmmmmmmmmmdo..',
+      '..odmmmmddmmmmmdo..',
+      '..odmmmo..odmmmdo..',
+      '..odmmo....odmmdo..',
+      '..odmmo....odmmo...',
+      '..odmmo....odmmo...',
+      '..oddo......oddo...',
+      '..ono........ono...',
+      '..oo..........oo...',
+      '..................',
     ],
-    // Mutaforma (licantropo): bipede bestiale, orecchie e fauci.
+    // Mutaforma (licantropo): bipede bestiale, orecchie, fauci, artigli (16x21).
     mutaforma: [
       '...oo......oo...',
       '..odmo....odmo..',
       '..odmmo..odmmo..',
-      '..odmeemoodmeedo',
-      '...odmmwwwwmmdo.',
-      '...oodmmmmmmddo.',
+      '..odmemoomedo...',
+      '..odmmmoommmdo..',
+      '...odmwwwwwmdo..',
+      '...oodmmmmmddo..',
       '..odmmmmmmmmmmdo',
       '.odmmmmllmmmmmdo',
-      'aoddmmmmmmmmddoa',
-      '.a.odmmmmmmdo.a.',
-      '...odmmmmmmdo...',
-      '...odmmddmmdo...',
-      '...odmo..odmo...',
-      '..aodo....odoa..',
-      '..aa........aa..',
+      'wddmmmmmmmmmmddw',
+      'wodmmmmmmmmmmdow',
+      '..odmmmmmmmmmdo.',
+      '..odmmmllmmmmdo.',
+      '..odmmmmmmmmmdo.',
+      '..oddmmmmmmmddo.',
+      '..odmmo..odmmo..',
+      '..odmo....odmo..',
+      '..odmo....odmo..',
+      '..owwo....owwo..',
+      '..ww........ww..',
     ],
     // Non-morto singolo (scheletro): teschio e costato, osso chiaro (16x21).
     nonmorto: [
@@ -175,46 +194,62 @@ const Sprites = {
       '...owwo..owwo...',
       '...oowo..owoo...',
     ],
-    // Orda di non-morti: tre figure scheletriche serrate.
+    // Orda di non-morti: quattro figure scheletriche serrate (24x16).
     orda: [
-      '.owo..owo..owo..',
-      '.owwo.owwo.owwo.',
-      '.oweo.oweo.oweo.',
-      '.owwo.owwo.owwo.',
-      '.owwo.owwo.owwo.',
-      '.owwo.owwo.owwo.',
-      '.owwo.owwo.owwo.',
-      '.owo..owo..owo..',
-      '.owo..owo..owo..',
-      '.oo...oo...oo...',
+      '.owo...owo...owo...owo..',
+      'owwwo.owwwo.owwwo.owwwo.',
+      'owewo.owewo.owewo.owewo.',
+      'owwwo.owwwo.owwwo.owwwo.',
+      '.owo...owo...owo...owo..',
+      'owwwo.owwwo.owwwo.owwwo.',
+      'owwwo.owwwo.owwwo.owwwo.',
+      'owwwo.owwwo.owwwo.owwwo.',
+      '.owo...owo...owo...owo..',
+      '.owo...owo...owo...owo..',
+      '.owo...owo...owo...owo..',
+      '.o.o...o.o...o.o...o.o..',
+      '........................',
+      '........................',
+      '........................',
+      '........................',
     ],
-    // Drago/Wyrm: ali spiegate, collo e testa a sinistra, coda a destra.
+    // Drago/Wyrm: di PROFILO, ali spiegate, collo e testa a destra,
+    // coda a sinistra (24x16).
     drago: [
-      '..o..........o..',
-      '.odo........odo.',
-      '.odmo......odmo.',
-      'odmmmo....odmmmo',
-      'odmllmoooomllmmo',
-      'oemmmmmmmmmmmmdo',
-      '.oommmmmmmmmmmdo',
-      '...odmmmmmmmddoo',
-      '....oodmmmddo.o.',
-      '......oddoodddo.',
-      '........o...oddo',
+      '........................',
+      '...........oo...........',
+      '..........odwo..........',
+      '.........odwwwo.........',
+      '........odwwwwwo........',
+      '..ooo...odwwwwwwo...ooo..',
+      '.oddmoooommmmmmmoooodmno.'.slice(0,24),
+      'odmmmmmmmmmmmmmmmmmmdmeno',
+      'odmmmmmmmmmmmmmmmmmmmmwwo',
+      '.ooummmmmmmmmmmmmmodmmmo.'.slice(0,24),
+      '....odmmmmmmmmmmdo.oooo..',
+      '.....odllmmmmllmdo.......',
+      '......odo..odo..odo......',
+      '......odo..odo..odo......',
+      '......ono..ono..ono......',
+      '........................',
     ],
-    // Chimera/Bestia di leggenda: felino cornuto, criniera, coda.
+    // Chimera/Bestia di leggenda: felino cornuto di PROFILO, criniera,
+    // coda (24x14).
     chimera: [
-      '..o........o....',
-      '.oao......oao...',
-      '.oao.oooo.oao...',
-      '.odmoddddomdo...',
-      'oemmmllllmmmeo..',
-      'odmmmmmmmmmmmdo.',
-      'odmmmmmmmmmmmmdo',
-      'odmmmllmmmmmmmdo',
-      '.oddmmmmmmmmmddo',
-      '..odmo.odmo.oddo',
-      '..oddo.oddo..ooo',
+      '........................',
+      '...................oa.oa',
+      '..................oaooao.'.slice(0,24),
+      '.................odmmmmdo',
+      '....ooo.........oamllllme'.slice(0,24),
+      '...oddmoooooooooommmmmmno',
+      '..odmmmmmmmmmmmmmmmmmmwwo',
+      '..odmmmmmmmmmmmmmmmmmmmmo',
+      '..odllmmmmmmmmmmmmmmllmdo',
+      '..oddmmmmmmmmmmmmmmmmddo.',
+      '...odo...odo....odo.odo..',
+      '...odo...odo....odo.odo..',
+      '...ono...ono....ono.ono..',
+      '........................',
     ],
     // Orchi/Goblin: bruto verde, zanne, occhi rossi (16x24).
     orchi: [
@@ -292,19 +327,24 @@ const Sprites = {
       '..obbb..bbbo....',
       '..oddo..oddo....',
     ],
-    // Massa (battaglia/assedio): stendardi incrociati su una schiera.
+    // Massa (battaglia/assedio): stendardi e lance su una schiera (22x16).
     battaglia: [
-      'r..o......o..r..',
-      'rr.o.o..o.o.rr..',
-      '.rro.o..o.o.rr..',
-      '...oao..oao.....',
-      '...oao..oao.....',
-      '....o....o......',
-      '..ooo.oo.ooo....',
-      '.ommo.oo.ommo...',
-      'ommmoommooommmo.',
-      'ommmmmmmmmmmmmo.',
-      'ooooooooooooooo.',
+      'rr...o........o...rr..',
+      'rrr..o.o....o.o..rrr..',
+      '.rr..o.o....o.o..rr...',
+      '.....oao....oao.......',
+      '.....oao....oao.......',
+      '......o......o........',
+      '......o......o........',
+      '...ooo.oo..oo.ooo.....',
+      '..ommo.oo..oo.ommo....',
+      '.ommmoommooommmommo...'.slice(0,22),
+      'ommmmmmmmmmmmmmmmmmo..',
+      'ommmmmmmmmmmmmmmmmmo..',
+      'ooooooooooooooooooo..',
+      '.....................',
+      '.....................',
+      '.....................',
     ],
   },
 
@@ -314,14 +354,14 @@ const Sprites = {
     umano:      { h:'#4a2e16', s:'#d2a474', k:'#a8794e', o:'#241a0e', d:'#3a2c1c',
                   m:'#6e5436', l:'#8e7048', b:'#5a3a1a', p:'#46506a', t:'#2a1d10' },
     lupo:       { o:'#16120c', d:'#34302a', m:'#5e564a', l:'#8a8272', e:'#d8b030', w:'#e8e0d0', n:'#201a14' },
-    orso:       { o:'#1a120a', d:'#3a2616', m:'#5e4026', l:'#866036', e:'#d8a830', w:'#e0d4c0', a:'#cfc8ba' },
+    orso:       { o:'#1a120a', d:'#3a2616', m:'#5e4026', l:'#866036', e:'#d8a830', w:'#e0d4c0', a:'#cfc8ba', n:'#1a120a' },
     ragno:      { o:'#120a14', d:'#2e1e36', m:'#4a3454', l:'#6a5074', e:'#cc2424' },
     gigante:    { o:'#16180f', d:'#3a4226', m:'#5e6a3e', l:'#8a9a5c', e:'#d8c030', d2:'#000' },
     mutaforma:  { o:'#14100c', d:'#332a22', m:'#574a3c', l:'#7e6e58', e:'#d83018', w:'#e0d8c8', a:'#cfc8ba' },
     nonmorto:   { o:'#181818', w:'#d8d4c4', m:'#9a968a', e:'#cc2424' },
     orda:       { o:'#181818', w:'#cfc8b8', m:'#8a8478', e:'#cc2424' },
-    drago:      { o:'#1a0c0a', d:'#5a1c14', m:'#8a2a1a', l:'#b04a26', e:'#e0b020' },
-    chimera:    { o:'#1a1208', d:'#6a4a1a', m:'#9a7028', l:'#c69a40', e:'#e03018', a:'#caa030' },
+    drago:      { o:'#1a0c0a', d:'#5a1c14', m:'#8a2a1a', l:'#b04a26', e:'#e0b020', w:'#6a201a', n:'#e8dcc0' },
+    chimera:    { o:'#1a1208', d:'#6a4a1a', m:'#9a7028', l:'#c69a40', e:'#e03018', a:'#caa030', n:'#1a1208', w:'#e8dcc0' },
     orchi:      { o:'#12160c', d:'#2e3a1c', g:'#5a6a2e', l:'#84984a', e:'#cc2424', w:'#e0d8c0', a:'#7a6a50', b:'#4a3420', n:'#1a2210' },
     wraith:     { o:'#0a0808', d:'#262024', m:'#463c46', l:'#665a68', e:'#cc2424', a:'#9aa0a8' },
     spettrogelo:{ o:'#10242c', b:'#9ed0e0', l:'#d8f0f8', e:'#3a78c8', d:'#3a2410' },
@@ -353,13 +393,21 @@ const Sprites = {
     return 'umano';
   },
 
+  // Larghezza in celle di una figura (massimo tra le righe: il renderer
+  // tollera righe di lunghezza diversa, le celle mancanti sono trasparenti).
+  _cols(bmp) {
+    let w = 0;
+    for (const row of bmp) if (row.length > w) w = row.length;
+    return w;
+  },
+
   // ─── Disegno ──────────────────────────────────────────────────────────────
   draw(ctx, key, x, y, cell, opts) {
     opts = opts || {};
     const bmp = this.bitmaps[key];
     const pal = this.palettes[key];
     if (!bmp || !pal) return;
-    const cols = bmp[0].length;
+    const cols = this._cols(bmp);
     for (let r = 0; r < bmp.length; r++) {
       const row = bmp[r];
       for (let c = 0; c < row.length; c++) {
@@ -377,7 +425,7 @@ const Sprites = {
   size(key, cell) {
     const bmp = this.bitmaps[key];
     if (!bmp) return { w: 0, h: 0 };
-    return { w: bmp[0].length * cell, h: bmp.length * cell };
+    return { w: this._cols(bmp) * cell, h: bmp.length * cell };
   },
 
   drawInBox(ctx, key, box, opts) {
@@ -386,7 +434,7 @@ const Sprites = {
     if (!bmp) return null;
     const margin = opts.margin != null ? opts.margin : 0;
     const availW = box.w - margin * 2, availH = box.h - margin * 2;
-    const cols = bmp[0].length, rows = bmp.length;
+    const cols = this._cols(bmp), rows = bmp.length;
     const cell = Math.max(1, Math.floor(Math.min(availW / cols, availH / rows)));
     const w = cols * cell, h = rows * cell;
     const x = Math.round(box.x + (box.w - w) / 2);
