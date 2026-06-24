@@ -152,7 +152,7 @@ Enemies.register({
 });
 Enemies.register({
   id: 'mitici.non_morti', nome: 'Schiera dei non-morti', tipo: 'mitico',
-  categoria: 'nonmorto', numerosita: 'orda',
+  categoria: 'orda', numerosita: 'orda',
   sfida: 15, roundMin: 8, roundMax: 12, accettaResa: false,
   terreni: { favorevole: [7, 8] },  // gelo del nord
   descr: 'Morti che camminano sotto il gelo. Non si stancano, non temono, non finiscono mai.',
