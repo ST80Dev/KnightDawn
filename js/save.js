@@ -22,6 +22,7 @@ const Save = {
       timestamp: Date.now(),
       knight: Knight.toJSON ? Knight.toJSON() : this._snapshotKnight(),
       calendar: Calendar.toJSON(),
+      events: (typeof Events !== 'undefined' && Events.toJSON) ? Events.toJSON() : null,
       world: {
         seed: World.seed,
         width: World.width,
@@ -79,6 +80,7 @@ const Save = {
 
     // Calendar
     Calendar.fromJSON(blob.calendar);
+    if (typeof Events !== 'undefined' && Events.fromJSON) Events.fromJSON(blob.events);
 
     // World — rigenera dallo stesso seed
     World.generate(blob.world.seed);
