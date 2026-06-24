@@ -142,9 +142,69 @@ completeDeadline(id)  // chiamato da una scelta che onora la scadenza
 
 ### Trigger reputazione
 
-(da definire) — eventi che leggono `Knight.reputazione[]` e attivano scene
-specifiche per fazione (es. agguato dei banditi se rep banditi molto negativa,
-invito a corte se rep casata molto positiva).
+Riusa `Knight.reputazione[]` (range **-5..+5** come Onore) e
+`Knight.onore`. Niente sistema parallelo.
+
+**Soglie standard** (in `config.js`):
+
+| Valore  | Stato     |
+|---------|-----------|
+| ≤ -3    | ostile    |
+| -2..-1  | freddo    |
+| 0       | neutro    |
+| +1..+2  | cordiale  |
+| ≥ +3    | alleato   |
+
+**Selezione evento.** Schema `Event` esteso con campo opzionale `if`:
+
+```js
+if: {
+  repMin: { id:'banditi', val:-2 },   // o repMax
+  onoreMin: 1,                         // o onoreMax
+  titolo: 'Lama Senza Onore',          // match esatto
+}
+```
+
+Letto da `Events._pick()` insieme a `where`/`once`. Esempi:
+- `travel.agguato_banditi` — `repMax:{id:'banditi',val:-2}`
+- `loc.castello.invito_corte` — `repMin:{id:'vorn',val:+3}`
+- `travel.mercante_diffidente` — `onoreMax:-2`
+
+**Prereq sulle scelte.** Helper standard nel sistema effetti:
+
+```js
+prereq: ctx => Events.repCheck(ctx, 'vorn', '>=', 2)
+prereq: ctx => Events.onoreCheck(ctx, '<=', -1)
+prereq: ctx => Events.tieneEquip(ctx, 'arma', 'Spada del Conte')
+```
+
+**Titolo dinamico.** `Knight.titolo` evolve in base allo stato cumulato.
+Tabella in `knight.js`:
+
+```js
+TITOLI_RULES = [
+  { titolo: 'Lama Senza Onore',    cond: k => k.onore <= -3 },
+  { titolo: 'Cavaliere Maledetto', cond: k => k.onore <= -1 && repAlleatoBanditi(k) },
+  { titolo: 'Paladino del Cervo',  cond: k => k.onore >=  3 && rep(k,'cervo') >= 3 },
+  { titolo: 'Spada di Vorn',       cond: k => rep(k,'vorn') >= 3 },
+  // 6-10 titoli totali, ordine = priorità
+  { titolo: 'Cavaliere Errante',   cond: () => true },  // default
+]
+```
+
+`Knight.recalcTitolo()` invocato da `_applyDescEffect` quando cambia
+`reputazione` o `onore`. Se il titolo cambia → log "Da ora siete
+conosciuti come **…**". Il titolo nuovo è a sua volta usabile come
+prereq (`if.titolo`).
+
+**Effetti.** `type:'reputazione'` e `type:'onore'` già esistono.
+Aggiunto solo `type:'titolo'` per override esplicito da eventi speciali
+(sovrascrive il calcolo automatico finché un altro evento non lo cambia
+o `recalcTitolo()` non lo riporta a una regola attiva).
+
+**Limite cosciente.** La reputazione **apre/chiude contenuti** (eventi
+extra, opzioni extra, blocchi), non sfuma testo NPC per NPC. Le varianti
+narrative sottili sono compito del text-system (S6).
 
 ### Catalogo eventi
 
