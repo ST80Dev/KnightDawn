@@ -474,9 +474,14 @@ da console / log testuale) prima di aggiungere la sua UI.
 - Dettaglio in `docs/EVENTS.md`
 
 #### Fase S4 — Combattimento
-- Risoluzione automatica a round
-- Modificatori da attributi, equipaggiamento, terreno, seguito
-- Fuga, ferite, morte
+- Scontro a **passi interattivi**: ogni round presenta scelte (continua,
+  fuga, resa, azioni speciali contestuali)
+- Numero di passi scala con la complessità del nemico (ladro 2-3,
+  cavaliere 6-10, battaglia in esercito 20-40)
+- Risoluzione automatica del singolo passo via formula su attributi,
+  equipaggiamento, terreno, seguito; il percorso dello scontro è scelto
+- Slancio cumulato, ferite, fuga, resa, morte
+- Punto di sutura con S3: effetto evento `{ type: 'combat', ... }`
 - Dettaglio in `docs/COMBAT.md`
 
 #### Fase S5 — Fazioni e reputazione

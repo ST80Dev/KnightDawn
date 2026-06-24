@@ -50,6 +50,8 @@ Regole per chi lo aggiorna (Claude o utente):
 
 ## Fase corrente
 
-**FASE 3 — Sistemi di gioco**
-Focus attivo: eventi di viaggio e Carta del cronista (`events.js`, `locations.js`).
-Riferimento: `docs/GDD.md`, `docs/UI_GUIDE.md`.
+**Fetta verticale S3+S4 — Combattimento integrato con eventi**
+S1-S2 complete. S3 ha scaffold motore eventi + catalogo parziale.
+Focus attivo: design e scaffold S4 (`combat.js`, schema effetto `combat`
+in `events.js`), poi chiusura S3 con eventi-incontro reali.
+Riferimento: `docs/COMBAT.md`, `docs/EVENTS.md`, `docs/GDD.md` §5.
