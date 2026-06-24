@@ -88,8 +88,15 @@ const MapRenderer = {
       this._drawContours(ctx, area, ox, oy, t, x0, y0, x1, y1);
     }
 
-    // 5-6. Strutture + etichette
+    // 5. Nebbia di guerra
+    if (World.fog) {
+      this._drawFog(ctx, area, ox, oy, t, x0, y0, x1, y1);
+    }
+
+    // 6. Strutture + etichette (solo se esplorate)
+    const W = World.width;
     for (const s of World.structures) {
+      if (World.fog && !World.fog[s.y * W + s.x]) continue;
       const sx = area.x + (s.x + 0.5 - ox) * t;
       const sy = area.y + (s.y + 0.5 - oy) * t;
       if (sx < area.x - t || sx > area.x + area.w + t ||
@@ -97,8 +104,9 @@ const MapRenderer = {
       this._drawStructure(ctx, s, sx, sy, t);
     }
 
-    // 6b. Zone speciali agli estremi (natura ignota finché non scoperte).
+    // 6b. Zone speciali agli estremi (solo se esplorate)
     for (const sp of World.specials) {
+      if (World.fog && !World.fog[sp.y * W + sp.x]) continue;
       const sx = area.x + (sp.x + 0.5 - ox) * t;
       const sy = area.y + (sp.y + 0.5 - oy) * t;
       if (sx < area.x - t || sx > area.x + area.w + t ||
@@ -320,6 +328,20 @@ const MapRenderer = {
             }
           }
         }
+      }
+    }
+  },
+
+  _drawFog(ctx, area, ox, oy, t, x0, y0, x1, y1) {
+    const W = World.width, H = World.height;
+    const cell = Math.ceil(t) + 1;
+    ctx.fillStyle = 'rgba(10, 6, 2, 0.88)';
+    for (let ty = Math.max(0, y0); ty < Math.min(H, y1); ty++) {
+      for (let tx = Math.max(0, x0); tx < Math.min(W, x1); tx++) {
+        if (World.fog[ty * W + tx]) continue;
+        const sx = Math.floor(area.x + (tx - ox) * t);
+        const sy = Math.floor(area.y + (ty - oy) * t);
+        ctx.fillRect(sx, sy, cell, cell);
       }
     }
   },

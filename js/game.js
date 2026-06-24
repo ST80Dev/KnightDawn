@@ -140,8 +140,17 @@ const GameScreen = {
     // Genera il mondo e posiziona camera/cavaliere.
     World.generate((Math.random() * 0xFFFFFFFF) >>> 0);
     this.knightPos = { x: World.knightStart.x, y: World.knightStart.y };
+    if (World.fog) World.explore(this.knightPos.x, this.knightPos.y, 5);
     this.cam = { cx: this.knightPos.x + 0.5, cy: this.knightPos.y + 0.5, step: MAP_ZOOM_DEFAULT };
     this.activeOverlay = null;
+    this.preRecap = null;          // pannello pre-partenza
+    this.preRecapBtnParti = null;
+    this.preRecapBtnAnnulla = null;
+    this.poiPause = null;          // interruzione POI durante viaggio
+    this._poiPauseBtn = {};        // { ferma, ignora } rect
+    this._dismissedPOIs = new Set(); // specials già notificate in questa tratta
+    this.camAnchor = { x: World.knightStart.x, y: World.knightStart.y };
+    this.camTarget = null;         // quando non-null la cam si avvicina qui
     this.dragging = false;
     this.dragMoved = false;
     Travel.stop();
@@ -269,6 +278,8 @@ const GameScreen = {
 
   onPointerDown(p) {
     if (Scenes.current !== this) return;
+    if (this.poiPause)  { this._poiPauseDown(p); return; }
+    if (this.preRecap)  { this._preRecapDown(p); return; }
     if (this.activeOverlay) { this.overlayPressed = this.overlayWhere(p); return; }
 
     const compact = window.UI.compact;
@@ -295,6 +306,9 @@ const GameScreen = {
   onPointerUp(p, type) {
     if (Scenes.current !== this) return;
 
+    if (this.poiPause)  { this._poiPauseUp(p); return; }
+    if (this.preRecap)  { this._preRecapUp(p); return; }
+
     if (this.dragging) {
       const wasDrag = this.dragMoved;
       this.dragging = false;
@@ -315,6 +329,14 @@ const GameScreen = {
       }
       this.overlayPressed = null;
       return;
+    }
+
+    // Controllo velocità viaggio
+    if (this._speedBtnMinus && hitRect(this._speedBtnMinus, p.x, p.y)) {
+      Travel.speedDown(); window.GameRender.invalidate(); return;
+    }
+    if (this._speedBtnPlus && hitRect(this._speedBtnPlus, p.x, p.y)) {
+      Travel.speedUp(); window.GameRender.invalidate(); return;
     }
 
     const compact = window.UI.compact;
@@ -353,6 +375,10 @@ const GameScreen = {
     this.pressedBtn = this.pressedNav = this.pressedZoom = this.pressedKnightTab = -1;
     this.hoverBtn = this.hoverNav = this.hoverZoom = this.hoverKnightTab = -1;
     this.overlayPressed = null;
+    this.preRecap = null;
+    this._preRecapPressed = null;
+    this.poiPause = null;
+    this._poiPausePressed = null;
     window.GameRender.invalidate();
   },
 
@@ -395,14 +421,308 @@ const GameScreen = {
       window.GameRender.invalidate();
       return;
     }
-    Travel.start(path);
 
-    // Etichetta destinazione: se è una struttura nota usa il nome.
+    // Mostra il pannello di pre-partenza invece di partire immediatamente.
     const struct = World.structures.find(s => s.x === tx && s.y === ty);
     const name = struct ? struct.name : `(${tx}, ${ty})`;
-    this.meta.destinazione = name;
-    this._logEvent(`In marcia verso ${name}.`);
+    this.preRecap = {
+      path, dest: { x: tx, y: ty }, name,
+      stats: this._computePreRecapStats(path),
+    };
     window.GameRender.invalidate();
+  },
+
+  // ─── Pre-recap partenza ───────────────────────────────────────────────────
+
+  _computePreRecapStats(path) {
+    const terrains = new Map();
+    let forzaCost = 0;
+    const onPath = new Set(path.map(t => t.y * World.width + t.x));
+    for (const tile of path) {
+      const b = World.biomeAt(tile.x, tile.y);
+      terrains.set(b, (terrains.get(b) || 0) + 1);
+      const c = TRAVEL_COST[b];
+      if (c != null) forzaCost += c;
+    }
+    const terrainList = [...terrains.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
+    const structures  = World.structures.filter(s => onPath.has(s.y * World.width + s.x));
+    const willExhaust = forzaCost > this.knight.forza.cur;
+    return { steps: path.length, timeSec: path.length * Travel.speedSec(),
+             forzaCost, willExhaust, terrainList, structures };
+  },
+
+  _fmtTime(sec) {
+    if (sec < 60) return Math.round(sec) + ' s';
+    if (sec < 3600) return Math.round(sec / 60) + ' min';
+    return (sec / 3600).toFixed(1) + ' h';
+  },
+
+  _preRecapDown(p) {
+    // Usato in onPointerDown per segnare quale pulsante è stato premuto.
+    this._preRecapPressed =
+      (this.preRecapBtnParti   && hitRect(this.preRecapBtnParti, p.x, p.y))   ? 'parti'   :
+      (this.preRecapBtnAnnulla && hitRect(this.preRecapBtnAnnulla, p.x, p.y)) ? 'annulla' :
+      (this._preRecapCard      && !hitRect(this._preRecapCard, p.x, p.y))     ? 'outside' : null;
+  },
+
+  _preRecapUp(p) {
+    const was = this._preRecapPressed;
+    this._preRecapPressed = null;
+    if (was === 'parti' && this.preRecapBtnParti && hitRect(this.preRecapBtnParti, p.x, p.y)) {
+      const { path, name } = this.preRecap;
+      this.preRecap = null;
+      this._dismissedPOIs.clear();
+      Travel.start(path);
+      this.camAnchor.x = this.knightPos.x;
+      this.camAnchor.y = this.knightPos.y;
+      this.meta.destinazione = name;
+      this._logEvent(`In marcia verso ${name}.`);
+    } else if (was === 'annulla' || was === 'outside') {
+      this.preRecap = null;
+    }
+    window.GameRender.invalidate();
+  },
+
+  // ─── POI pause ────────────────────────────────────────────────────────────
+
+  _poiPauseDown(p) {
+    this._poiPausePressed =
+      (this._poiPauseBtn.ferma   && hitRect(this._poiPauseBtn.ferma,  p.x, p.y)) ? 'ferma'  :
+      (this._poiPauseBtn.ignora  && hitRect(this._poiPauseBtn.ignora, p.x, p.y)) ? 'ignora' :
+      (this._poiPauseCard        && !hitRect(this._poiPauseCard,      p.x, p.y)) ? 'outside': null;
+  },
+
+  _poiPauseUp(p) {
+    const was = this._poiPausePressed;
+    this._poiPausePressed = null;
+    const poi = this.poiPause;
+    this.poiPause = null;
+    if (was === 'ferma' && this._poiPauseBtn.ferma && hitRect(this._poiPauseBtn.ferma, p.x, p.y)) {
+      // Rotta verso il POI: avvia un percorso diretto dalla posizione attuale
+      const path = Travel.findPath(this.knightPos.x, this.knightPos.y, poi.special.x, poi.special.y);
+      if (path && path.length) {
+        this._dismissedPOIs.clear();
+        Travel.start(path);
+        this.camAnchor.x = this.knightPos.x;
+        this.camAnchor.y = this.knightPos.y;
+        const label = poi.special.kind || 'luogo ignoto';
+        this.meta.destinazione = label;
+        this._logEvent(`Ti dirigi verso il ${label} avvistato.`);
+      }
+    } else if (was === 'ignora' || was === 'outside') {
+      // Riprende il viaggio verso la meta originale usando il path residuo salvato.
+      if (poi.remainingPath && poi.remainingPath.length) {
+        Travel.start(poi.remainingPath);
+        this.meta.destinazione = poi.savedDest || 'nessuna';
+        this._logEvent('Continui il viaggio.');
+      }
+    }
+    window.GameRender.invalidate();
+  },
+
+  drawPOIPause() {
+    const ctx = this.ctx;
+    const W = window.UI.w, H = window.UI.h;
+    const poi = this.poiPause;
+    const sp  = poi.special;
+
+    const POI_HINT = {
+      rovine:    'Un ammasso di pietre scheggiate intravisto tra la vegetazione.',
+      tempio:    'Una sagoma di pilastri — forse un vecchio tempio dimenticato.',
+      monolite:  'Una pietra scolpita eretta solitaria nella pianura.',
+      relitto:   'Un relitto arenato, semi-sommerso, lontano dal mare.',
+      cripta:    'Un\'apertura nel terreno: scalini che scendono nel buio.',
+      faro:      'Un moncone di torre in rovina, ancora vagamente riconoscibile.',
+      santuario: 'Resti di un piccolo santuario; fiori secchi sull\'altare.',
+      voragine:  'Un vasto varco aperto nella roccia, aria fredda ne sale.',
+    };
+
+    const hint = POI_HINT[sp.kind] || 'Qualcosa di insolito attira la tua attenzione.';
+    const kindLabel = sp.kind ? sp.kind.charAt(0).toUpperCase() + sp.kind.slice(1) : 'Luogo misterioso';
+    const distLabel = poi.dist <= 1 ? 'a pochi passi' : `a ${poi.dist} tile`;
+
+    const cw = Math.min(SF(320), W - SF(24));
+    const ch = SF(148);
+    // Ancorata in basso-centro sulla mappa (o sul canvas se mappa non disponibile)
+    const mr = this.mapRect || { x: 0, y: 0, w: W, h: H };
+    const cx = Math.round(mr.x + (mr.w - cw) / 2);
+    const cy = mr.y + mr.h - ch - SF(12);
+    this._poiPauseCard = { x: cx, y: cy, w: cw, h: ch };
+
+    // Card body
+    ctx.fillStyle = PALETTE.hudSfondo || '#1a1208';
+    ctx.fillRect(cx, cy, cw, ch);
+
+    // Banda titolo ambrata
+    ctx.fillStyle = '#3d2a08';
+    ctx.fillRect(cx, cy, cw, SF(26));
+    ctx.fillStyle = '#ffd080';
+    ctx.font = FONT.heading ? FONT.heading() : FONT.label();
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${kindLabel}  ·  ${distLabel}`, cx + SF(10), cy + SF(13));
+
+    // Testo descrittivo
+    ctx.fillStyle = '#c8b880';
+    ctx.font = FONT.body ? FONT.body() : FONT.value();
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    // Wrap manuale su due righe
+    const maxTW = cw - SF(20);
+    let line1 = hint, line2 = '';
+    while (line1.length > 0 && ctx.measureText(line1).width > maxTW) {
+      const cut = line1.lastIndexOf(' ');
+      if (cut <= 0) break;
+      line2 = line1.slice(cut + 1) + (line2 ? ' ' + line2 : '');
+      line1 = line1.slice(0, cut);
+    }
+    ctx.fillText(line1, cx + SF(10), cy + SF(32));
+    if (line2) ctx.fillText(line2, cx + SF(10), cy + SF(32) + SF(18));
+
+    // Pulsanti
+    const btnH = SF(26), btnW = SF(130);
+    const by = cy + ch - SF(34);
+    const ignoraR = { x: cx + SF(10),               y: by, w: btnW, h: btnH };
+    const fermaR  = { x: cx + cw - SF(10) - btnW,   y: by, w: btnW, h: btnH };
+    this._poiPauseBtn = { ignora: ignoraR, ferma: fermaR };
+
+    const drawBtn = (r, label, bg, fg) => {
+      ctx.fillStyle = bg;
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      drawPixelRectStroke(ctx, r.x, r.y, r.w, r.h, fg);
+      ctx.fillStyle = fg;
+      ctx.font = FONT.button ? FONT.button() : FONT.label();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2);
+    };
+    drawBtn(ignoraR, 'Ignora, continua', '#201408', '#a08050');
+    drawBtn(fermaR,  'Esplora →',        '#3a2808', '#ffd080');
+
+    drawPixelRectStroke(ctx, cx, cy, cw, ch, '#5a4020');
+  },
+
+  drawPreRecap() {
+    const ctx = this.ctx;
+    const W = window.UI.w, H = window.UI.h;
+    const r = this.preRecap;
+    const s = r.stats;
+
+    const BIOME_NOME = ['Acqua','Pianura','Foresta','Collina','Montagna',
+      'Palude','Sabbia','Neve','Ghiaccio','Fiume','Roccia','Steppa','Arido'];
+
+    // Dimensioni card
+    const cw = Math.min(SF(360), W - SF(32));
+    const ch = SF(s.willExhaust ? 258 : 238);
+    const cx = Math.round((W - cw) / 2);
+    const cy = Math.round((H - ch) / 2);
+    this._preRecapCard = { x: cx, y: cy, w: cw, h: ch };
+
+    // Sfondo semi-trasparente
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, W, H);
+
+    // Card body
+    ctx.fillStyle = PALETTE.hudSfondo || '#1a1208';
+    ctx.fillRect(cx, cy, cw, ch);
+
+    // Banda titolo
+    ctx.fillStyle = PALETTE.hudTitolo || '#3a2810';
+    ctx.fillRect(cx, cy, cw, SF(28));
+    ctx.fillStyle = '#e8c050';
+    ctx.font = FONT.heading();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('ROTTA VERSO  ' + r.name.toUpperCase(), cx + cw / 2, cy + SF(14));
+
+    // Bordo
+    drawPixelRectStroke(ctx, cx, cy, cw, ch, PALETTE.inkScuro || '#5a4020');
+
+    // Righe info
+    const lx = cx + SF(12), rx = cx + cw - SF(12);
+    const lw = SF(70);
+    let y = cy + SF(36);
+    const rh = SF(22);
+
+    const row = (label, value, valColor) => {
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = '#e8c050';
+      ctx.font = FONT.label();
+      ctx.fillText(label, lx, y + SF(2));
+      ctx.fillStyle = valColor || '#e8d8b0';
+      ctx.font = FONT.value();
+      ctx.fillText(value, lx + lw, y);
+      y += rh;
+    };
+
+    row('PASSI',  s.steps + ' tile');
+    row('TEMPO',  this._fmtTime(s.timeSec) + '  (a ' + Travel.speedSec() + ' s/passo)');
+
+    // Riga Fatica con barra
+    const fMax = this.knight.forza.max;
+    const fCur = this.knight.forza.cur;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#e8c050';
+    ctx.font = FONT.label();
+    ctx.fillText('FATICA', lx, y + SF(2));
+    const barX = lx + lw, barW = SF(120), barH = SF(10);
+    const barY = y + SF(5);
+    ctx.fillStyle = '#2a1a08';
+    ctx.fillRect(barX, barY, barW, barH);
+    const fill = Math.min(1, s.forzaCost / fMax);
+    ctx.fillStyle = s.willExhaust ? '#c04020' : '#60a030';
+    ctx.fillRect(barX, barY, Math.round(barW * fill), barH);
+    ctx.fillStyle = s.willExhaust ? '#ff8060' : '#e8d8b0';
+    ctx.font = FONT.value();
+    ctx.fillText(s.forzaCost.toFixed(1) + ' / ' + fCur.toFixed(1), barX + barW + SF(6), y);
+    y += rh;
+
+    // Terreni
+    const terrStr = s.terrainList.map(([b, n]) => (BIOME_NOME[b] || '?') + ' ×' + n).join('  ·  ');
+    row('TERRENI', terrStr);
+
+    // Strutture sul cammino
+    if (s.structures.length) {
+      const stNames = s.structures.map(st => st.name).join(' · ');
+      row('TAPPE', stNames, '#ffd080');
+    }
+
+    // Avviso esaurimento
+    if (s.willExhaust) {
+      y += SF(4);
+      ctx.fillStyle = 'rgba(180,40,10,0.25)';
+      ctx.fillRect(cx + SF(8), y, cw - SF(16), SF(20));
+      ctx.fillStyle = '#ff7050';
+      ctx.font = FONT.caption();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('⚠  Le forze potrebbero esaurirsi prima di arrivare', cx + cw / 2, y + SF(10));
+      y += SF(24);
+    }
+
+    // Pulsanti
+    y = cy + ch - SF(38);
+    const btnH = SF(26), btnW = SF(100);
+    const annR = { x: cx + SF(16),          y, w: btnW, h: btnH };
+    const parR = { x: cx + cw - SF(16) - btnW, y, w: btnW, h: btnH };
+    this.preRecapBtnAnnulla = annR;
+    this.preRecapBtnParti   = parR;
+
+    const drawBtn = (r2, label, col, textCol) => {
+      ctx.fillStyle = col;
+      ctx.fillRect(r2.x, r2.y, r2.w, r2.h);
+      drawPixelRectStroke(ctx, r2.x, r2.y, r2.w, r2.h, textCol);
+      ctx.fillStyle = textCol;
+      ctx.font = FONT.button();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, r2.x + r2.w / 2, r2.y + r2.h / 2);
+    };
+
+    drawBtn(annR, 'Annulla', '#2a1a08', '#a08050');
+    drawBtn(parR, 'Parti →', '#3a2808', '#e8c050');
   },
 
   // Chiamato da main.js a ogni frame. dtMs include la pausa fra frame: senza,
@@ -414,12 +734,38 @@ const GameScreen = {
     const dt = Math.min(dtMs, 250);
     Travel.update(dt, this.knightPos, {
       onStep: (tile, _biome) => {
-        // Pausa automatica su strutture (GAMEPLAY.md §1): il cavaliere si
-        // ferma sopra il luogo, lasciando al giocatore decidere se entrare.
+        // Esplora intorno alla nuova posizione (nebbia di guerra).
+        if (World.fog) World.explore(tile.x, tile.y, 4);
+
+        // Pausa automatica su strutture (GAMEPLAY.md §1 "Calmo"):
+        // il cavaliere si ferma al luogo, lasciando al giocatore decidere.
         const s = World.structures.find(st => st.x === tile.x && st.y === tile.y);
         if (s && (tile.x !== this.meta._lastStructX || tile.y !== this.meta._lastStructY)) {
           this.meta._lastStructX = tile.x; this.meta._lastStructY = tile.y;
-          this._logEvent(`Attraversi ${s.name}.`);
+          Travel.stop();
+          this.meta.destinazione = 'nessuna';
+          this._logEvent(`Arrivi a ${s.name}.`);
+          return;
+        }
+
+        // Pausa opzionale su POI vicini (rovine, templi, ecc.).
+        const POI_RADIUS = 3;
+        for (const sp of World.specials) {
+          const id = sp.y * World.width + sp.x;
+          if (this._dismissedPOIs.has(id)) continue;
+          const dx = sp.x - tile.x, dy = sp.y - tile.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist > POI_RADIUS) continue;
+          // Trovato POI abbastanza vicino: pausa con scelta.
+          // Salva il path residuo PRIMA di stop() che lo azzera.
+          const remainingPath = Travel.path ? Travel.path.slice(Travel.idx) : [];
+          const savedDest = this.meta.destinazione;
+          this._dismissedPOIs.add(id);
+          Travel.stop();
+          this.poiPause = { special: sp, dist: Math.round(dist), remainingPath, savedDest };
+          // Punta la camera verso il POI per farlo vedere
+          this.camTarget = { cx: sp.x + 0.5, cy: sp.y + 0.5 };
+          return;
         }
       },
       onArrive: () => {
@@ -432,6 +778,31 @@ const GameScreen = {
         else this._logEvent('Il cammino si interrompe.');
       },
     });
+
+    // Camera a scatti: la cam resta ferma finché il cavaliere supera CHUNK
+    // tile dall'ultimo ancoraggio; poi scivola fluida verso di lui.
+    const CHUNK = 4;
+    if (Travel.isActive()) {
+      const adx = Math.abs(this.knightPos.x - this.camAnchor.x);
+      const ady = Math.abs(this.knightPos.y - this.camAnchor.y);
+      if (adx >= CHUNK || ady >= CHUNK) {
+        this.camAnchor.x = this.knightPos.x;
+        this.camAnchor.y = this.knightPos.y;
+        this.camTarget = { cx: this.knightPos.x + 0.5, cy: this.knightPos.y + 0.5 };
+      }
+    }
+    if (this.camTarget) {
+      const f = Math.min(1, dt * 6 / 1000);
+      this.cam.cx += (this.camTarget.cx - this.cam.cx) * f;
+      this.cam.cy += (this.camTarget.cy - this.cam.cy) * f;
+      if (Math.abs(this.cam.cx - this.camTarget.cx) < 0.05 &&
+          Math.abs(this.cam.cy - this.camTarget.cy) < 0.05) {
+        this.cam.cx = this.camTarget.cx;
+        this.cam.cy = this.camTarget.cy;
+        this.camTarget = null;
+      }
+    }
+
     window.GameRender.invalidate();
   },
 
@@ -461,6 +832,8 @@ const GameScreen = {
 
     if (L.compact) this.drawCompact(L);
     else this.drawDesktop(L);
+    if (this.preRecap)  this.drawPreRecap();
+    if (this.poiPause)  this.drawPOIPause();
   },
 
   drawDesktop(L) {
@@ -796,6 +1169,54 @@ const GameScreen = {
     while (s.length && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
     if (s.length < last.length) s += '…';
     ctx.fillText(s, area.x + labelW, y);
+    y += rowH;
+
+    // Controllo velocità viaggio: [-] [◀◀  1.5 s  ▶▶] [+]
+    ctx.fillStyle = '#e8c050';
+    ctx.font = FONT.label();
+    ctx.fillText('VELOCITÀ', area.x, y + SF(2));
+
+    const btnW = SF(22), btnH = SF(20);
+    const vx = area.x + labelW;
+    const btnY = y + SF(3);
+    const sec = Travel.speedSec();
+    const secTxt = sec < 1 ? (sec * 1000 | 0) + ' ms' : sec + ' s';
+
+    // Bottone [-]
+    const r1 = { x: vx, y: btnY, w: btnW, h: btnH };
+    ctx.fillStyle = Travel.speedIdx > 0 ? '#4a3820' : '#2a2010';
+    ctx.fillRect(r1.x, r1.y, r1.w, r1.h);
+    ctx.fillStyle = Travel.speedIdx > 0 ? '#e8c050' : '#5a5040';
+    ctx.font = FONT.button();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('−', r1.x + r1.w / 2, r1.y + r1.h / 2);
+
+    // Valore centrale
+    const valX = vx + btnW + SF(4);
+    const valW = SF(60);
+    ctx.fillStyle = '#e8d8b0';
+    ctx.font = FONT.value();
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(secTxt + '/passo', valX, y);
+
+    // Bottone [+]
+    const maxIdx = Travel.SPEED_PRESETS.length - 1;
+    const r2 = { x: valX + valW, y: btnY, w: btnW, h: btnH };
+    ctx.fillStyle = Travel.speedIdx < maxIdx ? '#4a3820' : '#2a2010';
+    ctx.fillRect(r2.x, r2.y, r2.w, r2.h);
+    ctx.fillStyle = Travel.speedIdx < maxIdx ? '#e8c050' : '#5a5040';
+    ctx.font = FONT.button();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('+', r2.x + r2.w / 2, r2.y + r2.h / 2);
+
+    this._speedBtnMinus = r1;
+    this._speedBtnPlus  = r2;
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
   },
 
   // Pannello STATO CAVALIERE: nome+titolo in alto, tab bar con icone, poi
@@ -1374,6 +1795,30 @@ const GameScreen = {
     if (World.tiles) {
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(MapRenderer.thumbnail(), inner.x, inner.y, inner.w, inner.h);
+
+      // Nebbia di guerra sulla minimappa.
+      if (World.fog) {
+        const WW = World.width, WH = World.height;
+        const fw = Math.floor(inner.w), fh = Math.floor(inner.h);
+        const fc = document.createElement('canvas');
+        fc.width = fw; fc.height = fh;
+        const fctx = fc.getContext('2d');
+        const id = fctx.createImageData(fw, fh);
+        const d = id.data;
+        for (let py = 0; py < fh; py++) {
+          const ty = Math.min(WH - 1, Math.floor(py / fh * WH));
+          for (let px = 0; px < fw; px++) {
+            const tx = Math.min(WW - 1, Math.floor(px / fw * WW));
+            if (!World.fog[ty * WW + tx]) {
+              const i = (py * fw + px) * 4;
+              d[i] = 10; d[i + 1] = 6; d[i + 2] = 2; d[i + 3] = 224;
+            }
+          }
+        }
+        fctx.putImageData(id, 0, 0);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(fc, inner.x, inner.y);
+      }
 
       const t = MapRenderer.tilePx(this.cam);
       const vw = (this.mapRect ? this.mapRect.w / t : 0) / World.width * inner.w;

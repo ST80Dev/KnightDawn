@@ -32,6 +32,12 @@ const Save = {
         cam: { cx: GameScreen.cam.cx, cy: GameScreen.cam.cy, step: GameScreen.cam.step },
         log: GameScreen.log,
         meta: GameScreen.meta,
+        fog: (() => {
+          if (!World.fog) return '';
+          let s = '';
+          for (let i = 0; i < World.fog.length; i++) s += String.fromCharCode(World.fog[i]);
+          return btoa(s);
+        })(),
       },
     };
   },
@@ -76,6 +82,13 @@ const Save = {
 
     // World — rigenera dallo stesso seed
     World.generate(blob.world.seed);
+
+    // Nebbia di guerra
+    if (blob.game.fog) {
+      const raw = atob(blob.game.fog);
+      World.fog = new Uint8Array(raw.length);
+      for (let i = 0; i < raw.length; i++) World.fog[i] = raw.charCodeAt(i);
+    }
 
     // Game state
     GameScreen.knightPos = blob.game.knightPos;

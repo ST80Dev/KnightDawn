@@ -55,6 +55,7 @@ const World = {
   structures: [], // [{ type:'castle'|'village', x, y, name }]
   specials: [],   // [{ x, y, kind, discovered, name }] — luoghi ignoti agli estremi
   knightStart: { x: 0, y: 0 },
+  fog: null,      // Uint8Array: 1 = esplorato, 0 = nebbia
 
   BIOME: {
     ACQUA: 0, PIANURA: 1, FORESTA: 2, COLLINA: 3, MONTAGNA: 4, PALUDE: 5,
@@ -109,6 +110,20 @@ const World = {
     'Lorensil', 'Cellondir', 'Thanduil', 'Eilmoth',
   ],
 
+  explore(cx, cy, radius) {
+    if (!this.fog) return;
+    const r2 = radius * radius;
+    const W = this.width, H = this.height;
+    const x0 = Math.max(0, cx - radius), x1 = Math.min(W - 1, cx + radius);
+    const y0 = Math.max(0, cy - radius), y1 = Math.min(H - 1, cy + radius);
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const dx = x - cx, dy = y - cy;
+        if (dx * dx + dy * dy <= r2) this.fog[y * W + x] = 1;
+      }
+    }
+  },
+
   generate(seed) {
     this.seed = (seed >>> 0) || 1;
     this.width = WORLD_W;
@@ -117,6 +132,7 @@ const World = {
     const B = this.BIOME;
     this.tiles = new Uint8Array(W * H);
     this.elev = new Float32Array(W * H);
+    this.fog = new Uint8Array(W * H);
 
     // Per-seed style: ogni mappa ha "carattere" diverso (più mare/più terra,
     // più catene/poche, foreste sparse/fitte). Le frequenze e le frazioni
