@@ -155,6 +155,7 @@ const GameScreen = {
     this._chronicleBtns = [];      // rect dei pulsanti scelta + chiudi
     this.combat = null;            // Scena di combattimento (scontro attivo)
     this._combatBtns = [];         // rect dei pulsanti azione del Round
+    this._combatPending = null;    // ramo esito da applicare a fine scontro (evento)
     if (typeof Events !== 'undefined') Events.reset();
     this.camAnchor = { x: World.knightStart.x, y: World.knightStart.y };
     this.camTarget = null;         // quando non-null la cam si avvicina qui
@@ -580,6 +581,20 @@ const GameScreen = {
     if (ch.step === 'choices') {
       const opt = ch.event.options[i];
       if (!opt) return;
+      // Se l'opzione contiene un effetto combat, lancia la SCENA interattiva
+      // invece di risolvere in automatico: gli altri effetti si applicano
+      // subito, il ramo esito alla chiusura della scena (_closeCombat).
+      const combatEff = (opt.effects || []).find(
+        e => e && typeof e === 'object' && e.type === 'combat');
+      if (combatEff && typeof Combat !== 'undefined') {
+        const others = (opt.effects || []).filter(e => e !== combatEff);
+        for (const m of Events.applyEffects(others, { event: ch.event })) this._logEvent(m);
+        Events.markSeen(ch.event);
+        this._combatPending = { eff: combatEff, opt, event: ch.event };
+        this.openCombat(combatEff.enemy, { terrain: combatEff.terrain, fromChronicle: true });
+        window.GameRender.invalidate();
+        return;
+      }
       // Applica effetti, raccogli messaggi di log
       const logs = Events.applyEffects(opt.effects, { event: ch.event });
       for (const m of logs) this._logEvent(m);
@@ -719,7 +734,9 @@ const GameScreen = {
     if (typeof Combat === 'undefined') return false;
     opts = opts || {};
     let remainingPath = null, savedDest = null;
-    if (typeof Travel !== 'undefined' && Travel.isActive && Travel.isActive()) {
+    // Se lanciato dalla Carta del cronista, il viaggio è già sospeso da essa:
+    // non lo tocchiamo (lo riprende _closeChronicle).
+    if (!opts.fromChronicle && typeof Travel !== 'undefined' && Travel.isActive && Travel.isActive()) {
       remainingPath = Travel.path ? Travel.path.slice(Travel.idx) : null;
       savedDest = this.meta ? this.meta.destinazione : null;
       Travel.stop();
@@ -731,7 +748,7 @@ const GameScreen = {
     this.combat = {
       state: Combat.start({ enemy, terrain, knight: Knight }),
       remainingPath, savedDest,
-      resumeTravel: !!remainingPath && opts.resumeAfter !== false,
+      resumeTravel: !opts.fromChronicle && !!remainingPath && opts.resumeAfter !== false,
     };
     this._combatBtns = [];
     this._combatPressed = null;
@@ -763,7 +780,31 @@ const GameScreen = {
   _closeCombat() {
     const c = this.combat;
     this.combat = null;
-    // Riprende il viaggio se sospeso (lo step C applichera' qui il ramo esito).
+
+    // Scontro lanciato da un evento: applica il ramo esito e torna alla
+    // Carta del cronista per mostrare il reply (poi sarà lei a riprendere
+    // il viaggio quando viene chiusa).
+    const pend = this._combatPending;
+    this._combatPending = null;
+    if (pend && c) {
+      const eff = pend.eff;
+      const ramo = ({
+        vittoria:  eff.onWin,
+        fuga:      eff.onFlee,
+        resa:      eff.onSurrender,
+        sconfitta: eff.onDefeat,
+        morte:     eff.onDeath,
+        stallo:    eff.onStallo || eff.onFlee,
+      })[c.state.esito];
+      if (ramo) for (const m of Events.applyEffects(ramo, { event: pend.event })) this._logEvent(m);
+      if (this.chronicle) {
+        if (pend.opt.reply) { this.chronicle.step = 'reply'; this.chronicle.reply = pend.opt.reply; }
+        else { this._closeChronicle(); }
+      }
+      return;
+    }
+
+    // Scontro autonomo (da console): riprende il viaggio se sospeso.
     if (c && c.resumeTravel && c.remainingPath && c.remainingPath.length
         && typeof Travel !== 'undefined') {
       Travel.start(c.remainingPath);
@@ -1356,7 +1397,7 @@ const GameScreen = {
     else this.drawDesktop(L);
     if (this.preRecap)  this.drawPreRecap();
     if (this.poiPause)  this.drawPOIPause();
-    if (this.chronicle) this.drawChronicle();
+    if (this.chronicle && !this.combat) this.drawChronicle();
     if (this.combat)    this.drawCombat();
 
     // SaveUI overlay sopra tutto il resto, sia desktop che compatto.
