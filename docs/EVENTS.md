@@ -382,8 +382,62 @@ già. Layout senza catalogo è inerte.
 
 ### Integrazione news
 
-(dipendenza S6) — eventi che leggono news note al nodo e generano scelte
-contestuali, ed eventi che producono news.
+Il sistema news completo (NewsToken, onde di propagazione, rumor, clima
+generale, corvi) è **Fase S6** dedicata — vedi `docs/NEWS_SYSTEM.md`. In
+S3 forniamo solo l'**API stub** che gli eventi useranno per produrre e
+leggere news, in modo che il motore eventi non cambi quando S6 arriva.
+
+**Modulo `js/news.js`** — stub con API stabile:
+
+```js
+News.emit(payload, knownNow)   // pubblica un token
+News.sa(tag)                   // true se il cavaliere conosce una news con quel tag
+News.saSu(tipo, faction?)      // true per tipo (+ fazione opzionale)
+News.ultime(n)                 // ultime N news note (per UI/diario)
+News.propaga(passi)            // no-op in S3, attivato in S6
+News.rumorAt(x, y, tag)        // no-op in S3, attivato in S6
+```
+
+Schema NewsToken (stabile, valido anche in S6):
+```
+{ id, tipo:'voce'|'evento'|'rumor'|'clima', tag, testo, x?, y?, faction?, turno }
+```
+
+In S3 `knownNow:true` è il default: chi racconta è davanti al cavaliere,
+quindi la news è subito nota. In S6 sarà l'onda a decidere quando i tile
+non-sorgente la apprendono.
+
+**Nuovo effetto evento `news`:**
+```js
+{ type:'news', tipo:'voce', tag:'lupi.nord',
+  testo:'Lupi scesi a nord, oltre le colline.',
+  x:?, y:?, faction:?, knownNow:true }
+```
+
+Pattern doppio binario nei "voci/pettegolezzi": l'opzione emette sia
+`news` (per il sistema, query-able da altri eventi) sia `log` (per la
+cronaca personale del cavaliere — testo umano nel diario).
+
+**Lettura news nei prereq/condition:**
+```js
+prereq:    ctx => News.sa('lupi.nord')              // opzione visibile solo se sai
+condition: ctx => News.saSu('battaglia', 'vorn')    // evento attivabile solo se hai sentito
+```
+
+Queste query rendono possibile la **continuità narrativa** fra eventi
+distinti: un evento "voce di lupi" crea il tag, un evento successivo
+("Un cacciatore ti chiede della scorta") apre un'opzione extra "Lo
+sapevo, ho sentito al mercato" solo se la news è nota.
+
+**Cosa NON fa lo stub S3:**
+
+- Onde di propagazione (S6).
+- Versioni rumor distorte (S6).
+- Clima generale (S6).
+- Canali di lettura specifici (taverna/mercato/NPC) — l'effetto è
+  generico, lo emette qualunque evento.
+- Decadimento news vecchie — solo documentato.
+- UI dedicata "diario news" — rinviata.
 
 ## TBD operativo
 

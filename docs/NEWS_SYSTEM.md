@@ -20,6 +20,42 @@ parzialità — coerentemente con un'ambientazione medievale.
 - **Override**: corvi messaggeri di fazione, spie/informatori a pagamento,
   poteri narrativi (sogni profetici, reliquie).
 
+## Stato S3 (stub) → S6 (completo)
+
+**S3 — stub minimo già implementato (`js/news.js`):**
+
+API stabile (non cambierà passando a S6):
+```js
+News.emit(payload, knownNow)
+News.sa(tag)
+News.saSu(tipo, faction?)
+News.ultime(n)
+News.propaga(passi)         // no-op in S3
+News.rumorAt(x, y, tag)     // no-op in S3
+News.toJSON()/fromJSON()
+```
+
+Schema NewsToken stabile:
+```
+{ id, tipo:'voce'|'evento'|'rumor'|'clima', tag, testo, x?, y?, faction?, turno }
+```
+
+In S3 `knownNow:true` è il default: la news pubblicata da un evento è
+immediatamente nota al cavaliere (sta parlando con la fonte). Niente
+propagazione, niente rumor, niente clima generale. Gli eventi possono
+già emettere e leggere news con tag — il pattern `news`+`log` doppio
+binario è documentato in `docs/EVENTS.md`.
+
+**S6 — implementazione completa:**
+
+- `News.propaga()` avanza le onde a ogni Passo, decide quali token
+  diventano noti in quali tile/nodi.
+- `News.rumorAt()` ritorna variante distorta nella fascia rumor.
+- Canali di lettura: taverne, mercati, NPC viaggianti, corvi.
+- Clima generale (granularità grossa, sempre disponibile).
+- Decadimento news vecchie → confluiscono in clima generale.
+- UI diario news per il giocatore.
+
 ## TBD
 
 - [ ] Tabella velocità di propagazione per terreno

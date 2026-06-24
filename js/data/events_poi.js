@@ -83,6 +83,8 @@ Events.register({
       text: 'Studiare le rune',
       effects: [
         { type: 'tempo', passi: 2 },
+        { type: 'news', tipo: 'voce', tag: 'giuramento.spezzato',
+          testo: 'Antico giuramento spezzato, un re privato del nome.' },
         { type: 'log', text: 'Le rune parlano di un giuramento spezzato secoli fa.' },
       ],
       reply: 'I segni narrano di un giuramento infranto, di un re privato del nome.',

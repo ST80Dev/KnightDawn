@@ -59,6 +59,8 @@ Events.register({
       text: 'Ascoltare le voci',
       effects: [
         { type: 'tempo', passi: 1 },
+        { type: 'news', tipo: 'voce', tag: 'lupi.nord',
+          testo: 'Lupi scesi a nord, oltre le colline.' },
         { type: 'log', text: 'Si dice che i lupi siano scesi a nord, oltre le colline.' },
       ],
       reply: 'I contadini parlano di lupi numerosi a nord, mai visti così vicini.',
@@ -102,6 +104,8 @@ Events.register({
       text: 'Chiedere notizie della regione',
       effects: [
         { type: 'tempo', passi: 2 },
+        { type: 'news', tipo: 'voce', tag: 'disertori.paludi_sud',
+          testo: 'Disertori avvistati nelle paludi a sud.' },
         { type: 'log', text: 'Le guardie raccontano di disertori nelle paludi a sud.' },
       ],
       reply: 'Uno dei due si scioglie e parla di disertori visti nelle paludi a sud.',

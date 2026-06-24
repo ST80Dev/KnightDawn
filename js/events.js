@@ -46,6 +46,7 @@ const Events = {
     this.lastSeenAtPasso = {};
     this.seenInLuceKey = {};
     this.deadlines = [];
+    if (typeof News !== 'undefined' && News.reset) News.reset();
   },
 
   _ctx(extra) {
@@ -226,6 +227,11 @@ const Events = {
       case 'deadlineDone':
         this.completeDeadline(eff.id);
         break;
+      case 'news':
+        if (typeof News !== 'undefined' && News.emit) {
+          News.emit(eff, (eff.knownNow !== false));
+        }
+        break;
     }
   },
 
@@ -261,7 +267,7 @@ const Events = {
     const warns = [];
     const validTypes = new Set([
       'forza','volonta','salute','onore','oro','tempo','log',
-      'reputazione','rivela','deadlineAdd','deadlineDone',
+      'reputazione','rivela','deadlineAdd','deadlineDone','news',
     ]);
     const repIds = new Set((Knight.reputazione || []).map(r => r.id));
     for (const ev of this.registry) {
