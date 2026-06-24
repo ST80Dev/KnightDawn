@@ -76,6 +76,8 @@ const GameScreen = {
   actionButtons: [],
   navButtons: [],
   zoomButtons: [],
+  menuBtn: null,                    // pulsante "scroll" → apre SaveUI
+  hoverMenu: false, pressedMenu: false,
 
   activeOverlay: null,
   overlayCard: null,
@@ -241,6 +243,9 @@ const GameScreen = {
   onPointerMove(p, type) {
     if (Scenes.current !== this) return;
 
+    // SaveUI ha la precedenza su tutto
+    if (SaveUI.isOpen()) { SaveUI.onPointerMove(p, type); return; }
+
     // Pan in corso: vale per mouse e touch.
     if (this.dragging) {
       const dx = p.x - this.dragLast.x, dy = p.y - this.dragLast.y;
@@ -265,26 +270,38 @@ const GameScreen = {
       return;
     }
 
+    const hm = this._hitMenu(p);
     const compact = window.UI.compact;
     const hb = btnHitIndex(this.actionButtons, p.x, p.y);
     const hn = compact ? btnHitIndex(this.navButtons, p.x, p.y) : -1;
     const hz = compact ? btnHitIndex(this.zoomButtons, p.x, p.y) : -1;
     const hk = !compact ? btnHitIndex(this.knightTabRects, p.x, p.y) : -1;
-    const onBtn = hb >= 0 || hn >= 0 || hz >= 0 || hk >= 0;
+    const onBtn = hm || hb >= 0 || hn >= 0 || hz >= 0 || hk >= 0;
     document.getElementById('game').style.cursor =
       onBtn ? 'pointer' : (this.inMap(p) ? 'grab' : 'default');
-    if (hb !== this.hoverBtn || hn !== this.hoverNav || hz !== this.hoverZoom || hk !== this.hoverKnightTab) {
+    if (hm !== this.hoverMenu || hb !== this.hoverBtn || hn !== this.hoverNav || hz !== this.hoverZoom || hk !== this.hoverKnightTab) {
+      this.hoverMenu = hm;
       this.hoverBtn = hb; this.hoverNav = hn; this.hoverZoom = hz; this.hoverKnightTab = hk;
       window.GameRender.invalidate();
     }
   },
 
+  _hitMenu(p) {
+    const b = this.menuBtn;
+    if (!b) return false;
+    return p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h;
+  },
+
   onPointerDown(p) {
     if (Scenes.current !== this) return;
+    if (SaveUI.isOpen()) { SaveUI.onPointerDown(p); return; }
     if (this.chronicle) { this._chronicleDown(p); return; }
     if (this.poiPause)  { this._poiPauseDown(p); return; }
     if (this.preRecap)  { this._preRecapDown(p); return; }
     if (this.activeOverlay) { this.overlayPressed = this.overlayWhere(p); return; }
+
+    this.pressedMenu = this._hitMenu(p);
+    if (this.pressedMenu) { window.GameRender.invalidate(); return; }
 
     const compact = window.UI.compact;
     this.pressedBtn = btnHitIndex(this.actionButtons, p.x, p.y);
@@ -309,6 +326,7 @@ const GameScreen = {
 
   onPointerUp(p, type) {
     if (Scenes.current !== this) return;
+    if (SaveUI.isOpen()) { SaveUI.onPointerUp(p, type); return; }
 
     if (this.chronicle) { this._chronicleUp(p); return; }
     if (this.poiPause)  { this._poiPauseUp(p); return; }
@@ -333,6 +351,15 @@ const GameScreen = {
         this.activeOverlay = null; this.hoverClose = false; window.GameRender.invalidate();
       }
       this.overlayPressed = null;
+      return;
+    }
+
+    if (this.pressedMenu) {
+      const fire = this._hitMenu(p);
+      this.pressedMenu = false;
+      if (type === 'touch') this.hoverMenu = false;
+      if (fire) SaveUI.open('game', {});
+      window.GameRender.invalidate();
       return;
     }
 
@@ -375,10 +402,12 @@ const GameScreen = {
   },
 
   onPointerCancel() {
+    if (SaveUI.isOpen()) { SaveUI.onPointerCancel(); return; }
     this.dragging = false;
     this.dragMoved = false;
     this.pressedBtn = this.pressedNav = this.pressedZoom = this.pressedKnightTab = -1;
     this.hoverBtn = this.hoverNav = this.hoverZoom = this.hoverKnightTab = -1;
+    this.pressedMenu = false; this.hoverMenu = false;
     this.overlayPressed = null;
     this.preRecap = null;
     this._preRecapPressed = null;
@@ -391,6 +420,7 @@ const GameScreen = {
 
   onWheel(p, deltaY) {
     if (Scenes.current !== this) return;
+    if (SaveUI.isOpen()) return;
     if (this.activeOverlay) return;
     if (!this.inMap(p)) return;
     MapRenderer.zoom(this.cam, deltaY < 0 ? 1 : -1); // centrato sul centro camera
@@ -1102,6 +1132,9 @@ const GameScreen = {
     if (this.preRecap)  this.drawPreRecap();
     if (this.poiPause)  this.drawPOIPause();
     if (this.chronicle) this.drawChronicle();
+
+    // SaveUI overlay sopra tutto il resto, sia desktop che compatto.
+    if (SaveUI.isOpen()) SaveUI.draw(ctx);
   },
 
   drawDesktop(L) {
@@ -1297,16 +1330,27 @@ const GameScreen = {
     ctx.textBaseline = 'middle';
     ctx.fillText('KNIGHT DAWN', SF(compact ? 12 : 18), area.h / 2);
 
-    ctx.fillStyle = '#e8d8b0';
+    // Menu (apre gestione partita). Riserva spazio per il testo a destra.
+    const mBtnW = SF(compact ? 32 : 40);
+    const mBtnH = SF(compact ? 32 : 40);
+    this.menuBtn = {
+      x: area.x + area.w - SF(8) - mBtnW,
+      y: area.y + Math.floor((area.h - mBtnH) / 2),
+      w: mBtnW, h: mBtnH,
+    };
+    this._drawMenuButton(this.menuBtn);
+    const textRight = this.menuBtn.x - SF(8);
+
+    ctx.fillStyle = PALETTE.hudNormale;
     ctx.textAlign = 'right';
     if (compact) {
-      ctx.font = FONT.body();
-      ctx.fillText(Calendar.formatCompatto(), area.w - SF(12), area.h / 2 - SF(10));
-      ctx.fillText(`${Calendar.nomeStagione()} · ${this.meta.meteo}`, area.w - SF(12), area.h / 2 + SF(10));
+      ctx.font = `${SF(12)}px "Courier New", monospace`;
+      ctx.fillText(Calendar.formatCompatto(), textRight, area.h / 2 - SF(8));
+      ctx.fillText(`${Calendar.nomeStagione()} · ${this.meta.meteo}`, textRight, area.h / 2 + SF(8));
     } else {
-      ctx.font = FONT.body();
-      ctx.fillText(Calendar.formatCompatto(), area.w - SF(18), area.h / 2 - SF(12));
-      ctx.fillText(`${Calendar.nomeStagione()}  ·  ${this.meta.meteo}  ·  Destinazione: ${this.meta.destinazione}`, area.w - SF(18), area.h / 2 + SF(12));
+      ctx.font = `${SF(16)}px "Courier New", monospace`;
+      ctx.fillText(Calendar.formatCompatto(), textRight, area.h / 2 - SF(10));
+      ctx.fillText(`${Calendar.nomeStagione()}  ·  ${this.meta.meteo}  ·  Destinazione: ${this.meta.destinazione}`, textRight, area.h / 2 + SF(10));
       drawCompassRose(ctx, area.x + area.w / 2, area.y + area.h / 2, SF(26));
     }
   },
@@ -1327,6 +1371,18 @@ const GameScreen = {
     ctx.fillText('KNIGHT DAWN', left.x + SF(18), left.y + left.h / 2);
 
     this._drawBarSeg(right);
+
+    // Menu (apre gestione partita) sul lato sinistro del segmento destro,
+    // così il testo data/stagione/destinazione resta allineato a destra.
+    const mBtnW = SF(44);
+    const mBtnH = SF(44);
+    this.menuBtn = {
+      x: right.x + SF(10),
+      y: right.y + Math.floor((right.h - mBtnH) / 2),
+      w: mBtnW, h: mBtnH,
+    };
+    this._drawMenuButton(this.menuBtn);
+
     const rx = right.x + right.w - SF(14);
     const ry = right.y + right.h / 2;
     ctx.fillStyle = '#e8d8b0';
@@ -1362,6 +1418,32 @@ const GameScreen = {
     const cellH = SF(40);
     const stripY = Math.floor(cy0 + (ch - cellH) / 2);
     this.drawKnightStatStrip(stripX, stripY, stripW, cellH);
+  },
+
+  // Pulsante "scroll" (pergamena con linee). Apre SaveUI.
+  _drawMenuButton(b) {
+    const ctx = this.ctx;
+    const active = this.pressedMenu || (SaveUI && SaveUI.isOpen && SaveUI.isOpen());
+    const hov = this.hoverMenu;
+    ctx.fillStyle = active ? PALETTE.pergScura
+                  : (hov ? PALETTE.pergMedia : PALETTE.pergChiara);
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    drawPixelRectStroke(ctx, b.x, b.y, b.w, b.h,
+      hov || active ? PALETTE.inkScuro : PALETTE.inkMedio);
+
+    // Icona "pergamena con righe"
+    const inset = Math.max(PIXEL * 2, Math.floor(b.w * 0.18));
+    const ix = b.x + inset, iy = b.y + inset;
+    const iw = b.w - inset * 2, ih = b.h - inset * 2;
+    ctx.fillStyle = PALETTE.inkScuro;
+    // bordo rotolo verticale
+    ctx.fillRect(ix, iy, PIXEL, ih);
+    ctx.fillRect(ix + iw - PIXEL, iy, PIXEL, ih);
+    // righe di "testo"
+    const lineGap = Math.max(PIXEL * 2, Math.floor(ih / 5));
+    for (let ly = iy + lineGap; ly < iy + ih - PIXEL; ly += lineGap) {
+      ctx.fillRect(ix + PIXEL * 2, ly, iw - PIXEL * 4, PIXEL);
+    }
   },
 
   _drawBarSeg(area) {
