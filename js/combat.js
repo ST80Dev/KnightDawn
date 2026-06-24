@@ -33,8 +33,10 @@ const Combat = {
   SLANCIO_SCONFITTA: -3,
 
   // ─── Avvio ───────────────────────────────────────────────────────────────
+  // opts.enemy può essere un oggetto nemico oppure un id stringa risolto
+  // tramite il catalogo Enemies (js/data/enemies.js).
   start(opts) {
-    const enemy   = opts.enemy;
+    const enemy   = this._resolveEnemy(opts.enemy);
     const knight  = opts.knight  || Knight;
     const terrain = (opts.terrain != null) ? opts.terrain : 1;
     const roundMax = this._rollRoundMax(enemy);
@@ -46,6 +48,18 @@ const Combat = {
       cronaca: [],
       finito: false, esito: null,
     };
+  },
+
+  // Risolve un nemico da id stringa o oggetto. Fallback difensivo a un
+  // archetipo minimo se l'id è sconosciuto o il catalogo non è caricato.
+  _resolveEnemy(enemy) {
+    if (typeof Enemies !== 'undefined' && Enemies.get) {
+      const e = Enemies.get(enemy);
+      if (e) return e;
+    }
+    if (enemy && typeof enemy === 'object') return enemy;
+    return { id: '?', nome: 'Avversario', tipo: 'umano', sfida: 10,
+             roundMin: 2, roundMax: 3, accettaResa: true };
   },
 
   // Range di Round per archetipo (vedi docs/COMBAT.md §2):
