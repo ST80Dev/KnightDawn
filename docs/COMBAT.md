@@ -7,51 +7,68 @@
 
 ## 1. Principi
 
-- Combattimento **a passi interattivi** — ogni passo (round) presenta scelte
-  al giocatore: continuare, fuggire, arrendersi, o azioni speciali contestuali
-- **Non istantaneo** — durata variabile in passi, scala con la complessità del
-  nemico (ladro 2-3, cavaliere 6-10, battaglia in esercito 20-40)
-- Il **risultato del singolo passo** è automatico (formula su attributi /
+- Combattimento **a Round interattivi** — ogni Round presenta scelte al
+  giocatore: continuare, fuggire, arrendersi, o azioni speciali contestuali
+- **Non istantaneo** — durata variabile in Round, scala con la complessità del
+  nemico (ladro 1, cavaliere 4-6, battaglia in esercito 10-20)
+- **Un Round di combattimento = un Passo del calendario** (~3 ore in-fiction):
+  stessa griglia temporale del viaggio, niente sotto-unità tattiche
+- Il **risultato del singolo Round** è automatico (formula su attributi /
   equipaggiamento / terreno); il **percorso dello scontro** è scelto dal giocatore
 - Le decisioni pregresse contano: equipaggiamento, seguito, ferite, preparazione
-- Letale: la morte è possibile come esito di un passo o di una scelta estrema
+- Letale: la morte è possibile come esito di un Round o di una scelta estrema
 
 ## 2. Lunghezza dello scontro
 
-Numero indicativo di passi totali per archetipo (N):
+**Unità di tempo:** un Round di combattimento = un **Passo del calendario**
+(~3 ore in-fiction, vedi GDD §3). Non esistono sotto-unità tattiche: la
+stessa griglia temporale del viaggio governa anche lo scontro.
 
-| Tipo scontro                                  | N passi |
-|-----------------------------------------------|--------:|
-| Ladro disarmato, animale piccolo              |   2–3   |
-| Bandito armato, lupo, predone                 |   4–6   |
-| Cavaliere singolo, orso, creatura selvatica   |   6–10  |
-| Boss di fazione, creatura mitica              |  10–15  |
-| Scaramuccia con piccolo seguito               |   8–12  |
-| Battaglia in esercito                         |  20–40  |
+Numero indicativo di Round totali per archetipo (N):
 
-Battaglie lunghe sono suddivise in **fasi narrative** (es. schieramento → urto
-→ mischia → rotta), con scelte diverse per fase.
+| Tipo scontro                                  | N Round | In-fiction      |
+|-----------------------------------------------|--------:|-----------------|
+| Ladro disarmato, animale piccolo              |    1    | ~3 ore          |
+| Bandito armato, lupo, predone                 |   2–3   | mezza giornata  |
+| Cavaliere singolo, orso, creatura selvatica   |   4–6   | un giorno       |
+| Boss di fazione, creatura mitica              |   6–10  | 1–2 giorni      |
+| Scaramuccia con piccolo seguito               |   4–6   | un giorno       |
+| Battaglia in esercito                         |  10–20  | 1–3 giorni      |
+| Assedio prolungato                            |  30–60  | 4–8 giorni      |
 
-## 3. Struttura di un passo
+Scontri da **1 Round** (ladro, animaletto) si risolvono inline nell'evento
+gamebook: scelte morali (*Combatti / Fuggi / Parla*) all'incontro, esito
+immediato, niente scena combat dedicata.
 
-Ogni passo esegue, in ordine:
+Battaglie e assedi lunghi sono suddivisi in **fasi narrative** (es.
+schieramento → urto → mischia → rotta), con scelte diverse per fase.
+
+## 3. Struttura di un Round
+
+Ogni Round esegue, in ordine:
 
 1. **Risoluzione automatica**: micro-scambio calcolato da formula (§5),
    narrato in cronaca + Carta del cronista.
 2. **Aggiornamento Slancio**: variabile bilanciata ±N che misura il vantaggio
-   cumulato. Più leggibile di HP astratti; a fine N passi lo Slancio determina
+   cumulato. Più leggibile di HP astratti; a fine N Round lo Slancio determina
    l'esito di default (vittoria se positivo, sconfitta se negativo, stallo
    altrimenti).
-3. **Scelte del passo**: presentate al giocatore (§4). Una scelta consuma il
-   passo successivo o termina lo scontro in anticipo.
-4. **Costo tempo**: ogni passo avanza il calendario di una frazione di
-   Diario. Scaramuccia ≈ 1 Diario, battaglia ≈ 1–2 Luci.
+3. **Scelte del Round**: presentate al giocatore (§4). Una scelta consuma il
+   Round successivo o termina lo scontro in anticipo.
+4. **Costo tempo**: ogni Round avanza il calendario di esattamente **1
+   Passo**. Una scaramuccia (1 Round) costa 1 Passo, una battaglia (10–20
+   Round) costa 1–3 Diari di gioco.
+
+Per battaglie/assedi lunghi conviene prevedere in S9 un meccanismo di
+**fast-forward intra-combat** (passa N Round in blocco con resoconto
+sintetico) per non costringere il giocatore a clic ripetuti su decine
+di Round.
 
 ## 4. Scelte disponibili
 
 ### Sempre disponibili
-- **Continua** — prossimo passo automatico
-- **Tenta fuga** — tiro su Volontà + terreno; fallita = -slancio + 1 passo extra
+- **Continua** — prossimo Round automatico
+- **Tenta fuga** — tiro su Volontà + terreno; fallita = -slancio + 1 Round extra
 - **Arrenditi** — l'esito dipende dal nemico (umano onorevole → cattura;
   bandito → spogliato; mostro → morte)
 
@@ -64,10 +81,10 @@ Ogni passo esegue, in ordine:
 - **Comando agli arcieri / Carica / Ritirata ordinata** — solo in battaglia
   con esercito al seguito
 
-Le contestuali appaiono solo nei passi in cui hanno senso (es. *parlamento*
+Le contestuali appaiono solo nei Round in cui hanno senso (es. *parlamento*
 non disponibile dopo che è stato versato sangue significativo).
 
-## 5. Formula di passo
+## 5. Formula di Round
 
 `[TBD]` — fissata in S9. Fattori in input:
 
@@ -81,7 +98,7 @@ non disponibile dopo che è stato versato sangue significativo).
 - Numero combattenti / seguito (vantaggio numerico)
 - Reputazione (intimidazione passiva sul morale nemico)
 
-Output del passo: `{ slancioDelta: ±int, ferita?: bool, narrazione: string }`
+Output del Round: `{ slancioDelta: ±int, ferita?: bool, narrazione: string }`
 
 ## 6. Tipi di avversari
 
@@ -94,7 +111,7 @@ Output del passo: `{ slancioDelta: ±int, ferita?: bool, narrazione: string }`
 - Creature magiche/mitiche
 - Boss di fazione
 
-Ogni archetipo definisce: N passi, scelte di resa/parlamento ammesse,
+Ogni archetipo definisce: N Round, scelte di resa/parlamento ammesse,
 modificatori in formula, esiti possibili.
 
 ## 7. Esiti
@@ -121,9 +138,12 @@ poi applicare gli effetti del ramo-esito al ritorno. Schema dettagliato in
 
 ## 9. Visualizzazione
 
-Vista combattimento dedicata in `scenes.js`:
-- Carta del cronista per il passo corrente (narrazione + miniatura)
+Vista combattimento dedicata in `scenes.js`, attiva per scontri di **≥2 Round**.
+Per scontri da 1 Round la risoluzione resta inline nella Carta dell'evento
+gamebook che li ha originati.
+
+- Carta del cronista per il Round corrente (narrazione + miniatura)
 - Indicatore Slancio (barra simbolica, non numerica)
-- Pulsantiera scelte (sempre + contestuali del passo)
-- Cronaca scorrevole dei passi precedenti
+- Pulsantiera scelte (sempre + contestuali del Round)
+- Cronaca scorrevole dei Round precedenti
 - Niente sprite animate dei combattenti — la narrazione regge la scena

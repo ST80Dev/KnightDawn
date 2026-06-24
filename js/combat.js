@@ -1,7 +1,9 @@
 // FERRO & CENERE — Sistema combattimento (motore)
-// Scontro a passi interattivi. Questo file contiene solo motore e formula
-// del singolo passo: zero UI, zero scelte forzate. La UI (scena, scelte
-// del giocatore, Carta del cronista) sarà innestata in scenes.js/game.js.
+// Scontro a Round interattivi. Un Round di combattimento = un Passo del
+// calendario (~3 ore in-fiction): nessuna sotto-unità tattica, stessa
+// griglia temporale del viaggio. Ogni Round avanza Calendar di 1 Passo.
+// Zero UI, zero scelte forzate qui dentro. La UI (scena, scelte del
+// giocatore, Carta del cronista) sarà innestata in scenes.js/game.js.
 // Il catalogo nemici sta in js/data/enemies.js (sottofase successiva).
 //
 // Design: docs/COMBAT.md
@@ -13,20 +15,20 @@
 //
 // Stato di uno scontro (state):
 //   {
-//     enemy,            // oggetto nemico {id, nome, tipo, passiMin, passiMax, ...}
+//     enemy,            // oggetto nemico {id, nome, tipo, roundMin, roundMax, ...}
 //     terrain,          // codice bioma corrente (per modificatori)
 //     knight,           // ref a Knight (default = singleton globale)
-//     passo,            // numero passo corrente (1-based)
-//     passiMax,         // limite passi prima dell'esito automatico
+//     round,            // numero Round corrente (1-based)
+//     roundMax,         // limite Round prima dell'esito automatico
 //     slancio,          // ±N: vantaggio cumulato del cavaliere
 //     usate,            // set di azioni contestuali già usate (es. 'parlamento')
-//     cronaca,          // [string] log narrativo dei passi
+//     cronaca,          // [string] log narrativo dei Round
 //     finito,           // bool
 //     esito,            // null | 'vittoria'|'fuga'|'resa'|'morte'|'stallo'
 //   }
 
 const Combat = {
-  // Soglie di Slancio per esiti automatici a fine N passi.
+  // Soglie di Slancio per esiti automatici a fine N Round.
   SLANCIO_VITTORIA: 3,
   SLANCIO_SCONFITTA: -3,
 
@@ -35,10 +37,10 @@ const Combat = {
     const enemy   = opts.enemy;
     const knight  = opts.knight  || Knight;
     const terrain = (opts.terrain != null) ? opts.terrain : 1;
-    const passiMax = this._rollPassiMax(enemy);
+    const roundMax = this._rollRoundMax(enemy);
     return {
       enemy, terrain, knight,
-      passo: 0, passiMax,
+      round: 0, roundMax,
       slancio: 0,
       usate: new Set(),
       cronaca: [],
@@ -46,9 +48,17 @@ const Combat = {
     };
   },
 
-  _rollPassiMax(enemy) {
-    const lo = enemy.passiMin | 0 || 3;
-    const hi = enemy.passiMax | 0 || (lo + 2);
+  // Range di Round per archetipo (vedi docs/COMBAT.md §2):
+  //   ladro/animale piccolo: 1
+  //   bandito/lupo/predone:  2-3
+  //   cavaliere/orso/boss:   4-6
+  //   creatura mitica:       6-10
+  //   battaglia esercito:    10-20
+  //   assedio prolungato:    30-60
+  // I valori vengono dal catalogo nemici (enemy.roundMin/roundMax).
+  _rollRoundMax(enemy) {
+    const lo = enemy.roundMin | 0 || 1;
+    const hi = enemy.roundMax | 0 || lo;
     return lo + Math.floor(Math.random() * (hi - lo + 1));
   },
 
@@ -65,24 +75,32 @@ const Combat = {
     if (choice === 'parlamento')  return this._tryParlamento(state);
     if (choice === 'colpoDisperato') return this._colpoDisperato(state);
 
-    // continua: passo normale
-    return this._passoAuto(state);
+    // continua: Round normale
+    return this._roundAuto(state);
   },
 
-  // Avanza il passo automatico: calcola delta Slancio + narra.
-  _passoAuto(state) {
-    state.passo++;
-    const delta = this._formulaPasso(state);
+  // Avanza Calendar di 1 Passo per ogni Round consumato (auto, fuga, resa,
+  // parlamento, colpo disperato). Sicuro se Calendar non è disponibile (es.
+  // test in Node senza il calendario caricato).
+  _avanzaCalendar() {
+    if (typeof Calendar !== 'undefined' && Calendar.avanza) Calendar.avanza(1);
+  },
+
+  // Avanza il Round automatico: calcola delta Slancio + narra.
+  _roundAuto(state) {
+    state.round++;
+    this._avanzaCalendar();
+    const delta = this._formulaRound(state);
     state.slancio += delta;
-    state.cronaca.push(this._narraPasso(state, delta));
+    state.cronaca.push(this._narraRound(state, delta));
 
     // Morte immediata se Salute a zero (può capitare per colpo critico)
     if (state.knight.salute.cur <= 0) {
       return this._chiudi(state, 'morte');
     }
 
-    // Limite passi raggiunto: esito automatico da Slancio.
-    if (state.passo >= state.passiMax) {
+    // Limite Round raggiunto: esito automatico da Slancio.
+    if (state.round >= state.roundMax) {
       if (state.slancio >=  this.SLANCIO_VITTORIA) return this._chiudi(state, 'vittoria');
       if (state.slancio <=  this.SLANCIO_SCONFITTA) return this._chiudi(state, 'morte');
       return this._chiudi(state, 'stallo');
@@ -90,9 +108,9 @@ const Combat = {
     return { state };
   },
 
-  // Formula di passo (semplice, TBD §5 docs/COMBAT.md).
+  // Formula di Round (semplice, TBD §5 docs/COMBAT.md).
   // Δ slancio = (vigoreEff - sfidaNemico) + rumore.
-  _formulaPasso(state) {
+  _formulaRound(state) {
     const k = state.knight;
     const vigore  = (k.forza.cur   / k.forza.max)   * 5;     // 0..5
     const volonta = (k.volonta.cur / k.volonta.max) * 3;     // 0..3
@@ -126,8 +144,8 @@ const Combat = {
     return 0;
   },
 
-  _narraPasso(state, delta) {
-    const n = state.passo;
+  _narraRound(state, delta) {
+    const n = state.round;
     if (delta >=  2) return `${n}. Colpo netto: il nemico arretra.`;
     if (delta ===  1) return `${n}. Affondi e guadagni terreno.`;
     if (delta ===  0) return `${n}. Lame che si misurano, nessuno cede.`;
@@ -137,66 +155,70 @@ const Combat = {
 
   // ─── Azioni speciali ────────────────────────────────────────────────────
   _tryFuga(state) {
-    state.passo++;
+    state.round++;
+    this._avanzaCalendar();
     const k = state.knight;
     const chance = 0.35 + (k.volonta.cur / k.volonta.max) * 0.35
                        + this._terrenoBonus(state.terrain, state.enemy) * 0.05;
     if (Math.random() < chance) {
-      state.cronaca.push(`${state.passo}. Approfitti di un varco e fuggi.`);
+      state.cronaca.push(`${state.round}. Approfitti di un varco e fuggi.`);
       return this._chiudi(state, 'fuga');
     }
     state.slancio -= 2;
-    state.cronaca.push(`${state.passo}. Tenti la fuga ma il nemico ti raggiunge.`);
+    state.cronaca.push(`${state.round}. Tenti la fuga ma il nemico ti raggiunge.`);
     return { state };
   },
 
   _tryResa(state) {
-    state.passo++;
+    state.round++;
+    this._avanzaCalendar();
     const e = state.enemy;
-    state.cronaca.push(`${state.passo}. Getti le armi.`);
+    state.cronaca.push(`${state.round}. Getti le armi.`);
     if (e.accettaResa === false) {
       state.slancio -= 3;
       state.cronaca.push(`Il nemico non concede quartiere.`);
-      // Lo scontro continua: prossimo step sarà un passo subìto.
+      // Lo scontro continua: prossimo step sarà un Round subìto.
       return { state };
     }
     return this._chiudi(state, 'resa');
   },
 
   _tryParlamento(state) {
-    if (state.usate.has('parlamento')) return this._passoAuto(state);
+    if (state.usate.has('parlamento')) return this._roundAuto(state);
     state.usate.add('parlamento');
-    state.passo++;
+    state.round++;
+    this._avanzaCalendar();
     const e = state.enemy;
     const k = state.knight;
     if (e.tipo !== 'umano' || k.onore < 2) {
-      state.cronaca.push(`${state.passo}. Provi a parlare: nessuna risposta.`);
+      state.cronaca.push(`${state.round}. Provi a parlare: nessuna risposta.`);
       return { state };
     }
     if (Math.random() < 0.5) {
-      state.cronaca.push(`${state.passo}. Le tue parole pesano. Il nemico si ritrae.`);
+      state.cronaca.push(`${state.round}. Le tue parole pesano. Il nemico si ritrae.`);
       return this._chiudi(state, 'vittoria');
     }
-    state.cronaca.push(`${state.passo}. Le tue parole cadono nel vuoto.`);
+    state.cronaca.push(`${state.round}. Le tue parole cadono nel vuoto.`);
     return { state };
   },
 
   _colpoDisperato(state) {
-    state.passo++;
+    state.round++;
+    this._avanzaCalendar();
     state.knight.danneggia(8, 'salute');
     if (state.knight.salute.cur <= 0) {
-      state.cronaca.push(`${state.passo}. Tutto in un colpo: cadi con lui.`);
+      state.cronaca.push(`${state.round}. Tutto in un colpo: cadi con lui.`);
       return this._chiudi(state, 'morte');
     }
     state.slancio += 3;
-    state.cronaca.push(`${state.passo}. Affondo disperato: ferito ma in vantaggio.`);
-    if (state.passo >= state.passiMax) {
+    state.cronaca.push(`${state.round}. Affondo disperato: ferito ma in vantaggio.`);
+    if (state.round >= state.roundMax) {
       return this._chiudi(state, state.slancio > 0 ? 'vittoria' : 'morte');
     }
     return { state };
   },
 
-  // ─── Scelte disponibili in questo passo ─────────────────────────────────
+  // ─── Scelte disponibili in questo Round ─────────────────────────────────
   // Utile alla UI per decidere quali pulsanti mostrare.
   scelteDisponibili(state) {
     if (state.finito) return [];
@@ -225,7 +247,7 @@ const Combat = {
     while (!state.finito && safety-- > 0) {
       ({ state } = this.step(state, 'continua'));
     }
-    return { esito: state.esito, passo: state.passo, slancio: state.slancio,
+    return { esito: state.esito, round: state.round, slancio: state.slancio,
              cronaca: state.cronaca };
   },
 };

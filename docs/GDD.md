@@ -474,11 +474,12 @@ da console / log testuale) prima di aggiungere la sua UI.
 - Dettaglio in `docs/EVENTS.md`
 
 #### Fase S4 — Combattimento
-- Scontro a **passi interattivi**: ogni round presenta scelte (continua,
+- Scontro a **Round interattivi**: ogni Round presenta scelte (continua,
   fuga, resa, azioni speciali contestuali)
-- Numero di passi scala con la complessità del nemico (ladro 2-3,
-  cavaliere 6-10, battaglia in esercito 20-40)
-- Risoluzione automatica del singolo passo via formula su attributi,
+- **1 Round = 1 Passo del calendario** (~3 ore in-fiction): nessuna sotto-unità
+- Numero di Round scala con la complessità del nemico (ladro 1,
+  cavaliere 4-6, battaglia in esercito 10-20)
+- Risoluzione automatica del singolo Round via formula su attributi,
   equipaggiamento, terreno, seguito; il percorso dello scontro è scelto
 - Slancio cumulato, ferite, fuga, resa, morte
 - Punto di sutura con S3: effetto evento `{ type: 'combat', ... }`
