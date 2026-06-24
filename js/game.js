@@ -172,6 +172,7 @@ const GameScreen = {
     const W = window.UI.w, H = window.UI.h;
     const pad = SF(12);
     const topBarH = SF(76);
+    const statStripH = SF(48);  // strip cavaliere sotto il topbar sinistro
     const leftW = SF(360);
     const rightW = SF(310);
     const logH = SF(220);     // cronaca eventi → in basso nella sidebar sinistra
@@ -183,20 +184,27 @@ const GameScreen = {
     const topBarLeft  = { x: 0,         y: 0, w: leftW,  h: topBarH };
     const topBarRight = { x: W - rightW, y: 0, w: rightW, h: topBarH };
 
+    // Strip riassunto cavaliere: banda dedicata sotto il titolo gioco
+    // (nel pilastro sinistro). Non sconfina nel centro, cosi la mappa
+    // puo' risalire fino al bordo alto.
+    const stat = { x: 0, y: topBarH, w: leftW, h: statStripH };
+
     // Mappa centrale: altezza ridotta per lasciare spazio alla barra azioni.
     const mapW = W - leftW - rightW - pad * 2;
     const bottom = { x: leftW + pad, y: H - pad - bottomH, w: mapW, h: bottomH };
     const map = { x: leftW + pad, y: pad, w: mapW, h: bottom.y - pad - pad };
 
-    // Sidebar sinistra: STATO (alto) + CRONACA (basso).
+    // Sidebar sinistra: STATO (alto) + CRONACA (basso). Il pannello STATO
+    // inizia sotto la strip cavaliere.
     const log  = { x: pad, y: H - pad - logH, w: leftW - pad, h: logH };
-    const left = { x: pad, y: topBarH + pad, w: leftW - pad, h: log.y - (topBarH + pad) - pad };
+    const sidebarTop = topBarH + statStripH + pad;
+    const left = { x: pad, y: sidebarTop, w: leftW - pad, h: log.y - sidebarTop - pad };
 
     // Sidebar destra: CONTESTO (alto) + MINIMAPPA (basso).
     const mini  = { x: W - rightW, y: H - pad - miniH, w: rightW - pad, h: miniH };
     const right = { x: W - rightW, y: topBarH + pad, w: rightW - pad, h: mini.y - (topBarH + pad) - pad };
 
-    return { compact: false, pad, topBarLeft, topBarRight, left, map, right, log, mini, bottom };
+    return { compact: false, pad, topBarLeft, topBarRight, stat, left, map, right, log, mini, bottom };
   },
 
   layoutCompact() {
@@ -1141,9 +1149,12 @@ const GameScreen = {
     this.zoomButtons = [];           // niente +/- su desktop (solo rotella)
     this.activeOverlay = null;       // overlay solo in compatto
     this.mapRect = L.map;
-    // Le due "ali" del topbar (titolo a sx, meta a dx) vanno prima: hanno
-    // x specifici e non sconfinano sulla mappa.
+    // Topbar: due "ali" (titolo a sx, meta a dx). Il centro resta libero
+    // per la mappa che risale fino in cima.
     this.drawTopBarSplit(L.topBarLeft, L.topBarRight);
+    // Strip riassunto cavaliere: banda sotto il titolo gioco, nel pilastro
+    // sinistro. Non ruba spazio verticale al centro della mappa.
+    if (L.stat) this.drawDesktopStatStrip(L.stat);
     this.drawPanel(L.left, 'STATO CAVALIERE');
     this.drawKnightStatus(L.left);
     this.drawMapPanel(L.map);
@@ -1155,10 +1166,26 @@ const GameScreen = {
     this.drawMinimap(L.mini);
     // Barra inferiore: comandi azione + informazioni di gioco.
     this.drawBottomBar(L.bottom);
-    // Strip cavaliere centrale del topbar: disegnata ALLA FINE per garantire
-    // che resti sopra alla mappa, che parte da y=pad e sconfinerebbe dietro
-    // la fascia centrale del topbar (le ali sx/dx sono opache, il centro no).
-    this.drawTopBarCenterStrip(L.topBarLeft, L.topBarRight);
+  },
+
+  // Strip riassunto attributi cavaliere in fascia dedicata sotto il titolo
+  // gioco (pilastro sinistro del desktop). Larga quanto la sidebar sinistra,
+  // non sconfina sul centro mappa.
+  drawDesktopStatStrip(area) {
+    const ctx = this.ctx;
+    // Sfondo: stesso del topbar, con filo oro inferiore coerente
+    ctx.fillStyle = PALETTE.inkScuro;
+    ctx.fillRect(area.x, area.y, area.w, area.h);
+    ctx.fillStyle = PALETTE.hudTitolo;
+    ctx.fillRect(area.x, area.y + area.h - PIXEL, area.w, PIXEL);
+
+    // Strip centrata nella fascia con piccoli margini
+    const inset = SF(12);
+    const stripX = area.x + inset;
+    const stripW = area.w - inset * 2;
+    const cellH = area.h - SF(12);
+    const stripY = area.y + Math.floor((area.h - cellH) / 2);
+    this.drawKnightStatStrip(stripX, stripY, stripW, cellH);
   },
 
   drawCompact(L) {
@@ -1359,8 +1386,8 @@ const GameScreen = {
   // centro (sempre visibile a prescindere dalla tab attiva nella sidebar),
   // meta del calendario/meteo/destinazione a dx.
   // Topbar desktop: due "ali" (titolo a sx, meta a dx). La fascia centrale
-  // viene riempita dalla strip cavaliere — chiamata separata in coda al
-  // rendering (drawTopBarCenterStrip) per restare sopra alla mappa.
+  // resta trasparente sopra la mappa che risale fino al bordo alto. La
+  // strip cavaliere viene disegnata sotto al titolo gioco (drawDesktopStatStrip).
   drawTopBarSplit(left, right) {
     const ctx = this.ctx;
     this._drawBarSeg(left);
@@ -1391,33 +1418,6 @@ const GameScreen = {
     ctx.fillText(Calendar.formatCompatto(), rx, ry - SF(18));
     ctx.fillText(`${Calendar.nomeStagione()}  ·  ${this.meta.meteo}`, rx, ry);
     ctx.fillText(`Destinazione: ${this.meta.destinazione}`, rx, ry + SF(18));
-  },
-
-  // Strip riassunto attributi cavaliere disegnata nella fascia centrale del
-  // topbar desktop. Va chiamata DOPO drawMapPanel: la mappa parte da y=pad
-  // e copre dietro la fascia centrale (le ali sx/dx sono opache); la strip
-  // deve essere disegnata sopra.
-  drawTopBarCenterStrip(left, right) {
-    const ctx = this.ctx;
-    const cx0 = left.x + left.w;
-    const cx1 = right.x;
-    const cy0 = left.y;
-    const ch  = left.h;
-    if (cx1 - cx0 <= SF(280)) return;   // troppo stretto: skippa
-
-    // Banda di sfondo dietro lo strip (uguale alle ali del topbar)
-    ctx.fillStyle = PALETTE.inkScuro;
-    ctx.fillRect(cx0, cy0, cx1 - cx0, ch);
-    ctx.fillStyle = PALETTE.hudTitolo;
-    ctx.fillRect(cx0, cy0 + ch - PIXEL, cx1 - cx0, PIXEL);
-
-    // Centra lo strip nella fascia disponibile (con margini interni)
-    const stripPad = SF(20);
-    const stripW = Math.min(cx1 - cx0 - stripPad * 2, SF(540));
-    const stripX = Math.floor(cx0 + (cx1 - cx0 - stripW) / 2);
-    const cellH = SF(40);
-    const stripY = Math.floor(cy0 + (ch - cellH) / 2);
-    this.drawKnightStatStrip(stripX, stripY, stripW, cellH);
   },
 
   // Pulsante "scroll" (pergamena con linee). Apre SaveUI.
@@ -1677,10 +1677,10 @@ const GameScreen = {
   },
 
   // Riepilogo permanente delle 4 caratteristiche del cavaliere. Disegnata
-  // nella fascia centrale del topbar (desktop) o in una banda dedicata sotto
-  // il topbar (compact), così è sempre visibile a prescindere dalla scena/
-  // tab attiva. Ogni pillola: abbreviazione + valore con colore semantico.
-  // cellHOpt opzionale: se omesso usa il default.
+  // in una banda dedicata sotto il titolo gioco (desktop, pilastro sinistro)
+  // o sotto il topbar (compact), così è sempre visibile a prescindere dalla
+  // scena/tab attiva. Ogni pillola: abbreviazione + valore con colore
+  // semantico. cellHOpt opzionale: se omesso usa il default.
   drawKnightStatStrip(x, y, w, cellHOpt) {
     const ctx = this.ctx;
     const k = this.knight;
