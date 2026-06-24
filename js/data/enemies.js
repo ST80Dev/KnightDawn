@@ -145,7 +145,7 @@ Enemies.register({
 });
 Enemies.register({
   id: 'mitici.ragno', nome: 'Ragno gigante', tipo: 'mitico',
-  categoria: 'bestiamitica', numerosita: 'singolo',
+  categoria: 'ragno', numerosita: 'singolo',
   sfida: 14, roundMin: 5, roundMax: 8, accettaResa: false,
   terreni: { favorevole: [2, 5], sfavorevole: [1, 6] },  // foreste fitte, paludi
   descr: 'Tessitrice di tenebra fra gli alberi. Dove cala il silenzio, lei aspetta.',
@@ -162,6 +162,35 @@ Enemies.register({
   categoria: 'bestiamitica', numerosita: 'singolo',
   sfida: 16, roundMin: 9, roundMax: 12, accettaResa: false,
   descr: 'Creatura da cantastorie. Affrontarla è già materia da cronaca.',
+});
+
+// ── Creature mitiche (ispirazione LotR/GoT) ────────────────────────────────
+Enemies.register({
+  id: 'mitici.drago', nome: 'Drago', tipo: 'mitico',
+  categoria: 'drago', numerosita: 'singolo',
+  sfida: 17, roundMin: 10, roundMax: 14, accettaResa: false,
+  terreni: { favorevole: [4, 10] },  // alture e rovine
+  descr: 'Ali come vele nere, gola di fuoco. Chi lo affronta entra nella leggenda — o nella cenere.',
+});
+Enemies.register({
+  id: 'mitici.orchi', nome: 'Banda di orchi', tipo: 'mitico',
+  categoria: 'orchi', numerosita: 'orda',
+  sfida: 13, roundMin: 4, roundMax: 7, accettaResa: false,
+  terreni: { favorevole: [2, 5, 10], sfavorevole: [1] },  // ombra e cunicoli
+  descr: 'Zanne, ferro arrugginito e un fetore che precede l\'assalto. Vengono in molti.',
+});
+Enemies.register({
+  id: 'mitici.cavaliere_nero', nome: 'Cavaliere nero', tipo: 'mitico',
+  categoria: 'wraith', numerosita: 'singolo',
+  sfida: 16, roundMin: 7, roundMax: 10, accettaResa: false,
+  descr: 'Un\'armatura vuota in sella a un destriero d\'ombra. Dove passa, la Volontà gela.',
+});
+Enemies.register({
+  id: 'mitici.spettro_gelo', nome: 'Spettro del gelo', tipo: 'mitico',
+  categoria: 'gelo', numerosita: 'singolo',
+  sfida: 16, roundMin: 7, roundMax: 10, accettaResa: false,
+  terreni: { favorevole: [7, 8] },  // neve e ghiaccio del Nord
+  descr: 'Occhi come schegge di ghiaccio. Avanza nel silenzio bianco, lancia levata.',
 });
 
 // ─── Battaglie e assedi (scontri di massa, fasi narrative — vedi COMBAT.md) ─

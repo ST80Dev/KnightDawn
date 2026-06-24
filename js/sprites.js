@@ -130,6 +130,60 @@ const Sprites = {
       '.##....##..',
       '.#.....##..',
     ],
+    // Drago/Wyrm: ali spiegate, corpo serpentino, testa a sinistra.
+    drago: [
+      '..#........#..',
+      '..##......##..',
+      '.###......###.',
+      '.####....####.',
+      'oo############',
+      '.############.',
+      '..####..####..',
+      '...##....##...',
+      '.......####...',
+      '........##....',
+    ],
+    // Orchi/Goblin: umanoide tozzo, occhiaie e zanne (accento).
+    orchi: [
+      '...####...',
+      '..#oooo#..',
+      '..#o##o#..',
+      '..######..',
+      '.########.',
+      '##.####.##',
+      '#..####..#',
+      '..######..',
+      '..##..##..',
+      '.##....##.',
+      '.#......#.',
+    ],
+    // Cavaliere nero (wraith): figura ammantata in sella a un cavallo scuro.
+    wraith: [
+      '.....##.......',
+      '....####......',
+      '....####......',
+      '...######.....',
+      '..########..oo',
+      '.###########o.',
+      '.############.',
+      '.##########...',
+      '..#..#..#.#...',
+      '..#..#..#.#...',
+    ],
+    // Spettro del gelo: umanoide pallido con lancia (alla "non-morto del Nord").
+    spettrogelo: [
+      '...####...#',
+      '..#oooo#..#',
+      '..######..#',
+      '...####...#',
+      '..######..#',
+      '.###.###..#',
+      '..#.#.#...#',
+      '..#.#.#....',
+      '...#.#.....',
+      '..#...#....',
+      '.#.....#...',
+    ],
     // Massa (battaglia/assedio): schiera con lance e stendardo.
     battaglia: [
       '#.........#',
@@ -156,6 +210,10 @@ const Sprites = {
     ragno:     { body: '#3a2a3a', accent: '#aa1818', shade: '#1a0e1a' },
     nonmorto:  { body: '#9eb0b0', accent: '#3a6a9a', shade: '#4a5858' },
     mutaforma: { body: '#4a4038', accent: '#aa1818', shade: '#221c18' },
+    drago:       { body: '#7a2a18', accent: '#c8a030', shade: '#3a1408' },
+    orchi:       { body: '#4a5a2a', accent: '#aa1818', shade: '#222a14' },
+    wraith:      { body: '#2a2420', accent: '#aa1818', shade: '#0a0608' },
+    spettrogelo: { body: '#bcd0d8', accent: '#4a80b4', shade: '#6a8a9a' },
     battaglia: { body: '#6a5a40', accent: '#8a1010', shade: '#3a2010' },
   },
 
@@ -164,7 +222,9 @@ const Sprites = {
     ladro: 'umano', bandito: 'umano', soldato: 'umano', cavaliere: 'cavaliere',
     lupo: 'lupo', cinghiale: 'lupo', orso: 'orso',
     nonmorto: 'nonmorto', gigante: 'gigante', mutaforma: 'mutaforma',
-    bestiamitica: 'ragno', battaglia: 'battaglia',
+    ragno: 'ragno', bestiamitica: 'drago',
+    drago: 'drago', orchi: 'orchi', wraith: 'wraith', gelo: 'spettrogelo',
+    battaglia: 'battaglia',
   },
 
   // Fallback per tipo se la categoria non è mappata.
