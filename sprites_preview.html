@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ferro &amp; Cenere — Anteprima silhouette</title>
+  <style>
+    body { margin: 0; background: #15100a; color: #d8c890;
+           font-family: Georgia, serif; }
+    h1 { text-align: center; font-size: 18px; padding: 14px; color: #c8a030;
+         font-weight: normal; letter-spacing: 1px; }
+    canvas { display: block; margin: 0 auto; image-rendering: pixelated;
+             background: #1e1008; border: 1px solid #5a3a18; }
+    p.note { text-align: center; font-size: 13px; color: #8a7a5a; padding: 8px; }
+  </style>
+</head>
+<body>
+  <h1>FERRO &amp; CENERE — Silhouette pixel (anteprima)</h1>
+  <p class="note">Una figura per categoria. Le forme sono evocative, non illustrative.</p>
+  <canvas id="c"></canvas>
+  <script src="js/sprites.js"></script>
+  <script>
+    const keys = Object.keys(Sprites.bitmaps);
+    const cell = 10;          // dimensione pixel chunky in anteprima
+    const colW = 150, rowH = 190, perRow = 4, pad = 20;
+    const cols = Math.min(perRow, keys.length);
+    const rows = Math.ceil(keys.length / perRow);
+    const cv = document.getElementById('c');
+    cv.width  = cols * colW + pad * 2;
+    cv.height = rows * rowH + pad * 2;
+    const ctx = cv.getContext('2d');
+
+    keys.forEach((key, i) => {
+      const cx = pad + (i % perRow) * colW;
+      const cy = pad + Math.floor(i / perRow) * rowH;
+      const box = { x: cx, y: cy, w: colW - 16, h: rowH - 50 };
+
+      // cornice cella
+      ctx.strokeStyle = '#3a2810';
+      ctx.strokeRect(box.x, box.y, box.w, box.h);
+
+      Sprites.drawInBox(ctx, key, box, { margin: 14 });
+
+      // etichetta
+      ctx.fillStyle = '#c8a030';
+      ctx.font = '14px Georgia, serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(key, cx + (colW - 16) / 2, cy + rowH - 26);
+
+      // categorie mappate a questa silhouette
+      const cats = Object.entries(Sprites.byCategoria)
+        .filter(([, v]) => v === key).map(([k]) => k);
+      if (cats.length) {
+        ctx.fillStyle = '#8a7a5a';
+        ctx.font = '11px Georgia, serif';
+        ctx.fillText(cats.join(', '), cx + (colW - 16) / 2, cy + rowH - 10);
+      }
+    });
+  </script>
+</body>
+</html>
