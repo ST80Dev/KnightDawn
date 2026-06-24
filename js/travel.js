@@ -73,6 +73,7 @@ const Travel = {
       knightPos.x = next.x;
       knightPos.y = next.y;
       Calendar.avanza(1);
+      if (typeof Events !== 'undefined' && Events.tickDeadlines) Events.tickDeadlines();
       if (hooks.onStep) hooks.onStep(next, biome);
       if (this.idx >= this.path.length) {
         this.stop();

@@ -208,8 +208,106 @@ narrative sottili sono compito del text-system (S6).
 
 ### Catalogo eventi
 
-(da espandere) — attualmente 10 eventi totali. Obiettivo realistico: 50+
-viaggio per bioma, 20+ per ogni tipo struttura, 30+ POI.
+Coerente con luoghi (layout L1/L2), fog di guerra a 3 livelli, sistema
+effetti già implementato e linee guida dei rinvii sopra.
+
+#### Volumi target (prima beta giocabile)
+
+| Categoria                              | Target  |
+|----------------------------------------|---------|
+| `travel.<bioma>.*` (8 × 13 biomi)      | ~100    |
+| `travel.meteo_evento.*`                | 6–10    |
+| `travel.rep_*` (reputazione-driven)    | 10–15   |
+| `loc.<edificio>.*` (15 × 5 edifici)    | ~75     |
+| `loc.<struttura>.<area>.*` aree uniche | ~50     |
+| `poi.<kind>.*` (5 × 8 kind)            | ~40     |
+| `dungeon.<tipo>.stanze.*` (10 × 4)     | ~40     |
+| `stagione.<s>.*` una-tantum            | 4–8     |
+| **Totale**                             | **~300**|
+
+Meglio 5 per bioma scritti bene che 15 ripetitivi.
+
+#### Schema `Event` esteso
+
+Campi nuovi (additivi, retro-compatibili con S3):
+- `oncePerLuce` — bool, una volta per Luce (anno).
+- `cooldown` — int, passi minimi prima di poter ripetersi.
+- `tone` — autoriale: `drammatico|contemplativo|ironico|brutale|poetico|neutro`.
+- `portata` — autoriale: `marginale|notevole|svolta`.
+- `if` — prereq di selezione: `{ repMin, repMax, onoreMin, onoreMax, titolo }`.
+
+`where` supporta più forme:
+- `{ biomes:[int] }` — travel
+- `'castle' | 'village' | 'keep'` — legacy struttura intera (fallback)
+- `{ struttura, area }` — area unica di una struttura (layout L1)
+- `{ edificio }` — edificio condiviso L1 (taverna, fabbro, …)
+- `{ kind }` o stringa — POI
+
+Selezione: nuovo `Events.pickArea(structureType, areaKey, structure)` per
+il layout L1, che cerca prima namespace per-area e poi cade su namespace
+per-edificio condiviso.
+
+#### Linee guida autoriali
+
+1. **≥ 2 scelte sempre.** Mai una sola — non è una scelta.
+2. **Almeno una scelta ha costo o rischio.** Altrimenti l'evento è
+   gratuito e non decide nulla.
+3. **Asimmetria di outcome.** Scelte diverse devono dare conseguenze
+   qualitativamente diverse (rep vs salute vs news), non solo
+   `+5 vs +3` sulla stessa risorsa.
+4. **Lunghezze.** `text` ≤ 4 righe (~280 char), `text` opzione ≤ 50 char,
+   `reply` ≤ 2 righe. Niente romanzi.
+5. **Seconda persona, presente.** "Ti imbatti…", "Decidi di…".
+6. **NPC anonimi se non ricorrenti.** "Il viandante", "l'oste", "il
+   fabbro". Niente nomi propri inventati per personaggi una-tantum.
+7. **Ogni opzione ha `reply`**, anche minima, per chiudere il loop
+   narrativo.
+8. **Una prereq per opzione, max.** Eccezione: dungeon, dove la
+   composizione di check è il punto.
+9. **Niente filler.** Ogni evento ha un punto, una scelta significativa,
+   una conseguenza.
+10. **Coerenza con il fog.** Eventi che parlano di "vedere lontano" non
+    presuppongono che il giocatore abbia visto cose ancora ignote. Se
+    devono rivelare, usano l'effetto `type:'rivela'`.
+
+#### Organizzazione del codice
+
+```
+js/events.js                 ← solo motore (registry, pick, applyEffects,
+                                deadlines, validate, save/load)
+js/data/events_travel.js     ← Events.register(...) per ogni bioma
+js/data/events_loc.js
+js/data/events_poi.js
+js/data/events_dungeon.js
+js/data/events_meteo.js
+js/data/events_stagione.js
+js/data/events_rep.js
+```
+
+Caricamento `<script>` ordinato in `index.html`: motore prima, dati dopo.
+Vantaggio: file dati piccoli, una PR per categoria, review umana semplice.
+
+#### Validazione catalogo (debug)
+
+`Events.validate()` chiamabile a mano da console; logga warning (non
+blocca): id duplicato, opzioni < 2, effetto con `type` sconosciuto,
+`reputazione` id inesistente.
+
+#### Priorità di scrittura
+
+A. Travel per bioma (~100) — l'utente li incontra di più  
+B. Edifici condivisi: taverna, fabbro, cappella, mercante, guaritore (~75)  
+C. Aree uniche castello/monastero (~50)  
+D. POI per kind (~40)  
+E. Dungeon stanze (~40)  
+F. Reputazione + stagionali + meteo straordinari (~50)
+
+Per **questa fase di scaffold** sono stati implementati: schema esteso,
+nuovi trigger (`oncePerLuce`, `cooldown`), `if` di selezione, helper
+`repCheck/onoreCheck/tieneEquip`, effetto `rivela`, scadenze
+(`addDeadline`/`tickDeadlines`/`completeDeadline`), validatore,
+organizzazione file dati. Il riempimento del catalogo a ~300 eventi è
+lavoro autoriale incrementale.
 
 ### Luoghi mancanti
 
