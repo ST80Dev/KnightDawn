@@ -1,128 +1,55 @@
 # FERRO & CENERE — Claude Code Briefing
 
-## Cos'è
+Gioco di avventura medievale top-down, pixel art cartografico su pergamena.
+Cavaliere errante, mondo procedurale, fazioni, combattimento a turni.
+**NON** è costruzione/civiltà/action real-time.
 
-Gioco di avventura medievale top-down con pixel art stile cartografico su pergamena.
-Un cavaliere errante esplora un mondo generato proceduralmente, interagisce con fazioni,
-combatte creature e avversari, accumula reputazione e si definisce attraverso le scelte di gioco.
+## Stack
+Vanilla JS / HTML5 Canvas / CSS — zero framework, zero dipendenze esterne.
+Deploy GitHub Pages. Single-player, localStorage. UI in italiano. Target: desktop browser, mouse + tastiera.
 
-**NON è:** un gioco di costruzione/civiltà/conquista, un librogame a scelte, un action real-time.
+## File JS
+`main.js` · `config.js` · `world.js` · `renderer.js` · `tiles.js` · `sprites.js`
+`knight.js` · `travel.js` · `combat.js` · `events.js` · `factions.js` · `locations.js` · `ui.js` · `save.js`
 
-**È:** un gioco a turni di esplorazione e avventura semisolitaria dove il mondo vive
-indipendentemente dal giocatore. Il tempo scorre a passi di viaggio, interazione o combattimento.
+## Documenti di design — leggi SEMPRE quello rilevante prima di lavorare su un sistema
 
-## Stack tecnico
+| Sistema | Documento |
+|---|---|
+| Visione generale e meccaniche | `docs/GDD.md` |
+| Grafica, palette, tile, sprite | `docs/GRAFICA.md` ⭐ |
+| Generazione mondo | `docs/WORLD_GEN.md` |
+| Combattimento | `docs/COMBAT.md` |
+| Interfaccia utente | `docs/UI_GUIDE.md` |
 
-- **Vanilla JS / HTML5 Canvas / CSS** — zero framework, zero dipendenze esterne
-- **Deploy:** GitHub Pages (repo: ferro-e-cenere)
-- **Single-player** con salvataggio localStorage + esporta/importa JSON
-- **Lingua interfaccia:** Italiano
-- **Target:** desktop browser (Chrome, Firefox, Safari) — mouse + tastiera
+## Regole operative
 
-## Struttura progetto
-
-```
-/
-├── CLAUDE.md                  ← QUESTO FILE (briefing sessione)
-├── index.html                 ← Entry point
-├── style.css                  ← Stili globali
-├── js/
-│   ├── main.js                ← Bootstrap, game loop, state machine
-│   ├── config.js              ← Costanti, palette, configurazione
-│   ├── world.js               ← Generazione mondo procedurale
-│   ├── renderer.js            ← Canvas rendering, camera, zoom, fog of war
-│   ├── tiles.js               ← Tileset procedurale (disegnato in canvas)
-│   ├── sprites.js             ← Sprite cavaliere, NPC, creature
-│   ├── knight.js              ← Stato personaggio, attributi, equipaggiamento
-│   ├── travel.js              ← Pathfinding A*, viaggio automatico, costo turni
-│   ├── combat.js              ← Combattimento automatico a fasi
-│   ├── events.js              ← Trigger incontri, NPC, mercanti, dungeon
-│   ├── factions.js            ← Casate, ordini, reputazione
-│   ├── locations.js           ← Vista dettaglio laterale per castelli/luoghi
-│   ├── ui.js                  ← HUD, pannelli, log eventi, menu
-│   └── save.js                ← localStorage, esporta/importa
-├── assets/                    ← Eventuale grafica statica (opzionale)
-└── docs/
-    ├── GDD.md                 ← Game Design Document completo
-    ├── GRAFICA.md             ← Specifiche grafiche, palette, tileset, sprite
-    ├── WORLD_GEN.md           ← Sistema generazione mondo
-    ├── COMBAT.md              ← Sistema combattimento
-    └── UI_GUIDE.md            ← Guida interfaccia e layout
-```
-
-## Documenti di design
-
-**Leggi SEMPRE il documento rilevante prima di lavorare su un sistema:**
-
-- Visione generale e meccaniche → `docs/GDD.md`
-- Grafica, palette, tile, sprite → `docs/GRAFICA.md` ⭐ (focus corrente)
-- Generazione mondo → `docs/WORLD_GEN.md`
-- Combattimento → `docs/COMBAT.md`
-- Interfaccia utente → `docs/UI_GUIDE.md`
-
-## Regole di sessione
-
-1. **Lingua:** tutto in italiano (codice, commenti, variabili possono essere in inglese)
-2. **Mai toccare** la struttura dei file senza conferma esplicita
-3. **Conferma prima** di procedere con cambiamenti architetturali
-4. **Un sistema alla volta:** non iniziare un nuovo sistema prima di aver completato quello corrente
-5. **Nessuna dipendenza esterna:** tutto vanilla, tutto inline, nessun CDN
-6. **Grafica procedurale:** i tile e sprite sono disegnati in canvas via codice, non caricati da file PNG
-   (possibilità futura di caricare spritesheet, ma lo scheletro parte procedurale)
-7. **Test incrementale:** ogni feature deve essere visibile e testabile prima di passare alla successiva
-8. **Branch e PR — REGOLA OBBLIGATORIA:** prima di iniziare qualsiasi nuova modifica,
-   controllare SEMPRE lo stato del branch corrente rispetto a `main`:
-
+1. Comunicazione in italiano; codice/variabili possono essere in inglese
+2. Mai toccare la struttura dei file senza conferma esplicita
+3. Conferma prima di cambiamenti architetturali
+4. Un sistema alla volta — non iniziare il successivo prima di completare quello corrente
+5. Nessuna dipendenza esterna (no CDN, tutto inline vanilla)
+6. Grafica procedurale: tile e sprite disegnati in canvas via codice, non PNG
+7. Test incrementale: ogni feature visibile e testabile prima di passare avanti
+8. **Branch — REGOLA OBBLIGATORIA:** eseguire prima di ogni modifica:
    ```
    git log origin/main..HEAD --oneline
    ```
+   - **Vuoto** → branch già mergiato: creare nuovo branch descrittivo da `main` aggiornato
+   - **Con commit** → continuare sullo stesso branch
 
-   - Se l'output è **vuoto** → il branch è già stato integrato in `main` (PR mergiata).
-     In questo caso **NON committare oltre** su quel branch: creare subito un nuovo
-     branch a partire dal HEAD corrente (o da `main` aggiornato) con un nome
-     descrittivo del prossimo blocco di lavoro, e proseguire lì.
-   - Se l'output **contiene commit** → il branch ha ancora lavoro non integrato:
-     si può continuare a committare sullo stesso branch.
+## Mantenimento di questo file
 
-   Questa regola vale **anche per modifiche minime** (rinomine, refactor, fix).
-   Un branch già mergiato è "chiuso": ogni nuovo lavoro deve partire fresco.
+Questo file deve restare **breve e non ridondante**.
+Regole per chi lo aggiorna (Claude o utente):
+
+- **Niente descrizioni di design o architettura** — quelle stanno nei `docs/`. Se una sezione spiega *come funziona* un sistema, non appartiene qui: va in `docs/` con un link.
+- **Niente elenchi di file con descrizioni lunghe** — il codice si documenta da sé; qui basta la lista dei nomi.
+- **Aggiornare la fase corrente** a ogni cambio di focus, rimuovendo le fasi completate.
+- **Obiettivo dimensione:** massimo ~60 righe. Se superi questo limite, consolida o sposta in `docs/`.
 
 ## Fase corrente
 
-**FASE 1 — Grafica e rendering base**
-Obiettivo: avere la mappa cartografica visibile, zoomabile, con tile disegnati proceduralmente.
-
-Ordine di lavoro:
-1. `config.js` — palette colori, dimensioni tile, costanti
-2. `tiles.js` — funzioni di disegno tile per ogni bioma (procedurali in canvas)
-3. `renderer.js` — camera, zoom multi-livello, disegno mappa
-4. `world.js` — generazione mondo minima (noise → biomi) per testare il rendering
-5. `main.js` — bootstrap e game loop base
-6. `index.html` + `style.css` — struttura pagina
-
-## Note architetturali
-
-### Due viste
-
-1. **Vista mappa (top-down cartografica):** vista principale, stile pergamena medievale.
-   Zoomabile a più livelli: regione → zona → locale.
-   Zoom out = icone simboliche cartografiche. Zoom in = più dettaglio sui tile.
-
-2. **Carta del cronista:** si attiva entrando in castelli, taverne, dungeon,
-   luoghi speciali. Composizione statica in stile manoscritto miniato medievale:
-   cornice ornata, miniatura centrale, testo narrativo, pulsanti tematici.
-   Non è una scena navigabile point&click — si interagisce per scelta.
-   Stesso linguaggio visivo riusato per eventi di viaggio (carte mobili sopra
-   la mappa). Dettagli in `docs/GAMEPLAY.md`.
-
-### Generazione mondo
-
-Mondo grande con nebbia di guerra. Generato casualmente a ogni partita entro vincoli
-(deve avere almeno N castelli, villaggi, biomi diversi, punti di interesse).
-Dettagli in `docs/WORLD_GEN.md`.
-
-### Tempo e turni
-
-Ogni tile di viaggio costa turni (1-3 a seconda del terreno). Gli eventi del mondo
-avanzano con i turni (stagioni, guerre tra fazioni, morte di lord). Il combattimento
-consuma turni proporzionalmente alla complessità dello scontro.
+**FASE 3 — Sistemi di gioco**
+Focus attivo: eventi di viaggio e Carta del cronista (`events.js`, `locations.js`).
+Riferimento: `docs/GDD.md`, `docs/UI_GUIDE.md`.
