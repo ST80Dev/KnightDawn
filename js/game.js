@@ -149,6 +149,9 @@ const GameScreen = {
     this.poiPause = null;          // interruzione POI durante viaggio
     this._poiPauseBtn = {};        // { ferma, ignora } rect
     this._dismissedPOIs = new Set(); // specials già notificate in questa tratta
+    this.chronicle = null;         // Carta del cronista (evento attivo)
+    this._chronicleBtns = [];      // rect dei pulsanti scelta + chiudi
+    if (typeof Events !== 'undefined') Events.reset();
     this.camAnchor = { x: World.knightStart.x, y: World.knightStart.y };
     this.camTarget = null;         // quando non-null la cam si avvicina qui
     this.dragging = false;
@@ -278,6 +281,7 @@ const GameScreen = {
 
   onPointerDown(p) {
     if (Scenes.current !== this) return;
+    if (this.chronicle) { this._chronicleDown(p); return; }
     if (this.poiPause)  { this._poiPauseDown(p); return; }
     if (this.preRecap)  { this._preRecapDown(p); return; }
     if (this.activeOverlay) { this.overlayPressed = this.overlayWhere(p); return; }
@@ -306,6 +310,7 @@ const GameScreen = {
   onPointerUp(p, type) {
     if (Scenes.current !== this) return;
 
+    if (this.chronicle) { this._chronicleUp(p); return; }
     if (this.poiPause)  { this._poiPauseUp(p); return; }
     if (this.preRecap)  { this._preRecapUp(p); return; }
 
@@ -379,6 +384,8 @@ const GameScreen = {
     this._preRecapPressed = null;
     this.poiPause = null;
     this._poiPausePressed = null;
+    this.chronicle = null;
+    this._chroniclePressed = null;
     window.GameRender.invalidate();
   },
 
@@ -472,6 +479,7 @@ const GameScreen = {
       const { path, name } = this.preRecap;
       this.preRecap = null;
       this._dismissedPOIs.clear();
+      this._pendingPOI = null;
       Travel.start(path);
       this.camAnchor.x = this.knightPos.x;
       this.camAnchor.y = this.knightPos.y;
@@ -481,6 +489,204 @@ const GameScreen = {
       this.preRecap = null;
     }
     window.GameRender.invalidate();
+  },
+
+  // ─── Carta del cronista (eventi narrativi) ────────────────────────────────
+
+  // Apre la Carta del cronista per l'evento dato. Sospende il viaggio
+  // salvando il path residuo (come per POI), così "chiudi" può riprendere.
+  openChronicle(event, opts) {
+    if (!event) return false;
+    opts = opts || {};
+    let remainingPath = null, savedDest = null;
+    if (Travel.isActive()) {
+      remainingPath = Travel.path ? Travel.path.slice(Travel.idx) : null;
+      savedDest = this.meta.destinazione;
+      Travel.stop();
+    }
+    this.chronicle = {
+      event,
+      step: 'choices',         // 'choices' → 'reply' (mostra esito) → close
+      reply: null,
+      remainingPath, savedDest,
+      resumeTravel: !!remainingPath && opts.resumeAfter !== false,
+    };
+    window.GameRender.invalidate();
+    return true;
+  },
+
+  _chronicleDown(p) {
+    if (!this._chronicleBtns) return;
+    this._chroniclePressed = null;
+    for (let i = 0; i < this._chronicleBtns.length; i++) {
+      const r = this._chronicleBtns[i];
+      if (r && !r.disabled && hitRect(r, p.x, p.y)) {
+        this._chroniclePressed = i;
+        return;
+      }
+    }
+  },
+
+  _chronicleUp(p) {
+    const i = this._chroniclePressed;
+    this._chroniclePressed = null;
+    if (i == null || !this._chronicleBtns[i]) { window.GameRender.invalidate(); return; }
+    const r = this._chronicleBtns[i];
+    if (r.disabled || !hitRect(r, p.x, p.y)) { window.GameRender.invalidate(); return; }
+
+    const ch = this.chronicle;
+    if (ch.step === 'choices') {
+      const opt = ch.event.options[i];
+      if (!opt) return;
+      // Applica effetti, raccogli messaggi di log
+      const logs = Events.applyEffects(opt.effects, { event: ch.event });
+      for (const m of logs) this._logEvent(m);
+      Events.markSeen(ch.event);
+      // Mostra il reply nella stessa carta, poi chiude
+      if (opt.reply) {
+        ch.step = 'reply';
+        ch.reply = opt.reply;
+      } else {
+        this._closeChronicle();
+      }
+    } else {
+      // step === 'reply': il pulsante chiude
+      this._closeChronicle();
+    }
+    window.GameRender.invalidate();
+  },
+
+  _closeChronicle() {
+    const ch = this.chronicle;
+    this.chronicle = null;
+    // Riprende il viaggio se c'era una rotta in corso
+    if (ch && ch.resumeTravel && ch.remainingPath && ch.remainingPath.length) {
+      Travel.start(ch.remainingPath);
+      this.meta.destinazione = ch.savedDest || this.meta.destinazione;
+    }
+  },
+
+  drawChronicle() {
+    const ctx = this.ctx;
+    const W = window.UI.w, H = window.UI.h;
+    const ch = this.chronicle;
+    const ev = ch.event;
+
+    // Card dimensions
+    const cw = Math.min(SF(420), W - SF(24));
+    const lineH = SF(18);
+    // Stima righe per il testo (word-wrap)
+    const bodyMaxW = cw - SF(28);
+    ctx.font = FONT.body ? FONT.body() : FONT.value();
+    const bodyText = ch.step === 'reply' ? ch.reply : ev.text;
+    const bodyLines = this._wrapText(ctx, bodyText, bodyMaxW);
+
+    const headerH = SF(34);
+    const bodyH = lineH * bodyLines.length + SF(12);
+    const btnH = SF(28);
+    const opts = ch.step === 'choices' ? ev.options : [{ text: 'Prosegui' }];
+    const btnsH = opts.length * (btnH + SF(6)) + SF(8);
+    const ch_h = headerH + bodyH + btnsH + SF(14);
+
+    const cx = Math.round((W - cw) / 2);
+    const cy = Math.round((H - ch_h) / 2);
+    this._chronicleCard = { x: cx, y: cy, w: cw, h: ch_h };
+
+    // Backdrop scuro
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, W, H);
+
+    // Body
+    ctx.fillStyle = PALETTE.hudSfondo || '#1a1208';
+    ctx.fillRect(cx, cy, cw, ch_h);
+
+    // Banda titolo decorata
+    ctx.fillStyle = '#3a2810';
+    ctx.fillRect(cx, cy, cw, headerH);
+    ctx.fillStyle = '#e8c050';
+    ctx.font = FONT.heading ? FONT.heading() : FONT.label();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(ev.title || 'Cronaca', cx + cw / 2, cy + headerH / 2);
+
+    // Sottobanda ornamentale: tre piccoli rombi
+    ctx.fillStyle = '#5a4020';
+    for (let k = -1; k <= 1; k++) {
+      const ox = cx + cw / 2 + k * SF(20);
+      const oy = cy + headerH + SF(3);
+      ctx.beginPath();
+      ctx.moveTo(ox, oy - SF(2));
+      ctx.lineTo(ox + SF(2), oy);
+      ctx.lineTo(ox, oy + SF(2));
+      ctx.lineTo(ox - SF(2), oy);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Corpo narrativo
+    ctx.fillStyle = ch.step === 'reply' ? '#ffd080' : '#d8c890';
+    ctx.font = FONT.body ? FONT.body() : FONT.value();
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    let by = cy + headerH + SF(10);
+    for (const line of bodyLines) {
+      ctx.fillText(line, cx + SF(14), by);
+      by += lineH;
+    }
+
+    // Pulsanti scelta
+    this._chronicleBtns = [];
+    let yy = by + SF(8);
+    const ctxC = this._chronicleCtxForPrereq();
+    for (let i = 0; i < opts.length; i++) {
+      const o = opts[i];
+      const r = { x: cx + SF(12), y: yy, w: cw - SF(24), h: btnH };
+      let disabled = false;
+      if (ch.step === 'choices' && o.prereq) {
+        try { disabled = !o.prereq(ctxC); } catch (e) { disabled = true; }
+      }
+      r.disabled = disabled;
+      this._chronicleBtns.push(r);
+
+      ctx.fillStyle = disabled ? '#1a1108' : '#2a1c08';
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      drawPixelRectStroke(ctx, r.x, r.y, r.w, r.h, disabled ? '#4a3820' : '#a08050');
+      ctx.fillStyle = disabled ? '#705840' : '#e8d8b0';
+      ctx.font = FONT.button ? FONT.button() : FONT.value();
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      const num = ch.step === 'choices' ? (i + 1) + '.  ' : '';
+      let label = num + o.text;
+      if (disabled && o.prereqLabel) label += '  ' + o.prereqLabel;
+      ctx.fillText(label, r.x + SF(10), r.y + r.h / 2);
+      yy += btnH + SF(6);
+    }
+
+    drawPixelRectStroke(ctx, cx, cy, cw, ch_h, '#5a4020');
+  },
+
+  _chronicleCtxForPrereq() {
+    return { knight: Knight, world: World, meta: this.meta };
+  },
+
+  _wrapText(ctx, text, maxW) {
+    if (!text) return [''];
+    const lines = [];
+    for (const para of String(text).split('\n')) {
+      const words = para.split(/\s+/);
+      let cur = '';
+      for (const w of words) {
+        const t = cur ? cur + ' ' + w : w;
+        if (ctx.measureText(t).width > maxW && cur) {
+          lines.push(cur);
+          cur = w;
+        } else {
+          cur = t;
+        }
+      }
+      if (cur) lines.push(cur);
+    }
+    return lines.length ? lines : [''];
   },
 
   // ─── POI pause ────────────────────────────────────────────────────────────
@@ -498,10 +704,23 @@ const GameScreen = {
     const poi = this.poiPause;
     this.poiPause = null;
     if (was === 'ferma' && this._poiPauseBtn.ferma && hitRect(this._poiPauseBtn.ferma, p.x, p.y)) {
-      // Rotta verso il POI: avvia un percorso diretto dalla posizione attuale
+      // Se il cavaliere è già adiacente al POI, apre direttamente la scena.
+      const adx = Math.abs(this.knightPos.x - poi.special.x);
+      const ady = Math.abs(this.knightPos.y - poi.special.y);
+      if (adx <= 1 && ady <= 1 && typeof Events !== 'undefined') {
+        const ev = Events.pickPOI(poi.special);
+        if (ev) {
+          poi.special.discovered = true;
+          this.openChronicle(ev, { resumeAfter: false });
+          window.GameRender.invalidate();
+          return;
+        }
+      }
+      // Altrimenti rotta verso il POI; alla scoperta verrà aperta la scena.
       const path = Travel.findPath(this.knightPos.x, this.knightPos.y, poi.special.x, poi.special.y);
       if (path && path.length) {
         this._dismissedPOIs.clear();
+        this._pendingPOI = poi.special;
         Travel.start(path);
         this.camAnchor.x = this.knightPos.x;
         this.camAnchor.y = this.knightPos.y;
@@ -738,14 +957,24 @@ const GameScreen = {
         if (World.fog) World.explore(tile.x, tile.y, 4);
 
         // Pausa automatica su strutture (GAMEPLAY.md §1 "Calmo"):
-        // il cavaliere si ferma al luogo, lasciando al giocatore decidere.
+        // il cavaliere si ferma al luogo, e si tenta una scena di luogo.
         const s = World.structures.find(st => st.x === tile.x && st.y === tile.y);
         if (s && (tile.x !== this.meta._lastStructX || tile.y !== this.meta._lastStructY)) {
           this.meta._lastStructX = tile.x; this.meta._lastStructY = tile.y;
           Travel.stop();
           this.meta.destinazione = 'nessuna';
           this._logEvent(`Arrivi a ${s.name}.`);
+          if (typeof Events !== 'undefined') {
+            const ev = Events.pickLocation(s.type, s);
+            if (ev) this.openChronicle(ev, { resumeAfter: false });
+          }
           return;
+        }
+
+        // Evento di viaggio casuale (probabilità per Passo).
+        if (typeof Events !== 'undefined') {
+          const tev = Events.rollTravel(_biome);
+          if (tev) { this.openChronicle(tev, { resumeAfter: true }); return; }
         }
 
         // Pausa opzionale su POI vicini (rovine, templi, ecc.).
@@ -771,6 +1000,16 @@ const GameScreen = {
       onArrive: () => {
         this.meta.destinazione = 'nessuna';
         this._logEvent('Sei giunto a destinazione.');
+        // Se la meta era un POI, apri la scena di scoperta.
+        if (this._pendingPOI && typeof Events !== 'undefined') {
+          const sp = this._pendingPOI;
+          this._pendingPOI = null;
+          if (sp.x === this.knightPos.x && sp.y === this.knightPos.y) {
+            sp.discovered = true;
+            const ev = Events.pickPOI(sp);
+            if (ev) this.openChronicle(ev, { resumeAfter: false });
+          }
+        }
       },
       onBlocked: (reason) => {
         this.meta.destinazione = 'nessuna';
@@ -834,6 +1073,7 @@ const GameScreen = {
     else this.drawDesktop(L);
     if (this.preRecap)  this.drawPreRecap();
     if (this.poiPause)  this.drawPOIPause();
+    if (this.chronicle) this.drawChronicle();
   },
 
   drawDesktop(L) {
