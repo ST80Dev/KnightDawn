@@ -27,6 +27,8 @@ Events.register({
       text: 'Interrogarlo sulla regione',
       effects: [
         { type: 'tempo', passi: 1 },
+        { type: 'news', tipo: 'voce', tag: 'banditi.boschi_est',
+          testo: 'Banditi annidati nei boschi a est.', faction: 'banditi' },
         { type: 'log', text: 'Il viandante parla di banditi nei boschi a est.' },
       ],
       reply: 'Parla a lungo, accennando a banditi annidati nei boschi a est.',
