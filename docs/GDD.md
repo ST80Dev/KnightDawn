@@ -69,7 +69,13 @@ Si definisce attraverso le scelte di gioco:
 - **Salute** (0-100) — integrità corporea; cala in combattimento (0 = morte)
 - **Onore** (-5/+5) — statura morale bipolare; apre e chiude porte con fazioni e NPC
 
-[TBD] Sistema di progressione dettagliato
+**Progressione per ranghi.** Il cavaliere non parte tale: inizia come **garzone
+di stalla** nella Veglia e sale per **ranghi sociali** (Garzone → Scudiero →
+Cavaliere Errante → di Ventura → Campione/Bannerale). I ranghi sbloccano
+*accesso e opportunità* (corti, contratti, covi, compagni) con bonus modesti —
+niente albero abilità. Dettaglio completo (apertura, azioni, mercato) in
+`docs/EARLY_GAME.md`.
+
 [TBD] Equipaggiamento e inventario (pesi, slot, durabilità?)
 [TBD] Arti magiche / abilità speciali
 [TBD] Sistema di titoli emergenti (condizioni di trigger)
@@ -184,6 +190,10 @@ addestramento del cavaliere. Caratteristiche:
   *Prima Era · Prima Luce · Primavera · Diario 1 · Passo 1*.
 - Lore in-fiction: periodo "fuori dalla storia", non registrato dai cronisti —
   coerente col fatto che i Diari sono unità di cronaca.
+- Contenuto concreto della Veglia: il protagonista è un **garzone di stalla** che
+  guadagna i primi oro, compra cavallo ed equipaggiamento e si qualifica
+  all'investitura (= evento di soglia). Azioni, ranghi e mercato in
+  `docs/EARLY_GAME.md`.
 
 #### Visualizzazione
 

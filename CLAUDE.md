@@ -17,6 +17,7 @@ Deploy GitHub Pages. Single-player, localStorage. UI in italiano. Target: deskto
 | Sistema | Documento |
 |---|---|
 | Visione generale e meccaniche | `docs/GDD.md` |
+| Inizio gioco, ranghi, mercato | `docs/EARLY_GAME.md` |
 | Grafica, palette, tile, sprite | `docs/GRAFICA.md` ⭐ |
 | Generazione mondo | `docs/WORLD_GEN.md` |
 | Combattimento | `docs/COMBAT.md` |
