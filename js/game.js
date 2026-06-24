@@ -284,7 +284,8 @@ const GameScreen = {
     const hn = compact ? btnHitIndex(this.navButtons, p.x, p.y) : -1;
     const hz = compact ? btnHitIndex(this.zoomButtons, p.x, p.y) : -1;
     const hk = !compact ? btnHitIndex(this.knightTabRects, p.x, p.y) : -1;
-    const onBtn = hm || hb >= 0 || hn >= 0 || hz >= 0 || hk >= 0;
+    const onTime = !!(this._timeButtons && this._timeButtons.some(b => hitRect(b, p.x, p.y)));
+    const onBtn = hm || hb >= 0 || hn >= 0 || hz >= 0 || hk >= 0 || onTime;
     document.getElementById('game').style.cursor =
       onBtn ? 'pointer' : (this.inMap(p) ? 'grab' : 'default');
     if (hm !== this.hoverMenu || hb !== this.hoverBtn || hn !== this.hoverNav || hz !== this.hoverZoom || hk !== this.hoverKnightTab) {
@@ -371,12 +372,11 @@ const GameScreen = {
       return;
     }
 
-    // Controllo velocità viaggio
-    if (this._speedBtnMinus && hitRect(this._speedBtnMinus, p.x, p.y)) {
-      Travel.speedDown(); window.GameRender.invalidate(); return;
-    }
-    if (this._speedBtnPlus && hitRect(this._speedBtnPlus, p.x, p.y)) {
-      Travel.speedUp(); window.GameRender.invalidate(); return;
+    // Toolbar tempo/salvataggi in alto a destra.
+    if (this._timeButtons) {
+      for (const b of this._timeButtons) {
+        if (hitRect(b, p.x, p.y)) { this._handleTimeBtn(b.key); return; }
+      }
     }
 
     const compact = window.UI.compact;
@@ -1357,7 +1357,7 @@ const GameScreen = {
     ctx.textBaseline = 'middle';
     ctx.fillText('KNIGHT DAWN', SF(compact ? 12 : 18), area.h / 2);
 
-    // Menu (apre gestione partita). Riserva spazio per il testo a destra.
+    // Menu (apre gestione partita). Sta all'estrema destra.
     const mBtnW = SF(compact ? 32 : 40);
     const mBtnH = SF(compact ? 32 : 40);
     this.menuBtn = {
@@ -1366,20 +1366,28 @@ const GameScreen = {
       w: mBtnW, h: mBtnH,
     };
     this._drawMenuButton(this.menuBtn);
-    const textRight = this.menuBtn.x - SF(8);
 
+    // Toolbar tempo (pausa/play, step, ±velocità) a sinistra del menu.
+    const btnH = SF(22);
+    const btnY = area.y + Math.floor((area.h - btnH) / 2) - SF(8);
+    const ctrlLeftX = this._drawTimeControls(this.menuBtn.x - SF(8), btnY, btnH);
+
+    // Data + stagione/meteo a sx della toolbar tempo, su due righe compatte.
+    const tx = ctrlLeftX - SF(8);
     ctx.fillStyle = PALETTE.hudNormale;
     ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
     if (compact) {
       ctx.font = `${SF(12)}px "Courier New", monospace`;
-      ctx.fillText(Calendar.formatCompatto(), textRight, area.h / 2 - SF(8));
-      ctx.fillText(`${Calendar.nomeStagione()} · ${this.meta.meteo}`, textRight, area.h / 2 + SF(8));
+      ctx.fillText(Calendar.formatCompatto(), tx, area.h / 2 - SF(2));
+      ctx.fillText(`${Calendar.nomeStagione()} · ${this.meta.meteo}`, tx, area.h / 2 + SF(12));
     } else {
       ctx.font = `${SF(16)}px "Courier New", monospace`;
-      ctx.fillText(Calendar.formatCompatto(), textRight, area.h / 2 - SF(10));
-      ctx.fillText(`${Calendar.nomeStagione()}  ·  ${this.meta.meteo}  ·  Destinazione: ${this.meta.destinazione}`, textRight, area.h / 2 + SF(10));
+      ctx.fillText(Calendar.formatCompatto(), tx, area.h / 2 - SF(10));
+      ctx.fillText(`${Calendar.nomeStagione()}  ·  ${this.meta.meteo}  ·  Destinazione: ${this.meta.destinazione}`, tx, area.h / 2 + SF(10));
       drawCompassRose(ctx, area.x + area.w / 2, area.y + area.h / 2, SF(26));
     }
+    ctx.textBaseline = 'top';
   },
 
   // Barra superiore desktop: tre segmenti — titolo a sx, strip riassunto al
@@ -1399,8 +1407,7 @@ const GameScreen = {
 
     this._drawBarSeg(right);
 
-    // Menu (apre gestione partita) sul lato sinistro del segmento destro,
-    // così il testo data/stagione/destinazione resta allineato a destra.
+    // Menu (apre gestione partita) sul lato sinistro del segmento destro.
     const mBtnW = SF(44);
     const mBtnH = SF(44);
     this.menuBtn = {
@@ -1410,14 +1417,30 @@ const GameScreen = {
     };
     this._drawMenuButton(this.menuBtn);
 
+    // Toolbar tempo (pausa/play, step, ±velocità) in alto a destra del segmento.
+    const btnH = SF(22);
+    const btnY = right.y + SF(8);
+    const ctrlLeftX = this._drawTimeControls(right.x + right.w - SF(10), btnY, btnH);
+
+    // Data subito sotto la toolbar, allineata a destra.
     const rx = right.x + right.w - SF(14);
-    const ry = right.y + right.h / 2;
     ctx.fillStyle = '#e8d8b0';
     ctx.font = FONT.body();
     ctx.textAlign = 'right';
-    ctx.fillText(Calendar.formatCompatto(), rx, ry - SF(18));
-    ctx.fillText(`${Calendar.nomeStagione()}  ·  ${this.meta.meteo}`, rx, ry);
-    ctx.fillText(`Destinazione: ${this.meta.destinazione}`, rx, ry + SF(18));
+    ctx.textBaseline = 'top';
+    ctx.fillText(Calendar.formatCompatto(), rx, btnY + btnH + SF(4));
+    ctx.font = FONT.label();
+    ctx.fillText(`${Calendar.nomeStagione()} · ${this.meta.meteo} · → ${this.meta.destinazione}`,
+                 rx, btnY + btnH + SF(20));
+    // Indicatore velocità a sinistra della toolbar, sopra la data.
+    const sec = Travel.speedSec();
+    const secTxt = sec < 1 ? (sec * 1000 | 0) + ' ms' : sec + ' s';
+    ctx.fillStyle = '#e8c050';
+    ctx.font = FONT.label();
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(secTxt + '/passo', ctrlLeftX - SF(8), btnY + btnH / 2);
+    ctx.textBaseline = 'top';
   },
 
   // Pulsante "scroll" (pergamena con linee). Apre SaveUI.
@@ -1452,6 +1475,67 @@ const GameScreen = {
     ctx.fillRect(area.x, area.y, area.w, area.h);
     ctx.fillStyle = PALETTE.hudTitolo;
     ctx.fillRect(area.x, area.y + area.h - PIXEL, area.w, PIXEL);
+  },
+
+  // Toolbar compatta tempo + salvataggi, ancorata al margine destro a (rightX, topY).
+  // Pulsanti senza etichette estese: pausa/play, − velocità, + velocità, salva, carica.
+  // Ritorna la X del bordo sinistro della toolbar, utile per allineare testo a fianco.
+  _drawTimeControls(rightX, topY, btnH) {
+    const ctx = this.ctx;
+    const btnW = SF(26);
+    const gap = SF(3);
+    const maxIdx = Travel.SPEED_PRESETS.length - 1;
+    const items = [
+      { key: 'pause', label: Travel.paused ? '▶' : 'II', accent: Travel.paused },
+      { key: 'step',  label: '»', dim: !Travel.isActive() },
+      { key: 'down',  label: '−', dim: Travel.speedIdx === 0 },
+      { key: 'up',    label: '+', dim: Travel.speedIdx === maxIdx },
+    ];
+    const n = items.length;
+    let totalW = 0;
+    for (const it of items) totalW += (it.key === 'sep' ? SF(6) : btnW);
+    totalW += gap * (n - 1);
+
+    let x = rightX - totalW;
+    const leftX = x;
+    this._timeButtons = [];
+    for (const it of items) {
+      if (it.key === 'sep') { x += SF(6) + gap; continue; }
+      const r = { x: Math.floor(x), y: topY, w: btnW, h: btnH, key: it.key };
+      ctx.fillStyle = it.accent ? '#6a2010' : (it.dim ? '#2a2010' : '#4a3820');
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      drawPixelRectStroke(ctx, r.x, r.y, r.w, r.h, '#1a0e04');
+      ctx.fillStyle = it.accent ? '#f0e0b8' : (it.dim ? '#5a5040' : '#e8c050');
+      ctx.font = FONT.button();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(it.label, r.x + r.w / 2, r.y + r.h / 2);
+      this._timeButtons.push(r);
+      x += btnW + gap;
+    }
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    return leftX;
+  },
+
+  _handleTimeBtn(key) {
+    if (key === 'pause') {
+      Travel.togglePause();
+      this._logEvent(Travel.paused ? 'Tempo in pausa.' : 'Tempo ripreso.');
+    } else if (key === 'step') {
+      if (!Travel.isActive()) return;
+      // Forza un singolo Passo bypassando temporaneamente la pausa.
+      const wasPaused = Travel.paused;
+      Travel.paused = false;
+      Travel.accum = Travel.speedMs();
+      this.update(0);
+      Travel.paused = wasPaused;
+    } else if (key === 'down') {
+      Travel.speedDown();
+    } else if (key === 'up') {
+      Travel.speedUp();
+    }
+    window.GameRender.invalidate();
   },
 
   // Barra inferiore desktop: pannello dedicato sotto la mappa con i comandi
@@ -1535,50 +1619,6 @@ const GameScreen = {
     if (s.length < last.length) s += '…';
     ctx.fillText(s, area.x + labelW, y);
     y += rowH;
-
-    // Controllo velocità viaggio: [-] [◀◀  1.5 s  ▶▶] [+]
-    ctx.fillStyle = '#e8c050';
-    ctx.font = FONT.label();
-    ctx.fillText('VELOCITÀ', area.x, y + SF(2));
-
-    const btnW = SF(22), btnH = SF(20);
-    const vx = area.x + labelW;
-    const btnY = y + SF(3);
-    const sec = Travel.speedSec();
-    const secTxt = sec < 1 ? (sec * 1000 | 0) + ' ms' : sec + ' s';
-
-    // Bottone [-]
-    const r1 = { x: vx, y: btnY, w: btnW, h: btnH };
-    ctx.fillStyle = Travel.speedIdx > 0 ? '#4a3820' : '#2a2010';
-    ctx.fillRect(r1.x, r1.y, r1.w, r1.h);
-    ctx.fillStyle = Travel.speedIdx > 0 ? '#e8c050' : '#5a5040';
-    ctx.font = FONT.button();
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('−', r1.x + r1.w / 2, r1.y + r1.h / 2);
-
-    // Valore centrale
-    const valX = vx + btnW + SF(4);
-    const valW = SF(60);
-    ctx.fillStyle = '#e8d8b0';
-    ctx.font = FONT.value();
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    ctx.fillText(secTxt + '/passo', valX, y);
-
-    // Bottone [+]
-    const maxIdx = Travel.SPEED_PRESETS.length - 1;
-    const r2 = { x: valX + valW, y: btnY, w: btnW, h: btnH };
-    ctx.fillStyle = Travel.speedIdx < maxIdx ? '#4a3820' : '#2a2010';
-    ctx.fillRect(r2.x, r2.y, r2.w, r2.h);
-    ctx.fillStyle = Travel.speedIdx < maxIdx ? '#e8c050' : '#5a5040';
-    ctx.font = FONT.button();
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('+', r2.x + r2.w / 2, r2.y + r2.h / 2);
-
-    this._speedBtnMinus = r1;
-    this._speedBtnPlus  = r2;
 
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';

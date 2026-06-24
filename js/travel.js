@@ -26,6 +26,11 @@ const Travel = {
   speedUp()   { this.speedIdx = Math.min(this.speedIdx + 1, this.SPEED_PRESETS.length - 1); },
   speedDown() { this.speedIdx = Math.max(this.speedIdx - 1, 0); },
 
+  // Pausa globale del tempo di viaggio: blocca l'avanzamento dei Passi senza
+  // toccare lo stato del path. Indipendente dalle pause "modali" (POI, recap).
+  paused: false,
+  togglePause() { this.paused = !this.paused; },
+
   state: 'idle',     // 'idle' | 'traveling'
   path: null,        // [{x,y}, ...] dopo la sorgente, fino alla meta inclusa
   idx: 0,            // prossimo indice da consumare
@@ -55,6 +60,7 @@ const Travel = {
   // hooks: { onStep(tile, biome), onArrive(), onBlocked(reason) }
   update(dtMs, knightPos, hooks) {
     if (this.state !== 'traveling' || !this.path) return;
+    if (this.paused) return;
     hooks = hooks || {};
     this.accum += dtMs;
     const stepMs = this.speedMs();
