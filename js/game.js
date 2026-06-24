@@ -1108,6 +1108,8 @@ const GameScreen = {
     this.zoomButtons = [];           // niente +/- su desktop (solo rotella)
     this.activeOverlay = null;       // overlay solo in compatto
     this.mapRect = L.map;
+    // Le due "ali" del topbar (titolo a sx, meta a dx) vanno prima: hanno
+    // x specifici e non sconfinano sulla mappa.
     this.drawTopBarSplit(L.topBarLeft, L.topBarRight);
     this.drawPanel(L.left, 'STATO CAVALIERE');
     this.drawKnightStatus(L.left);
@@ -1120,6 +1122,10 @@ const GameScreen = {
     this.drawMinimap(L.mini);
     // Barra inferiore: comandi azione + informazioni di gioco.
     this.drawBottomBar(L.bottom);
+    // Strip cavaliere centrale del topbar: disegnata ALLA FINE per garantire
+    // che resti sopra alla mappa, che parte da y=pad e sconfinerebbe dietro
+    // la fascia centrale del topbar (le ali sx/dx sono opache, il centro no).
+    this.drawTopBarCenterStrip(L.topBarLeft, L.topBarRight);
   },
 
   drawCompact(L) {
@@ -1308,6 +1314,9 @@ const GameScreen = {
   // Barra superiore desktop: tre segmenti — titolo a sx, strip riassunto al
   // centro (sempre visibile a prescindere dalla tab attiva nella sidebar),
   // meta del calendario/meteo/destinazione a dx.
+  // Topbar desktop: due "ali" (titolo a sx, meta a dx). La fascia centrale
+  // viene riempita dalla strip cavaliere — chiamata separata in coda al
+  // rendering (drawTopBarCenterStrip) per restare sopra alla mappa.
   drawTopBarSplit(left, right) {
     const ctx = this.ctx;
     this._drawBarSeg(left);
@@ -1326,27 +1335,33 @@ const GameScreen = {
     ctx.fillText(Calendar.formatCompatto(), rx, ry - SF(18));
     ctx.fillText(`${Calendar.nomeStagione()}  ·  ${this.meta.meteo}`, rx, ry);
     ctx.fillText(`Destinazione: ${this.meta.destinazione}`, rx, ry + SF(18));
+  },
 
-    // Strip riassunto attributi nel centro del topbar
+  // Strip riassunto attributi cavaliere disegnata nella fascia centrale del
+  // topbar desktop. Va chiamata DOPO drawMapPanel: la mappa parte da y=pad
+  // e copre dietro la fascia centrale (le ali sx/dx sono opache); la strip
+  // deve essere disegnata sopra.
+  drawTopBarCenterStrip(left, right) {
+    const ctx = this.ctx;
     const cx0 = left.x + left.w;
     const cx1 = right.x;
     const cy0 = left.y;
     const ch  = left.h;
-    if (cx1 - cx0 > SF(280)) {
-      // Banda di sfondo dietro lo strip
-      ctx.fillStyle = PALETTE.inkScuro;
-      ctx.fillRect(cx0, cy0, cx1 - cx0, ch);
-      ctx.fillStyle = PALETTE.hudTitolo;
-      ctx.fillRect(cx0, cy0 + ch - PIXEL, cx1 - cx0, PIXEL);
+    if (cx1 - cx0 <= SF(280)) return;   // troppo stretto: skippa
 
-      // Centra lo strip nella fascia disponibile (con margini interni)
-      const stripPad = SF(20);
-      const stripW = Math.min(cx1 - cx0 - stripPad * 2, SF(540));
-      const stripX = Math.floor(cx0 + (cx1 - cx0 - stripW) / 2);
-      const cellH = SF(40);
-      const stripY = Math.floor(cy0 + (ch - cellH) / 2);
-      this.drawKnightStatStrip(stripX, stripY, stripW, cellH);
-    }
+    // Banda di sfondo dietro lo strip (uguale alle ali del topbar)
+    ctx.fillStyle = PALETTE.inkScuro;
+    ctx.fillRect(cx0, cy0, cx1 - cx0, ch);
+    ctx.fillStyle = PALETTE.hudTitolo;
+    ctx.fillRect(cx0, cy0 + ch - PIXEL, cx1 - cx0, PIXEL);
+
+    // Centra lo strip nella fascia disponibile (con margini interni)
+    const stripPad = SF(20);
+    const stripW = Math.min(cx1 - cx0 - stripPad * 2, SF(540));
+    const stripX = Math.floor(cx0 + (cx1 - cx0 - stripW) / 2);
+    const cellH = SF(40);
+    const stripY = Math.floor(cy0 + (ch - cellH) / 2);
+    this.drawKnightStatStrip(stripX, stripY, stripW, cellH);
   },
 
   _drawBarSeg(area) {
