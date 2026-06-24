@@ -143,6 +143,11 @@ const GameScreen = {
     if (World.fog) World.explore(this.knightPos.x, this.knightPos.y, 5);
     this.cam = { cx: this.knightPos.x + 0.5, cy: this.knightPos.y + 0.5, step: MAP_ZOOM_DEFAULT };
     this.activeOverlay = null;
+    this.preRecap = null;          // pannello pre-partenza
+    this.preRecapBtnParti = null;
+    this.preRecapBtnAnnulla = null;
+    this.camAnchor = { x: World.knightStart.x, y: World.knightStart.y };
+    this.camTarget = null;         // quando non-null la cam si avvicina qui
     this.dragging = false;
     this.dragMoved = false;
     Travel.stop();
@@ -270,6 +275,7 @@ const GameScreen = {
 
   onPointerDown(p) {
     if (Scenes.current !== this) return;
+    if (this.preRecap) { this._preRecapDown(p); return; }
     if (this.activeOverlay) { this.overlayPressed = this.overlayWhere(p); return; }
 
     const compact = window.UI.compact;
@@ -295,6 +301,8 @@ const GameScreen = {
 
   onPointerUp(p, type) {
     if (Scenes.current !== this) return;
+
+    if (this.preRecap) { this._preRecapUp(p); return; }
 
     if (this.dragging) {
       const wasDrag = this.dragMoved;
@@ -362,6 +370,8 @@ const GameScreen = {
     this.pressedBtn = this.pressedNav = this.pressedZoom = this.pressedKnightTab = -1;
     this.hoverBtn = this.hoverNav = this.hoverZoom = this.hoverKnightTab = -1;
     this.overlayPressed = null;
+    this.preRecap = null;
+    this._preRecapPressed = null;
     window.GameRender.invalidate();
   },
 
@@ -404,14 +414,188 @@ const GameScreen = {
       window.GameRender.invalidate();
       return;
     }
-    Travel.start(path);
 
-    // Etichetta destinazione: se è una struttura nota usa il nome.
+    // Mostra il pannello di pre-partenza invece di partire immediatamente.
     const struct = World.structures.find(s => s.x === tx && s.y === ty);
     const name = struct ? struct.name : `(${tx}, ${ty})`;
-    this.meta.destinazione = name;
-    this._logEvent(`In marcia verso ${name}.`);
+    this.preRecap = {
+      path, dest: { x: tx, y: ty }, name,
+      stats: this._computePreRecapStats(path),
+    };
     window.GameRender.invalidate();
+  },
+
+  // ─── Pre-recap partenza ───────────────────────────────────────────────────
+
+  _computePreRecapStats(path) {
+    const terrains = new Map();
+    let forzaCost = 0;
+    const onPath = new Set(path.map(t => t.y * World.width + t.x));
+    for (const tile of path) {
+      const b = World.biomeAt(tile.x, tile.y);
+      terrains.set(b, (terrains.get(b) || 0) + 1);
+      const c = TRAVEL_COST[b];
+      if (c != null) forzaCost += c;
+    }
+    const terrainList = [...terrains.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
+    const structures  = World.structures.filter(s => onPath.has(s.y * World.width + s.x));
+    const willExhaust = forzaCost > this.knight.forza.cur;
+    return { steps: path.length, timeSec: path.length * Travel.speedSec(),
+             forzaCost, willExhaust, terrainList, structures };
+  },
+
+  _fmtTime(sec) {
+    if (sec < 60) return Math.round(sec) + ' s';
+    if (sec < 3600) return Math.round(sec / 60) + ' min';
+    return (sec / 3600).toFixed(1) + ' h';
+  },
+
+  _preRecapDown(p) {
+    // Usato in onPointerDown per segnare quale pulsante è stato premuto.
+    this._preRecapPressed =
+      (this.preRecapBtnParti   && hitRect(this.preRecapBtnParti, p.x, p.y))   ? 'parti'   :
+      (this.preRecapBtnAnnulla && hitRect(this.preRecapBtnAnnulla, p.x, p.y)) ? 'annulla' :
+      (this._preRecapCard      && !hitRect(this._preRecapCard, p.x, p.y))     ? 'outside' : null;
+  },
+
+  _preRecapUp(p) {
+    const was = this._preRecapPressed;
+    this._preRecapPressed = null;
+    if (was === 'parti' && this.preRecapBtnParti && hitRect(this.preRecapBtnParti, p.x, p.y)) {
+      const { path, name } = this.preRecap;
+      this.preRecap = null;
+      Travel.start(path);
+      this.camAnchor.x = this.knightPos.x;
+      this.camAnchor.y = this.knightPos.y;
+      this.meta.destinazione = name;
+      this._logEvent(`In marcia verso ${name}.`);
+    } else if (was === 'annulla' || was === 'outside') {
+      this.preRecap = null;
+    }
+    window.GameRender.invalidate();
+  },
+
+  drawPreRecap() {
+    const ctx = this.ctx;
+    const W = window.UI.w, H = window.UI.h;
+    const r = this.preRecap;
+    const s = r.stats;
+
+    const BIOME_NOME = ['Acqua','Pianura','Foresta','Collina','Montagna',
+      'Palude','Sabbia','Neve','Ghiaccio','Fiume','Roccia','Steppa','Arido'];
+
+    // Dimensioni card
+    const cw = Math.min(SF(360), W - SF(32));
+    const ch = SF(s.willExhaust ? 258 : 238);
+    const cx = Math.round((W - cw) / 2);
+    const cy = Math.round((H - ch) / 2);
+    this._preRecapCard = { x: cx, y: cy, w: cw, h: ch };
+
+    // Sfondo semi-trasparente
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, W, H);
+
+    // Card body
+    ctx.fillStyle = PALETTE.hudSfondo || '#1a1208';
+    ctx.fillRect(cx, cy, cw, ch);
+
+    // Banda titolo
+    ctx.fillStyle = PALETTE.hudTitolo || '#3a2810';
+    ctx.fillRect(cx, cy, cw, SF(28));
+    ctx.fillStyle = '#e8c050';
+    ctx.font = FONT.heading();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('ROTTA VERSO  ' + r.name.toUpperCase(), cx + cw / 2, cy + SF(14));
+
+    // Bordo
+    drawPixelRectStroke(ctx, cx, cy, cw, ch, PALETTE.inkScuro || '#5a4020');
+
+    // Righe info
+    const lx = cx + SF(12), rx = cx + cw - SF(12);
+    const lw = SF(70);
+    let y = cy + SF(36);
+    const rh = SF(22);
+
+    const row = (label, value, valColor) => {
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = '#e8c050';
+      ctx.font = FONT.label();
+      ctx.fillText(label, lx, y + SF(2));
+      ctx.fillStyle = valColor || '#e8d8b0';
+      ctx.font = FONT.value();
+      ctx.fillText(value, lx + lw, y);
+      y += rh;
+    };
+
+    row('PASSI',  s.steps + ' tile');
+    row('TEMPO',  this._fmtTime(s.timeSec) + '  (a ' + Travel.speedSec() + ' s/passo)');
+
+    // Riga Fatica con barra
+    const fMax = this.knight.forza.max;
+    const fCur = this.knight.forza.cur;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#e8c050';
+    ctx.font = FONT.label();
+    ctx.fillText('FATICA', lx, y + SF(2));
+    const barX = lx + lw, barW = SF(120), barH = SF(10);
+    const barY = y + SF(5);
+    ctx.fillStyle = '#2a1a08';
+    ctx.fillRect(barX, barY, barW, barH);
+    const fill = Math.min(1, s.forzaCost / fMax);
+    ctx.fillStyle = s.willExhaust ? '#c04020' : '#60a030';
+    ctx.fillRect(barX, barY, Math.round(barW * fill), barH);
+    ctx.fillStyle = s.willExhaust ? '#ff8060' : '#e8d8b0';
+    ctx.font = FONT.value();
+    ctx.fillText(s.forzaCost.toFixed(1) + ' / ' + fCur.toFixed(1), barX + barW + SF(6), y);
+    y += rh;
+
+    // Terreni
+    const terrStr = s.terrainList.map(([b, n]) => (BIOME_NOME[b] || '?') + ' ×' + n).join('  ·  ');
+    row('TERRENI', terrStr);
+
+    // Strutture sul cammino
+    if (s.structures.length) {
+      const stNames = s.structures.map(st => st.name).join(' · ');
+      row('TAPPE', stNames, '#ffd080');
+    }
+
+    // Avviso esaurimento
+    if (s.willExhaust) {
+      y += SF(4);
+      ctx.fillStyle = 'rgba(180,40,10,0.25)';
+      ctx.fillRect(cx + SF(8), y, cw - SF(16), SF(20));
+      ctx.fillStyle = '#ff7050';
+      ctx.font = FONT.caption();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('⚠  Le forze potrebbero esaurirsi prima di arrivare', cx + cw / 2, y + SF(10));
+      y += SF(24);
+    }
+
+    // Pulsanti
+    y = cy + ch - SF(38);
+    const btnH = SF(26), btnW = SF(100);
+    const annR = { x: cx + SF(16),          y, w: btnW, h: btnH };
+    const parR = { x: cx + cw - SF(16) - btnW, y, w: btnW, h: btnH };
+    this.preRecapBtnAnnulla = annR;
+    this.preRecapBtnParti   = parR;
+
+    const drawBtn = (r2, label, col, textCol) => {
+      ctx.fillStyle = col;
+      ctx.fillRect(r2.x, r2.y, r2.w, r2.h);
+      drawPixelRectStroke(ctx, r2.x, r2.y, r2.w, r2.h, textCol);
+      ctx.fillStyle = textCol;
+      ctx.font = FONT.button();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, r2.x + r2.w / 2, r2.y + r2.h / 2);
+    };
+
+    drawBtn(annR, 'Annulla', '#2a1a08', '#a08050');
+    drawBtn(parR, 'Parti →', '#3a2808', '#e8c050');
   },
 
   // Chiamato da main.js a ogni frame. dtMs include la pausa fra frame: senza,
@@ -448,11 +632,28 @@ const GameScreen = {
       },
     });
 
-    // Camera follow: lerp morbido verso il cavaliere mentre è in marcia.
+    // Camera a scatti: la cam resta ferma finché il cavaliere supera CHUNK
+    // tile dall'ultimo ancoraggio; poi scivola fluida verso di lui.
+    const CHUNK = 4;
     if (Travel.isActive()) {
-      const tx = this.knightPos.x + 0.5, ty = this.knightPos.y + 0.5;
-      this.cam.cx += (tx - this.cam.cx) * 0.10;
-      this.cam.cy += (ty - this.cam.cy) * 0.10;
+      const adx = Math.abs(this.knightPos.x - this.camAnchor.x);
+      const ady = Math.abs(this.knightPos.y - this.camAnchor.y);
+      if (adx >= CHUNK || ady >= CHUNK) {
+        this.camAnchor.x = this.knightPos.x;
+        this.camAnchor.y = this.knightPos.y;
+        this.camTarget = { cx: this.knightPos.x + 0.5, cy: this.knightPos.y + 0.5 };
+      }
+    }
+    if (this.camTarget) {
+      const f = Math.min(1, dt * 6 / 1000);
+      this.cam.cx += (this.camTarget.cx - this.cam.cx) * f;
+      this.cam.cy += (this.camTarget.cy - this.cam.cy) * f;
+      if (Math.abs(this.cam.cx - this.camTarget.cx) < 0.05 &&
+          Math.abs(this.cam.cy - this.camTarget.cy) < 0.05) {
+        this.cam.cx = this.camTarget.cx;
+        this.cam.cy = this.camTarget.cy;
+        this.camTarget = null;
+      }
     }
 
     window.GameRender.invalidate();
@@ -484,6 +685,7 @@ const GameScreen = {
 
     if (L.compact) this.drawCompact(L);
     else this.drawDesktop(L);
+    if (this.preRecap) this.drawPreRecap();
   },
 
   drawDesktop(L) {
