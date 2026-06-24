@@ -30,11 +30,14 @@
 //                                 'deadlineAdd'|'deadlineDone'|'news'|'combat', ... }
 //
 // Effetto combat: { type:'combat', enemy, terrain?, onWin:[Effect],
-//                   onFlee:[Effect], onSurrender:[Effect], onDeath:[Effect],
-//                   onStallo?:[Effect] }
-//   Per ora risolve in automatico (Combat.resolveAuto) e applica il ramo
-//   esito. Quando la UI scena combattimento sarà disponibile, l'effetto
-//   sospenderà l'evento e il ramo verrà applicato al ritorno dalla scena.
+//                   onFlee:[Effect], onSurrender:[Effect], onDefeat:[Effect],
+//                   onDeath:[Effect], onStallo?:[Effect] }
+//   enemy: id stringa del catalogo (js/data/enemies.js) o oggetto nemico.
+//   Rami esito: onWin (vittoria), onFlee (fuga), onSurrender (resa),
+//   onDefeat (sconfitta = battuto ma vivo), onDeath (morte = Salute 0),
+//   onStallo (default → onFlee). Per ora risolve in automatico
+//   (Combat.resolveAuto); quando la UI scena combattimento sarà disponibile,
+//   l'effetto sospenderà l'evento e il ramo verrà applicato al ritorno.
 
 const Events = {
   registry: [],
@@ -242,19 +245,27 @@ const Events = {
       case 'combat': {
         // Risoluzione automatica (stub finché manca scena UI).
         if (typeof Combat === 'undefined' || !eff.enemy) break;
+        // Terreno: esplicito nell'effetto, altrimenti il bioma del tile corrente
+        // (così le affinità di terreno del nemico si attivano da sole).
+        let terrain = eff.terrain;
+        if (terrain == null && typeof World !== 'undefined' && World.biomeAt
+            && typeof GameScreen !== 'undefined' && GameScreen.knightPos) {
+          terrain = World.biomeAt(GameScreen.knightPos.x, GameScreen.knightPos.y);
+        }
         const res = Combat.resolveAuto({
           enemy:   eff.enemy,
-          terrain: eff.terrain,
+          terrain: terrain,
           knight:  Knight,
         });
         for (const line of res.cronaca) ctx.log(line);
         ctx.log(`Esito scontro: ${res.esito}.`);
         const ramo = ({
-          vittoria: eff.onWin,
-          fuga:     eff.onFlee,
-          resa:     eff.onSurrender,
-          morte:    eff.onDeath,
-          stallo:   eff.onStallo || eff.onFlee,
+          vittoria:  eff.onWin,
+          fuga:      eff.onFlee,
+          resa:      eff.onSurrender,
+          sconfitta: eff.onDefeat,        // battuto ma vivo: conseguenza scelta dall'evento
+          morte:     eff.onDeath,         // Salute a 0: game over
+          stallo:    eff.onStallo || eff.onFlee,
         })[res.esito];
         if (ramo) this.applyEffects(ramo).forEach(m => ctx.log(m));
         break;
@@ -297,19 +308,33 @@ const Events = {
       'reputazione','rivela','deadlineAdd','deadlineDone','news','combat',
     ]);
     const repIds = new Set((Knight.reputazione || []).map(r => r.id));
+    const enemyIds = (typeof Enemies !== 'undefined' && Enemies.catalog)
+      ? new Set(Object.keys(Enemies.catalog)) : null;
+    // Valida ricorsivamente una lista di effetti (entra nei rami combat).
+    const checkEffects = (effects, evId) => {
+      for (const eff of (effects || [])) {
+        if (typeof eff === 'function') continue;
+        if (!validTypes.has(eff.type)) warns.push(`${evId}: effetto type sconosciuto "${eff.type}"`);
+        if (eff.type === 'reputazione' && !repIds.has(eff.id)) {
+          warns.push(`${evId}: reputazione id sconosciuto "${eff.id}"`);
+        }
+        if (eff.type === 'combat') {
+          if (enemyIds && typeof eff.enemy === 'string' && !enemyIds.has(eff.enemy)) {
+            warns.push(`${evId}: nemico sconosciuto "${eff.enemy}"`);
+          }
+          for (const ramo of ['onWin','onFlee','onSurrender','onDefeat','onDeath','onStallo']) {
+            checkEffects(eff[ramo], evId);
+          }
+        }
+      }
+    };
     for (const ev of this.registry) {
       if (!ev.id) { warns.push('evento senza id'); continue; }
       if (seen.has(ev.id)) warns.push(`id duplicato: ${ev.id}`);
       seen.add(ev.id);
       if (!ev.options || ev.options.length < 2) warns.push(`${ev.id}: opzioni < 2`);
       for (const opt of (ev.options || [])) {
-        for (const eff of (opt.effects || [])) {
-          if (typeof eff === 'function') continue;
-          if (!validTypes.has(eff.type)) warns.push(`${ev.id}: effetto type sconosciuto "${eff.type}"`);
-          if (eff.type === 'reputazione' && !repIds.has(eff.id)) {
-            warns.push(`${ev.id}: reputazione id sconosciuto "${eff.id}"`);
-          }
-        }
+        checkEffects(opt.effects, ev.id);
       }
     }
     if (warns.length) console.warn('Events.validate:', warns);
