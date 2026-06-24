@@ -27,7 +27,14 @@
 // Option = { text, prereq(ctx), prereqLabel, effects:[Effect], reply }
 // Effect = function(ctx) | { type:'forza'|'volonta'|'salute'|'onore'|'oro'|
 //                                 'tempo'|'log'|'reputazione'|'rivela'|
-//                                 'deadlineAdd'|'deadlineDone', ... }
+//                                 'deadlineAdd'|'deadlineDone'|'news'|'combat', ... }
+//
+// Effetto combat: { type:'combat', enemy, terrain?, onWin:[Effect],
+//                   onFlee:[Effect], onSurrender:[Effect], onDeath:[Effect],
+//                   onStallo?:[Effect] }
+//   Per ora risolve in automatico (Combat.resolveAuto) e applica il ramo
+//   esito. Quando la UI scena combattimento sarà disponibile, l'effetto
+//   sospenderà l'evento e il ramo verrà applicato al ritorno dalla scena.
 
 const Events = {
   registry: [],
@@ -232,6 +239,26 @@ const Events = {
           News.emit(eff, (eff.knownNow !== false));
         }
         break;
+      case 'combat': {
+        // Risoluzione automatica (stub finché manca scena UI).
+        if (typeof Combat === 'undefined' || !eff.enemy) break;
+        const res = Combat.resolveAuto({
+          enemy:   eff.enemy,
+          terrain: eff.terrain,
+          knight:  Knight,
+        });
+        for (const line of res.cronaca) ctx.log(line);
+        ctx.log(`Esito scontro: ${res.esito}.`);
+        const ramo = ({
+          vittoria: eff.onWin,
+          fuga:     eff.onFlee,
+          resa:     eff.onSurrender,
+          morte:    eff.onDeath,
+          stallo:   eff.onStallo || eff.onFlee,
+        })[res.esito];
+        if (ramo) this.applyEffects(ramo).forEach(m => ctx.log(m));
+        break;
+      }
     }
   },
 
@@ -267,7 +294,7 @@ const Events = {
     const warns = [];
     const validTypes = new Set([
       'forza','volonta','salute','onore','oro','tempo','log',
-      'reputazione','rivela','deadlineAdd','deadlineDone','news',
+      'reputazione','rivela','deadlineAdd','deadlineDone','news','combat',
     ]);
     const repIds = new Set((Knight.reputazione || []).map(r => r.id));
     for (const ev of this.registry) {
