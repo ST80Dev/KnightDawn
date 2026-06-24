@@ -140,13 +140,6 @@ const GameScreen = {
       Knight.init(this._newName || undefined);
       this._newName = null;
       this.knight = Knight;
-      this.log = [
-        'Inizi il tuo viaggio nelle Marche di Vorn.',
-        'Il vento dell\'alba porta odore di pioggia.',
-        'Lungo la strada incontri un mercante.',
-        'Egli ti racconta di rovine a est.',
-        'Una taverna si scorge a sud-ovest.',
-      ];
       Calendar.init();
       this.meta = { meteo: 'Sereno', destinazione: 'nessuna' };
 
@@ -156,6 +149,18 @@ const GameScreen = {
       this._exploreFromHere(this.knightPos.x, this.knightPos.y);
       this.cam = { cx: this.knightPos.x + 0.5, cy: this.knightPos.y + 0.5, step: MAP_ZOOM_DEFAULT };
       if (typeof Events !== 'undefined') Events.reset();
+
+      // Inizio nella Veglia: garzone di stalla al castello di partenza.
+      const startCastle = World.structures.find(
+        s => s.x === World.knightStart.x && s.y === World.knightStart.y);
+      const castleName = startCastle ? startCastle.name : 'Vorn';
+      this.log = [
+        `Sei un garzone di stalla al castello di ${castleName}.`,
+        'Non hai armi, né cavallo, né un nome che pesi.',
+        'Solo le tue mani, e i giorni che ti aspettano.',
+        'Lavora, metti da parte qualche moneta,',
+        'e forse un giorno ti chiameranno cavaliere.',
+      ];
     }
 
     this.activeOverlay = null;
@@ -176,6 +181,60 @@ const GameScreen = {
     Travel.stop();
 
     Save.startAutosave();
+
+    // Nuova partita in Veglia: apri subito l'hub del garzone per orientare.
+    if (!resume && typeof Calendar !== 'undefined' && Calendar.inVeglia) {
+      this._openVegliaHub();
+    }
+  },
+
+  // ─── Veglia: hub del garzone ──────────────────────────────────────────────
+  // Apre la Carta del cronista con i lavori del garzone (vedi
+  // js/data/events_veglia.js e docs/EARLY_GAME.md). Ripetibile: si richiude e
+  // si riapre con il pulsante INTERAGISCI finché dura la Veglia.
+  _openVegliaHub() {
+    if (typeof Events === 'undefined' || !Events.getById) return false;
+    const ev = Events.getById('veglia.castello');
+    if (!ev) return false;
+    return this.openChronicle(ev, { resumeAfter: false });
+  },
+
+  // Dispatch dei pulsanti azione della barra inferiore.
+  _handleAction(action) {
+    if (action === 'interagisci') { this._interact(); return; }
+    console.log('Azione gioco:', action);
+  },
+
+  // INTERAGISCI: in Veglia riapre l'hub del garzone; altrimenti, se il
+  // cavaliere è fermo su una struttura, pesca un evento di luogo.
+  _interact() {
+    if (this.chronicle || this.combat) return;
+    if (typeof Calendar !== 'undefined' && Calendar.inVeglia) {
+      if (!this._openVegliaHub()) this._logEvent('Il castello è silenzioso.');
+      return;
+    }
+    const s = World.structures &&
+      World.structures.find(st => st.x === this.knightPos.x && st.y === this.knightPos.y);
+    if (!s) {
+      this._logEvent('Non c\'è nulla con cui interagire qui.');
+      window.GameRender.invalidate();
+      return;
+    }
+    let ev = null;
+    if (typeof Events !== 'undefined') ev = Events.pickLocation(s.type, s);
+    if (ev) this.openChronicle(ev, { resumeAfter: false });
+    else { this._logEvent(`${s.name}: nessuno ti dà retta.`); window.GameRender.invalidate(); }
+  },
+
+  // Aggiorna lo stato abilitato di INTERAGISCI: attivo in Veglia o quando il
+  // cavaliere è fermo su una struttura. Chiamato a ogni draw().
+  _refreshActionState() {
+    const b = this.actionButtons.find(x => x.action === 'interagisci');
+    if (!b) return;
+    const inVeglia = (typeof Calendar !== 'undefined' && Calendar.inVeglia);
+    const onStruct = !!(World.structures &&
+      World.structures.find(st => st.x === this.knightPos.x && st.y === this.knightPos.y));
+    b.disabled = !(inVeglia || onStruct);
   },
 
   // ─── Layout ───────────────────────────────────────────────────────────────
@@ -420,7 +479,7 @@ const GameScreen = {
       window.GameRender.invalidate();
     } else if (fireB) {
       const b = this.actionButtons[bi];
-      if (!b.disabled) console.log('Azione gioco:', b.action);
+      if (!b.disabled) this._handleAction(b.action);
     } else if (type === 'touch') {
       window.GameRender.invalidate();
     }
@@ -1364,6 +1423,8 @@ const GameScreen = {
     ctx.fillRect(0, 0, W, H);
     const parchment = getParchmentTexture(W, H, 4242);
     ctx.drawImage(parchment, 0, 0);
+
+    this._refreshActionState();
 
     if (L.compact) this.drawCompact(L);
     else this.drawDesktop(L);

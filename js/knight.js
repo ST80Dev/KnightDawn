@@ -27,6 +27,17 @@ const TRAVEL_COST = [
   0.25,   // 12 PIANURA_S
 ];
 
+// Scala dei ranghi del cavaliere (progressione sociale, non livelli RPG).
+// Vedi docs/EARLY_GAME.md §2. Il rango sblocca accesso e opportunità; i bonus
+// passivi restano modesti. La partita inizia da 'garzone' (Età della Veglia).
+const RANGHI = [
+  { id: 'garzone',  nome: 'Garzone' },
+  { id: 'scudiero', nome: 'Scudiero' },
+  { id: 'errante',  nome: 'Cavaliere Errante' },
+  { id: 'ventura',  nome: 'Cavaliere di Ventura' },
+  { id: 'campione', nome: 'Campione' },
+];
+
 // Recupero Forza e Salute per tipo di sosta.
 const RECOVERY = {
   accampamento: { forza: 30 },
@@ -38,6 +49,7 @@ const RECOVERY = {
 const Knight = {
   nome:   '',
   titolo: '',
+  rango:  'garzone',   // id in RANGHI; sale per imprese/reputazione (vedi EARLY_GAME.md)
 
   forza:   { cur: 100, max: 100 },
   volonta: { cur: 100, max: 100 },
@@ -58,9 +70,13 @@ const Knight = {
   compagni: [],   // max 3: { nome, archetipo:'lama'|'ombra'|'conoscitore', fedelta }
 
   // Azzera e re-inizializza per una nuova partita.
+  // Stato iniziale = garzone di stalla durante l'Età della Veglia (GDD §3,
+  // docs/EARLY_GAME.md): nessun equipaggiamento, nessun cavallo, pochi spiccioli.
+  // L'investitura (fine Veglia) promuove a 'errante' e consegna il primo kit.
   init(nome) {
-    this.nome   = nome || 'Sir Aldric di Vorn';
-    this.titolo = 'Cavaliere Errante';
+    this.nome   = nome || 'Aldric di Vorn';
+    this.titolo = 'Garzone';
+    this.rango  = 'garzone';
 
     this.forza   = { cur: 100, max: 100 };
     this.volonta = { cur: 100, max: 100 };
@@ -68,11 +84,11 @@ const Knight = {
     this.onore   = 0;
 
     this.equip = {
-      arma:     'Spada bastarda',
-      armatura: 'Cotta di maglia',
-      scudo:    'Scudo da campo',
+      arma:     null,
+      armatura: null,
+      scudo:    null,
       speciale: null,
-      viaggio:  'Mantello scuro',
+      viaggio:  null,
     };
 
     this.reputazione = [
@@ -82,9 +98,15 @@ const Knight = {
       { id: 'banditi',  nome: 'Banditi del Sud',   val: 0 },
     ];
 
-    this.oro          = 10;
+    this.oro          = 3;
     this.apprendista  = null;
     this.compagni     = [];
+  },
+
+  // Nome leggibile del rango corrente (per UI/log).
+  rangoNome() {
+    const r = RANGHI.find(x => x.id === this.rango);
+    return r ? r.nome : this.titolo;
   },
 
   // Consuma Forza per il bioma del tile percorso.

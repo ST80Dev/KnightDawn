@@ -54,6 +54,7 @@ const Save = {
     return {
       nome: Knight.nome,
       titolo: Knight.titolo,
+      rango: Knight.rango,
       forza: { ...Knight.forza },
       volonta: { ...Knight.volonta },
       salute: { ...Knight.salute },
@@ -74,6 +75,7 @@ const Save = {
     const k = blob.knight;
     Knight.nome     = k.nome;
     Knight.titolo   = k.titolo;
+    Knight.rango    = k.rango || 'errante';   // back-compat: salvataggi pre-ranghi
     Knight.forza    = k.forza;
     Knight.volonta  = k.volonta;
     Knight.salute   = k.salute;
