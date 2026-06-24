@@ -125,25 +125,39 @@ const GameScreen = {
   },
 
   onEnter() {
-    Knight.init();
-    this.knight = Knight;
-    this.log = [
-      'Inizi il tuo viaggio nelle Marche di Vorn.',
-      'Il vento dell\'alba porta odore di pioggia.',
-      'Lungo la strada incontri un mercante.',
-      'Egli ti racconta di rovine a est.',
-      'Una taverna si scorge a sud-ovest.',
-    ];
-    Calendar.init();
-    this.meta = {
-      meteo: 'Sereno', destinazione: 'nessuna',
-    };
+    // Due percorsi entrano qui via Scenes.switchTo('game'):
+    //  - NUOVA PARTITA (da CreateScreen): inizializza stato e mondo da zero,
+    //    usando il nome scelto in _newName.
+    //  - RIPRESA dopo un load (da titolo o menu): lo stato e' gia' stato
+    //    ripristinato da Save.applyBlob; qui NON va reinizializzato, altrimenti
+    //    il salvataggio viene perso. Il chiamante imposta _resume = true.
+    const resume = this._resume === true;
+    this._resume = false;
 
-    // Genera il mondo e posiziona camera/cavaliere.
-    World.generate((Math.random() * 0xFFFFFFFF) >>> 0);
-    this.knightPos = { x: World.knightStart.x, y: World.knightStart.y };
-    this._exploreFromHere(this.knightPos.x, this.knightPos.y);
-    this.cam = { cx: this.knightPos.x + 0.5, cy: this.knightPos.y + 0.5, step: MAP_ZOOM_DEFAULT };
+    if (resume) {
+      this.knight = Knight;        // gia' popolato da applyBlob (nome incluso)
+    } else {
+      Knight.init(this._newName || undefined);
+      this._newName = null;
+      this.knight = Knight;
+      this.log = [
+        'Inizi il tuo viaggio nelle Marche di Vorn.',
+        'Il vento dell\'alba porta odore di pioggia.',
+        'Lungo la strada incontri un mercante.',
+        'Egli ti racconta di rovine a est.',
+        'Una taverna si scorge a sud-ovest.',
+      ];
+      Calendar.init();
+      this.meta = { meteo: 'Sereno', destinazione: 'nessuna' };
+
+      // Genera il mondo e posiziona camera/cavaliere.
+      World.generate((Math.random() * 0xFFFFFFFF) >>> 0);
+      this.knightPos = { x: World.knightStart.x, y: World.knightStart.y };
+      this._exploreFromHere(this.knightPos.x, this.knightPos.y);
+      this.cam = { cx: this.knightPos.x + 0.5, cy: this.knightPos.y + 0.5, step: MAP_ZOOM_DEFAULT };
+      if (typeof Events !== 'undefined') Events.reset();
+    }
+
     this.activeOverlay = null;
     this.preRecap = null;          // pannello pre-partenza
     this.preRecapBtnParti = null;
@@ -155,8 +169,7 @@ const GameScreen = {
     this._chronicleBtns = [];      // rect dei pulsanti scelta + chiudi
     this.combat = null;            // Scena di combattimento (scontro attivo)
     this._combatBtns = [];         // rect dei pulsanti azione del Round
-    if (typeof Events !== 'undefined') Events.reset();
-    this.camAnchor = { x: World.knightStart.x, y: World.knightStart.y };
+    this.camAnchor = { x: this.knightPos.x, y: this.knightPos.y };
     this.camTarget = null;         // quando non-null la cam si avvicina qui
     this.dragging = false;
     this.dragMoved = false;
