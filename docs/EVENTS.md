@@ -102,8 +102,43 @@ saturare il viaggio.
 
 ### Trigger temporali
 
-(da definire) — cambi di Diario/Stagione che fanno scattare eventi globali
-o locali (es. festa del raccolto, marcia di una fazione).
+Due meccanismi distinti, entrambi minimali.
+
+**Cambi stagione (passivi).** Tre soli effetti, nessun sistema dedicato:
+
+1. **Bias meteo** — la stagione modifica i pesi della tabella distribuzione
+   meteo (inverno → +neve/nebbia, estate → +sereno e +eventi siccità,
+   autunno → +pioggia/temporale, primavera → mix). Tabella
+   `METEO_BIAS_STAGIONE[stagione][stato] = moltiplicatore` in `config.js`.
+2. **Moltiplicatore costo viaggio per bioma** — `STAGIONE_COST_MOD[stagione][bioma]`
+   applicato in `Knight.consumaForza()` (es. inverno × FORESTA = 1.3,
+   inverno × MONTAGNA = 1.5, estate × SABBIA = 1.4).
+3. **1–2 eventi tematici una-tantum per stagione** — voci in `Events.registry`
+   con prereq stagione + `once=true` (festa del raccolto, veglia d'inverno,
+   mercato di primavera, calura estiva).
+
+Niente sistema viveri separato: la Forza che cala più rapidamente nel
+bioma+stagione cattivo è già il segnale di gestione.
+
+**Scadenze.** Registro globale dentro `Events`:
+
+```js
+deadlines: [],  // { id, scade_a_passo, on_expire: [effects], label }
+
+addDeadline(id, passi_da_ora, on_expire, label) { ... }
+tickDeadlines()       // chiamato a ogni Passo dall'update()
+completeDeadline(id)  // chiamato da una scelta che onora la scadenza
+```
+
+- Una scelta evento crea una scadenza come effetto:
+  `Events.addDeadline('vorn.tributo', 60, [{type:'reputazione', id:'vorn', delta:-2},{type:'log',text:'…'}], 'Portare il tributo a Vorn')`.
+- `tickDeadlines()` applica `on_expire` e rimuove l'entry quando il Passo
+  corrente la supera.
+- `on_expire` riusa lo stesso vocabolario di effetti già esistente
+  (`reputazione`, `onore`, `oro`, `log`, …): zero codice nuovo.
+- Pannello UI "Impegni" mostra id + label + Passi rimanenti.
+- Persistenza: aggiungere `deadlines` a `Events.toJSON()/fromJSON()`
+  insieme a `seenIds`.
 
 ### Trigger reputazione
 
