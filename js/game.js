@@ -1406,6 +1406,7 @@ const GameScreen = {
     const maxIdx = Travel.SPEED_PRESETS.length - 1;
     const items = [
       { key: 'pause', label: Travel.paused ? '▶' : 'II', accent: Travel.paused },
+      { key: 'step',  label: '»', dim: !Travel.isActive() },
       { key: 'down',  label: '−', dim: Travel.speedIdx === 0 },
       { key: 'up',    label: '+', dim: Travel.speedIdx === maxIdx },
       { key: 'sep'  },
@@ -1444,6 +1445,14 @@ const GameScreen = {
     if (key === 'pause') {
       Travel.togglePause();
       this._logEvent(Travel.paused ? 'Tempo in pausa.' : 'Tempo ripreso.');
+    } else if (key === 'step') {
+      if (!Travel.isActive()) return;
+      // Forza un singolo Passo bypassando temporaneamente la pausa.
+      const wasPaused = Travel.paused;
+      Travel.paused = false;
+      Travel.accum = Travel.speedMs();
+      this.update(0);
+      Travel.paused = wasPaused;
     } else if (key === 'down') {
       Travel.speedDown();
     } else if (key === 'up') {
