@@ -55,7 +55,10 @@ const World = {
   structures: [], // [{ type:'castle'|'village', x, y, name }]
   specials: [],   // [{ x, y, kind, discovered, name }] — luoghi ignoti agli estremi
   knightStart: { x: 0, y: 0 },
-  fog: null,      // Uint8Array: 1 = esplorato, 0 = nebbia
+  fog: null,      // Uint8Array per tile: 0=ignoto, 1=intravisto, 2=esplorato
+
+  // Costanti livello nebbia.
+  FOG: { IGNOTO: 0, INTRAVISTO: 1, ESPLORATO: 2 },
 
   BIOME: {
     ACQUA: 0, PIANURA: 1, FORESTA: 2, COLLINA: 3, MONTAGNA: 4, PALUDE: 5,
@@ -110,8 +113,20 @@ const World = {
     'Lorensil', 'Cellondir', 'Thanduil', 'Eilmoth',
   ],
 
-  explore(cx, cy, radius) {
+  // Esplora intorno al cavaliere con due cerchi concentrici:
+  // - fullR: tile portati a ESPLORATO (= ci sei stato o vicino abbastanza)
+  // - dimR:  tile portati almeno a INTRAVISTO (vista d'occhio dalla distanza)
+  // I valori non scendono mai: si usa max().
+  explore(cx, cy, fullR, dimR) {
     if (!this.fog) return;
+    if (fullR == null) fullR = 2;
+    if (dimR  == null) dimR  = fullR;
+    if (dimR < fullR) dimR = fullR;
+    this._reveal(cx, cy, dimR,  this.FOG.INTRAVISTO);
+    this._reveal(cx, cy, fullR, this.FOG.ESPLORATO);
+  },
+
+  _reveal(cx, cy, radius, level) {
     const r2 = radius * radius;
     const W = this.width, H = this.height;
     const x0 = Math.max(0, cx - radius), x1 = Math.min(W - 1, cx + radius);
@@ -119,7 +134,57 @@ const World = {
     for (let y = y0; y <= y1; y++) {
       for (let x = x0; x <= x1; x++) {
         const dx = x - cx, dy = y - cy;
-        if (dx * dx + dy * dy <= r2) this.fog[y * W + x] = 1;
+        if (dx * dx + dy * dy > r2) continue;
+        const i = y * W + x;
+        if (this.fog[i] < level) this.fog[i] = level;
+      }
+    }
+  },
+
+  // Rivelazione esplicita per missioni/eventi: porta i tile entro raggio
+  // al livello indicato (default INTRAVISTO). Non degrada mai i livelli.
+  revealArea(cx, cy, radius, level) {
+    if (!this.fog) return;
+    this._reveal(cx, cy, radius, level == null ? this.FOG.INTRAVISTO : level);
+  },
+
+  // Vista marittima: flood-fill BFS sui soli tile ACQUA/GHIACCIO partendo dai
+  // tile d'acqua adiacenti al cavaliere, limitato a raggio Manhattan.
+  // Simula la vista dell'orizzonte marino dalla costa.
+  revealSeaFlood(cx, cy, radius) {
+    if (!this.fog) return;
+    const W = this.width, H = this.height;
+    const B = this.BIOME;
+    const isSea = (x, y) => {
+      if (x < 0 || y < 0 || x >= W || y >= H) return false;
+      const b = this.tiles[y * W + x];
+      return b === B.ACQUA || b === B.GHIACCIO;
+    };
+    const queue = [];
+    const dist = new Map();
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        const nx = cx + dx, ny = cy + dy;
+        if (!isSea(nx, ny)) continue;
+        const k = ny * W + nx;
+        if (!dist.has(k)) { dist.set(k, 1); queue.push([nx, ny, 1]); }
+      }
+    }
+    const lvl = this.FOG.INTRAVISTO;
+    while (queue.length) {
+      const [x, y, d] = queue.shift();
+      const i = y * W + x;
+      if (this.fog[i] < lvl) this.fog[i] = lvl;
+      if (d >= radius) continue;
+      const neigh = [[1,0],[-1,0],[0,1],[0,-1]];
+      for (const [ox, oy] of neigh) {
+        const nx = x + ox, ny = y + oy;
+        if (!isSea(nx, ny)) continue;
+        const k = ny * W + nx;
+        if (dist.has(k)) continue;
+        dist.set(k, d + 1);
+        queue.push([nx, ny, d + 1]);
       }
     }
   },

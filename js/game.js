@@ -140,7 +140,7 @@ const GameScreen = {
     // Genera il mondo e posiziona camera/cavaliere.
     World.generate((Math.random() * 0xFFFFFFFF) >>> 0);
     this.knightPos = { x: World.knightStart.x, y: World.knightStart.y };
-    if (World.fog) World.explore(this.knightPos.x, this.knightPos.y, 5);
+    this._exploreFromHere(this.knightPos.x, this.knightPos.y);
     this.cam = { cx: this.knightPos.x + 0.5, cy: this.knightPos.y + 0.5, step: MAP_ZOOM_DEFAULT };
     this.activeOverlay = null;
     this.preRecap = null;          // pannello pre-partenza
@@ -944,6 +944,34 @@ const GameScreen = {
     drawBtn(parR, 'Parti →', '#3a2808', '#e8c050');
   },
 
+  // Esplora intorno a (x,y) modulando il raggio "intravisto" dal bioma sotto
+  // i piedi del cavaliere. Se il tile è adiacente al mare, applica anche la
+  // vista marittima a flood-fill sui tile d'acqua.
+  _exploreFromHere(x, y) {
+    if (!World.fog) return;
+    const W = World.width, H = World.height;
+    const B = World.BIOME;
+    const b = World.tiles[y * W + x];
+    let fullR = 2;
+    let dimR  = 5;
+    if (b === B.MONTAGNA || b === B.COLLINA) dimR += 2;       // vista dall'alto
+    else if (b === B.FORESTA || b === B.PALUDE || b === B.NEVE) dimR -= 2;  // ostruita
+    World.explore(x, y, fullR, dimR);
+
+    // Vista marittima: se almeno un vicino è acqua/ghiaccio, flood-fill.
+    let touchesSea = false;
+    for (let dy = -1; dy <= 1 && !touchesSea; dy++) {
+      for (let dx = -1; dx <= 1 && !touchesSea; dx++) {
+        if (!dx && !dy) continue;
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+        const nb = World.tiles[ny * W + nx];
+        if (nb === B.ACQUA || nb === B.GHIACCIO) touchesSea = true;
+      }
+    }
+    if (touchesSea) World.revealSeaFlood(x, y, 10);
+  },
+
   // Chiamato da main.js a ogni frame. dtMs include la pausa fra frame: senza,
   // il viaggio si bloccherebbe quando la finestra è inattiva e ripartirebbe
   // di colpo. Limitiamo il dt a ~250 ms (1 secondo di buffering al massimo)
@@ -954,7 +982,7 @@ const GameScreen = {
     Travel.update(dt, this.knightPos, {
       onStep: (tile, _biome) => {
         // Esplora intorno alla nuova posizione (nebbia di guerra).
-        if (World.fog) World.explore(tile.x, tile.y, 4);
+        this._exploreFromHere(tile.x, tile.y);
 
         // Pausa automatica su strutture (GAMEPLAY.md §1 "Calmo"):
         // il cavaliere si ferma al luogo, e si tenta una scena di luogo.
@@ -2049,10 +2077,11 @@ const GameScreen = {
           const ty = Math.min(WH - 1, Math.floor(py / fh * WH));
           for (let px = 0; px < fw; px++) {
             const tx = Math.min(WW - 1, Math.floor(px / fw * WW));
-            if (!World.fog[ty * WW + tx]) {
-              const i = (py * fw + px) * 4;
-              d[i] = 10; d[i + 1] = 6; d[i + 2] = 2; d[i + 3] = 224;
-            }
+            const f = World.fog[ty * WW + tx];
+            if (f >= 2) continue;
+            const i = (py * fw + px) * 4;
+            d[i] = 10; d[i + 1] = 6; d[i + 2] = 2;
+            d[i + 3] = (f === 1) ? 130 : 240;
           }
         }
         fctx.putImageData(id, 0, 0);

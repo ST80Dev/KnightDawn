@@ -33,6 +33,7 @@ const Save = {
         cam: { cx: GameScreen.cam.cx, cy: GameScreen.cam.cy, step: GameScreen.cam.step },
         log: GameScreen.log,
         meta: GameScreen.meta,
+        fogVersion: 2,
         fog: (() => {
           if (!World.fog) return '';
           let s = '';
@@ -90,6 +91,13 @@ const Save = {
       const raw = atob(blob.game.fog);
       World.fog = new Uint8Array(raw.length);
       for (let i = 0; i < raw.length; i++) World.fog[i] = raw.charCodeAt(i);
+      // Migrazione fog v1 (binario 0/1) → v2 (0/1/2): i tile esplorati passano a 2.
+      const fv = blob.game.fogVersion || 1;
+      if (fv < 2) {
+        for (let i = 0; i < World.fog.length; i++) {
+          if (World.fog[i] > 0) World.fog[i] = 2;
+        }
+      }
     }
 
     // Game state
