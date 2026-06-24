@@ -115,6 +115,54 @@ Direzione: estendere la famiglia cromatica della pergamena con:
 
 ---
 
+## 2b. Vista luoghi — Layout top-down
+
+Quando il cavaliere entra in un luogo interattivo (castello, villaggio, monastero…),
+la mappa non cambia registro visivo: si mostra un **layout schematizzato del luogo
+visto dall'alto**, con la stessa grammatica cartografica della mappa di viaggio
+(pergamena, inchiostro, pixel art).
+
+### Principio di interazione a due livelli
+
+1. **Livello 1 — Layout luogo:** vista top-down dell'area, edifici cliccabili.
+   Il cavaliere si sposta automaticamente all'area selezionata. Non è navigazione
+   libera: si clicca una destinazione, il cavaliere ci va.
+2. **Livello 2 — Carta del cronista:** cliccando un edificio/area specifica,
+   appare la Carta del cronista per quell'area. La miniatura mostra l'edificio
+   specifico (taverna, sala del trono, fabbro), non il luogo generico.
+
+### Elementi fissi vs variabili
+
+Ogni tipo di luogo ha:
+- **Sempre presenti** — edifici garantiti, sempre cliccabili
+- **Standard** — presenti nella maggior parte delle istanze
+- **Variabili** — randomizzati per singola istanza (alcuni castelli li hanno, altri no)
+
+Il catalogo dettagliato per tipo di luogo verrà definito in una fase successiva,
+incrociando questo schema con il catalogo completo dei luoghi di gioco.
+
+### Caso speciale — Palazzo del Signore (castello)
+
+Il palazzo/keep principale è suddiviso in zone interne solo se ciascuna produce
+un'interazione meccanicamente diversa dalle altre. Soglia minima:
+- **Sala del trono** — incontro formale, missioni, giuramenti
+- **Camera del consiglio** — informazioni politiche, intrighi
+
+Ulteriori stanze solo se portano dinamiche di evento non coperte da quelle sopra.
+
+### Caso speciale — Rovine e dungeon
+
+Non hanno un layout cliccabile per edificio. Mostrano una planimetria parziale
+(muri crollati, aperture, corridoi) con **pulsanti di esplorazione testuale**
+(*"Esplora sezione nord"*, *"Scava macerie"*, *"Cerca ingresso nascosto"*) che
+aprono la Carta del cronista. Il dungeon è da trattare separatamente come
+mini-dungeon a stanze progressive.
+
+> Specifiche complete da definire in Fase G3, incrociando con il catalogo
+> definitivo dei luoghi di gioco.
+
+---
+
 ## 3. Tile system — Mappa top-down
 
 ### Dimensioni
