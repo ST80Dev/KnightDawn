@@ -1,18 +1,23 @@
 // FERRO & CENERE — save/load
-// Primario: Supabase cloud (tabella public.saves, slot unico per ora).
-// Fallback: localStorage autosave periodico (singolo, niente storico).
+// Tutto su Supabase. Tabella public.saves con colonna 'slot' unique.
+//
+// Convenzione slot:
+//   0       → autosave automatico (ogni AUTOSAVE_INTERVAL)
+//   1..5    → slot manuali del giocatore
 //
 // Il "save blob" è un oggetto JSON con tutto lo stato di gioco.
-// Ogni modulo espone toJSON()/fromJSON() per la propria fetta.
 
 const SUPABASE_URL = 'https://ysiluaqmexhssvumokzx.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlzaWx1YXFtZXhoc3N2dW1va3p4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIyMDM5MzksImV4cCI6MjA5Nzc3OTkzOX0.mGUWlG6ireYAdnP54DmVe9agAtDBOg6SBTFMJBbvYv4';
 
-const LOCAL_SAVE_KEY = 'knightdawn_autosave';
+const AUTOSAVE_SLOT = 0;
+const MANUAL_SLOTS = [1, 2, 3, 4, 5];
+const ALL_SLOTS = [0, 1, 2, 3, 4, 5];
 const AUTOSAVE_INTERVAL = 60_000; // 1 minuto
 
 const Save = {
   _autoTimer: null,
+  AUTOSAVE_SLOT, MANUAL_SLOTS, ALL_SLOTS,
 
   // ─── Costruzione blob ────────────────────────────────────────────────
 
@@ -20,7 +25,7 @@ const Save = {
     return {
       version: 1,
       timestamp: Date.now(),
-      knight: Knight.toJSON ? Knight.toJSON() : this._snapshotKnight(),
+      knight: this._snapshotKnight(),
       calendar: Calendar.toJSON(),
       events: (typeof Events !== 'undefined' && Events.toJSON) ? Events.toJSON() : null,
       news: (typeof News !== 'undefined' && News.toJSON) ? News.toJSON() : null,
@@ -66,7 +71,6 @@ const Save = {
   applyBlob(blob) {
     if (!blob || blob.version !== 1) return false;
 
-    // Knight
     const k = blob.knight;
     Knight.nome     = k.nome;
     Knight.titolo   = k.titolo;
@@ -80,12 +84,10 @@ const Save = {
     Knight.apprendista = k.apprendista;
     Knight.compagni    = k.compagni;
 
-    // Calendar
     Calendar.fromJSON(blob.calendar);
     if (typeof Events !== 'undefined' && Events.fromJSON) Events.fromJSON(blob.events);
     if (typeof News   !== 'undefined' && News.fromJSON)   News.fromJSON(blob.news);
 
-    // World — rigenera dallo stesso seed
     World.generate(blob.world.seed);
 
     // Nebbia di guerra
@@ -130,8 +132,8 @@ const Save = {
     return res;
   },
 
-  async saveCloud(slot) {
-    slot = slot || 1;
+  async save(slot) {
+    if (slot == null) return false;
     const blob = this.buildBlob();
     const row = {
       slot,
@@ -141,7 +143,6 @@ const Save = {
       updated_at: new Date().toISOString(),
     };
 
-    // Upsert: se il slot esiste aggiorna, altrimenti inserisce.
     const res = await this._supaFetch(
       '/saves?on_conflict=slot',
       {
@@ -152,23 +153,21 @@ const Save = {
     );
 
     if (!res.ok) {
-      console.error('Save cloud fallito:', res.status, await res.text());
+      console.error('Save fallito (slot ' + slot + '):', res.status, await res.text());
       return false;
     }
-    // Aggiorna anche il fallback locale
-    this.saveLocal();
     return true;
   },
 
-  async loadCloud(slot) {
-    slot = slot || 1;
+  async load(slot) {
+    if (slot == null) return false;
     const res = await this._supaFetch(
       '/saves?slot=eq.' + slot + '&select=data&limit=1',
       { method: 'GET' }
     );
 
     if (!res.ok) {
-      console.error('Load cloud fallito:', res.status);
+      console.error('Load fallito (slot ' + slot + '):', res.status);
       return false;
     }
 
@@ -177,8 +176,8 @@ const Save = {
     return this.applyBlob(rows[0].data);
   },
 
-  async deleteCloud(slot) {
-    slot = slot || 1;
+  async delete(slot) {
+    if (slot == null) return false;
     const res = await this._supaFetch(
       '/saves?slot=eq.' + slot,
       { method: 'DELETE' }
@@ -186,8 +185,23 @@ const Save = {
     return res.ok;
   },
 
-  async hasCloudSave(slot) {
-    slot = slot || 1;
+  // Ritorna metadata di tutti gli slot in una sola fetch.
+  // Risultato: { 0: {...} | null, 1: {...} | null, ... }
+  async listSlots() {
+    const res = await this._supaFetch(
+      '/saves?select=slot,player_name,label,updated_at&order=slot.asc',
+      { method: 'GET' }
+    );
+    const out = {};
+    for (const s of ALL_SLOTS) out[s] = null;
+    if (!res.ok) return out;
+    const rows = await res.json();
+    for (const r of rows) out[r.slot] = r;
+    return out;
+  },
+
+  async hasSave(slot) {
+    if (slot == null) return null;
     const res = await this._supaFetch(
       '/saves?slot=eq.' + slot + '&select=slot,player_name,label,updated_at&limit=1',
       { method: 'GET' }
@@ -197,43 +211,13 @@ const Save = {
     return rows.length ? rows[0] : null;
   },
 
-  // ─── Locale (localStorage fallback) ──────────────────────────────────
-
-  saveLocal() {
-    try {
-      const blob = this.buildBlob();
-      localStorage.setItem(LOCAL_SAVE_KEY, JSON.stringify(blob));
-      return true;
-    } catch (e) {
-      console.error('Autosave locale fallito:', e);
-      return false;
-    }
-  },
-
-  loadLocal() {
-    try {
-      const raw = localStorage.getItem(LOCAL_SAVE_KEY);
-      if (!raw) return false;
-      return this.applyBlob(JSON.parse(raw));
-    } catch (e) {
-      console.error('Load locale fallito:', e);
-      return false;
-    }
-  },
-
-  hasLocalSave() {
-    return localStorage.getItem(LOCAL_SAVE_KEY) !== null;
-  },
-
-  clearLocal() {
-    localStorage.removeItem(LOCAL_SAVE_KEY);
-  },
-
-  // ─── Autosave periodico ──────────────────────────────────────────────
+  // ─── Autosave periodico (slot 0) ─────────────────────────────────────
 
   startAutosave() {
     this.stopAutosave();
-    this._autoTimer = setInterval(() => this.saveLocal(), AUTOSAVE_INTERVAL);
+    this._autoTimer = setInterval(() => {
+      this.save(AUTOSAVE_SLOT).catch(e => console.error('Autosave:', e));
+    }, AUTOSAVE_INTERVAL);
   },
 
   stopAutosave() {
