@@ -125,6 +125,14 @@ const Events = {
         if (r) r.val = clamp(r.val + eff.delta, -5, 5);
         break;
       }
+      case 'rivela': {
+        if (typeof World !== 'undefined' && World.revealArea) {
+          const lvl = (eff.livello != null) ? eff.livello
+            : (World.FOG ? World.FOG.INTRAVISTO : 1);
+          World.revealArea(eff.x | 0, eff.y | 0, eff.raggio | 0 || 2, lvl);
+        }
+        break;
+      }
     }
   },
 
