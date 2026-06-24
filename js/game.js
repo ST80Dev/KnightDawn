@@ -146,6 +146,9 @@ const GameScreen = {
     this.preRecap = null;          // pannello pre-partenza
     this.preRecapBtnParti = null;
     this.preRecapBtnAnnulla = null;
+    this.poiPause = null;          // interruzione POI durante viaggio
+    this._poiPauseBtn = {};        // { ferma, ignora } rect
+    this._dismissedPOIs = new Set(); // specials già notificate in questa tratta
     this.camAnchor = { x: World.knightStart.x, y: World.knightStart.y };
     this.camTarget = null;         // quando non-null la cam si avvicina qui
     this.dragging = false;
@@ -275,7 +278,8 @@ const GameScreen = {
 
   onPointerDown(p) {
     if (Scenes.current !== this) return;
-    if (this.preRecap) { this._preRecapDown(p); return; }
+    if (this.poiPause)  { this._poiPauseDown(p); return; }
+    if (this.preRecap)  { this._preRecapDown(p); return; }
     if (this.activeOverlay) { this.overlayPressed = this.overlayWhere(p); return; }
 
     const compact = window.UI.compact;
@@ -302,7 +306,8 @@ const GameScreen = {
   onPointerUp(p, type) {
     if (Scenes.current !== this) return;
 
-    if (this.preRecap) { this._preRecapUp(p); return; }
+    if (this.poiPause)  { this._poiPauseUp(p); return; }
+    if (this.preRecap)  { this._preRecapUp(p); return; }
 
     if (this.dragging) {
       const wasDrag = this.dragMoved;
@@ -372,6 +377,8 @@ const GameScreen = {
     this.overlayPressed = null;
     this.preRecap = null;
     this._preRecapPressed = null;
+    this.poiPause = null;
+    this._poiPausePressed = null;
     window.GameRender.invalidate();
   },
 
@@ -464,6 +471,7 @@ const GameScreen = {
     if (was === 'parti' && this.preRecapBtnParti && hitRect(this.preRecapBtnParti, p.x, p.y)) {
       const { path, name } = this.preRecap;
       this.preRecap = null;
+      this._dismissedPOIs.clear();
       Travel.start(path);
       this.camAnchor.x = this.knightPos.x;
       this.camAnchor.y = this.knightPos.y;
@@ -473,6 +481,125 @@ const GameScreen = {
       this.preRecap = null;
     }
     window.GameRender.invalidate();
+  },
+
+  // ─── POI pause ────────────────────────────────────────────────────────────
+
+  _poiPauseDown(p) {
+    this._poiPausePressed =
+      (this._poiPauseBtn.ferma   && hitRect(this._poiPauseBtn.ferma,  p.x, p.y)) ? 'ferma'  :
+      (this._poiPauseBtn.ignora  && hitRect(this._poiPauseBtn.ignora, p.x, p.y)) ? 'ignora' :
+      (this._poiPauseCard        && !hitRect(this._poiPauseCard,      p.x, p.y)) ? 'outside': null;
+  },
+
+  _poiPauseUp(p) {
+    const was = this._poiPausePressed;
+    this._poiPausePressed = null;
+    const poi = this.poiPause;
+    this.poiPause = null;
+    if (was === 'ferma' && this._poiPauseBtn.ferma && hitRect(this._poiPauseBtn.ferma, p.x, p.y)) {
+      // Rotta verso il POI: avvia un percorso diretto dalla posizione attuale
+      const path = Travel.findPath(this.knightPos.x, this.knightPos.y, poi.special.x, poi.special.y);
+      if (path && path.length) {
+        this._dismissedPOIs.clear();
+        Travel.start(path);
+        this.camAnchor.x = this.knightPos.x;
+        this.camAnchor.y = this.knightPos.y;
+        const label = poi.special.kind || 'luogo ignoto';
+        this.meta.destinazione = label;
+        this._logEvent(`Ti dirigi verso il ${label} avvistato.`);
+      }
+    } else if (was === 'ignora' || was === 'outside') {
+      // Riprende il viaggio verso la meta originale usando il path residuo salvato.
+      if (poi.remainingPath && poi.remainingPath.length) {
+        Travel.start(poi.remainingPath);
+        this.meta.destinazione = poi.savedDest || 'nessuna';
+        this._logEvent('Continui il viaggio.');
+      }
+    }
+    window.GameRender.invalidate();
+  },
+
+  drawPOIPause() {
+    const ctx = this.ctx;
+    const W = window.UI.w, H = window.UI.h;
+    const poi = this.poiPause;
+    const sp  = poi.special;
+
+    const POI_HINT = {
+      rovine:    'Un ammasso di pietre scheggiate intravisto tra la vegetazione.',
+      tempio:    'Una sagoma di pilastri — forse un vecchio tempio dimenticato.',
+      monolite:  'Una pietra scolpita eretta solitaria nella pianura.',
+      relitto:   'Un relitto arenato, semi-sommerso, lontano dal mare.',
+      cripta:    'Un\'apertura nel terreno: scalini che scendono nel buio.',
+      faro:      'Un moncone di torre in rovina, ancora vagamente riconoscibile.',
+      santuario: 'Resti di un piccolo santuario; fiori secchi sull\'altare.',
+      voragine:  'Un vasto varco aperto nella roccia, aria fredda ne sale.',
+    };
+
+    const hint = POI_HINT[sp.kind] || 'Qualcosa di insolito attira la tua attenzione.';
+    const kindLabel = sp.kind ? sp.kind.charAt(0).toUpperCase() + sp.kind.slice(1) : 'Luogo misterioso';
+    const distLabel = poi.dist <= 1 ? 'a pochi passi' : `a ${poi.dist} tile`;
+
+    const cw = Math.min(SF(320), W - SF(24));
+    const ch = SF(148);
+    // Ancorata in basso-centro sulla mappa (o sul canvas se mappa non disponibile)
+    const mr = this.mapRect || { x: 0, y: 0, w: W, h: H };
+    const cx = Math.round(mr.x + (mr.w - cw) / 2);
+    const cy = mr.y + mr.h - ch - SF(12);
+    this._poiPauseCard = { x: cx, y: cy, w: cw, h: ch };
+
+    // Card body
+    ctx.fillStyle = PALETTE.hudSfondo || '#1a1208';
+    ctx.fillRect(cx, cy, cw, ch);
+
+    // Banda titolo ambrata
+    ctx.fillStyle = '#3d2a08';
+    ctx.fillRect(cx, cy, cw, SF(26));
+    ctx.fillStyle = '#ffd080';
+    ctx.font = FONT.heading ? FONT.heading() : FONT.label();
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${kindLabel}  ·  ${distLabel}`, cx + SF(10), cy + SF(13));
+
+    // Testo descrittivo
+    ctx.fillStyle = '#c8b880';
+    ctx.font = FONT.body ? FONT.body() : FONT.value();
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    // Wrap manuale su due righe
+    const maxTW = cw - SF(20);
+    let line1 = hint, line2 = '';
+    while (line1.length > 0 && ctx.measureText(line1).width > maxTW) {
+      const cut = line1.lastIndexOf(' ');
+      if (cut <= 0) break;
+      line2 = line1.slice(cut + 1) + (line2 ? ' ' + line2 : '');
+      line1 = line1.slice(0, cut);
+    }
+    ctx.fillText(line1, cx + SF(10), cy + SF(32));
+    if (line2) ctx.fillText(line2, cx + SF(10), cy + SF(32) + SF(18));
+
+    // Pulsanti
+    const btnH = SF(26), btnW = SF(130);
+    const by = cy + ch - SF(34);
+    const ignoraR = { x: cx + SF(10),               y: by, w: btnW, h: btnH };
+    const fermaR  = { x: cx + cw - SF(10) - btnW,   y: by, w: btnW, h: btnH };
+    this._poiPauseBtn = { ignora: ignoraR, ferma: fermaR };
+
+    const drawBtn = (r, label, bg, fg) => {
+      ctx.fillStyle = bg;
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      drawPixelRectStroke(ctx, r.x, r.y, r.w, r.h, fg);
+      ctx.fillStyle = fg;
+      ctx.font = FONT.button ? FONT.button() : FONT.label();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2);
+    };
+    drawBtn(ignoraR, 'Ignora, continua', '#201408', '#a08050');
+    drawBtn(fermaR,  'Esplora →',        '#3a2808', '#ffd080');
+
+    drawPixelRectStroke(ctx, cx, cy, cw, ch, '#5a4020');
   },
 
   drawPreRecap() {
@@ -620,6 +747,26 @@ const GameScreen = {
           this._logEvent(`Arrivi a ${s.name}.`);
           return;
         }
+
+        // Pausa opzionale su POI vicini (rovine, templi, ecc.).
+        const POI_RADIUS = 3;
+        for (const sp of World.specials) {
+          const id = sp.y * World.width + sp.x;
+          if (this._dismissedPOIs.has(id)) continue;
+          const dx = sp.x - tile.x, dy = sp.y - tile.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist > POI_RADIUS) continue;
+          // Trovato POI abbastanza vicino: pausa con scelta.
+          // Salva il path residuo PRIMA di stop() che lo azzera.
+          const remainingPath = Travel.path ? Travel.path.slice(Travel.idx) : [];
+          const savedDest = this.meta.destinazione;
+          this._dismissedPOIs.add(id);
+          Travel.stop();
+          this.poiPause = { special: sp, dist: Math.round(dist), remainingPath, savedDest };
+          // Punta la camera verso il POI per farlo vedere
+          this.camTarget = { cx: sp.x + 0.5, cy: sp.y + 0.5 };
+          return;
+        }
       },
       onArrive: () => {
         this.meta.destinazione = 'nessuna';
@@ -685,7 +832,8 @@ const GameScreen = {
 
     if (L.compact) this.drawCompact(L);
     else this.drawDesktop(L);
-    if (this.preRecap) this.drawPreRecap();
+    if (this.preRecap)  this.drawPreRecap();
+    if (this.poiPause)  this.drawPOIPause();
   },
 
   drawDesktop(L) {
