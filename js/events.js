@@ -30,11 +30,14 @@
 //                                 'deadlineAdd'|'deadlineDone'|'news'|'combat', ... }
 //
 // Effetto combat: { type:'combat', enemy, terrain?, onWin:[Effect],
-//                   onFlee:[Effect], onSurrender:[Effect], onDeath:[Effect],
-//                   onStallo?:[Effect] }
-//   Per ora risolve in automatico (Combat.resolveAuto) e applica il ramo
-//   esito. Quando la UI scena combattimento sarà disponibile, l'effetto
-//   sospenderà l'evento e il ramo verrà applicato al ritorno dalla scena.
+//                   onFlee:[Effect], onSurrender:[Effect], onDefeat:[Effect],
+//                   onDeath:[Effect], onStallo?:[Effect] }
+//   enemy: id stringa del catalogo (js/data/enemies.js) o oggetto nemico.
+//   Rami esito: onWin (vittoria), onFlee (fuga), onSurrender (resa),
+//   onDefeat (sconfitta = battuto ma vivo), onDeath (morte = Salute 0),
+//   onStallo (default → onFlee). Per ora risolve in automatico
+//   (Combat.resolveAuto); quando la UI scena combattimento sarà disponibile,
+//   l'effetto sospenderà l'evento e il ramo verrà applicato al ritorno.
 
 const Events = {
   registry: [],
@@ -250,11 +253,12 @@ const Events = {
         for (const line of res.cronaca) ctx.log(line);
         ctx.log(`Esito scontro: ${res.esito}.`);
         const ramo = ({
-          vittoria: eff.onWin,
-          fuga:     eff.onFlee,
-          resa:     eff.onSurrender,
-          morte:    eff.onDeath,
-          stallo:   eff.onStallo || eff.onFlee,
+          vittoria:  eff.onWin,
+          fuga:      eff.onFlee,
+          resa:      eff.onSurrender,
+          sconfitta: eff.onDefeat,        // battuto ma vivo: conseguenza scelta dall'evento
+          morte:     eff.onDeath,         // Salute a 0: game over
+          stallo:    eff.onStallo || eff.onFlee,
         })[res.esito];
         if (ramo) this.applyEffects(ramo).forEach(m => ctx.log(m));
         break;

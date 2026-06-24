@@ -102,26 +102,46 @@ Output del Round: `{ slancioDelta: ±int, ferita?: bool, narrazione: string }`
 
 ## 6. Tipi di avversari
 
-`[TBD]` — catalogo concreto in S9. Categorie:
+Catalogo in `js/data/enemies.js` (oggetto `Enemies`). Copertura iniziale:
 
-- Banditi (umani, deboli, numerosi)
-- Soldati di casata (umani, equipaggiati, disciplinati)
-- Cavalieri (umani, forti, singoli)
-- Creature selvatiche (lupi, orsi, cinghiali)
-- Creature magiche/mitiche
-- Boss di fazione
+- **Fuorilegge** — ladro, predone, banda della boscaglia
+- **Casata** — soldato, cavaliere
+- **Bestie** — lupo, branco, orso, cinghiale (affinità di terreno)
+- **Mitici** — spettro, troll delle pietre, licantropo, ragno gigante,
+  schiera dei non-morti, bestia di leggenda (tono Tolkien/Martin: orrore
+  antico, non magia barocca)
+- **Guerra** — scaramuccia, battaglia campale, assedio (fasi narrative)
 
-Ogni archetipo definisce: N Round, scelte di resa/parlamento ammesse,
-modificatori in formula, esiti possibili.
+Nemici legati alle **fazioni concrete** (Ordine del Cervo, Banditi del Sud…)
+arriveranno con S5, quando le fazioni saranno definite.
+
+Ogni nemico definisce: `tipo`, `categoria`, `numerosita` (singolo/gruppo/orda),
+`sfida`, range `roundMin/roundMax`, `accettaResa`, affinità `terreni` opzionali.
+I valori di `sfida` sono provvisori — bilanciamento numerico ufficiale in S9.
+Il **bottino** non è nei dati del nemico: si calcola a fine scontro.
 
 ## 7. Esiti
 
-- **Vittoria** — bottino (oro/oggetti), onore, news propagata
-- **Fuga riuscita** — perdita oro/oggetti, malus reputazione locale
-- **Resa accettata** — cattura → arco narrativo prigionia (S8)
-- **Resa rifiutata** — lo scontro continua con +slancio negativo forte
-- **Ferita** — uscita dallo scontro con malus persistente (vedi `knight.js`)
-- **Morte** — game over (oppure penalità grave, da decidere in S9)
+Due binari indipendenti governano la fine dello scontro:
+
+- **Salute** (`Knight.salute`, 0-100, persistente): il corpo. A **0 = morte**,
+  sempre, in qualsiasi Round. È l'unica cosa che uccide.
+- **Slancio** (±N, solo durante lo scontro): il vantaggio tattico cumulato.
+  A fine Round decide vittoria/sconfitta/stallo, **ma non uccide**.
+
+Esiti possibili:
+
+- **Vittoria** — Slancio ≥ +3 a fine Round (o scelta vincente). Bottino
+  (oro/oggetti, calcolati a fine scontro), onore, news propagata.
+- **Sconfitta** — Slancio ≤ −3 a fine Round, ma cavaliere **vivo**. Sei stato
+  battuto, non ucciso. La conseguenza concreta (cattura → prigionia S8;
+  spoglio di oro/oggetti; ferita grave; fuga forzata; malus reputazione) è
+  decisa **dall'evento** nel ramo `onDefeat`, non cablata nel motore.
+- **Stallo** — Slancio fra le soglie: nessuno prevale, disimpegno.
+- **Fuga riuscita** — scelta del giocatore; perdita oro/oggetti possibile.
+- **Resa accettata** — scelta del giocatore; esito dipende dal nemico.
+- **Resa rifiutata** — il nemico non concede quartiere; lo scontro prosegue.
+- **Morte** — Salute a 0. Game over.
 
 ## 8. Integrazione con S3 (eventi)
 
@@ -129,8 +149,12 @@ Il punto di sutura S3↔S4 è un nuovo tipo di effetto evento:
 
 ```js
 { type: 'combat', enemy: 'banditi.boscaglia', onWin: [...], onFlee: [...],
-  onSurrender: [...], onDeath: [...] }
+  onSurrender: [...], onDefeat: [...], onDeath: [...] }
 ```
+
+`onDefeat` (sconfitta: battuto ma vivo) e `onDeath` (morte: Salute a 0) sono
+rami distinti: dalla sconfitta si torna a giocare con una penalità decisa
+dall'evento, dalla morte no.
 
 Un evento di viaggio o di luogo può sospendere e lanciare il combattimento,
 poi applicare gli effetti del ramo-esito al ritorno. Schema dettagliato in

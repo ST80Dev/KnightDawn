@@ -24,8 +24,16 @@
 //     usate,            // set di azioni contestuali già usate (es. 'parlamento')
 //     cronaca,          // [string] log narrativo dei Round
 //     finito,           // bool
-//     esito,            // null | 'vittoria'|'fuga'|'resa'|'morte'|'stallo'
+//     esito,            // null | 'vittoria'|'fuga'|'resa'|'sconfitta'|'morte'|'stallo'
 //   }
+//
+// Esiti (vedi docs/COMBAT.md §7):
+//   morte    → Salute a 0 (solo il corpo distrutto uccide). Game over.
+//   sconfitta→ battuto ma vivo (Slancio ≤ -3 a fine Round). L'evento decide
+//              la conseguenza nel ramo onDefeat (cattura, spoglio, ferita...).
+//   vittoria → Slancio ≥ +3 a fine Round, o scelta vincente.
+//   stallo   → nessuno prevale; disimpegno.
+//   fuga/resa→ scelte del giocatore.
 
 const Combat = {
   // Soglie di Slancio per esiti automatici a fine N Round.
@@ -114,9 +122,11 @@ const Combat = {
     }
 
     // Limite Round raggiunto: esito automatico da Slancio.
+    // NB: la morte la decide SOLO la Salute a 0 (intercettata sopra). Qui uno
+    // Slancio molto negativo = sei stato battuto, non ucciso → 'sconfitta'.
     if (state.round >= state.roundMax) {
-      if (state.slancio >=  this.SLANCIO_VITTORIA) return this._chiudi(state, 'vittoria');
-      if (state.slancio <=  this.SLANCIO_SCONFITTA) return this._chiudi(state, 'morte');
+      if (state.slancio >=  this.SLANCIO_VITTORIA)  return this._chiudi(state, 'vittoria');
+      if (state.slancio <=  this.SLANCIO_SCONFITTA) return this._chiudi(state, 'sconfitta');
       return this._chiudi(state, 'stallo');
     }
     return { state };
@@ -151,8 +161,17 @@ const Combat = {
   },
 
   _terrenoBonus(terrain, enemy) {
-    // Placeholder: nemico animale è svantaggiato su strada, vantaggiato in foresta.
-    // Catalogo terrain-vs-archetipo da affinare con js/data/enemies.js.
+    // Affinità di terreno LEGGERE (±1): danno sapore, non decidono lo scontro.
+    // Una bestia è più a suo agio fra gli alberi, il cavaliere in campo aperto.
+    // Un nemico può dichiarare la propria affinità con enemy.terreni:
+    //   { favorevole:[biomi], sfavorevole:[biomi] } — interpretati dal SUO
+    //   punto di vista (favorevole al nemico = malus per il cavaliere).
+    if (enemy.terreni) {
+      if (enemy.terreni.favorevole  && enemy.terreni.favorevole.includes(terrain))  return -1;
+      if (enemy.terreni.sfavorevole && enemy.terreni.sfavorevole.includes(terrain)) return  1;
+      return 0;
+    }
+    // Default per archetipo se il nemico non specifica affinità.
     if (enemy.tipo === 'bestia' && terrain === 2 /*FORESTA*/) return -1;
     if (enemy.tipo === 'bestia' && terrain === 1 /*PIANURA*/) return  1;
     return 0;
@@ -227,7 +246,7 @@ const Combat = {
     state.slancio += 3;
     state.cronaca.push(`${state.round}. Affondo disperato: ferito ma in vantaggio.`);
     if (state.round >= state.roundMax) {
-      return this._chiudi(state, state.slancio > 0 ? 'vittoria' : 'morte');
+      return this._chiudi(state, state.slancio > 0 ? 'vittoria' : 'sconfitta');
     }
     return { state };
   },
