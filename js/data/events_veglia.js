@@ -9,9 +9,12 @@
 // pescaggio casuale: la condition lo tiene comunque fuori dai luoghi una volta
 // finita la Veglia.
 
-// Oro necessario per farsi armare ed essere investiti cavaliere.
-// [DA BILANCIARE] insieme alle paghe dei lavori (vedi EARLY_GAME.md §5).
-const VEGLIA_SOGLIA_INVESTITURA = 12;
+// Soglie della Veglia [DA BILANCIARE] (vedi EARLY_GAME.md §2-§3).
+// L'investitura ora richiede TRE cose: rango scudiero, prima battaglia e oro.
+const VEGLIA_SOGLIA_INVESTITURA = 10;   // oro per farsi armare
+const VEGLIA_SOGLIA_ADDESTRAMENTO = 3;  // sessioni col maestro → scudiero
+// Nemici facili per la prima battaglia fuori porta (catalogo js/data/enemies.js).
+const VEGLIA_NEMICI = ['bestie.lupo', 'banditi.ladro'];
 
 Events.register({
   id: 'veglia.castello',
@@ -62,9 +65,47 @@ Events.register({
         { type: 'volonta', delta: 4 },
         { type: 'forza', delta: -8 },
         { type: 'tempo', passi: 2 },
+        ctx => {
+          Knight.addestramento = (Knight.addestramento || 0) + 1;
+          if (Knight.rango === 'garzone' && Knight.addestramento >= VEGLIA_SOGLIA_ADDESTRAMENTO) {
+            Knight.promuovi('scudiero');
+            ctx.log('Il maestro d\'armi ti riconosce: da oggi sei uno scudiero.');
+          } else if (Knight.rango === 'garzone') {
+            ctx.log('Addestramento ' + Knight.addestramento + '/' + VEGLIA_SOGLIA_ADDESTRAMENTO + '.');
+          }
+        },
       ],
       reply: 'Il vecchio maestro ti concede un\'ora di legno e sudore. ' +
              'Le mani imparano, lo spirito si tempra.',
+    },
+    {
+      text: 'Accettare un incarico fuori porta',
+      // Solo da scudiero: la tua prima vera battaglia (gate dell'investitura).
+      prereq: ctx => ctx.knight.rango !== 'garzone',
+      prereqLabel: '(da scudiero)',
+      effects: [
+        { type: 'forza', delta: -10 },   // a piedi, lento: il tragitto stanca
+        { type: 'tempo', passi: 3 },
+        () => {
+          if (typeof GameScreen === 'undefined' || !GameScreen.openCombat) return;
+          const id = VEGLIA_NEMICI[(Math.random() * VEGLIA_NEMICI.length) | 0];
+          GameScreen.openCombat(id, {
+            onEnd: (esito) => {
+              if (esito === 'vittoria') {
+                Knight.oro += 5;
+                Knight.primaSangue = true;
+                GameScreen._logEvent('Hai avuto la meglio: 5 monete e la tua prima vittoria.');
+              } else if (esito === 'sconfitta') {
+                Knight.primaSangue = true;
+                GameScreen._logEvent('Battuto ma vivo: ora sai cos\'è una battaglia.');
+              } else {
+                GameScreen._logEvent('Ti sei sottratto allo scontro. Nessuna gloria, oggi.');
+              }
+            },
+          });
+        },
+      ],
+      // Nessun reply: la Carta si chiude e parte la scena di combattimento.
     },
     {
       text: 'Visitare il mercato',
@@ -77,17 +118,19 @@ Events.register({
     },
     {
       text: 'Presentarti per l\'investitura',
-      prereq: ctx => ctx.knight.oro >= VEGLIA_SOGLIA_INVESTITURA,
-      prereqLabel: '(servono ' + VEGLIA_SOGLIA_INVESTITURA + ' oro)',
+      // Tre requisiti: scudiero (addestrato), prima battaglia, oro per armarti.
+      prereq: ctx => ctx.knight.rango !== 'garzone'
+                  && ctx.knight.primaSangue
+                  && ctx.knight.oro >= VEGLIA_SOGLIA_INVESTITURA,
+      prereqLabel: '(scudiero · 1ª battaglia · ' + VEGLIA_SOGLIA_INVESTITURA + ' oro)',
       effects: [
         ctx => {
-          // Paghi la tua stessa armatura: un garzone si arma da sé.
-          Knight.oro = Math.max(0, Knight.oro - 10);
+          // Paghi la tua stessa armatura: uno scudiero si arma da sé.
+          Knight.oro = Math.max(0, Knight.oro - VEGLIA_SOGLIA_INVESTITURA);
           // Chiude la Veglia → Prima Era · Passo 1.
           if (typeof Calendar !== 'undefined' && Calendar.fineVeglia) Calendar.fineVeglia();
-          // Promozione di rango e primo equipaggiamento cerimoniale.
-          Knight.titolo = 'Cavaliere Errante';
-          Knight.rango  = 'errante';
+          // Promozione di rango (+ bonus cap) e primo equipaggiamento cerimoniale.
+          Knight.promuovi('errante');
           Knight.equip.arma     = Knight.equip.arma     || 'Spada da arme';
           Knight.equip.armatura = Knight.equip.armatura || 'Giaco di cuoio';
           Knight.equip.viaggio  = Knight.equip.viaggio  || 'Mantello da viandante';

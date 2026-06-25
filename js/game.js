@@ -1048,6 +1048,7 @@ const GameScreen = {
   openCombat(enemy, opts) {
     if (typeof Combat === 'undefined') return false;
     opts = opts || {};
+    this.chronicle = null;   // chiude un'eventuale Carta del cronista che lo lancia
     let remainingPath = null, savedDest = null;
     if (typeof Travel !== 'undefined' && Travel.isActive && Travel.isActive()) {
       remainingPath = Travel.path ? Travel.path.slice(Travel.idx) : null;
@@ -1062,6 +1063,7 @@ const GameScreen = {
       state: Combat.start({ enemy, terrain, knight: Knight }),
       remainingPath, savedDest,
       resumeTravel: !!remainingPath && opts.resumeAfter !== false,
+      onEnd: opts.onEnd || null,   // callback(esito) per ricompense post-scontro
     };
     this._combatBtns = [];
     this._combatPressed = null;
@@ -1093,6 +1095,8 @@ const GameScreen = {
   _closeCombat() {
     const c = this.combat;
     this.combat = null;
+    // Ricompense/conseguenze dell'esito (es. missioni fuori porta della Veglia).
+    if (c && c.onEnd) { try { c.onEnd(c.state.esito); } catch (e) { console.error(e); } }
     // Riprende il viaggio se sospeso (lo step C applichera' qui il ramo esito).
     if (c && c.resumeTravel && c.remainingPath && c.remainingPath.length
         && typeof Travel !== 'undefined') {

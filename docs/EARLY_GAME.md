@@ -191,7 +191,10 @@ lavorando.
 - [DA BILANCIARE] Valore dell'oro, prezzi base, paghe dei lavori, costo del ronzino.
 - [DA BILANCIARE] Frazione di rivendita X.
 - [DA BILANCIARE] Bonus esatti per rango e soglie di promozione.
-- [TBD] Condizioni precise dell'evento di soglia (investitura).
+- L'evento di soglia (investitura) è implementato: richiede **rango scudiero**
+  (3 sessioni col maestro d'armi), **prima battaglia** (un incarico fuori porta
+  vinto/sopravvissuto) e **oro** per armarsi. Numeri [DA BILANCIARE].
+- [TBD] Morte del cavaliere in battaglia: manca lo schermo di game-over.
 - [TBD] Catalogo oggetti iniziali (armi/armature/cavalli) con prezzo base.
 - [TBD] Scelta dell'arco (Missione/Sandbox/Campagna, GDD §2): per ora default
   Sandbox; si aggancia qui quando si affronta S8.
