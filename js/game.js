@@ -107,7 +107,7 @@ const GameScreen = {
       { label: 'STATO',    key: 'stato' },
       { label: 'CONTESTO', key: 'contesto' },
       { label: 'DIARIO',   key: 'log' },
-      { label: 'REGIONE',  key: 'mini' },
+      { label: 'BORSA',    key: 'mini' },
     ];
 
     // Tab del pannello STATO CAVALIERE: una sottosezione alla volta per
@@ -1790,8 +1790,8 @@ const GameScreen = {
     this.drawContext(L.right);
     this.drawPanel(L.log, 'CRONACA EVENTI');
     this.drawLog(L.log, L.log.y + L.log.h - SF(12));
-    this.drawPanel(L.mini, 'MINIMAPPA REGIONALE');
-    this.drawMinimap(L.mini);
+    this.drawPanel(L.mini, 'BORSA E COMPAGNIA');
+    this.drawBorsaCompagnia(L.mini);
     // Barra inferiore: comandi azione + informazioni di gioco.
     this.drawBottomBar(L.bottom);
   },
@@ -1903,14 +1903,14 @@ const GameScreen = {
 
     const titleByKey = {
       stato: 'STATO CAVALIERE', contesto: 'CONTESTO',
-      log: 'DIARIO EVENTI', mini: 'MINIMAPPA REGIONALE',
+      log: 'DIARIO EVENTI', mini: 'BORSA E COMPAGNIA',
     };
     this.drawPanel(card, titleByKey[this.activeOverlay] || '');
 
     if (this.activeOverlay === 'stato')    this.drawKnightStatus(card);
     if (this.activeOverlay === 'contesto') this.drawContext(card);
     if (this.activeOverlay === 'log')      this.drawLog(card, card.y + card.h - SF(16));
-    if (this.activeOverlay === 'mini')     this.drawMinimap(card);
+    if (this.activeOverlay === 'mini')     this.drawBorsaCompagnia(card);
 
     const bandH = SF(26);
     const cs = SF(20);
@@ -2922,6 +2922,106 @@ const GameScreen = {
       ctx.fillText(ln.text, x + indentX, y);
       y += lineH;
     }
+  },
+
+  // BORSA E COMPAGNIA: sostituisce la minimappa nel layout. Mostra la
+  // "spedizione" del cavaliere errante (cavallo + apprendista + compagni)
+  // e la borsa (oro + viveri/scorte). Niente informazioni che svelino la
+  // forma del mondo: il giocatore si orienta solo viaggiando.
+  drawBorsaCompagnia(area) {
+    const ctx = this.ctx;
+    const k = this.knight;
+    const x = area.x + PIXEL * 8;
+    const innerW = area.w - PIXEL * 16;
+    let y = area.y + PIXEL * 4 + SF(26) + SF(10);
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+
+    const drawHeading = (text) => {
+      ctx.fillStyle = '#e8c050';
+      ctx.font = FONT.heading();
+      ctx.textAlign = 'left';
+      ctx.fillText(text, x, y);
+      y += LINEH.heading();
+    };
+
+    const drawLine = (left, right, leftCol, rightCol) => {
+      ctx.font = FONT.body();
+      ctx.fillStyle = leftCol || '#e8d8b0';
+      ctx.textAlign = 'left';
+      ctx.fillText(left, x, y);
+      if (right != null && right !== '') {
+        ctx.fillStyle = rightCol || '#e8d8b0';
+        ctx.textAlign = 'right';
+        ctx.fillText(right, x + innerW, y);
+      }
+      y += LINEH.body();
+    };
+
+    // ── COMPAGNIA ────────────────────────────────────────────────────────
+    drawHeading('COMPAGNIA');
+
+    // Cavallo (o "a piedi")
+    if (k.cavallo) {
+      const c = k.cavallo;
+      const pct = c.vigoreMax > 0 ? c.vigore / c.vigoreMax : 0;
+      const tired = c.vigore === 0;
+      const lowV  = pct <= 0.3 && !tired;
+      const nameCol = tired ? '#ff5050' : (lowV ? '#ffa040' : '#e8d8b0');
+      const stato = tired ? 'stremato' : (lowV ? 'stanco' : 'fresco');
+      const statoCol = tired ? '#ff5050' : (lowV ? '#ffa040' : '#a8e878');
+      drawLine('◐ ' + c.nome, stato, nameCol, statoCol);
+      // Mini-barra vigore subito sotto il nome.
+      const barX = x + SF(14);
+      const barW = innerW - SF(20);
+      const barH = SF(6);
+      ctx.fillStyle = '#1a0e04';
+      ctx.fillRect(barX, y, barW, barH);
+      drawPixelRectStroke(ctx, barX, y, barW, barH, '#5a3a18');
+      const fillW = Math.max(0, Math.floor(barW * pct));
+      ctx.fillStyle = tired ? '#ff5050' : (lowV ? '#ffa040' : '#6ce06a');
+      ctx.fillRect(barX, y, fillW, barH);
+      y += barH + SF(6);
+    } else {
+      drawLine('◐ A piedi', 'no cavalcatura', '#a07038', '#a07038');
+    }
+
+    // Apprendista
+    if (k.apprendista) {
+      const a = k.apprendista;
+      drawLine('☉ ' + (a.nome || 'Apprendista'), 'apprendista', '#e8d8b0', '#a07038');
+    }
+
+    // Compagni (max 3)
+    if (Array.isArray(k.compagni) && k.compagni.length > 0) {
+      const glyph = { lama: '⚔', ombra: '◑', conoscitore: '✒' };
+      const archLab = { lama: 'lama', ombra: 'ombra', conoscitore: 'conoscitore' };
+      for (const c of k.compagni) {
+        const g = glyph[c.archetipo] || '◇';
+        const arch = archLab[c.archetipo] || (c.archetipo || '');
+        drawLine(g + ' ' + (c.nome || '—'), arch, '#e8d8b0', '#a07038');
+      }
+    }
+
+    // Nessun seguito? Nota tematica.
+    const haSeguito = !!k.apprendista || (Array.isArray(k.compagni) && k.compagni.length > 0);
+    if (!haSeguito) {
+      ctx.fillStyle = '#a07038';
+      ctx.font = FONT.valueI ? FONT.valueI() : FONT.body();
+      ctx.textAlign = 'left';
+      ctx.fillText('Cavalchi solo.', x, y);
+      y += LINEH.body();
+    }
+
+    y += SF(14);
+
+    // ── BORSA ─────────────────────────────────────────────────────────────
+    drawHeading('BORSA');
+    drawLine('◉ Oro', (k.oro != null ? k.oro : 0) + ' mo', '#e8c050', '#ffd060');
+    // Viveri/scorte: il sistema ancora non esiste — placeholder neutro così
+    // l'utente sa dov'è quando lo introdurremo.
+    drawLine('⊕ Viveri', '—', '#e8d8b0', '#a07038');
   },
 
   drawMinimap(area) {
