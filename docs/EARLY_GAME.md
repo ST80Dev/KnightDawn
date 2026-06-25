@@ -78,8 +78,12 @@ ti ricevono).
 
 ## 3. Azioni e missioni del garzone (Veglia)
 
-Tutto passa per la **Carta del cronista** del castello (GDD §3): scelte tematiche,
-niente real-time. **Ogni azione consuma Passi** e rende **pochi oro**.
+La Veglia usa la **Vista luoghi — Layout top-down** (`docs/GRAFICA.md §2b`,
+implementata in `js/castle.js`): il garzone vede il **cortile del castello
+dall'alto** con gli **edifici cliccabili** (stalla, cortile, taverna, sala
+d'armi, armeria/mercato, portale, cappella). Recandosi a un edificio — il marker
+ci si sposta da solo, *non* navigazione libera — si apre la sua **Carta del
+cronista** con il compito. **Ogni azione consuma Passi** e rende **pochi oro**.
 
 ### Lavori al castello — oro sicuro, basso
 

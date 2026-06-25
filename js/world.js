@@ -55,6 +55,7 @@ const World = {
   structures: [], // [{ type:'castle'|'village', x, y, name }]
   specials: [],   // [{ x, y, kind, discovered, name }] — luoghi ignoti agli estremi
   knightStart: { x: 0, y: 0 },
+  regionName: '', // nome della regione, generato per-seed (vedi _generaRegione)
   fog: null,      // Uint8Array per tile: 0=ignoto, 1=intravisto, 2=esplorato
 
   // Costanti livello nebbia.
@@ -112,6 +113,45 @@ const World = {
     'Brilonde', 'Aelinor', 'Sothmere', 'Felwyn', 'Edhelas', 'Mirathan',
     'Lorensil', 'Cellondir', 'Thanduil', 'Eilmoth',
   ],
+
+  // ─── Nome della regione (generato per-seed) ───────────────────────────────
+  // Incastri casuali tra "tipo geografico" e nome proprio, in registro
+  // fantasy europeo (anglo / cavalleresco / tolkieniano). Esempi:
+  // "Le Marche di Vorn", "Le Terre del Cervo", "Il Dominio di Mordreth".
+  REGION_TIPI: [
+    'Le Marche di', 'Le Terre di', 'La Costa di', 'Le Lande di', 'I Reami di',
+    'Il Dominio di', 'Le Valli di', 'I Confini di', 'Le Brughiere di',
+    'Il Margravato di', 'Le Contee di', 'Le Alte Terre di', 'Il Ducato di',
+    'I Feudi di',
+  ],
+  REGION_PROPRI: [
+    'Vorn', 'Ashmoor', 'Greymark', 'Mordreth', 'Calanthe', 'Eldmere', 'Karhold',
+    'Drennan', 'Valduin', 'Thornvale', 'Blackfen', 'Caldoris', 'Rhunmar',
+    'Stenwald', 'Morvane', 'Dunmar', 'Aspramonte', 'Belmonte', 'Roccaspra',
+  ],
+  // Forma alternativa "Le Terre del {epiteto}".
+  REGION_EPITETI: [
+    'Cervo', 'Corvo', 'Lupo', 'Confine', 'Nord', 'Gelo', 'Ferro', 'Tramonto',
+    'Sole Morente', 'Drago Spento', 'Silenzio', 'Lamento', 'Cinghiale',
+  ],
+
+  // Mescola in loco una copia di arr con l'RNG dato (Fisher-Yates).
+  _shuffle(arr, rng) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      const t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+    }
+    return arr;
+  },
+
+  _generaRegione(rng) {
+    if (rng() < 0.3) {
+      return 'Le Terre del ' + this.REGION_EPITETI[(rng() * this.REGION_EPITETI.length) | 0];
+    }
+    const tipo = this.REGION_TIPI[(rng() * this.REGION_TIPI.length) | 0];
+    const prop = this.REGION_PROPRI[(rng() * this.REGION_PROPRI.length) | 0];
+    return tipo + ' ' + prop;
+  },
 
   // Esplora intorno al cavaliere con due cerchi concentrici:
   // - fullR: tile portati a ESPLORATO (= ci sei stato o vicino abbastanza)
@@ -678,6 +718,13 @@ const World = {
   _placeStructures() {
     const B = this.BIOME;
     const rnd = mulberry32((this.seed ^ 0xC0FFEE) >>> 0);
+    // RNG separato per i NOMI: non consuma lo stream di posizionamento, così i
+    // nomi variano per-seed senza spostare le strutture (vecchi save intatti).
+    const nameRng = mulberry32((this.seed ^ 0x5EED1234) >>> 0);
+    const castleNames  = this._shuffle(this.CASTLE_NAMES.slice(),  nameRng);
+    const keepNames    = this._shuffle(this.KEEP_NAMES.slice(),    nameRng);
+    const villageNames = this._shuffle(this.VILLAGE_NAMES.slice(), nameRng);
+    this.regionName = this._generaRegione(nameRng);
     this.structures = [];
     const W = this.width, H = this.height;
     const isPlainAny = (b) => (b === B.PIANURA || b === B.PIANURA_N || b === B.PIANURA_S);
@@ -693,7 +740,7 @@ const World = {
       if ((b === B.COLLINA || isPlainAny(b)) &&
           this._farFromType(x, y, ['castle'], 26)) {
         this.structures.push({ type: 'castle', x, y,
-          name: this.CASTLE_NAMES[ci % this.CASTLE_NAMES.length] });
+          name: castleNames[ci % castleNames.length] });
         ci++;
       }
     }
@@ -713,7 +760,7 @@ const World = {
           this._farFromType(x, y, ['castle'], 14) &&
           this._farFromType(x, y, ['keep'], 11)) {
         this.structures.push({ type: 'keep', x, y,
-          name: this.KEEP_NAMES[ki % this.KEEP_NAMES.length] });
+          name: keepNames[ki % keepNames.length] });
         ki++;
       }
     }
@@ -734,7 +781,7 @@ const World = {
       // Bonus vicino acqua come prima
       if (this._nearWater(x, y, 2) || rnd() < 0.5) {
         this.structures.push({ type: 'village', x, y,
-          name: this.VILLAGE_NAMES[vi % this.VILLAGE_NAMES.length] });
+          name: villageNames[vi % villageNames.length] });
         vi++;
       }
     }
