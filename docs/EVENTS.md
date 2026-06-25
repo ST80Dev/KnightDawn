@@ -236,6 +236,38 @@ Campi nuovi (additivi, retro-compatibili con S3):
 - `portata` — autoriale: `marginale|notevole|svolta`.
 - `if` — prereq di selezione: `{ repMin, repMax, onoreMin, onoreMax, titolo }`.
 
+#### Costo in Passi delle azioni (atomico)
+
+Le scelte narrative dentro a un luogo NON consumano tempo per il solo
+fatto di essere lette o esplorate — il loro **costo in Passi scatta
+all'atto della conferma**, in un singolo tick atomico (vedi GDD §3
+"Modello del tempo").
+
+**Convenzione canonica:** ogni opzione che rappresenta un'azione con
+durata in-fiction dichiara come primo effetto
+
+```js
+{ type: 'tempo', passi: N }
+```
+
+L'effetto `tempo` è gestito da `Events._applyDescEffect`: chiama
+`Calendar.avanza(N)` e poi `Events.tickDeadlines()`, così le scadenze
+attive vengono spuntate coerentemente. Tabella di riferimento dei costi
+standard in `docs/GDD.md` §3.
+
+Esempio (riposo alla locanda):
+```js
+{ text: 'Riposa la notte (8 Passi)', effects: [
+    { type: 'tempo', passi: 8 },
+    { type: 'forza', delta: +30 },
+    { type: 'oro',   delta: -2 },
+    { type: 'log',   text: 'La notte alla locanda ti restituisce vigore.' },
+]}
+```
+
+Le azioni "gratuite" (osservare, chiacchierare in modo informale, leggere
+un'iscrizione) NON dichiarano `tempo`. Cliccarle non muove il calendario.
+
 `where` supporta più forme:
 - `{ biomes:[int] }` — travel
 - `'castle' | 'village' | 'keep'` — legacy struttura intera (fallback)

@@ -165,11 +165,59 @@ Era → Luce → Stagione → Diario → Passo
 
 #### Velocità di gioco e tempo reale
 
-Il giocatore può regolare la velocità da 4 a 30 secondi per Passo.
-A velocità massima una Luce dura ~2,7 ore reali, un'Era ~13 ore.
-A velocità minima una Luce dura ~20 ore reali, un'Era ~100 ore.
+Il giocatore può regolare la velocità da 3 a 60 secondi per Passo (preset
+`[60, 30, 15, 7.5, 3]`, default 15 s/passo). Il pulsante `+` accelera,
+`−` rallenta. A velocità massima una Luce dura ~2 ore reali, un'Era ~10
+ore. A velocità minima una Luce dura ~40 ore reali, un'Era ~200 ore.
 Le pause per eventi, combattimento e scelte allungano la sessione reale
 senza far avanzare i Passi.
+
+#### Modello del tempo: cosa scorre e quando
+
+Il tempo reale regolabile (s/passo) governa **solo il viaggio libero
+sulla mappa**. Tutto il resto è discreto e atomico, scandito dalle
+azioni del giocatore — non dal cronometro.
+
+| Contesto                          | Come scorre il tempo                              |
+|-----------------------------------|---------------------------------------------------|
+| Viaggio libero su mappa           | 1 Passo ogni *N* secondi reali (velocità scelta)  |
+| **Pausa (`II/▶`)**                | **Nulla scorre**: né Passi, né deadlines, né mondo |
+| Pausa modale (pre-recap, POI)     | Come la pausa: nulla scorre                       |
+| Lettura evento / scelta narrativa | Nulla scorre durante la lettura                   |
+| Azione atomica dentro luogo       | *N* Passi scattano d'un colpo a conferma azione   |
+| Combattimento (Round interattivi) | 1 Passo a ogni Round confermato dal giocatore     |
+
+**Conseguenze di design:**
+
+- **La pausa è UX, mai meccanica.** Serve a leggere e decidere senza
+  fretta. Mettere in pausa per "guadagnare tempo nel mondo" non esiste:
+  il mondo è fermo quanto te.
+- **Le azioni costano Passi solo alla conferma.** Entrare in una taverna
+  non costa nulla; scegliere *"Riposa la notte"* fa scattare gli 8 Passi
+  in un solo tick atomico (Calendar avanza, deadlines vengono spuntate,
+  recuperi vengono applicati), poi lo stato torna a quello precedente —
+  se eri in pausa, resti in pausa. Nessuna tensione passiva sul testo.
+- **Il combattimento sospende il tempo reale** e diventa puro turn-based:
+  il cronometro si ferma e ogni Round confermato (auto, fuga, resa,
+  parlamento, colpo) avanza il calendario di 1 Passo. La durata reale
+  del combattimento è decisa dal giocatore, non dal sistema.
+- **Le deadlines (`addDeadline`) vengono spuntate solo quando il Passo
+  scatta davvero** — viaggio, azione atomica, Round combat. Una scadenza
+  fissata a 60 Passi non scade mentre stai leggendo un evento.
+
+**Costi standard per azione atomica** (riferimento, ogni evento decide
+il proprio valore dichiarando `{type:'tempo', passi:N}` nei suoi effetti
+— vedi `docs/EVENTS.md`):
+
+| Azione                                | Passi  | In-fiction  |
+|---------------------------------------|-------:|-------------|
+| Parlare con NPC, chiedere informazioni|  1     | ~3 ore      |
+| Contrattare al mercato                |  1–3   | mezza giornata |
+| Curare ferita lieve                   |  2–4   | mezza giornata |
+| Addestrarsi / studiare                |  4–8   | un giorno   |
+| Riposare alla locanda (notte)         |  8–12  | un giorno+notte |
+| Convalescenza (ferita grave)          | 20–40  | una settimana |
+| Forgiare / commissionare arma         | 12–24  | 3–5 giorni  |
 
 #### Corrispondenza con viaggio medievale
 
@@ -218,15 +266,17 @@ Durante la Veglia:
 
 ### Combattimento
 
-Automatico ma NON istantaneo — si risolve in round visibili.
-Durata proporzionale alla complessità dello scontro.
+Combattimento **a Round interattivi** (vedi `docs/COMBAT.md`). Sospende
+il tempo reale del viaggio e diventa turn-based puro: il calendario
+avanza di 1 Passo solo a ogni Round confermato dal giocatore (auto,
+fuga, resa, parlamento, colpo disperato).
 
-- Ogni round: calcolo attacco/difesa basato su attributi + armi + status
-- Modificatori: ferite accumulate, stanchezza viaggio, bonus terreno, arti magiche,
-  qualità armi, vantaggio numerico
-- Output visivo: barre HP che scendono, testo nel log, possibilità di fuga
-- Il giocatore NON sceglie azioni durante il combattimento — osserva il risultato
-  delle sue decisioni pregresse (equipaggiamento, alleanze, preparazione)
+- Risultato del singolo Round automatico (attributi + equipaggiamento +
+  terreno + ferite + vantaggio numerico); il **percorso dello scontro**
+  è scelto dal giocatore.
+- Durata in Round scala con la complessità (ladro 1, cavaliere 4-6,
+  battaglia 10-20). Letale: morte possibile.
+- Output: barre HP visibili, cronaca testuale, scelte per Round.
 
 [TBD] Formula di combattimento dettagliata → `docs/COMBAT.md`
 [TBD] Tabella creature e avversari
