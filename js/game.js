@@ -203,7 +203,30 @@ const GameScreen = {
   // Dispatch dei pulsanti azione della barra inferiore.
   _handleAction(action) {
     if (action === 'interagisci') { this._interact(); return; }
+    if (action === 'accampa')     { this._accampa();  return; }
     console.log('Azione gioco:', action);
+  },
+
+  // Accampa: breve sosta (2 Passi) che ridà Forza al cavaliere e riposa il
+  // cavallo (Vigore pieno). Non durante il viaggio.
+  _accampa() {
+    if (Travel.isActive()) {
+      this._logEvent('Non puoi accamparti mentre viaggi: fermati prima.');
+      window.GameRender.invalidate();
+      return;
+    }
+    Knight.recupera('accampamento');
+    let extra = '.';
+    if (Knight.cavallo) {
+      Knight.cavallo.vigore = Knight.cavallo.vigoreMax;
+      extra = ' e ' + Knight.cavallo.nome + ' riprende fiato.';
+    }
+    if (typeof Calendar !== 'undefined') {
+      Calendar.avanza(2);
+      if (typeof Events !== 'undefined' && Events.tickDeadlines) Events.tickDeadlines();
+    }
+    this._logEvent('Ti accampi: riprendi le forze' + extra);
+    window.GameRender.invalidate();
   },
 
   // INTERAGISCI: in Veglia riapre l'hub del garzone; altrimenti, se il
@@ -257,7 +280,14 @@ const GameScreen = {
     return true;
   },
 
-  // Oggetti equipaggiati rivendibili (in catalogo), in ordine di slot.
+  // Merce acquistabile: equipaggiamento + cavalli (categoria 'cavallo').
+  _buyList() {
+    const equip = Items.buyList().map(x => ({ ...x, kind: 'equip' }));
+    const mounts = Items.mountList().map(x => ({ ...x, kind: 'cavallo', slot: 'cavallo' }));
+    return equip.concat(mounts);
+  },
+
+  // Oggetti rivendibili: equipaggiamento (in catalogo) + cavallo posseduto.
   _sellList() {
     const out = [];
     for (const slot of Items.SLOT_ORDER) {
@@ -265,23 +295,46 @@ const GameScreen = {
       if (!nome) continue;
       out.push({ nome, slot, glyph: Items.glyphOf(nome), back: Items.rivendita(nome) });
     }
+    if (Knight.cavallo) {
+      out.push({
+        kind: 'cavallo', id: Knight.cavallo.id, nome: Knight.cavallo.nome,
+        glyph: '♞', back: Items.mountResale(Knight.cavallo.id),
+      });
+    }
     return out;
+  },
+
+  _marketBuyMount(id) {
+    const m = Items.MOUNTS[id];
+    if (!m) return;
+    if (Knight.cavallo && Knight.cavallo.id === id) { this._logEvent('Lo possiedi già.'); return; }
+    const oldNome = Knight.cavallo ? Knight.cavallo.nome : null;
+    const back = Knight.cavallo ? Items.mountResale(Knight.cavallo.id) : 0;   // permuta
+    if (Knight.oro + back < m.prezzo) { this._logEvent('Non hai abbastanza oro.'); return; }
+    Knight.oro = Knight.oro + back - m.prezzo;
+    if (oldNome) this._logEvent(`Cedi ${oldNome} (+${back} mo) e compri ${m.nome} per ${m.prezzo} mo.`);
+    else         this._logEvent(`Compri ${m.nome} per ${m.prezzo} mo.`);
+    Knight.cavallo = Items.makeMount(id);
+  },
+
+  _marketSellMount() {
+    if (!Knight.cavallo) return;
+    const back = Items.mountResale(Knight.cavallo.id);
+    this._logEvent(`Vendi ${Knight.cavallo.nome} per ${back} mo.`);
+    Knight.oro += back;
+    Knight.cavallo = null;
   },
 
   _marketBuy(nome) {
     const it = Items.catalog[nome];
     if (!it) return;
     if (Knight.equip[it.slot] === nome) { this._logEvent('Lo possiedi già.'); return; }
-    if (Knight.oro < it.prezzo) { this._logEvent('Non hai abbastanza oro.'); return; }
-    Knight.oro -= it.prezzo;
     const old = Knight.equip[it.slot];
-    if (old) {
-      const back = Items.rivendita(old);
-      Knight.oro += back;
-      this._logEvent(`Cedi ${old} (+${back} mo) e acquisti ${nome} per ${it.prezzo} mo.`);
-    } else {
-      this._logEvent(`Acquisti ${nome} per ${it.prezzo} mo.`);
-    }
+    const back = old ? Items.rivendita(old) : 0;     // permuta del pezzo in uso
+    if (Knight.oro + back < it.prezzo) { this._logEvent('Non hai abbastanza oro.'); return; }
+    Knight.oro = Knight.oro + back - it.prezzo;
+    if (old) this._logEvent(`Cedi ${old} (+${back} mo) e acquisti ${nome} per ${it.prezzo} mo.`);
+    else     this._logEvent(`Acquisti ${nome} per ${it.prezzo} mo.`);
     Knight.equip[it.slot] = nome;
   },
 
@@ -317,7 +370,7 @@ const GameScreen = {
     const ctx = this.ctx;
     const W = window.UI.w, H = window.UI.h;
     const mk = this.market;
-    const list = mk.tab === 'buy' ? Items.buyList() : this._sellList();
+    const list = mk.tab === 'buy' ? this._buyList() : this._sellList();
 
     const headerH = SF(38), tabH = SF(30), rowH = SF(30), rowGap = SF(4);
     const cw = Math.min(SF(440), W - SF(24));
@@ -388,17 +441,27 @@ const GameScreen = {
       let disabled = false, leftTxt, rightTxt, accent = '#a08050', act;
 
       if (mk.tab === 'buy') {
-        const owned = Knight.equip[item.slot] === item.nome;
-        const afford = Knight.oro >= item.prezzo;
+        const owned = item.kind === 'cavallo'
+          ? !!(Knight.cavallo && Knight.cavallo.id === item.id)
+          : Knight.equip[item.slot] === item.nome;
+        // La permuta del pezzo/cavallo in uso riduce il costo effettivo.
+        const tradeIn = item.kind === 'cavallo'
+          ? (Knight.cavallo ? Items.mountResale(Knight.cavallo.id) : 0)
+          : (Knight.equip[item.slot] ? Items.rivendita(Knight.equip[item.slot]) : 0);
+        const afford = (Knight.oro + tradeIn) >= item.prezzo;
         disabled = owned || !afford;
         leftTxt = item.glyph + '  ' + item.nome + (owned ? '  (in uso)' : '');
         rightTxt = owned ? '—' : item.prezzo + ' mo';
-        if (!disabled) act = () => this._marketBuy(item.nome);
+        if (!disabled) act = item.kind === 'cavallo'
+          ? () => this._marketBuyMount(item.id)
+          : () => this._marketBuy(item.nome);
       } else {
         disabled = item.back <= 0;
         leftTxt = item.glyph + '  ' + item.nome;
         rightTxt = item.back > 0 ? '+' + item.back + ' mo' : '—';
-        if (!disabled) act = () => this._marketSell(item.slot);
+        if (!disabled) act = item.kind === 'cavallo'
+          ? () => this._marketSellMount()
+          : () => this._marketSell(item.slot);
       }
 
       ctx.fillStyle = disabled ? '#180f06' : '#2a1808';
@@ -757,6 +820,9 @@ const GameScreen = {
       const c = TRAVEL_COST[b];
       if (c != null) forzaCost += c;
     }
+    // Stima: in sella il cavaliere spende meno Forza (×0,7). Approssimazione —
+    // non modella l'esaurimento del Vigore a metà tragitto.
+    if (Knight.isMounted && Knight.isMounted()) forzaCost *= 0.7;
     const terrainList = [...terrains.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
     const structures  = World.structures.filter(s => onPath.has(s.y * World.width + s.x));
     const willExhaust = forzaCost > this.knight.forza.cur;
@@ -1561,6 +1627,10 @@ const GameScreen = {
       onBlocked: (reason) => {
         this.meta.destinazione = 'nessuna';
         if (reason === 'esausto') this._logEvent('Crolli per la stanchezza: ti fermi.');
+        else if (reason === 'cavallo') {
+          const nome = (Knight.cavallo && Knight.cavallo.nome) || 'Il cavallo';
+          this._logEvent(`${nome} è stremato: abbeveralo a un fiume o accampati. Puoi proseguire a piedi.`);
+        }
         else this._logEvent('Il cammino si interrompe.');
       },
     });
@@ -2365,6 +2435,45 @@ const GameScreen = {
       ctx.fillText(val || '— vuoto —', x + w - SF(8), cy);
 
       y += rowH;
+    }
+
+    // Riga cavallo (montatura): asse separato dall'equip (viaggio + battaglia).
+    {
+      const cav = k.cavallo;
+      ctx.fillStyle = '#2a1808';
+      ctx.fillRect(x, y, w, rowH - SF(2));
+      ctx.fillStyle = '#6a4a1a';
+      ctx.fillRect(x, y, SF(3), rowH - SF(2));
+      const cyR = y + (rowH - SF(2)) / 2;
+      ctx.fillStyle = '#caa050'; ctx.font = FONT.heading();
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText('♞', x + SF(10), cyR);
+      ctx.fillStyle = '#e8c050'; ctx.font = FONT.label();
+      ctx.fillText('CAVALLO', x + SF(28), cyR);
+      ctx.fillStyle = cav ? '#e8d8b0' : '#7a5a2a';
+      ctx.font = cav ? FONT.body() : FONT.bodyI();
+      ctx.textAlign = 'right';
+      ctx.fillText(cav ? cav.nome : '— a piedi —', x + w - SF(8), cyR);
+      y += rowH;
+
+      if (cav) {
+        const barH = SF(10);
+        const pct = cav.vigoreMax > 0 ? cav.vigore / cav.vigoreMax : 0;
+        ctx.fillStyle = '#e8c050'; ctx.font = FONT.caption();
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText('VIGORE', x + SF(2), y + barH / 2);
+        const bx = x + SF(60), bw = w - SF(60) - SF(74);
+        ctx.fillStyle = '#000'; ctx.fillRect(bx, y, bw, barH);
+        const col = pct >= 0.5 ? '#6ce06a' : pct >= 0.25 ? '#ffa040' : '#ff5050';
+        ctx.fillStyle = col;
+        ctx.fillRect(bx + PIXEL, y + PIXEL, Math.max(0, (bw - PIXEL * 2) * pct), barH - PIXEL * 2);
+        drawPixelRectStroke(ctx, bx, y, bw, barH, '#5a3a18');
+        ctx.fillStyle = '#caa050'; ctx.textAlign = 'right';
+        const possaTxt = cav.possa ? '  ·  possa ' + cav.possa : '  ·  no battaglia';
+        ctx.fillText(cav.vigore + '/' + cav.vigoreMax + possaTxt, x + w - SF(2), y + barH / 2);
+        y += barH + SF(6);
+      }
+      ctx.textBaseline = 'top';
     }
 
     y += SF(14);

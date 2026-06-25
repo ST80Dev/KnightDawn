@@ -66,6 +66,7 @@ const Knight = {
 
   reputazione: [],
   oro: 0,
+  cavallo: null,   // null = a piedi; altrimenti { id, nome, vigore, vigoreMax }
   apprendista: null,
   compagni: [],   // max 3: { nome, archetipo:'lama'|'ombra'|'conoscitore', fedelta }
 
@@ -99,9 +100,18 @@ const Knight = {
     ];
 
     this.oro          = 3;
+    this.cavallo      = null;   // il garzone parte a piedi: compra un ronzino al mercato
     this.apprendista  = null;
     this.compagni     = [];
   },
+
+  // ─── Cavallo (montatura) — vedi js/data/items.js e docs/EARLY_GAME.md ──────
+  // A cavallo (con vigore) il viaggio costa meno Forza al cavaliere; il cavallo
+  // però consuma Vigore tile per tile e, a Vigore 0, è stremato: bisogna
+  // abbeverarlo a un fiume o riposare (accampa). Il sistema riguarda SOLO il
+  // cavaliere: la compagnia viaggia con lui in astratto (GDD §2 Seguito).
+  isMounted()    { return !!(this.cavallo && this.cavallo.vigore > 0); },
+  isHorseTired() { return !!(this.cavallo && this.cavallo.vigore <= 0); },
 
   // Nome leggibile del rango corrente (per UI/log).
   rangoNome() {
@@ -112,9 +122,25 @@ const Knight = {
   // Consuma Forza per il bioma del tile percorso.
   // Ritorna false se il tile è impassabile, true altrimenti.
   consumaForza(biome) {
-    const cost = TRAVEL_COST[biome];
-    if (cost == null) return false;
+    const base = TRAVEL_COST[biome];
+    if (base == null) return false;
+
+    // A cavallo (con vigore) il cavaliere fatica meno: sconto sulla Forza.
+    const mounted = this.isMounted();
+    const cost = base * (mounted ? 0.7 : 1.0);
     this.forza.cur = Math.max(0, +(this.forza.cur - cost).toFixed(3));
+
+    if (this.cavallo) {
+      if (mounted) {
+        // Vigore: terreni duri (montagna/palude/neve/ghiaccio) stancano il doppio.
+        const dura = (biome === 4 || biome === 5 || biome === 7 || biome === 8);
+        this.cavallo.vigore = Math.max(0, this.cavallo.vigore - (dura ? 2 : 1));
+      }
+      // Abbeverata: attraversare un fiume ridà fiato al cavallo.
+      if (biome === 9) {
+        this.cavallo.vigore = Math.min(this.cavallo.vigoreMax, this.cavallo.vigore + 8);
+      }
+    }
     return true;
   },
 

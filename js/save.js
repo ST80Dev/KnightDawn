@@ -62,6 +62,7 @@ const Save = {
       equip: { ...Knight.equip },
       reputazione: Knight.reputazione.map(r => ({ ...r })),
       oro: Knight.oro,
+      cavallo: Knight.cavallo ? { ...Knight.cavallo } : null,
       apprendista: Knight.apprendista,
       compagni: Knight.compagni.map(c => ({ ...c })),
     };
@@ -83,6 +84,7 @@ const Save = {
     Knight.equip    = k.equip;
     Knight.reputazione = k.reputazione;
     Knight.oro         = k.oro;
+    Knight.cavallo     = k.cavallo || null;   // back-compat: salvataggi pre-cavallo
     Knight.apprendista = k.apprendista;
     Knight.compagni    = k.compagni;
 

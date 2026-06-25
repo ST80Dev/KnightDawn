@@ -41,6 +41,41 @@ const Items = {
   // Valore di rivendita (frazione fissa del prezzo base, arrotondata in basso).
   rivendita(nome) { return Math.floor(this.prezzo(nome) * this.RESALE); },
 
+  // ── Cavalli (montature) ──────────────────────────────────────────────────
+  // Ogni cavallo ha DUE caratteristiche su assi diversi:
+  //   vigoreMax = riserva di VIAGGIO: tile percorribili a cavallo prima che sia
+  //               stremato (poi serve un fiume o una sosta). Vedi consumaForza.
+  //   possa     = forza in BATTAGLIA: bonus al combattimento quando si è in
+  //               sella (vedi js/combat.js). Un destriero da guerra carica
+  //               forte; un palafreno da sella è comodo ma inutile in mischia.
+  // I tier sono SPECIALIZZATI, non una scala lineare: si sceglie tra cavallo da
+  // viaggio (molto vigore, poca possa) e cavallo da guerra (molta possa, meno
+  // autonomia). Numeri [DA BILANCIARE].
+  MOUNTS: {
+    ronzino:   { nome: 'Ronzino',   prezzo: 14, vigoreMax: 20, possa: 0, glyph: '♞' },
+    corsiero:  { nome: 'Corsiero',  prezzo: 38, vigoreMax: 40, possa: 1, glyph: '♞' },
+    destriero: { nome: 'Destriero', prezzo: 60, vigoreMax: 28, possa: 3, glyph: '♞' },
+    palafreno: { nome: 'Palafreno', prezzo: 46, vigoreMax: 52, possa: 0, glyph: '♞' },
+  },
+
+  // Lista cavalli acquistabili.
+  mountList() {
+    return Object.keys(this.MOUNTS).map(id => ({ id, ...this.MOUNTS[id] }));
+  },
+
+  // Crea un'istanza di montatura (vigore pieno) da mettere in Knight.cavallo.
+  makeMount(id) {
+    const m = this.MOUNTS[id];
+    if (!m) return null;
+    return { id, nome: m.nome, vigore: m.vigoreMax, vigoreMax: m.vigoreMax, possa: m.possa || 0 };
+  },
+
+  // Valore di rivendita di una montatura (stessa frazione fissa).
+  mountResale(id) {
+    const m = this.MOUNTS[id];
+    return m ? Math.floor(m.prezzo * this.RESALE) : 0;
+  },
+
   // Lista acquistabile: tutti gli oggetti del catalogo, ordinati per slot e
   // poi per prezzo crescente (così i più economici sono in cima).
   buyList() {

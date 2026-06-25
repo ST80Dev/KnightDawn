@@ -147,7 +147,46 @@ solo **manutenzione e lieve potenziamento**, non compravendita. Sistemi separati
 
 ---
 
-## 5. Aperti / da definire
+## 5. Cavallo (montatura)
+
+Il cavallo riguarda **solo il cavaliere POV**. La compagnia (Seguito, GDD §2)
+viaggia con lui in astratto: nessun cavallo né logistica per i compagni, che
+contribuiscono solo in battaglia o con bonus speciali.
+
+Ogni cavallo ha **due caratteristiche su assi diversi**:
+
+- **Vigore** — riserva di **viaggio**. Cala tile per tile cavalcando (doppio sui
+  terreni duri: montagna, palude, neve, ghiaccio). A 0 il cavallo è **stremato**:
+  si prosegue a piedi finché non recupera. Si ricarica **abbeverandosi a un fiume**
+  (attraversare un tile fiume) o con una **sosta** (accampa → Vigore pieno).
+- **Possa** — forza in **battaglia**: bonus al combattimento quando si è in sella
+  (dimezzato su terreni chiusi: foresta/palude/montagna; nullo se stremato).
+
+A cavallo (con Vigore) il cavaliere **spende meno Forza** per tile (×0,7): è il
+vantaggio di viaggio. A piedi o a cavallo stremato, la Forza si consuma come al
+solito.
+
+I **tier sono specializzati**, non una scala lineare — si sceglie tra cavallo da
+viaggio e cavallo da guerra [DA BILANCIARE]:
+
+| Cavallo | Prezzo | Vigore | Possa | Vocazione |
+|---|---|---|---|---|
+| **Ronzino**   | 14 | 20 | 0 | da garzone, povero in tutto |
+| **Corsiero**  | 38 | 40 | 1 | gran viaggiatore, poca battaglia |
+| **Destriero** | 60 | 28 | 3 | cavallo da guerra, autonomia media |
+| **Palafreno** | 46 | 52 | 0 | comodo e di lungo raggio, nullo in mischia |
+
+Si compra/vende al **mercato** (categoria cavalli); comprarne uno nuovo **permuta**
+in automatico il precedente. Il garzone si compra il primo ronzino in Veglia
+lavorando.
+
+> [TBD] Il cavallo può essere **ferito o perso** in battaglia/eventi (per ora è al
+> sicuro). [TBD] La cura dei cavalli in Veglia potrebbe sbloccare l'accesso a
+> cavalli migliori.
+
+---
+
+## 6. Aperti / da definire
 
 - [DA BILANCIARE] Valore dell'oro, prezzi base, paghe dei lavori, costo del ronzino.
 - [DA BILANCIARE] Frazione di rivendita X.
