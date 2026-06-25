@@ -1979,10 +1979,12 @@ const GameScreen = {
     const btnY = area.y + Math.floor((area.h - btnH) / 2);
     const ctrlLeftX = this._drawTimeControls(this.menuBtn.x - SF(6), btnY, btnH);
 
-    // Riquadro data schematico a sx della toolbar tempo.
-    const boxH = SF(compact ? 38 : 44);
+    // Riquadro data a sx della toolbar tempo. In compatto la larghezza
+    // disponibile è limitata dal titolo KNIGHT DAWN a sinistra.
+    const boxH = SF(compact ? 46 : 44);
     const boxY = area.y + Math.floor((area.h - boxH) / 2);
-    this._drawDateBox(ctrlLeftX - SF(6), boxY, boxH);
+    const boxMaxW = ctrlLeftX - area.x - SF(compact ? 210 : 240);
+    this._drawDateBox(ctrlLeftX - SF(6), boxY, boxH, boxMaxW);
 
     if (!compact) drawCompassRose(ctx, area.x + area.w / 2, area.y + area.h / 2, SF(26));
     ctx.textBaseline = 'top';
@@ -2016,8 +2018,8 @@ const GameScreen = {
     this._drawMenuButton(this.menuBtn);
 
     // Toolbar tempo a sinistra del menu (stessa fascia in alto).
-    const btnH = SF(22);
-    const btnY = right.y + SF(8);
+    const btnH = SF(20);
+    const btnY = right.y + SF(5);
     const ctrlLeftX = this._drawTimeControls(this.menuBtn.x - SF(6), btnY, btnH);
 
     // Indicatore velocità a sinistra della toolbar, su stessa riga.
@@ -2029,80 +2031,80 @@ const GameScreen = {
     ctx.textBaseline = 'middle';
     ctx.fillText(secTxt, ctrlLeftX - SF(8), btnY + btnH / 2);
 
-    // Riquadro data schematico sotto, occupando la fascia inferiore.
-    const boxY = btnY + btnH + SF(4);
+    // Riquadro data sotto, allargato a tutta la fascia inferiore disponibile.
+    const boxY = btnY + btnH + SF(2);
     const boxH = right.y + right.h - boxY - SF(4);
-    this._drawDateBox(right.x + right.w - SF(10), boxY, boxH);
+    this._drawDateBox(right.x + right.w - SF(10), boxY, boxH, right.w - SF(20));
 
     ctx.textBaseline = 'top';
   },
 
-  // Riquadro data schematico: due righe, sigle + numeri colorati.
+  // Riquadro data: griglia 2×2 di celle "LABEL valore" inline.
   // Anchored a destra (rightX = bordo destro), ritorna la X sinistra.
-  // Riga 1: STAG  d.p              ERA·LUCE (romani)
-  // Riga 2: meteo (azzurro)        → destinazione (oro vivo)
-  _drawDateBox(rightX, topY, h) {
+  //
+  //   ┌────────────────────────────────┐
+  //   │ ANNO II·I     STAG PRI 2.5     │ ← linea 1: tempo
+  //   │ ─────────────────────────────  │
+  //   │ METEO Sereno  META → Vorn      │ ← linea 2: contesto
+  //   └────────────────────────────────┘
+  //
+  // In Veglia la riga 1 mostra "STATO VEGLIA / GIORNO N".
+  _drawDateBox(rightX, topY, h, maxW) {
     const ctx = this.ctx;
-    const w = SF(160);
+    const w = Math.min(SF(220), maxW || SF(220));
     const x = rightX - w;
 
-    // Cornice doppia stile cartiglio
+    // Cornice cesellata stile cartiglio (sfondo molto scuro, bordo oro + interno marrone)
     ctx.fillStyle = '#120a04';
     ctx.fillRect(x, topY, w, h);
     drawPixelRectStroke(ctx, x, topY, w, h, '#8a6030');
     drawPixelRectStroke(ctx, x + PIXEL, topY + PIXEL, w - PIXEL * 2, h - PIXEL * 2, '#3a2010');
 
-    const padX = SF(7);
-    const padR = SF(7);
-    const lh = SF(13);
-    const y1 = topY + Math.floor(h / 2) - lh + SF(2);
-    const y2 = topY + Math.floor(h / 2) + SF(2);
+    // Linea divisoria orizzontale a metà (cesellatura a due tonalità)
+    const midY = topY + Math.floor(h / 2);
+    ctx.fillStyle = '#3a2010';
+    ctx.fillRect(x + PIXEL * 3, midY, w - PIXEL * 6, PIXEL);
+    ctx.fillStyle = '#5a3818';
+    ctx.fillRect(x + PIXEL * 3, midY - PIXEL, w - PIXEL * 6, PIXEL);
+    // Linea divisoria verticale al centro (separa le due colonne)
+    const midX = x + Math.floor(w / 2);
+    ctx.fillStyle = '#3a2010';
+    ctx.fillRect(midX, topY + PIXEL * 3, PIXEL, h - PIXEL * 6);
 
-    ctx.textBaseline = 'middle';
+    const colW = Math.floor(w / 2);
+    const pad = SF(7);
+    const rowY1 = topY + Math.floor((midY - topY) / 2) + PIXEL;
+    const rowY2 = midY + Math.floor((topY + h - midY) / 2) + PIXEL;
+
+    // Helper: disegna "LABEL valore" inline; tronca il valore alla larghezza cella.
+    const drawCell = (cx, cy, label, value, valColor) => {
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'left';
+      ctx.font = FONT.tiny();          // 12px bold
+      ctx.fillStyle = '#8a6030';       // oro spento per etichetta
+      ctx.fillText(label, cx + pad, cy);
+      const labW = ctx.measureText(label).width;
+
+      ctx.font = FONT.label();         // 16px bold per il valore
+      ctx.fillStyle = valColor;
+      const valX = cx + pad + labW + SF(5);
+      const maxValW = colW - (valX - cx) - pad;
+      ctx.fillText(this._truncTo(ctx, value, maxValW), valX, cy);
+    };
 
     if (Calendar.inVeglia) {
-      // Forma 'veglia': solo VEG · g<n> centrato
-      ctx.font = FONT.button();
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#e8c050';
-      ctx.fillText('VEG', x + padX, y1);
-      ctx.fillStyle = '#6a5030';
-      ctx.fillText('·', x + padX + SF(34), y1);
-      ctx.fillStyle = '#f0e0b8';
-      ctx.fillText('g' + Calendar.giornoVeglia, x + padX + SF(46), y1);
+      drawCell(x, rowY1, 'STATO', 'VEGLIA', '#e8a838');
+      drawCell(midX, rowY1, 'GIORNO', String(Calendar.giornoVeglia), '#f0e0b8');
     } else {
-      // Riga 1 sinistra: STAG (oro) + d.p (crema)
-      const stagAbbr = Calendar.nomeStagione().substring(0, 3).toUpperCase();
-      ctx.font = FONT.button();
-      ctx.textAlign = 'left';
-      ctx.fillStyle = '#e8c050';
-      ctx.fillText(stagAbbr, x + padX, y1);
-      ctx.fillStyle = '#f0e0b8';
-      ctx.fillText(Calendar.diario + '.' + Calendar.passo, x + padX + SF(34), y1);
-
-      // Riga 1 destra: ERA·LUCE in romani (oro spento)
       const era  = Calendar._romano(Calendar.era);
       const luce = Calendar._romano(Calendar.luce);
-      ctx.textAlign = 'right';
-      ctx.font = FONT.label();
-      ctx.fillStyle = '#b89048';
-      ctx.fillText(era + '·' + luce, x + w - padR, y1);
+      drawCell(x, rowY1, 'ANNO', era + '·' + luce, '#b89048');
+      const stagAbbr = Calendar.nomeStagione().substring(0, 3).toUpperCase();
+      drawCell(midX, rowY1, 'STAG', stagAbbr + ' ' + Calendar.diario + '.' + Calendar.passo, '#f0e0b8');
     }
 
-    // Riga 2: meteo (azzurrino) + → destinazione (oro vivo)
-    ctx.font = FONT.tiny();
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#a8c8d8';
-    const meteoTxt = this._truncTo(ctx, (this.meta.meteo || '—'), SF(68));
-    ctx.fillText(meteoTxt, x + padX, y2);
-
-    ctx.textAlign = 'right';
-    ctx.fillStyle = '#6a5030';
-    const destTxt = this._truncTo(ctx, (this.meta.destinazione || 'nessuna'), SF(70));
-    const destW = ctx.measureText(destTxt).width;
-    ctx.fillText('→', x + w - padR - destW - SF(4), y2);
-    ctx.fillStyle = '#e8a838';
-    ctx.fillText(destTxt, x + w - padR, y2);
+    drawCell(x,    rowY2, 'METEO', this.meta.meteo || '—',           '#a8c8d8');
+    drawCell(midX, rowY2, 'META',  '→ ' + (this.meta.destinazione || 'nessuna'), '#e8a838');
 
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
