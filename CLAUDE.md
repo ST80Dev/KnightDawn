@@ -51,8 +51,9 @@ Regole per chi lo aggiorna (Claude o utente):
 
 ## Fase corrente
 
-**Fetta verticale S3+S4 — Combattimento integrato con eventi**
-S1-S2 complete. S3 ha scaffold motore eventi + catalogo parziale.
-Focus attivo: design e scaffold S4 (`combat.js`, schema effetto `combat`
-in `events.js`), poi chiusura S3 con eventi-incontro reali.
+**Fetta verticale S3+S4 — COMPLETA (combattimento integrato con eventi)**
+Motore `combat.js` (Round = Passo), catalogo `data/enemies.js` (22 nemici),
+silhouette `sprites.js`, eventi-incontro in `data/events_travel.js`, scena
+3 colonne in `game.js` agganciata all'effetto evento `combat`.
+Prossimo focus: bilanciamento formula (TBD S9), o avvio S5 (fazioni).
 Riferimento: `docs/COMBAT.md`, `docs/EVENTS.md`, `docs/GDD.md` §5.
