@@ -102,10 +102,13 @@ const Combat = {
   },
 
   // Avanza Calendar di 1 Passo per ogni Round consumato (auto, fuga, resa,
-  // parlamento, colpo disperato). Sicuro se Calendar non è disponibile (es.
-  // test in Node senza il calendario caricato).
+  // parlamento, colpo disperato). Spunta anche le scadenze attive, per
+  // coerenza col viaggio (vedi GDD §3 "Modello del tempo"): ogni Passo
+  // reale che scatta deve ticchettare le deadlines.
+  // Sicuro se Calendar/Events non sono disponibili (es. test in Node).
   _avanzaCalendar() {
     if (typeof Calendar !== 'undefined' && Calendar.avanza) Calendar.avanza(1);
+    if (typeof Events !== 'undefined' && Events.tickDeadlines) Events.tickDeadlines();
   },
 
   // Avanza il Round automatico: calcola delta Slancio + narra.
