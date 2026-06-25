@@ -117,6 +117,7 @@ const CastleView = {
     ctx.clip();
 
     this._drawGround(ctx, rect);
+    this._drawTrees(ctx);
     this._drawWalls(ctx, rect);
     for (let i = 0; i < this.buildings.length; i++) {
       this._drawBuilding(ctx, this.buildings[i], i === this.hover || i === this.pressed);
@@ -390,6 +391,40 @@ const CastleView = {
         ctx.fillStyle = '#b8902a';
         ctx.beginPath(); ctx.arc(x, y, s * 0.26, 0, Math.PI * 2); ctx.fill();
         break;
+    }
+    ctx.restore();
+  },
+
+  // Alberi decorativi: piazzati nei 4 angoli del cortile (e 2 laterali extra)
+  // usando il Forest Objects pack. Se i PNG non sono caricati, nessun fallback
+  // (non c'era grafica arborea procedurale).
+  _TREE_SLOTS: [
+    { fx: 0.06, fy: 0.08, key: 'tree1' },   // NW
+    { fx: 0.94, fy: 0.08, key: 'tree2' },   // NE
+    { fx: 0.06, fy: 0.88, key: 'tree2' },   // SW
+    { fx: 0.94, fy: 0.88, key: 'tree1' },   // SE
+    { fx: 0.32, fy: 0.14, key: 'funghi' },  // NW-mid (piccolo accento)
+    { fx: 0.68, fy: 0.14, key: 'funghi' },  // NE-mid
+  ],
+
+  _drawTrees(ctx) {
+    if (typeof SpriteAssets === 'undefined') return;
+    const inn = this.inner;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    for (const slot of this._TREE_SLOTS) {
+      const img = SpriteAssets.get('veglia/' + slot.key);
+      if (!img || img.naturalWidth === 0) continue;
+      const cx = inn.x + slot.fx * inn.w;
+      const cy = inn.y + slot.fy * inn.h;
+      // alberi grandi ~40% della dimensione minima edificio, funghi ~20%
+      const base = Math.min(inn.w, inn.h);
+      const isMushroom = slot.key === 'funghi';
+      const size = isMushroom ? base * 0.12 : base * 0.22;
+      const scale = size / Math.max(img.naturalWidth, img.naturalHeight);
+      const w = Math.ceil(img.naturalWidth  * scale);
+      const h = Math.ceil(img.naturalHeight * scale);
+      ctx.drawImage(img, Math.round(cx - w / 2), Math.round(cy - h), w, h);
     }
     ctx.restore();
   },
