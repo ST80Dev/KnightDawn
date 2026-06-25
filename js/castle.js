@@ -1,9 +1,9 @@
 // FERRO & CENERE — Vista luoghi (Livello 1): cortile del castello
-// Implementa il modello stabilito in docs/GRAFICA.md §2b "Vista luoghi —
-// Layout top-down": vista dall'alto schematica dell'area, edifici CLICCABILI,
-// il cavaliere si sposta AUTOMATICAMENTE all'edificio scelto (spostamento
-// semplificato, non navigazione libera). Cliccando un edificio si apre la sua
-// Carta del cronista (Livello 2).
+// Variante "piantina cliccabile" del modello docs/GRAFICA.md §2b "Vista luoghi
+// — Layout top-down": vista dall'alto schematica dell'area, edifici CLICCABILI.
+// Niente camminata del personaggio (point&click leggero): cliccando un edificio
+// si apre subito la sua Carta del cronista (Livello 2). Un marker statico
+// "sei qui" indica il cortile.
 //
 // Usata durante l'Età della Veglia: il garzone gira il cortile e, recandosi
 // alle strutture, gli vengono proposti i compiti. Ogni edificio rimanda a un
@@ -94,7 +94,8 @@ const CastleView = {
     const fire = i >= 0 && i === this.pressed;
     this.pressed = -1;
     if (type === 'touch') this.hover = -1;
-    if (fire) this._goTo(this.buildings[i]);
+    // Piantina cliccabile (no camminata): il click apre subito la carta.
+    if (fire) this._enter(this.buildings[i]);
     else window.GameRender.invalidate();
   },
 
@@ -103,29 +104,8 @@ const CastleView = {
     this.hover = -1;
   },
 
-  // Avvia lo spostamento automatico verso l'edificio; all'arrivo apre la carta.
-  _goTo(b) {
-    this.pending = b;
-    this.target = { x: b.cx, y: b.rect.y + b.rect.h + SF(14) };
-    window.GameRender.invalidate();
-  },
-
-  // ─── Tick: spostamento semplificato del marker ────────────────────────────
-  update(dtMs) {
-    if (!this.active || !this.target) return;
-    const dt = Math.min(dtMs, 60);
-    const f = Math.min(1, dt * 0.011);
-    this.marker.x += (this.target.x - this.marker.x) * f;
-    this.marker.y += (this.target.y - this.marker.y) * f;
-    const dx = this.target.x - this.marker.x, dy = this.target.y - this.marker.y;
-    if (dx * dx + dy * dy < SF(3) * SF(3)) {
-      this.marker.x = this.target.x; this.marker.y = this.target.y;
-      this.target = null;
-      const b = this.pending; this.pending = null;
-      this._enter(b);
-    }
-    window.GameRender.invalidate();
-  },
+  // Nessun movimento del personaggio: la vista è statica (point&click leggero).
+  update() {},
 
   _enter(b) {
     if (!b || typeof Events === 'undefined' || typeof GameScreen === 'undefined') return;
@@ -185,7 +165,7 @@ const CastleView = {
     ctx.fillStyle = PALETTE.inkLeggero;
     ctx.font = `italic ${SF(14)}px "Courier New", monospace`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-    ctx.fillText('Tocca un edificio per recartici e svolgere un compito.',
+    ctx.fillText('Tocca un edificio del cortile per svolgere un compito.',
       W / 2, H - SF(6));
   },
 
