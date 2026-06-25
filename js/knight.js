@@ -27,6 +27,17 @@ const TRAVEL_COST = [
   0.25,   // 12 PIANURA_S
 ];
 
+// Scala dei ranghi del cavaliere (progressione sociale, non livelli RPG).
+// Vedi docs/EARLY_GAME.md §2. Il rango sblocca accesso e opportunità; i bonus
+// passivi restano modesti. La partita inizia da 'garzone' (Età della Veglia).
+const RANGHI = [
+  { id: 'garzone',  nome: 'Garzone' },
+  { id: 'scudiero', nome: 'Scudiero' },
+  { id: 'errante',  nome: 'Cavaliere Errante' },
+  { id: 'ventura',  nome: 'Cavaliere di Ventura' },
+  { id: 'campione', nome: 'Campione' },
+];
+
 // Recupero Forza e Salute per tipo di sosta.
 const RECOVERY = {
   accampamento: { forza: 30 },
@@ -38,6 +49,7 @@ const RECOVERY = {
 const Knight = {
   nome:   '',
   titolo: '',
+  rango:  'garzone',   // id in RANGHI; sale per imprese/reputazione (vedi EARLY_GAME.md)
 
   forza:   { cur: 100, max: 100 },
   volonta: { cur: 100, max: 100 },
@@ -54,13 +66,20 @@ const Knight = {
 
   reputazione: [],
   oro: 0,
+  cavallo: null,   // null = a piedi; altrimenti { id, nome, vigore, vigoreMax }
+  addestramento: 0, // sessioni col maestro d'armi (Veglia → promozione a scudiero)
+  primaSangue: false, // true dopo la prima vera battaglia (gate investitura)
   apprendista: null,
   compagni: [],   // max 3: { nome, archetipo:'lama'|'ombra'|'conoscitore', fedelta }
 
   // Azzera e re-inizializza per una nuova partita.
+  // Stato iniziale = garzone di stalla durante l'Età della Veglia (GDD §3,
+  // docs/EARLY_GAME.md): nessun equipaggiamento, nessun cavallo, pochi spiccioli.
+  // L'investitura (fine Veglia) promuove a 'errante' e consegna il primo kit.
   init(nome) {
-    this.nome   = nome || 'Sir Aldric di Vorn';
-    this.titolo = 'Cavaliere Errante';
+    this.nome   = nome || 'Aldric di Vorn';
+    this.titolo = 'Garzone';
+    this.rango  = 'garzone';
 
     this.forza   = { cur: 100, max: 100 };
     this.volonta = { cur: 100, max: 100 };
@@ -68,11 +87,11 @@ const Knight = {
     this.onore   = 0;
 
     this.equip = {
-      arma:     'Spada bastarda',
-      armatura: 'Cotta di maglia',
-      scudo:    'Scudo da campo',
+      arma:     null,
+      armatura: null,
+      scudo:    null,
       speciale: null,
-      viaggio:  'Mantello scuro',
+      viaggio:  null,
     };
 
     this.reputazione = [
@@ -82,17 +101,62 @@ const Knight = {
       { id: 'banditi',  nome: 'Banditi del Sud',   val: 0 },
     ];
 
-    this.oro          = 10;
+    this.oro          = 3;
+    this.cavallo      = null;   // il garzone parte a piedi: compra un ronzino al mercato
+    this.addestramento = 0;
+    this.primaSangue   = false;
     this.apprendista  = null;
     this.compagni     = [];
+  },
+
+  // Promozione di rango: imposta rango/titolo e applica un bonus modesto a un
+  // cap (EARLY_GAME.md §2). Ritorna true se la promozione è avvenuta.
+  promuovi(rango) {
+    const r = RANGHI.find(x => x.id === rango);
+    if (!r) return false;
+    this.rango  = rango;
+    this.titolo = r.nome;
+    if (rango === 'scudiero') this.forza.max   += 5;
+    if (rango === 'errante')  this.volonta.max += 5;
+    return true;
+  },
+
+  // ─── Cavallo (montatura) — vedi js/data/items.js e docs/EARLY_GAME.md ──────
+  // A cavallo (con vigore) il viaggio costa meno Forza al cavaliere; il cavallo
+  // però consuma Vigore tile per tile e, a Vigore 0, è stremato: bisogna
+  // abbeverarlo a un fiume o riposare (accampa). Il sistema riguarda SOLO il
+  // cavaliere: la compagnia viaggia con lui in astratto (GDD §2 Seguito).
+  isMounted()    { return !!(this.cavallo && this.cavallo.vigore > 0); },
+  isHorseTired() { return !!(this.cavallo && this.cavallo.vigore <= 0); },
+
+  // Nome leggibile del rango corrente (per UI/log).
+  rangoNome() {
+    const r = RANGHI.find(x => x.id === this.rango);
+    return r ? r.nome : this.titolo;
   },
 
   // Consuma Forza per il bioma del tile percorso.
   // Ritorna false se il tile è impassabile, true altrimenti.
   consumaForza(biome) {
-    const cost = TRAVEL_COST[biome];
-    if (cost == null) return false;
+    const base = TRAVEL_COST[biome];
+    if (base == null) return false;
+
+    // A cavallo (con vigore) il cavaliere fatica meno: sconto sulla Forza.
+    const mounted = this.isMounted();
+    const cost = base * (mounted ? 0.7 : 1.0);
     this.forza.cur = Math.max(0, +(this.forza.cur - cost).toFixed(3));
+
+    if (this.cavallo) {
+      if (mounted) {
+        // Vigore: terreni duri (montagna/palude/neve/ghiaccio) stancano il doppio.
+        const dura = (biome === 4 || biome === 5 || biome === 7 || biome === 8);
+        this.cavallo.vigore = Math.max(0, this.cavallo.vigore - (dura ? 2 : 1));
+      }
+      // Abbeverata: attraversare un fiume ridà fiato al cavallo.
+      if (biome === 9) {
+        this.cavallo.vigore = Math.min(this.cavallo.vigoreMax, this.cavallo.vigore + 8);
+      }
+    }
     return true;
   },
 

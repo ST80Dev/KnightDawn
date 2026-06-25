@@ -125,25 +125,44 @@ const GameScreen = {
   },
 
   onEnter() {
-    Knight.init();
-    this.knight = Knight;
-    this.log = [
-      'Inizi il tuo viaggio nelle Marche di Vorn.',
-      'Il vento dell\'alba porta odore di pioggia.',
-      'Lungo la strada incontri un mercante.',
-      'Egli ti racconta di rovine a est.',
-      'Una taverna si scorge a sud-ovest.',
-    ];
-    Calendar.init();
-    this.meta = {
-      meteo: 'Sereno', destinazione: 'nessuna',
-    };
+    // Due percorsi entrano qui via Scenes.switchTo('game'):
+    //  - NUOVA PARTITA (da CreateScreen): inizializza stato e mondo da zero,
+    //    usando il nome scelto in _newName.
+    //  - RIPRESA dopo un load (da titolo o menu): lo stato e' gia' stato
+    //    ripristinato da Save.applyBlob; qui NON va reinizializzato, altrimenti
+    //    il salvataggio viene perso. Il chiamante imposta _resume = true.
+    const resume = this._resume === true;
+    this._resume = false;
 
-    // Genera il mondo e posiziona camera/cavaliere.
-    World.generate((Math.random() * 0xFFFFFFFF) >>> 0);
-    this.knightPos = { x: World.knightStart.x, y: World.knightStart.y };
-    this._exploreFromHere(this.knightPos.x, this.knightPos.y);
-    this.cam = { cx: this.knightPos.x + 0.5, cy: this.knightPos.y + 0.5, step: MAP_ZOOM_DEFAULT };
+    if (resume) {
+      this.knight = Knight;        // gia' popolato da applyBlob (nome incluso)
+    } else {
+      Knight.init(this._newName || undefined);
+      this._newName = null;
+      this.knight = Knight;
+      Calendar.init();
+      this.meta = { meteo: 'Sereno', destinazione: 'nessuna' };
+
+      // Genera il mondo e posiziona camera/cavaliere.
+      World.generate((Math.random() * 0xFFFFFFFF) >>> 0);
+      this.knightPos = { x: World.knightStart.x, y: World.knightStart.y };
+      this._exploreFromHere(this.knightPos.x, this.knightPos.y);
+      this.cam = { cx: this.knightPos.x + 0.5, cy: this.knightPos.y + 0.5, step: MAP_ZOOM_DEFAULT };
+      if (typeof Events !== 'undefined') Events.reset();
+
+      // Inizio nella Veglia: garzone di stalla al castello di partenza.
+      const startCastle = World.structures.find(
+        s => s.x === World.knightStart.x && s.y === World.knightStart.y);
+      const castleName = startCastle ? startCastle.name : 'Vorn';
+      this.log = [
+        `Sei un garzone di stalla al castello di ${castleName}.`,
+        'Non hai armi, né cavallo, né un nome che pesi.',
+        'Solo le tue mani, e i giorni che ti aspettano.',
+        'Lavora, metti da parte qualche moneta,',
+        'e forse un giorno ti chiameranno cavaliere.',
+      ];
+    }
+
     this.activeOverlay = null;
     this.preRecap = null;          // pannello pre-partenza
     this.preRecapBtnParti = null;
@@ -156,14 +175,314 @@ const GameScreen = {
     this.combat = null;            // Scena di combattimento (scontro attivo)
     this._combatBtns = [];         // rect dei pulsanti azione del Round
     this._combatPending = null;    // ramo esito da applicare a fine scontro (evento)
-    if (typeof Events !== 'undefined') Events.reset();
-    this.camAnchor = { x: World.knightStart.x, y: World.knightStart.y };
+    this.market = null;            // Overlay mercato (compra/vendi)
+    this.camAnchor = { x: this.knightPos.x, y: this.knightPos.y };
     this.camTarget = null;         // quando non-null la cam si avvicina qui
     this.dragging = false;
     this.dragMoved = false;
     Travel.stop();
 
     Save.startAutosave();
+
+    // Nuova partita in Veglia: apri subito l'hub del garzone per orientare.
+    if (!resume && typeof Calendar !== 'undefined' && Calendar.inVeglia) {
+      this._openVegliaHub();
+    }
+  },
+
+  // ─── Veglia: hub del garzone ──────────────────────────────────────────────
+  // Apre la Carta del cronista con i lavori del garzone (vedi
+  // js/data/events_veglia.js e docs/EARLY_GAME.md). Ripetibile: si richiude e
+  // si riapre con il pulsante INTERAGISCI finché dura la Veglia.
+  _openVegliaHub() {
+    if (typeof Events === 'undefined' || !Events.getById) return false;
+    const ev = Events.getById('veglia.castello');
+    if (!ev) return false;
+    return this.openChronicle(ev, { resumeAfter: false });
+  },
+
+  // Dispatch dei pulsanti azione della barra inferiore.
+  _handleAction(action) {
+    if (action === 'interagisci') { this._interact(); return; }
+    if (action === 'accampa')     { this._accampa();  return; }
+    console.log('Azione gioco:', action);
+  },
+
+  // Accampa: breve sosta (2 Passi) che ridà Forza al cavaliere e riposa il
+  // cavallo (Vigore pieno). Non durante il viaggio.
+  _accampa() {
+    if (Travel.isActive()) {
+      this._logEvent('Non puoi accamparti mentre viaggi: fermati prima.');
+      window.GameRender.invalidate();
+      return;
+    }
+    Knight.recupera('accampamento');
+    let extra = '.';
+    if (Knight.cavallo) {
+      Knight.cavallo.vigore = Knight.cavallo.vigoreMax;
+      extra = ' e ' + Knight.cavallo.nome + ' riprende fiato.';
+    }
+    if (typeof Calendar !== 'undefined') {
+      Calendar.avanza(2);
+      if (typeof Events !== 'undefined' && Events.tickDeadlines) Events.tickDeadlines();
+    }
+    this._logEvent('Ti accampi: riprendi le forze' + extra);
+    window.GameRender.invalidate();
+  },
+
+  // INTERAGISCI: in Veglia riapre l'hub del garzone; altrimenti, se il
+  // cavaliere è fermo su una struttura, pesca un evento di luogo.
+  _interact() {
+    if (this.chronicle || this.combat) return;
+    if (typeof Calendar !== 'undefined' && Calendar.inVeglia) {
+      if (!this._openVegliaHub()) this._logEvent('Il castello è silenzioso.');
+      return;
+    }
+    const s = World.structures &&
+      World.structures.find(st => st.x === this.knightPos.x && st.y === this.knightPos.y);
+    if (!s) {
+      this._logEvent('Non c\'è nulla con cui interagire qui.');
+      window.GameRender.invalidate();
+      return;
+    }
+    let ev = null;
+    if (typeof Events !== 'undefined') ev = Events.pickLocation(s.type, s);
+    if (ev) this.openChronicle(ev, { resumeAfter: false });
+    else { this._logEvent(`${s.name}: nessuno ti dà retta.`); window.GameRender.invalidate(); }
+  },
+
+  // Aggiorna lo stato abilitato di INTERAGISCI: attivo in Veglia o quando il
+  // cavaliere è fermo su una struttura. Chiamato a ogni draw().
+  _refreshActionState() {
+    const b = this.actionButtons.find(x => x.action === 'interagisci');
+    if (!b) return;
+    const inVeglia = (typeof Calendar !== 'undefined' && Calendar.inVeglia);
+    const onStruct = !!(World.structures &&
+      World.structures.find(st => st.x === this.knightPos.x && st.y === this.knightPos.y));
+    b.disabled = !(inVeglia || onStruct);
+  },
+
+  // ─── Mercato (compra/vendi usato) ─────────────────────────────────────────
+  // Overlay modale. Economia semplice: prezzi uguali ovunque, rivendita a
+  // frazione fissa (vedi js/data/items.js e docs/EARLY_GAME.md §4). Lavora con
+  // l'equip a stringhe: comprare in uno slot occupato rivende il vecchio pezzo.
+  openMarket(opts) {
+    if (typeof Items === 'undefined') return false;
+    opts = opts || {};
+    this.chronicle = null;     // chiude un'eventuale Carta del cronista aperta
+    let name = opts.name;
+    if (!name) {
+      const s = World.structures &&
+        World.structures.find(st => st.x === this.knightPos.x && st.y === this.knightPos.y);
+      name = s ? s.name : 'castello';
+    }
+    this.market = { tab: 'buy', name };
+    window.GameRender.invalidate();
+    return true;
+  },
+
+  // Merce acquistabile: equipaggiamento + cavalli (categoria 'cavallo').
+  _buyList() {
+    const equip = Items.buyList().map(x => ({ ...x, kind: 'equip' }));
+    const mounts = Items.mountList().map(x => ({ ...x, kind: 'cavallo', slot: 'cavallo' }));
+    return equip.concat(mounts);
+  },
+
+  // Oggetti rivendibili: equipaggiamento (in catalogo) + cavallo posseduto.
+  _sellList() {
+    const out = [];
+    for (const slot of Items.SLOT_ORDER) {
+      const nome = Knight.equip[slot];
+      if (!nome) continue;
+      out.push({ nome, slot, glyph: Items.glyphOf(nome), back: Items.rivendita(nome) });
+    }
+    if (Knight.cavallo) {
+      out.push({
+        kind: 'cavallo', id: Knight.cavallo.id, nome: Knight.cavallo.nome,
+        glyph: '♞', back: Items.mountResale(Knight.cavallo.id),
+      });
+    }
+    return out;
+  },
+
+  _marketBuyMount(id) {
+    const m = Items.MOUNTS[id];
+    if (!m) return;
+    if (Knight.cavallo && Knight.cavallo.id === id) { this._logEvent('Lo possiedi già.'); return; }
+    const oldNome = Knight.cavallo ? Knight.cavallo.nome : null;
+    const back = Knight.cavallo ? Items.mountResale(Knight.cavallo.id) : 0;   // permuta
+    if (Knight.oro + back < m.prezzo) { this._logEvent('Non hai abbastanza oro.'); return; }
+    Knight.oro = Knight.oro + back - m.prezzo;
+    if (oldNome) this._logEvent(`Cedi ${oldNome} (+${back} mo) e compri ${m.nome} per ${m.prezzo} mo.`);
+    else         this._logEvent(`Compri ${m.nome} per ${m.prezzo} mo.`);
+    Knight.cavallo = Items.makeMount(id);
+  },
+
+  _marketSellMount() {
+    if (!Knight.cavallo) return;
+    const back = Items.mountResale(Knight.cavallo.id);
+    this._logEvent(`Vendi ${Knight.cavallo.nome} per ${back} mo.`);
+    Knight.oro += back;
+    Knight.cavallo = null;
+  },
+
+  _marketBuy(nome) {
+    const it = Items.catalog[nome];
+    if (!it) return;
+    if (Knight.equip[it.slot] === nome) { this._logEvent('Lo possiedi già.'); return; }
+    const old = Knight.equip[it.slot];
+    const back = old ? Items.rivendita(old) : 0;     // permuta del pezzo in uso
+    if (Knight.oro + back < it.prezzo) { this._logEvent('Non hai abbastanza oro.'); return; }
+    Knight.oro = Knight.oro + back - it.prezzo;
+    if (old) this._logEvent(`Cedi ${old} (+${back} mo) e acquisti ${nome} per ${it.prezzo} mo.`);
+    else     this._logEvent(`Acquisti ${nome} per ${it.prezzo} mo.`);
+    Knight.equip[it.slot] = nome;
+  },
+
+  _marketSell(slot) {
+    const nome = Knight.equip[slot];
+    if (!nome) return;
+    const back = Items.rivendita(nome);
+    Knight.equip[slot] = null;
+    Knight.oro += back;
+    this._logEvent(`Vendi ${nome} per ${back} mo.`);
+  },
+
+  _marketUp(p) {
+    const mk = this.market;
+    if (!mk) return;
+    if (this._marketClose && hitRect(this._marketClose, p.x, p.y)) {
+      this.market = null; window.GameRender.invalidate(); return;
+    }
+    for (const t of (this._marketTabs || [])) {
+      if (hitRect(t, p.x, p.y)) { mk.tab = t.tab; window.GameRender.invalidate(); return; }
+    }
+    for (const row of (this._marketRows || [])) {
+      if (!row.disabled && hitRect(row.rect, p.x, p.y)) { row.act(); window.GameRender.invalidate(); return; }
+    }
+    // Tap fuori dal pannello: chiude.
+    if (this._marketPanel && !hitRect(this._marketPanel, p.x, p.y)) {
+      this.market = null;
+    }
+    window.GameRender.invalidate();
+  },
+
+  drawMarket() {
+    const ctx = this.ctx;
+    const W = window.UI.w, H = window.UI.h;
+    const mk = this.market;
+    const list = mk.tab === 'buy' ? this._buyList() : this._sellList();
+
+    const headerH = SF(38), tabH = SF(30), rowH = SF(30), rowGap = SF(4);
+    const cw = Math.min(SF(440), W - SF(24));
+    const listH = Math.max(rowH, list.length * (rowH + rowGap));
+    const chWanted = headerH + tabH + SF(8) + listH + SF(12);
+    const ch = Math.min(chWanted, H - SF(24));
+    const cx = Math.round((W - cw) / 2), cy = Math.round((H - ch) / 2);
+    this._marketPanel = { x: cx, y: cy, w: cw, h: ch };
+
+    // Backdrop + pannello
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = PALETTE.hudSfondo || '#1a1208';
+    ctx.fillRect(cx, cy, cw, ch);
+
+    // Header: titolo + oro + chiudi
+    ctx.fillStyle = '#3a2810';
+    ctx.fillRect(cx, cy, cw, headerH);
+    ctx.fillStyle = '#e8c050';
+    ctx.font = FONT.heading();
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('Mercato — ' + (mk.name || 'castello'), cx + SF(12), cy + headerH / 2);
+    ctx.textAlign = 'right'; ctx.fillStyle = '#ffd060';
+    ctx.font = FONT.value();
+    ctx.fillText('◉ ' + Knight.oro + ' mo', cx + cw - SF(44), cy + headerH / 2);
+
+    const xb = { x: cx + cw - SF(32), y: cy + SF(8), w: SF(22), h: SF(22) };
+    this._marketClose = xb;
+    ctx.fillStyle = '#2a1c08'; ctx.fillRect(xb.x, xb.y, xb.w, xb.h);
+    drawPixelRectStroke(ctx, xb.x, xb.y, xb.w, xb.h, '#a08050');
+    ctx.fillStyle = '#e8d8b0'; ctx.font = FONT.button();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('✕', xb.x + xb.w / 2, xb.y + xb.h / 2);
+
+    // Tab ACQUISTA / VENDI
+    this._marketTabs = [];
+    const tabGap = SF(8);
+    const tabW = Math.floor((cw - SF(24) - tabGap) / 2);
+    const ty = cy + headerH + SF(4);
+    [['buy', 'ACQUISTA'], ['sell', 'VENDI']].forEach(([key, label], i) => {
+      const r = { x: cx + SF(12) + i * (tabW + tabGap), y: ty, w: tabW, h: tabH, tab: key };
+      const active = mk.tab === key;
+      ctx.fillStyle = active ? '#3a2810' : '#201408';
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      drawPixelRectStroke(ctx, r.x, r.y, r.w, r.h, active ? '#e8c050' : '#a08050');
+      ctx.fillStyle = active ? '#ffd060' : '#a08850';
+      ctx.font = FONT.button(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2);
+      this._marketTabs.push(r);
+    });
+
+    // Righe
+    this._marketRows = [];
+    const rowX = cx + SF(12), rowW = cw - SF(24);
+    let yy = ty + tabH + SF(8);
+    const limitY = cy + ch - SF(6);
+
+    if (!list.length) {
+      ctx.fillStyle = '#a08850'; ctx.font = FONT.bodyI();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const msg = mk.tab === 'buy' ? 'Nessuna merce in vendita.' : 'Non hai nulla da vendere.';
+      ctx.fillText(msg, cx + cw / 2, yy + SF(12));
+    }
+
+    for (const item of list) {
+      if (yy + rowH > limitY) break;   // clip se il pannello è pieno
+      const r = { x: rowX, y: yy, w: rowW, h: rowH };
+      let disabled = false, leftTxt, rightTxt, accent = '#a08050', act;
+
+      if (mk.tab === 'buy') {
+        const owned = item.kind === 'cavallo'
+          ? !!(Knight.cavallo && Knight.cavallo.id === item.id)
+          : Knight.equip[item.slot] === item.nome;
+        // La permuta del pezzo/cavallo in uso riduce il costo effettivo.
+        const tradeIn = item.kind === 'cavallo'
+          ? (Knight.cavallo ? Items.mountResale(Knight.cavallo.id) : 0)
+          : (Knight.equip[item.slot] ? Items.rivendita(Knight.equip[item.slot]) : 0);
+        const afford = (Knight.oro + tradeIn) >= item.prezzo;
+        disabled = owned || !afford;
+        leftTxt = item.glyph + '  ' + item.nome + (owned ? '  (in uso)' : '');
+        rightTxt = owned ? '—' : item.prezzo + ' mo';
+        if (!disabled) act = item.kind === 'cavallo'
+          ? () => this._marketBuyMount(item.id)
+          : () => this._marketBuy(item.nome);
+      } else {
+        disabled = item.back <= 0;
+        leftTxt = item.glyph + '  ' + item.nome;
+        rightTxt = item.back > 0 ? '+' + item.back + ' mo' : '—';
+        if (!disabled) act = item.kind === 'cavallo'
+          ? () => this._marketSellMount()
+          : () => this._marketSell(item.slot);
+      }
+
+      ctx.fillStyle = disabled ? '#180f06' : '#2a1808';
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      drawPixelRectStroke(ctx, r.x, r.y, r.w, r.h, disabled ? '#3a2c18' : accent);
+      const cyR = r.y + r.h / 2;
+      ctx.fillStyle = disabled ? '#6a5638' : '#e8d8b0';
+      ctx.font = FONT.body(); ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(leftTxt, r.x + SF(10), cyR);
+      ctx.fillStyle = mk.tab === 'buy'
+        ? (disabled ? '#6a5638' : '#ffd060')
+        : (disabled ? '#6a5638' : '#8ce06a');
+      ctx.textAlign = 'right';
+      ctx.fillText(rightTxt, r.x + r.w - SF(10), cyR);
+
+      this._marketRows.push({ rect: r, disabled, act: act || (() => {}) });
+      yy += rowH + rowGap;
+    }
+
+    drawPixelRectStroke(ctx, cx, cy, cw, ch, '#5a4020');
   },
 
   // ─── Layout ───────────────────────────────────────────────────────────────
@@ -274,6 +593,12 @@ const GameScreen = {
 
     if (type === 'touch') return; // hover solo su mouse
 
+    if (this.market) {
+      // Overlay modale: niente hover sui pulsanti sottostanti.
+      document.getElementById('game').style.cursor = 'default';
+      return;
+    }
+
     if (this.activeOverlay) {
       const over = this.overlayWhere(p) === 'close';
       document.getElementById('game').style.cursor = over ? 'pointer' : 'default';
@@ -307,6 +632,7 @@ const GameScreen = {
   onPointerDown(p) {
     if (Scenes.current !== this) return;
     if (SaveUI.isOpen()) { SaveUI.onPointerDown(p); return; }
+    if (this.market)    { return; }   // overlay modale: agisce sul pointerup
     if (this.combat) { this._combatDown(p); return; }
     if (this.chronicle) { this._chronicleDown(p); return; }
     if (this.poiPause)  { this._poiPauseDown(p); return; }
@@ -341,6 +667,7 @@ const GameScreen = {
     if (Scenes.current !== this) return;
     if (SaveUI.isOpen()) { SaveUI.onPointerUp(p, type); return; }
 
+    if (this.market)    { this._marketUp(p); return; }
     if (this.combat)    { this._combatUp(p); return; }
     if (this.chronicle) { this._chronicleUp(p); return; }
     if (this.poiPause)  { this._poiPauseUp(p); return; }
@@ -408,7 +735,7 @@ const GameScreen = {
       window.GameRender.invalidate();
     } else if (fireB) {
       const b = this.actionButtons[bi];
-      if (!b.disabled) console.log('Azione gioco:', b.action);
+      if (!b.disabled) this._handleAction(b.action);
     } else if (type === 'touch') {
       window.GameRender.invalidate();
     }
@@ -494,6 +821,9 @@ const GameScreen = {
       const c = TRAVEL_COST[b];
       if (c != null) forzaCost += c;
     }
+    // Stima: in sella il cavaliere spende meno Forza (×0,7). Approssimazione —
+    // non modella l'esaurimento del Vigore a metà tragitto.
+    if (Knight.isMounted && Knight.isMounted()) forzaCost *= 0.7;
     const terrainList = [...terrains.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
     const structures  = World.structures.filter(s => onPath.has(s.y * World.width + s.x));
     const willExhaust = forzaCost > this.knight.forza.cur;
@@ -733,6 +1063,11 @@ const GameScreen = {
   openCombat(enemy, opts) {
     if (typeof Combat === 'undefined') return false;
     opts = opts || {};
+    // Se lanciato da un'opzione che NON appartiene al flusso evento-incontro
+    // (es. missione fuori porta della Veglia), chiude la Carta che lo lancia.
+    // Col flusso evento-incontro (fromChronicle) la Carta resta aperta per
+    // mostrare il reply dopo lo scontro (vedi _closeCombat).
+    if (!opts.fromChronicle) this.chronicle = null;
     let remainingPath = null, savedDest = null;
     // Se lanciato dalla Carta del cronista, il viaggio è già sospeso da essa:
     // non lo tocchiamo (lo riprende _closeChronicle).
@@ -749,6 +1084,7 @@ const GameScreen = {
       state: Combat.start({ enemy, terrain, knight: Knight }),
       remainingPath, savedDest,
       resumeTravel: !opts.fromChronicle && !!remainingPath && opts.resumeAfter !== false,
+      onEnd: opts.onEnd || null,   // callback(esito) per ricompense post-scontro
     };
     this._combatBtns = [];
     this._combatPressed = null;
@@ -781,6 +1117,10 @@ const GameScreen = {
     const c = this.combat;
     this.combat = null;
 
+    // Ricompense/conseguenze dell'esito via callback (es. missioni fuori porta
+    // della Veglia, lanciate con openCombat({ onEnd })).
+    if (c && c.onEnd) { try { c.onEnd(c.state.esito); } catch (e) { console.error(e); } }
+
     // Scontro lanciato da un evento: applica il ramo esito e torna alla
     // Carta del cronista per mostrare il reply (poi sarà lei a riprendere
     // il viaggio quando viene chiusa).
@@ -804,7 +1144,7 @@ const GameScreen = {
       return;
     }
 
-    // Scontro autonomo (da console): riprende il viaggio se sospeso.
+    // Scontro autonomo / missione: riprende il viaggio se sospeso.
     if (c && c.resumeTravel && c.remainingPath && c.remainingPath.length
         && typeof Travel !== 'undefined') {
       Travel.start(c.remainingPath);
@@ -1338,6 +1678,10 @@ const GameScreen = {
       onBlocked: (reason) => {
         this.meta.destinazione = 'nessuna';
         if (reason === 'esausto') this._logEvent('Crolli per la stanchezza: ti fermi.');
+        else if (reason === 'cavallo') {
+          const nome = (Knight.cavallo && Knight.cavallo.nome) || 'Il cavallo';
+          this._logEvent(`${nome} è stremato: abbeveralo a un fiume o accampati. Puoi proseguire a piedi.`);
+        }
         else this._logEvent('Il cammino si interrompe.');
       },
     });
@@ -1393,12 +1737,15 @@ const GameScreen = {
     const parchment = getParchmentTexture(W, H, 4242);
     ctx.drawImage(parchment, 0, 0);
 
+    this._refreshActionState();
+
     if (L.compact) this.drawCompact(L);
     else this.drawDesktop(L);
     if (this.preRecap)  this.drawPreRecap();
     if (this.poiPause)  this.drawPOIPause();
     if (this.chronicle && !this.combat) this.drawChronicle();
     if (this.combat)    this.drawCombat();
+    if (this.market)    this.drawMarket();
 
     // SaveUI overlay sopra tutto il resto, sia desktop che compatto.
     if (SaveUI.isOpen()) SaveUI.draw(ctx);
@@ -2139,6 +2486,45 @@ const GameScreen = {
       ctx.fillText(val || '— vuoto —', x + w - SF(8), cy);
 
       y += rowH;
+    }
+
+    // Riga cavallo (montatura): asse separato dall'equip (viaggio + battaglia).
+    {
+      const cav = k.cavallo;
+      ctx.fillStyle = '#2a1808';
+      ctx.fillRect(x, y, w, rowH - SF(2));
+      ctx.fillStyle = '#6a4a1a';
+      ctx.fillRect(x, y, SF(3), rowH - SF(2));
+      const cyR = y + (rowH - SF(2)) / 2;
+      ctx.fillStyle = '#caa050'; ctx.font = FONT.heading();
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText('♞', x + SF(10), cyR);
+      ctx.fillStyle = '#e8c050'; ctx.font = FONT.label();
+      ctx.fillText('CAVALLO', x + SF(28), cyR);
+      ctx.fillStyle = cav ? '#e8d8b0' : '#7a5a2a';
+      ctx.font = cav ? FONT.body() : FONT.bodyI();
+      ctx.textAlign = 'right';
+      ctx.fillText(cav ? cav.nome : '— a piedi —', x + w - SF(8), cyR);
+      y += rowH;
+
+      if (cav) {
+        const barH = SF(10);
+        const pct = cav.vigoreMax > 0 ? cav.vigore / cav.vigoreMax : 0;
+        ctx.fillStyle = '#e8c050'; ctx.font = FONT.caption();
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText('VIGORE', x + SF(2), y + barH / 2);
+        const bx = x + SF(60), bw = w - SF(60) - SF(74);
+        ctx.fillStyle = '#000'; ctx.fillRect(bx, y, bw, barH);
+        const col = pct >= 0.5 ? '#6ce06a' : pct >= 0.25 ? '#ffa040' : '#ff5050';
+        ctx.fillStyle = col;
+        ctx.fillRect(bx + PIXEL, y + PIXEL, Math.max(0, (bw - PIXEL * 2) * pct), barH - PIXEL * 2);
+        drawPixelRectStroke(ctx, bx, y, bw, barH, '#5a3a18');
+        ctx.fillStyle = '#caa050'; ctx.textAlign = 'right';
+        const possaTxt = cav.possa ? '  ·  possa ' + cav.possa : '  ·  no battaglia';
+        ctx.fillText(cav.vigore + '/' + cav.vigoreMax + possaTxt, x + w - SF(2), y + barH / 2);
+        y += barH + SF(6);
+      }
+      ctx.textBaseline = 'top';
     }
 
     y += SF(14);

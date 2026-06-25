@@ -69,6 +69,7 @@ const Travel = {
       const next = this.path[this.idx++];
       if (!next) { this.stop(); if (hooks.onArrive) hooks.onArrive(); return; }
       const biome = World.biomeAt(next.x, next.y);
+      const wasMounted = Knight.isMounted ? Knight.isMounted() : false;
       // L'A* ha già escluso i tile impassabili: in pratica consumaForza
       // ritorna true; teniamo il check per sicurezza (mondo modificabile).
       if (!Knight.consumaForza(biome)) {
@@ -89,6 +90,14 @@ const Travel = {
       if (Knight.isExhausted()) {
         this.stop();
         if (hooks.onBlocked) hooks.onBlocked('esausto');
+        return;
+      }
+      // Cavallo appena stremato: ferma una volta per la decisione (abbeverare /
+      // riposare / proseguire a piedi). Da fermo è già "a piedi" (vigore 0),
+      // quindi ripartendo si cammina senza ri-scattare questo stop.
+      if (wasMounted && Knight.isHorseTired && Knight.isHorseTired()) {
+        this.stop();
+        if (hooks.onBlocked) hooks.onBlocked('cavallo');
         return;
       }
     }

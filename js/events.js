@@ -51,6 +51,10 @@ const Events = {
 
   register(ev) { this.registry.push(ev); },
 
+  // Ritorna un evento del catalogo per id (o null). Usato per aprire eventi
+  // specifici fuori dal pescaggio pesato (es. hub del garzone in Veglia).
+  getById(id) { return this.registry.find(ev => ev.id === id) || null; },
+
   reset() {
     this.seenIds = new Set();
     this.lastSeenAtPasso = {};

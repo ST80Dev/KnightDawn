@@ -143,9 +143,16 @@ const Combat = {
     const armaturaBonus= k.equip.armatura ? 1 : 0;
     const scudoBonus   = k.equip.scudo    ? 1 : 0;
     const terrenoBonus = this._terrenoBonus(state.terrain, state.enemy);
+    // Possa del cavallo: bonus solo se in sella (vigore > 0). La carica perde
+    // efficacia su terreni chiusi (foresta/palude/montagna): possa dimezzata.
+    let cavalloBonus = 0;
+    if (k.isMounted && k.isMounted() && k.cavallo) {
+      const chiuso = (state.terrain === 2 || state.terrain === 4 || state.terrain === 5);
+      cavalloBonus = chiuso ? Math.floor((k.cavallo.possa || 0) / 2) : (k.cavallo.possa || 0);
+    }
 
     const vigoreEff = vigore + volonta + armaBonus + armaturaBonus
-                     + scudoBonus + terrenoBonus - ferito;
+                     + scudoBonus + terrenoBonus + cavalloBonus - ferito;
     const sfida = (state.enemy.sfida != null) ? state.enemy.sfida : 4;
     const rumore = (Math.random() * 2 - 1) * 2;              // ±2
 

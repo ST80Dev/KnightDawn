@@ -127,9 +127,11 @@ const COMPACT_BREAKPOINT = 820; // sotto questa larghezza (CSS px) → layout co
   }
 
   // Registra e inizializza le scene (entrambe disegnano sul canvas display)
-  Scenes.register('title', TitleScreen);
-  Scenes.register('game',  GameScreen);
+  Scenes.register('title',  TitleScreen);
+  Scenes.register('create', CreateScreen);
+  Scenes.register('game',   GameScreen);
   TitleScreen.init(canvas);
+  CreateScreen.init(canvas);
   GameScreen.init(canvas);
   Scenes.switchTo('title');
 

@@ -101,7 +101,7 @@ const TitleScreen = {
   activate(b) {
     if (!b || b.disabled) return;
     if (b.action === 'new') {
-      Scenes.switchTo('game');
+      Scenes.switchTo('create');
       return;
     }
     if (b.action === 'continue') {
@@ -110,7 +110,7 @@ const TitleScreen = {
     }
     if (b.action === 'load') {
       SaveUI.open('title', {
-        onLoaded: () => Scenes.switchTo('game'),
+        onLoaded: () => { GameScreen._resume = true; Scenes.switchTo('game'); },
       });
       return;
     }
@@ -119,7 +119,7 @@ const TitleScreen = {
 
   async _continueAutosave() {
     const ok = await Save.load(Save.AUTOSAVE_SLOT);
-    if (ok) Scenes.switchTo('game');
+    if (ok) { GameScreen._resume = true; Scenes.switchTo('game'); }
     else console.warn('Autosave non disponibile.');
   },
 

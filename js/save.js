@@ -54,6 +54,7 @@ const Save = {
     return {
       nome: Knight.nome,
       titolo: Knight.titolo,
+      rango: Knight.rango,
       forza: { ...Knight.forza },
       volonta: { ...Knight.volonta },
       salute: { ...Knight.salute },
@@ -61,6 +62,9 @@ const Save = {
       equip: { ...Knight.equip },
       reputazione: Knight.reputazione.map(r => ({ ...r })),
       oro: Knight.oro,
+      cavallo: Knight.cavallo ? { ...Knight.cavallo } : null,
+      addestramento: Knight.addestramento,
+      primaSangue: Knight.primaSangue,
       apprendista: Knight.apprendista,
       compagni: Knight.compagni.map(c => ({ ...c })),
     };
@@ -74,6 +78,7 @@ const Save = {
     const k = blob.knight;
     Knight.nome     = k.nome;
     Knight.titolo   = k.titolo;
+    Knight.rango    = k.rango || 'errante';   // back-compat: salvataggi pre-ranghi
     Knight.forza    = k.forza;
     Knight.volonta  = k.volonta;
     Knight.salute   = k.salute;
@@ -81,6 +86,9 @@ const Save = {
     Knight.equip    = k.equip;
     Knight.reputazione = k.reputazione;
     Knight.oro         = k.oro;
+    Knight.cavallo     = k.cavallo || null;   // back-compat: salvataggi pre-cavallo
+    Knight.addestramento = k.addestramento || 0;
+    Knight.primaSangue   = !!k.primaSangue;
     Knight.apprendista = k.apprendista;
     Knight.compagni    = k.compagni;
 
