@@ -1,4 +1,4 @@
-# FERRO & CENERE — Sistema Combattimento
+# Knight Dawn — Sistema Combattimento
 
 > Documento di design per la **Fase S4**. Implementazione preceduta da
 > scaffold dati come da regole operative CLAUDE.md.

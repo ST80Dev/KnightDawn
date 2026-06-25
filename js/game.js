@@ -1,4 +1,4 @@
-// FERRO & CENERE — schermata gioco principale
+// Knight Dawn — schermata gioco principale
 // Disegnata direttamente sul canvas display (vedi main.js). Le dimensioni
 // passano da S(...)/SF(...) per restare proporzionate al canvas.
 //
@@ -1519,7 +1519,7 @@ const GameScreen = {
     };
 
     row('PASSI',  s.steps + ' tile');
-    row('TEMPO',  this._fmtTime(s.timeSec) + '  (a ' + Travel.speedSec() + ' s/passo)');
+    row('TEMPO',  this._fmtTime(s.timeSec) + '  (a ' + Math.round(Travel.speedSec()) + ' s/passo)');
 
     // Riga Fatica con barra
     const fMax = this.knight.forza.max;
@@ -1985,9 +1985,10 @@ const GameScreen = {
     ctx.textBaseline = 'middle';
     ctx.fillText('KNIGHT DAWN', SF(compact ? 12 : 18), area.h / 2);
 
-    // Menu (apre gestione partita). Sta all'estrema destra.
-    const mBtnW = SF(compact ? 32 : 40);
-    const mBtnH = SF(compact ? 32 : 40);
+    // Pulsante menu (apre SaveUI). Ridotto: poco più piccolo dei pulsanti
+    // della toolbar tempo, così non domina il topbar.
+    const mBtnW = SF(compact ? 24 : 28);
+    const mBtnH = SF(compact ? 24 : 28);
     this.menuBtn = {
       x: area.x + area.w - SF(8) - mBtnW,
       y: area.y + Math.floor((area.h - mBtnH) / 2),
@@ -1997,24 +1998,15 @@ const GameScreen = {
 
     // Toolbar tempo (pausa/play, step, ±velocità) a sinistra del menu.
     const btnH = SF(22);
-    const btnY = area.y + Math.floor((area.h - btnH) / 2) - SF(8);
-    const ctrlLeftX = this._drawTimeControls(this.menuBtn.x - SF(8), btnY, btnH);
+    const btnY = area.y + Math.floor((area.h - btnH) / 2);
+    const ctrlLeftX = this._drawTimeControls(this.menuBtn.x - SF(6), btnY, btnH);
 
-    // Data + stagione/meteo a sx della toolbar tempo, su due righe compatte.
-    const tx = ctrlLeftX - SF(8);
-    ctx.fillStyle = PALETTE.hudNormale;
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    if (compact) {
-      ctx.font = `${SF(12)}px "Courier New", monospace`;
-      ctx.fillText(Calendar.formatCompatto(), tx, area.h / 2 - SF(2));
-      ctx.fillText(`${Calendar.nomeStagione()} · ${this.meta.meteo}`, tx, area.h / 2 + SF(12));
-    } else {
-      ctx.font = `${SF(16)}px "Courier New", monospace`;
-      ctx.fillText(Calendar.formatCompatto(), tx, area.h / 2 - SF(10));
-      ctx.fillText(`${Calendar.nomeStagione()}  ·  ${this.meta.meteo}  ·  Destinazione: ${this.meta.destinazione}`, tx, area.h / 2 + SF(10));
-      drawCompassRose(ctx, area.x + area.w / 2, area.y + area.h / 2, SF(26));
-    }
+    // Riquadro data schematico a sx della toolbar tempo.
+    const boxH = SF(compact ? 38 : 44);
+    const boxY = area.y + Math.floor((area.h - boxH) / 2);
+    this._drawDateBox(ctrlLeftX - SF(6), boxY, boxH);
+
+    if (!compact) drawCompassRose(ctx, area.x + area.w / 2, area.y + area.h / 2, SF(26));
     ctx.textBaseline = 'top';
   },
 
@@ -2035,40 +2027,115 @@ const GameScreen = {
 
     this._drawBarSeg(right);
 
-    // Menu (apre gestione partita) sul lato sinistro del segmento destro.
-    const mBtnW = SF(44);
-    const mBtnH = SF(44);
+    // Menu (apre SaveUI): più piccolo, in alto a destra del segmento.
+    const mBtnW = SF(28);
+    const mBtnH = SF(28);
     this.menuBtn = {
-      x: right.x + SF(10),
-      y: right.y + Math.floor((right.h - mBtnH) / 2),
+      x: right.x + right.w - SF(10) - mBtnW,
+      y: right.y + SF(6),
       w: mBtnW, h: mBtnH,
     };
     this._drawMenuButton(this.menuBtn);
 
-    // Toolbar tempo (pausa/play, step, ±velocità) in alto a destra del segmento.
+    // Toolbar tempo a sinistra del menu (stessa fascia in alto).
     const btnH = SF(22);
     const btnY = right.y + SF(8);
-    const ctrlLeftX = this._drawTimeControls(right.x + right.w - SF(10), btnY, btnH);
+    const ctrlLeftX = this._drawTimeControls(this.menuBtn.x - SF(6), btnY, btnH);
 
-    // Data subito sotto la toolbar, allineata a destra.
-    const rx = right.x + right.w - SF(14);
-    ctx.fillStyle = '#e8d8b0';
-    ctx.font = FONT.body();
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'top';
-    ctx.fillText(Calendar.formatCompatto(), rx, btnY + btnH + SF(4));
-    ctx.font = FONT.label();
-    ctx.fillText(`${Calendar.nomeStagione()} · ${this.meta.meteo} · → ${this.meta.destinazione}`,
-                 rx, btnY + btnH + SF(20));
-    // Indicatore velocità a sinistra della toolbar, sopra la data.
+    // Indicatore velocità a sinistra della toolbar, su stessa riga.
     const sec = Travel.speedSec();
-    const secTxt = sec < 1 ? (sec * 1000 | 0) + ' ms' : sec + ' s';
+    const secTxt = Math.round(sec) + ' s/passo';
     ctx.fillStyle = '#e8c050';
     ctx.font = FONT.label();
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
-    ctx.fillText(secTxt + '/passo', ctrlLeftX - SF(8), btnY + btnH / 2);
+    ctx.fillText(secTxt, ctrlLeftX - SF(8), btnY + btnH / 2);
+
+    // Riquadro data schematico sotto, occupando la fascia inferiore.
+    const boxY = btnY + btnH + SF(4);
+    const boxH = right.y + right.h - boxY - SF(4);
+    this._drawDateBox(right.x + right.w - SF(10), boxY, boxH);
+
     ctx.textBaseline = 'top';
+  },
+
+  // Riquadro data schematico: due righe, sigle + numeri colorati.
+  // Anchored a destra (rightX = bordo destro), ritorna la X sinistra.
+  // Riga 1: STAG  d.p              ERA·LUCE (romani)
+  // Riga 2: meteo (azzurro)        → destinazione (oro vivo)
+  _drawDateBox(rightX, topY, h) {
+    const ctx = this.ctx;
+    const w = SF(160);
+    const x = rightX - w;
+
+    // Cornice doppia stile cartiglio
+    ctx.fillStyle = '#120a04';
+    ctx.fillRect(x, topY, w, h);
+    drawPixelRectStroke(ctx, x, topY, w, h, '#8a6030');
+    drawPixelRectStroke(ctx, x + PIXEL, topY + PIXEL, w - PIXEL * 2, h - PIXEL * 2, '#3a2010');
+
+    const padX = SF(7);
+    const padR = SF(7);
+    const lh = SF(13);
+    const y1 = topY + Math.floor(h / 2) - lh + SF(2);
+    const y2 = topY + Math.floor(h / 2) + SF(2);
+
+    ctx.textBaseline = 'middle';
+
+    if (Calendar.inVeglia) {
+      // Forma 'veglia': solo VEG · g<n> centrato
+      ctx.font = FONT.button();
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#e8c050';
+      ctx.fillText('VEG', x + padX, y1);
+      ctx.fillStyle = '#6a5030';
+      ctx.fillText('·', x + padX + SF(34), y1);
+      ctx.fillStyle = '#f0e0b8';
+      ctx.fillText('g' + Calendar.giornoVeglia, x + padX + SF(46), y1);
+    } else {
+      // Riga 1 sinistra: STAG (oro) + d.p (crema)
+      const stagAbbr = Calendar.nomeStagione().substring(0, 3).toUpperCase();
+      ctx.font = FONT.button();
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#e8c050';
+      ctx.fillText(stagAbbr, x + padX, y1);
+      ctx.fillStyle = '#f0e0b8';
+      ctx.fillText(Calendar.diario + '.' + Calendar.passo, x + padX + SF(34), y1);
+
+      // Riga 1 destra: ERA·LUCE in romani (oro spento)
+      const era  = Calendar._romano(Calendar.era);
+      const luce = Calendar._romano(Calendar.luce);
+      ctx.textAlign = 'right';
+      ctx.font = FONT.label();
+      ctx.fillStyle = '#b89048';
+      ctx.fillText(era + '·' + luce, x + w - padR, y1);
+    }
+
+    // Riga 2: meteo (azzurrino) + → destinazione (oro vivo)
+    ctx.font = FONT.tiny();
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#a8c8d8';
+    const meteoTxt = this._truncTo(ctx, (this.meta.meteo || '—'), SF(68));
+    ctx.fillText(meteoTxt, x + padX, y2);
+
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#6a5030';
+    const destTxt = this._truncTo(ctx, (this.meta.destinazione || 'nessuna'), SF(70));
+    const destW = ctx.measureText(destTxt).width;
+    ctx.fillText('→', x + w - padR - destW - SF(4), y2);
+    ctx.fillStyle = '#e8a838';
+    ctx.fillText(destTxt, x + w - padR, y2);
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    return x;
+  },
+
+  _truncTo(ctx, s, maxW) {
+    if (!s) return '';
+    if (ctx.measureText(s).width <= maxW) return s;
+    while (s.length > 1 && ctx.measureText(s + '…').width > maxW) s = s.slice(0, -1);
+    return s + '…';
   },
 
   // Pulsante "scroll" (pergamena con linee). Apre SaveUI.

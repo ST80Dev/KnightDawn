@@ -1,4 +1,4 @@
-// FERRO & CENERE — generazione mondo procedurale
+// Knight Dawn — generazione mondo procedurale
 // Vanilla, niente dipendenze. Value-noise fBm con seed → elevazione + umidità
 // → biomi; poi piazzamento di castelli e villaggi con vincoli minimi.
 // Vedi docs/WORLD_GEN.md e docs/GRAFICA.md.

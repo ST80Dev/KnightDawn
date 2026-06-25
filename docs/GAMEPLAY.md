@@ -1,4 +1,4 @@
-# FERRO & CENERE — Modello di gameplay
+# Knight Dawn — Modello di gameplay
 
 > **Stato:** definizione concettuale. Verrà raffinato man mano che le fasi
 > S2–S4 procedono. Sistemi di supporto: `docs/EVENTS.md` (eventi e scelte),

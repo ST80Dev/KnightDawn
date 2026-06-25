@@ -1,4 +1,4 @@
-// FERRO & CENERE — Schermata creazione cavaliere
+// Knight Dawn — Schermata creazione cavaliere
 // Passo unico dell'avvio nuova partita: scelta del NOME (editabile o casuale).
 // Titolo, equipaggiamento iniziale ed evento di soglia restano alla futura
 // fase "Veglia" (vedi docs/GDD.md §3): qui si fissa solo l'identita' del POV.

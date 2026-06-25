@@ -1,4 +1,4 @@
-# FERRO & CENERE — Generazione Mondo
+# Knight Dawn — Generazione Mondo
 
 > Documento da definire nella Fase 2. Scheletro iniziale.
 

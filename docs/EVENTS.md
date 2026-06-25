@@ -1,4 +1,4 @@
-# FERRO & CENERE — Eventi e incontri
+# Knight Dawn — Eventi e incontri
 
 > **Stato:** stub. Verrà ampliato all'inizio della **Fase S3** della
 > roadmap. È il cuore del "respiro narrativo" del gioco.

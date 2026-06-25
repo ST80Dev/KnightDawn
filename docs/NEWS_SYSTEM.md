@@ -1,4 +1,4 @@
-# FERRO & CENERE — Sistema di propagazione delle informazioni
+# Knight Dawn — Sistema di propagazione delle informazioni
 
 > **Stato:** stub. La definizione concettuale è in `docs/GDD.md` §3
 > *Propagazione delle informazioni*. Questo documento verrà ampliato

@@ -1,4 +1,4 @@
-# FERRO & CENERE — Fazioni e reputazione
+# Knight Dawn — Fazioni e reputazione
 
 > **Stato:** stub. La definizione concettuale è in `docs/GDD.md` §3
 > *Fazioni e reputazione*. Questo documento verrà ampliato all'inizio

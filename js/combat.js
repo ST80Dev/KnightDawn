@@ -1,4 +1,4 @@
-// FERRO & CENERE — Sistema combattimento (motore)
+// Knight Dawn — Sistema combattimento (motore)
 // Scontro a Round interattivi. Un Round di combattimento = un Passo del
 // calendario (~3 ore in-fiction): nessuna sotto-unità tattica, stessa
 // griglia temporale del viaggio. Ogni Round avanza Calendar di 1 Passo.

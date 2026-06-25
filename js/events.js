@@ -1,4 +1,4 @@
-// FERRO & CENERE — Sistema eventi (motore)
+// Knight Dawn — Sistema eventi (motore)
 // Trigger di scene narrative durante il viaggio o nei luoghi, con scelte
 // stile gamebook. Solo motore: registry, selezione, applicazione effetti,
 // scadenze, save/load. Il CATALOGO sta in js/data/events_*.js

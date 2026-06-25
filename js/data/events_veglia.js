@@ -1,4 +1,4 @@
-// FERRO & CENERE — Catalogo eventi della Veglia (garzone di stalla)
+// Knight Dawn — Catalogo eventi della Veglia (garzone di stalla)
 // Un evento per EDIFICIO del cortile (vedi js/castle.js, vista Livello 1 di
 // docs/GRAFICA.md §2b). Recandosi a un edificio si apre la sua Carta del
 // cronista (Livello 2). Ripetibili finché dura la Veglia (Calendar.inVeglia).

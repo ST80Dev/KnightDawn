@@ -1,4 +1,4 @@
-# FERRO & CENERE — Compagnia e covi
+# Knight Dawn — Compagnia e covi
 
 > **Stato:** stub. La definizione concettuale è in `docs/GDD.md`
 > §2 *Il cavaliere / Seguito* e §3 *Compagnia e covi*. Questo documento

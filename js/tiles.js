@@ -1,4 +1,4 @@
-// FERRO & CENERE — grafica procedurale pixel-art chunky
+// Knight Dawn — grafica procedurale pixel-art chunky
 // Tutti i primitivi grafici disegnano in blocchi PIXEL×PIXEL
 // (configurato in config.js). Le curve si vedono "a quadratini".
 

@@ -1,4 +1,4 @@
-# FERRO & CENERE — Game Design Document
+# Knight Dawn — Game Design Document
 
 > Documento vivo. Le sezioni marcate [TBD] sono da definire.
 > Ultimo aggiornamento: sessione di design iniziale.
