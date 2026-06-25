@@ -82,6 +82,11 @@ const Travel = {
       Calendar.avanza(1);
       if (typeof Events !== 'undefined' && Events.tickDeadlines) Events.tickDeadlines();
       if (hooks.onStep) hooks.onStep(next, biome);
+      // onStep può aver fermato il viaggio (arrivo a struttura, evento di
+      // viaggio, pausa POI → Travel.stop azzera path). Se non viaggiamo più,
+      // esci subito: senza questa guardia gli accessi sotto a this.path
+      // sollevano "Cannot read properties of null (reading 'length')".
+      if (this.state !== 'traveling' || !this.path) return;
       if (this.idx >= this.path.length) {
         this.stop();
         if (hooks.onArrive) hooks.onArrive();
