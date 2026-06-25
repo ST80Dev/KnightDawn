@@ -232,7 +232,29 @@ const CastleView = {
       return;
     }
 
-    // Casa: corpo in pietra + tetto colorato + portone + emblema.
+    // Override PNG opzionale: se assets/sprites/veglia/<id>.png è caricato,
+    // disegnalo al posto della casa procedurale. L'edificio si estende
+    // leggermente sopra il rect per dare aria al tetto/torrette (il rect
+    // resta l'hitbox cliccabile).
+    const img = (typeof SpriteAssets !== 'undefined') ? SpriteAssets.get('veglia/' + b.id) : null;
+    if (img && img.naturalWidth > 0) {
+      const overflow = r.h * 0.35;
+      const targetH = r.h + overflow;
+      const scale = Math.min((r.w * 1.2) / img.naturalWidth, targetH / img.naturalHeight);
+      const w = Math.floor(img.naturalWidth * scale);
+      const h = Math.floor(img.naturalHeight * scale);
+      const x = Math.round(r.x + (r.w - w) / 2);
+      const y = Math.round(r.y + r.h - h);
+      const prev = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, x, y, w, h);
+      ctx.imageSmoothingEnabled = prev;
+      if (hot) { ctx.fillStyle = 'rgba(255,220,120,0.18)'; ctx.fillRect(r.x, r.y, r.w, r.h); }
+      this._label(ctx, b, hot);
+      return;
+    }
+
+    // Fallback procedurale: casa in pietra + tetto colorato + portone + emblema.
     const roofH = Math.max(SF(10), r.h * 0.42);
     // Corpo
     ctx.fillStyle = hot ? '#a99a76' : '#8f8160';
