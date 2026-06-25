@@ -16,11 +16,11 @@
 // ostili) sia il consumo di Forza durante il cammino reale.
 
 const Travel = {
-  // Quanto dura un Passo in tempo reale, in ms. Per la fase corrente uso un
   // Velocità di viaggio: durata in secondi di un Passo (1 tile).
-  // GDD: range 0.3 s (veloce, debug) → 30 s (lento, simulazione).
-  SPEED_PRESETS: [0.3, 1.5, 5, 15, 30],
-  speedIdx: 1,  // default: 1.5 s/passo (ritmo narrativo confortevole)
+  // Array ordinato dal più LENTO al più VELOCE: speedUp() → indice crescente
+  // → secondi minori → ritmo più rapido (UX: "+" = più veloce).
+  SPEED_PRESETS: [60, 30, 15, 7.5, 3],
+  speedIdx: 2,  // default: 15 s/passo
   speedMs()   { return this.SPEED_PRESETS[this.speedIdx] * 1000; },
   speedSec()  { return this.SPEED_PRESETS[this.speedIdx]; },
   speedUp()   { this.speedIdx = Math.min(this.speedIdx + 1, this.SPEED_PRESETS.length - 1); },
