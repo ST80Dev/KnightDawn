@@ -596,7 +596,7 @@ const GameScreen = {
       document.getElementById('game').style.cursor = 'default';
       return;
     }
-    if (typeof CastleView !== 'undefined' && CastleView.active) { CastleView.onPointerMove(p, type); return; }
+    if (typeof CastleView !== 'undefined' && CastleView.active && this.inMap(p)) { CastleView.onPointerMove(p, type); return; }
 
     if (this.activeOverlay) {
       const over = this.overlayWhere(p) === 'close';
@@ -637,7 +637,7 @@ const GameScreen = {
     if (this.poiPause)  { this._poiPauseDown(p); return; }
     if (this.preRecap)  { this._preRecapDown(p); return; }
     if (this.activeOverlay) { this.overlayPressed = this.overlayWhere(p); return; }
-    if (typeof CastleView !== 'undefined' && CastleView.active) { CastleView.onPointerDown(p); return; }
+    if (typeof CastleView !== 'undefined' && CastleView.active && this.inMap(p)) { CastleView.onPointerDown(p); return; }
 
     this.pressedMenu = this._hitMenu(p);
     if (this.pressedMenu) { window.GameRender.invalidate(); return; }
@@ -672,7 +672,7 @@ const GameScreen = {
     if (this.chronicle) { this._chronicleUp(p); return; }
     if (this.poiPause)  { this._poiPauseUp(p); return; }
     if (this.preRecap)  { this._preRecapUp(p); return; }
-    if (typeof CastleView !== 'undefined' && CastleView.active) { CastleView.onPointerUp(p, type); return; }
+    if (typeof CastleView !== 'undefined' && CastleView.active && this.inMap(p)) { CastleView.onPointerUp(p, type); return; }
 
     if (this.dragging) {
       const wasDrag = this.dragMoved;
@@ -1761,8 +1761,8 @@ const GameScreen = {
 
     if (L.compact) this.drawCompact(L);
     else this.drawDesktop(L);
-    // Vista cortile (Veglia): copre la mappa; le carte si sovrappongono sopra.
-    if (typeof CastleView !== 'undefined' && CastleView.active) CastleView.draw(ctx);
+    // La vista cortile (Veglia) è disegnata dentro il pannello mappa
+    // (vedi drawMapPanel); le carte si sovrappongono sopra l'HUD.
     if (this.preRecap)  this.drawPreRecap();
     if (this.poiPause)  this.drawPOIPause();
     if (this.chronicle && !this.combat) this.drawChronicle();
@@ -2788,6 +2788,11 @@ const GameScreen = {
 
   drawMapPanel(area) {
     const ctx = this.ctx;
+    // Durante la Veglia il pannello mappa mostra il cortile del castello.
+    if (typeof CastleView !== 'undefined' && CastleView.active) {
+      CastleView.draw(ctx, area);
+      return;
+    }
     const tex = getParchmentTexture(area.w, area.h, 9999);
     ctx.drawImage(tex, area.x, area.y);
 
