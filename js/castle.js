@@ -15,8 +15,10 @@ const CastleView = {
   marker: { x: 0, y: 0 },
   hover: -1,
   pressed: -1,
+  mode: 'veglia',       // 'veglia' (garzone) | 'visita' (castello sulla mappa)
 
   // Disposizione (fx,fy in [0,1] del cortile interno) + stile per edificio.
+  // Set Veglia: i compiti del garzone (eventi veglia.<id>).
   DEFS: [
     { id: 'cappella',  label: 'Cappella',    eventId: 'veglia.cappella',  fx: 0.50, fy: 0.18, roof: '#b6b6c0', emblem: 'croce' },
     { id: 'stalla',    label: 'Stalla',      eventId: 'veglia.stalla',    fx: 0.16, fy: 0.34, roof: '#7a4a22', emblem: 'ferro' },
@@ -27,7 +29,23 @@ const CastleView = {
     { id: 'portale',   label: 'Portale',     eventId: 'veglia.portale',   fx: 0.50, fy: 0.95, kind: 'gate' },
   ],
 
-  open() {
+  // Set Visita: entrando in un castello dalla mappa (Layout L1). Gli edifici
+  // pescano eventi per area (Events.pickArea 'castle'); 'mercato' apre il
+  // mercato; 'porta' esce alla mappa.
+  DEFS_VISITA: [
+    { id: 'salatrono', label: 'Sala del trono', area: 'salatrono', fx: 0.50, fy: 0.18, roof: '#9a7a30', emblem: 'corona' },
+    { id: 'stalla',    label: 'Stalla',         area: 'stalla',    fx: 0.16, fy: 0.34, roof: '#7a4a22', emblem: 'ferro' },
+    { id: 'taverna',   label: 'Taverna',        area: 'taverna',   fx: 0.84, fy: 0.34, roof: '#a8662c', emblem: 'boccale' },
+    { id: 'cappella',  label: 'Cappella',       area: 'cappella',  fx: 0.16, fy: 0.66, roof: '#b6b6c0', emblem: 'croce' },
+    { id: 'mercato',   label: 'Mercato',        action: 'market',  fx: 0.84, fy: 0.66, roof: '#9a7a30', emblem: 'moneta' },
+    { id: 'cortile',   label: 'Cortile',        area: 'cortile',   fx: 0.50, fy: 0.50, kind: 'pozzo' },
+    { id: 'porta',     label: 'Esci',           action: 'exit',    fx: 0.50, fy: 0.95, kind: 'gate' },
+  ],
+
+  _defs() { return this.mode === 'visita' ? this.DEFS_VISITA : this.DEFS; },
+
+  open(mode) {
+    this.mode = mode || 'veglia';
     this.active = true;
     this.buildings = [];   // posizionati al primo draw, quando si conosce il rect
     this.hover = -1;
@@ -51,7 +69,7 @@ const CastleView = {
     const inW = this.inner.w, inH = this.inner.h;
     const bw = Math.max(SF(34), Math.min(SF(86), inW * 0.18));
     const bh = Math.max(SF(26), Math.min(SF(56), inH * 0.20));
-    this.buildings = this.DEFS.map(d => {
+    this.buildings = this._defs().map(d => {
       const cx = this.inner.x + d.fx * inW;
       const cy = this.inner.y + d.fy * inH;
       return { ...d, cx, cy, rect: { x: cx - bw / 2, y: cy - bh / 2, w: bw, h: bh } };
@@ -100,9 +118,42 @@ const CastleView = {
   update() {},   // vista statica, nessuna camminata
 
   _enter(b) {
-    if (!b || typeof Events === 'undefined' || typeof GameScreen === 'undefined') return;
+    if (!b || typeof GameScreen === 'undefined') return;
+
+    if (this.mode === 'visita') {
+      if (b.action === 'exit') { this._exit(); return; }
+      if (b.action === 'market') { if (GameScreen.openMarket) GameScreen.openMarket(); return; }
+      // Evento per area (Layout L1); fallback su evento di luogo generico.
+      let ev = null;
+      if (typeof Events !== 'undefined') {
+        ev = (Events.pickArea && Events.pickArea('castle', b.area, this._struct()))
+          || (Events.pickLocation && Events.pickLocation('castle', this._struct()));
+      }
+      if (ev && GameScreen.openChronicle) GameScreen.openChronicle(ev, { resumeAfter: false });
+      else GameScreen._logEvent(b.label + ': non c\'è nessuno, per ora.');
+      return;
+    }
+
+    // Veglia: compiti del garzone per id.
+    if (typeof Events === 'undefined') return;
     const ev = Events.getById(b.eventId);
     if (ev && GameScreen.openChronicle) GameScreen.openChronicle(ev, { resumeAfter: false });
+  },
+
+  // Struttura su cui si trova il cavaliere (per gli eventi di area).
+  _struct() {
+    if (typeof World === 'undefined' || !World.structures || typeof GameScreen === 'undefined') return null;
+    return World.structures.find(
+      st => st.x === GameScreen.knightPos.x && st.y === GameScreen.knightPos.y) || null;
+  },
+
+  // Esce dal castello tornando alla mappa (solo modalità visita).
+  _exit() {
+    this.close();
+    if (typeof GameScreen !== 'undefined') {
+      const reg = (typeof World !== 'undefined' && World.regionName) ? World.regionName : 'le terre';
+      GameScreen._logEvent('Lasci il castello. Davanti a te, ' + reg + '.');
+    }
   },
 
   // ─── Disegno (dentro rect = pannello mappa) ─────────────────────────────────
@@ -391,6 +442,20 @@ const CastleView = {
         ctx.fillStyle = '#b8902a';
         ctx.beginPath(); ctx.arc(x, y, s * 0.26, 0, Math.PI * 2); ctx.fill();
         break;
+      case 'corona': { // corona a tre punte
+        ctx.fillStyle = '#f0c850';
+        const b = s * 0.7, t = s * 0.7;
+        ctx.beginPath();
+        ctx.moveTo(x - b, y + t);
+        ctx.lineTo(x - b, y - t * 0.2);
+        ctx.lineTo(x - b * 0.5, y + t * 0.2);
+        ctx.lineTo(x, y - t);
+        ctx.lineTo(x + b * 0.5, y + t * 0.2);
+        ctx.lineTo(x + b, y - t * 0.2);
+        ctx.lineTo(x + b, y + t);
+        ctx.closePath(); ctx.fill();
+        break;
+      }
     }
     ctx.restore();
   },
@@ -441,7 +506,9 @@ const CastleView = {
   _drawHeader(ctx, r) {
     const name = 'Castello di ' + this._castleName();
     const giorno = (typeof Calendar !== 'undefined') ? Calendar.giornoVeglia : 0;
-    const sub = 'Veglia · giorno ' + giorno;
+    const sub = this.mode === 'visita'
+      ? ((typeof World !== 'undefined' && World.regionName) ? World.regionName : '')
+      : 'Veglia · giorno ' + giorno;
     ctx.font = `bold ${SF(14)}px "Courier New", monospace`;
     const w1 = ctx.measureText(name).width;
     ctx.font = `italic ${SF(11)}px "Courier New", monospace`;
