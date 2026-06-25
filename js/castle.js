@@ -117,6 +117,7 @@ const CastleView = {
     ctx.clip();
 
     this._drawGround(ctx, rect);
+    this._drawTrees(ctx);
     this._drawWalls(ctx, rect);
     for (let i = 0; i < this.buildings.length; i++) {
       this._drawBuilding(ctx, this.buildings[i], i === this.hover || i === this.pressed);
@@ -162,6 +163,20 @@ const CastleView = {
 
   // Mura di cinta + torri angolari + porta a sud.
   _drawWalls(ctx, r) {
+    // Override PNG opzionale: palizzata di legno tilata. Se i 4 PNG sono
+    // disponibili, sostituisce le mura di pietra procedurali.
+    if (typeof SpriteAssets !== 'undefined') {
+      const wH = SpriteAssets.get('veglia/muro_h');
+      const wV = SpriteAssets.get('veglia/muro_v');
+      const arco = SpriteAssets.get('veglia/portale_arco');
+      const battenti = SpriteAssets.get('veglia/portale');
+      if (wH && wV && arco && battenti &&
+          wH.naturalWidth > 0 && wV.naturalWidth > 0 &&
+          arco.naturalWidth > 0 && battenti.naturalWidth > 0) {
+        this._drawWallsPNG(ctx, r, wH, wV, arco, battenti);
+        return;
+      }
+    }
     const t = this.wallT;
     const stone = '#9a9286', stoneHi = '#b3ab9d', stoneLo = '#6c655a';
     const x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h;
@@ -209,6 +224,55 @@ const CastleView = {
     }
   },
 
+  // Variante PNG di _drawWalls: palizzata di legno tilata sui 4 lati con
+  // cancello al centro del lato sud. Niente torri angolari (i tile orizzontali
+  // e verticali si incrociano agli angoli, coerenti perché stesso tileset).
+  _drawWallsPNG(ctx, r, wH, wV, arco, battenti) {
+    const t = this.wallT;
+    const x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h;
+    const prev = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+
+    // Larghezza di un segmento orizzontale e di uno verticale a video.
+    const tileH = wH.naturalHeight * (t / wH.naturalHeight);   // = t
+    const segW  = Math.max(1, Math.round(wH.naturalWidth  * (t / wH.naturalHeight)));
+    const tileV = wV.naturalWidth  * (t / wV.naturalWidth);    // = t
+    const segH  = Math.max(1, Math.round(wV.naturalHeight * (t / wV.naturalWidth)));
+
+    // Cancello al centro del lato sud (arco sopra + battenti dentro).
+    const gateW = Math.max(t * 2.2, Math.min(t * 3.5, r.w * 0.18));
+    const gateX = (x0 + x1) / 2 - gateW / 2;
+
+    // Lato nord (continuo).
+    for (let x = x0; x < x1; x += segW) {
+      const w = Math.min(segW, x1 - x);
+      ctx.drawImage(wH, 0, 0, wH.naturalWidth, wH.naturalHeight, x, y0, w, tileH);
+    }
+    // Lato sud (salta il varco del cancello).
+    for (let x = x0; x < x1; x += segW) {
+      const w = Math.min(segW, x1 - x);
+      if (x + w <= gateX || x >= gateX + gateW) {
+        ctx.drawImage(wH, 0, 0, wH.naturalWidth, wH.naturalHeight, x, y1 - tileH, w, tileH);
+      }
+    }
+    // Lati est/ovest.
+    for (let y = y0; y < y1; y += segH) {
+      const h = Math.min(segH, y1 - y);
+      ctx.drawImage(wV, 0, 0, wV.naturalWidth, wV.naturalHeight, x0, y, tileV, h);
+      ctx.drawImage(wV, 0, 0, wV.naturalWidth, wV.naturalHeight, x1 - tileV, y, tileV, h);
+    }
+
+    // Cancello: arco sopra (dentro lo spessore mura), battenti chiusi sotto.
+    const archH = tileH;
+    ctx.drawImage(arco, 0, 0, arco.naturalWidth, arco.naturalHeight,
+                  gateX, y1 - tileH, gateW, archH);
+    const doorH = Math.max(t * 0.9, archH * 1.1);
+    ctx.drawImage(battenti, 0, 0, battenti.naturalWidth, battenti.naturalHeight,
+                  gateX, y1 - tileH - doorH * 0.15, gateW, doorH);
+
+    ctx.imageSmoothingEnabled = prev;
+  },
+
   _drawBuilding(ctx, b, hot) {
     const r = b.rect;
     if (b.kind === 'gate') {
@@ -232,7 +296,29 @@ const CastleView = {
       return;
     }
 
-    // Casa: corpo in pietra + tetto colorato + portone + emblema.
+    // Override PNG opzionale: se assets/sprites/veglia/<id>.png è caricato,
+    // disegnalo al posto della casa procedurale. L'edificio si estende
+    // leggermente sopra il rect per dare aria al tetto/torrette (il rect
+    // resta l'hitbox cliccabile).
+    const img = (typeof SpriteAssets !== 'undefined') ? SpriteAssets.get('veglia/' + b.id) : null;
+    if (img && img.naturalWidth > 0) {
+      const overflow = r.h * 0.35;
+      const targetH = r.h + overflow;
+      const scale = Math.min((r.w * 1.2) / img.naturalWidth, targetH / img.naturalHeight);
+      const w = Math.floor(img.naturalWidth * scale);
+      const h = Math.floor(img.naturalHeight * scale);
+      const x = Math.round(r.x + (r.w - w) / 2);
+      const y = Math.round(r.y + r.h - h);
+      const prev = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, x, y, w, h);
+      ctx.imageSmoothingEnabled = prev;
+      if (hot) { ctx.fillStyle = 'rgba(255,220,120,0.18)'; ctx.fillRect(r.x, r.y, r.w, r.h); }
+      this._label(ctx, b, hot);
+      return;
+    }
+
+    // Fallback procedurale: casa in pietra + tetto colorato + portone + emblema.
     const roofH = Math.max(SF(10), r.h * 0.42);
     // Corpo
     ctx.fillStyle = hot ? '#a99a76' : '#8f8160';
@@ -305,6 +391,40 @@ const CastleView = {
         ctx.fillStyle = '#b8902a';
         ctx.beginPath(); ctx.arc(x, y, s * 0.26, 0, Math.PI * 2); ctx.fill();
         break;
+    }
+    ctx.restore();
+  },
+
+  // Alberi decorativi: piazzati nei 4 angoli del cortile (e 2 laterali extra)
+  // usando il Forest Objects pack. Se i PNG non sono caricati, nessun fallback
+  // (non c'era grafica arborea procedurale).
+  _TREE_SLOTS: [
+    { fx: 0.06, fy: 0.08, key: 'tree1' },   // NW
+    { fx: 0.94, fy: 0.08, key: 'tree2' },   // NE
+    { fx: 0.06, fy: 0.88, key: 'tree2' },   // SW
+    { fx: 0.94, fy: 0.88, key: 'tree1' },   // SE
+    { fx: 0.32, fy: 0.14, key: 'funghi' },  // NW-mid (piccolo accento)
+    { fx: 0.68, fy: 0.14, key: 'funghi' },  // NE-mid
+  ],
+
+  _drawTrees(ctx) {
+    if (typeof SpriteAssets === 'undefined') return;
+    const inn = this.inner;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    for (const slot of this._TREE_SLOTS) {
+      const img = SpriteAssets.get('veglia/' + slot.key);
+      if (!img || img.naturalWidth === 0) continue;
+      const cx = inn.x + slot.fx * inn.w;
+      const cy = inn.y + slot.fy * inn.h;
+      // alberi grandi ~40% della dimensione minima edificio, funghi ~20%
+      const base = Math.min(inn.w, inn.h);
+      const isMushroom = slot.key === 'funghi';
+      const size = isMushroom ? base * 0.12 : base * 0.22;
+      const scale = size / Math.max(img.naturalWidth, img.naturalHeight);
+      const w = Math.ceil(img.naturalWidth  * scale);
+      const h = Math.ceil(img.naturalHeight * scale);
+      ctx.drawImage(img, Math.round(cx - w / 2), Math.round(cy - h), w, h);
     }
     ctx.restore();
   },

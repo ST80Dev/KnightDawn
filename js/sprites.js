@@ -11,6 +11,33 @@
 //   r rosso (sangue/cresta) · e occhio/bagliore · w osso/bianco
 //   g pelle verde · b ghiaccio/azzurro · p viola/magia
 // Nessuna dipendenza esterna: serve solo un context 2D. Stile docs/GRAFICA.md.
+//
+// Override PNG opzionale: se esiste assets/sprites/<chiave>.png viene usato
+// al posto della bitmap procedurale (vedi SpriteAssets sotto); il fallback
+// alla bitmap è automatico se il file manca o fallisce il caricamento.
+
+// Loader lazy per sprite PNG opzionali. Nessuna preload sincrona: la prima
+// volta che una chiave serve si avvia la fetch e si disegna la bitmap; ai
+// frame successivi appare il PNG.
+const SpriteAssets = {
+  _img: Object.create(null),
+  _state: Object.create(null),   // chiave → 'loading' | 'ok' | 'fail'
+  basePath: 'assets/sprites/',
+
+  tryLoad(key) {
+    if (this._state[key]) return;
+    this._state[key] = 'loading';
+    const img = new Image();
+    img.onload  = () => { this._img[key] = img; this._state[key] = 'ok'; };
+    img.onerror = () => { this._state[key] = 'fail'; };
+    img.src = this.basePath + key + '.png';
+  },
+
+  get(key) {
+    this.tryLoad(key);
+    return this._state[key] === 'ok' ? this._img[key] : null;
+  },
+};
 
 const Sprites = {
   // ─── Bitmap per chiave ───────────────────────────────────────────────────
@@ -453,10 +480,34 @@ const Sprites = {
 
   drawInBox(ctx, key, box, opts) {
     opts = opts || {};
-    const bmp = this.bitmaps[key];
-    if (!bmp) return null;
     const margin = opts.margin != null ? opts.margin : 0;
     const availW = box.w - margin * 2, availH = box.h - margin * 2;
+
+    // PNG override: se l'asset è caricato, disegnalo centrato e proporzionato.
+    const img = SpriteAssets.get(key);
+    if (img && img.naturalWidth > 0) {
+      const scale = Math.min(availW / img.naturalWidth, availH / img.naturalHeight);
+      const w = Math.floor(img.naturalWidth * scale);
+      const h = Math.floor(img.naturalHeight * scale);
+      const x = Math.round(box.x + (box.w - w) / 2);
+      const y = Math.round(box.y + (box.h - h) / 2);
+      const prev = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = false;
+      if (opts.flip) {
+        ctx.save();
+        ctx.translate(x + w, y); ctx.scale(-1, 1);
+        ctx.drawImage(img, 0, 0, w, h);
+        ctx.restore();
+      } else {
+        ctx.drawImage(img, x, y, w, h);
+      }
+      ctx.imageSmoothingEnabled = prev;
+      return { x, y, w, h, cell: scale };
+    }
+
+    // Fallback procedurale: bitmap esistente, invariato.
+    const bmp = this.bitmaps[key];
+    if (!bmp) return null;
     const cols = this._cols(bmp), rows = bmp.length;
     const cell = Math.max(1, Math.floor(Math.min(availW / cols, availH / rows)));
     const w = cols * cell, h = rows * cell;
