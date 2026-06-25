@@ -184,21 +184,19 @@ const GameScreen = {
 
     Save.startAutosave();
 
-    // Nuova partita in Veglia: apri subito l'hub del garzone per orientare.
-    if (!resume && typeof Calendar !== 'undefined' && Calendar.inVeglia) {
-      this._openVegliaHub();
+    // In Veglia (nuova partita o ripresa a metà prologo) la vista è il cortile
+    // del castello; altrimenti è la mappa del mondo.
+    if (typeof CastleView !== 'undefined') {
+      if (typeof Calendar !== 'undefined' && Calendar.inVeglia) CastleView.open();
+      else CastleView.close();
     }
   },
 
   // ─── Veglia: hub del garzone ──────────────────────────────────────────────
-  // Apre la Carta del cronista con i lavori del garzone (vedi
-  // js/data/events_veglia.js e docs/EARLY_GAME.md). Ripetibile: si richiude e
-  // si riapre con il pulsante INTERAGISCI finché dura la Veglia.
+  // Apre la vista del cortile del castello (Veglia, Layout luogo §2b).
   _openVegliaHub() {
-    if (typeof Events === 'undefined' || !Events.getById) return false;
-    const ev = Events.getById('veglia.castello');
-    if (!ev) return false;
-    return this.openChronicle(ev, { resumeAfter: false });
+    if (typeof CastleView !== 'undefined') { CastleView.open(); return true; }
+    return false;
   },
 
   // Dispatch dei pulsanti azione della barra inferiore.
@@ -598,6 +596,7 @@ const GameScreen = {
       document.getElementById('game').style.cursor = 'default';
       return;
     }
+    if (typeof CastleView !== 'undefined' && CastleView.active) { CastleView.onPointerMove(p, type); return; }
 
     if (this.activeOverlay) {
       const over = this.overlayWhere(p) === 'close';
@@ -638,6 +637,7 @@ const GameScreen = {
     if (this.poiPause)  { this._poiPauseDown(p); return; }
     if (this.preRecap)  { this._preRecapDown(p); return; }
     if (this.activeOverlay) { this.overlayPressed = this.overlayWhere(p); return; }
+    if (typeof CastleView !== 'undefined' && CastleView.active) { CastleView.onPointerDown(p); return; }
 
     this.pressedMenu = this._hitMenu(p);
     if (this.pressedMenu) { window.GameRender.invalidate(); return; }
@@ -672,6 +672,7 @@ const GameScreen = {
     if (this.chronicle) { this._chronicleUp(p); return; }
     if (this.poiPause)  { this._poiPauseUp(p); return; }
     if (this.preRecap)  { this._preRecapUp(p); return; }
+    if (typeof CastleView !== 'undefined' && CastleView.active) { CastleView.onPointerUp(p, type); return; }
 
     if (this.dragging) {
       const wasDrag = this.dragMoved;
@@ -743,6 +744,7 @@ const GameScreen = {
 
   onPointerCancel() {
     if (SaveUI.isOpen()) { SaveUI.onPointerCancel(); return; }
+    if (typeof CastleView !== 'undefined' && CastleView.active) CastleView.onPointerCancel();
     this.dragging = false;
     this.dragMoved = false;
     this.pressedBtn = this.pressedNav = this.pressedZoom = this.pressedKnightTab = -1;
@@ -1618,6 +1620,19 @@ const GameScreen = {
   // di colpo. Limitiamo il dt a ~250 ms (1 secondo di buffering al massimo)
   // per evitare maxi-balzi al rientro.
   update(dtMs) {
+    // Vista cortile (Veglia): anima lo spostamento del garzone e, finita la
+    // Veglia (investitura), chiude la vista lasciando spazio alla mappa.
+    if (typeof CastleView !== 'undefined' && CastleView.active) {
+      CastleView.update(dtMs);
+      // Finita la Veglia (investitura), chiude la vista cortile — ma solo dopo
+      // che la carta dell'investitura è stata congedata, così la transizione al
+      // mondo avviene a schermo libero.
+      if (typeof Calendar !== 'undefined' && !Calendar.inVeglia
+          && !this.chronicle && !this.market && !this.combat) {
+        CastleView.close();
+        this._logEvent('Esci dal castello. Davanti a te, ' + this.regionName() + '.');
+      }
+    }
     if (!Travel.isActive()) return;
     const dt = Math.min(dtMs, 250);
     Travel.update(dt, this.knightPos, {
@@ -1746,6 +1761,8 @@ const GameScreen = {
 
     if (L.compact) this.drawCompact(L);
     else this.drawDesktop(L);
+    // Vista cortile (Veglia): copre la mappa; le carte si sovrappongono sopra.
+    if (typeof CastleView !== 'undefined' && CastleView.active) CastleView.draw(ctx);
     if (this.preRecap)  this.drawPreRecap();
     if (this.poiPause)  this.drawPOIPause();
     if (this.chronicle && !this.combat) this.drawChronicle();
