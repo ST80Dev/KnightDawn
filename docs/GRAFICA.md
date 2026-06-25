@@ -1,4 +1,4 @@
-# FERRO & CENERE — Specifiche Grafiche
+# Knight Dawn — Specifiche Grafiche
 
 > Documento di riferimento per la grafica del gioco.
 > **Questo è il focus della Fase 1.**

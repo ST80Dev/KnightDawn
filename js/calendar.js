@@ -1,4 +1,4 @@
-// FERRO & CENERE — calendario del mondo
+// Knight Dawn — calendario del mondo
 // Gerarchia: Era → Luce → Stagione → Diario → Passo
 //
 // 1 Passo    = 1 tile di viaggio (~2-3 ore in-fiction)

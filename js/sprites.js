@@ -1,4 +1,4 @@
-// FERRO & CENERE — Silhouette pixel-art (procedurali)
+// Knight Dawn — Silhouette pixel-art (procedurali)
 // Figure pixel ombreggiate per cavaliere e nemici, usate nella scena di
 // combattimento (e riutilizzabili altrove). Ogni figura è una BITMAP (array
 // di stringhe) + una PALETTE (mappa carattere → colore esadecimale): così

@@ -1,4 +1,4 @@
-// FERRO & CENERE — viaggio automatico tile-by-tile + A*
+// Knight Dawn — viaggio automatico tile-by-tile + A*
 // Granularità: 1 Passo = 1 tile (vedi GDD §3 Tempo e calendario, §3 Viaggio).
 // Vanilla, niente dipendenze. Espone l'oggetto globale Travel.
 //

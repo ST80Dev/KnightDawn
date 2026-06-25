@@ -1,4 +1,4 @@
-// FERRO & CENERE — save/load
+// Knight Dawn — save/load
 // Tutto su Supabase. Tabella public.saves con colonna 'slot' unique.
 //
 // Convenzione slot:

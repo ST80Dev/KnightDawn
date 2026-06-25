@@ -1,4 +1,4 @@
-// FERRO & CENERE — schermata gioco principale
+// Knight Dawn — schermata gioco principale
 // Disegnata direttamente sul canvas display (vedi main.js). Le dimensioni
 // passano da S(...)/SF(...) per restare proporzionate al canvas.
 //

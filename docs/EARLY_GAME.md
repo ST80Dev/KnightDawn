@@ -1,4 +1,4 @@
-# FERRO & CENERE — Inizio gioco, ranghi e mercato
+# Knight Dawn — Inizio gioco, ranghi e mercato
 
 > Documento di design dell'**apertura** (Età della Veglia) e dei sistemi che la
 > sorreggono: ranghi del cavaliere, azioni/missioni iniziali, mercato/economia.

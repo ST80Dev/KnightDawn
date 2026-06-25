@@ -1,4 +1,4 @@
-# FERRO & CENERE — Architettura del sistema testi
+# Knight Dawn — Architettura del sistema testi
 
 > **Stato:** stub architetturale. Verrà ampliato all'inizio della
 > **Fase S3** della roadmap, in parallelo a `docs/EVENTS.md`.

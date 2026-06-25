@@ -1,4 +1,4 @@
-// FERRO & CENERE — stato del cavaliere
+// Knight Dawn — stato del cavaliere
 // Dati puri, niente UI. Acceduto da game.js per display, da travel.js (futuro)
 // per costi di viaggio.
 //

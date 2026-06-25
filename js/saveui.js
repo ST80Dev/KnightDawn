@@ -1,4 +1,4 @@
-// FERRO & CENERE — overlay gestione slot di salvataggio
+// Knight Dawn — overlay gestione slot di salvataggio
 // Stato disaccoppiato dalle scene; mostra slot 0 (autosave, sola lettura)
 // e slot 1-5 (manuali). Riusabile sia da titolo (mode='title') sia da
 // in-game (mode='game').

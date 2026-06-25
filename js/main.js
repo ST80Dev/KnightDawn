@@ -1,4 +1,4 @@
-// FERRO & CENERE — bootstrap
+// Knight Dawn — bootstrap
 // Pipeline: render DIRETTO sul canvas visibile. Il canvas ha un backing store
 // in pixel FISICI (× devicePixelRatio) per testo e grafica nitidi su schermi
 // retina e mobile; il contesto è scalato di dpr così tutto il codice di

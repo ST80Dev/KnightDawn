@@ -1,4 +1,4 @@
-// FERRO & CENERE — renderer mappa top-down
+// Knight Dawn — renderer mappa top-down
 // Disegna il mondo (World) dentro un'area, data una camera. Stateless: la
 // camera vive nella scena. Lo zoom è discreto (MAP_ZOOM_STEPS) e centrato sul
 // centro camera; il pan sposta liberamente quel centro.

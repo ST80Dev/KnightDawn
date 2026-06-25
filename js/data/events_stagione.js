@@ -1,4 +1,4 @@
-// FERRO & CENERE — Catalogo eventi stagionali
+// Knight Dawn — Catalogo eventi stagionali
 // Una-tantum per Luce (oncePerLuce: true) con prereq stagione corrente.
 // Target: 1–2 eventi per stagione = 4–8 totali.
 // Esempi: festa del raccolto (autunno), veglia d'inverno, mercato di

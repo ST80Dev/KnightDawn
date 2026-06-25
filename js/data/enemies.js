@@ -1,4 +1,4 @@
-// FERRO & CENERE — Catalogo nemici (dati)
+// Knight Dawn — Catalogo nemici (dati)
 // Archetipi di avversari usati dal motore di combattimento (js/combat.js).
 // Solo dati: nessuna logica di scontro qui. Gli eventi referenziano un nemico
 // per id stringa (es. 'banditi.viandante') nell'effetto { type:'combat', ... };

@@ -1,4 +1,4 @@
-// FERRO & CENERE — Catalogo stanze dungeon
+// Knight Dawn — Catalogo stanze dungeon
 // Sequenze di stanze (grafo) per dungeon attivabili da POI (cripta, rovine,
 // voragine, tempio) o da scelte interne a castelli/monasteri.
 //
