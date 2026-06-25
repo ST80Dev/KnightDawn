@@ -1056,6 +1056,11 @@ const GameScreen = {
     return { knight: Knight, world: World, meta: this.meta };
   },
 
+  // Nome della regione corrente (generato per-seed in World), con fallback.
+  regionName() {
+    return (typeof World !== 'undefined' && World.regionName) ? World.regionName : 'Le Marche di Vorn';
+  },
+
   // ─── Scena di combattimento (overlay 3 colonne) ───────────────────────────
   // Etichette italiane per le scelte del Round (vedi js/combat.js).
   // Avvia uno scontro. enemy = id stringa del catalogo o oggetto nemico.
@@ -2202,7 +2207,7 @@ const GameScreen = {
     ctx.fillText('LUOGO', area.x, y + SF(2));
     ctx.fillStyle = '#e8d8b0';
     ctx.font = FONT.value();
-    ctx.fillText('Pianura, Marche di Vorn', area.x + labelW, y);
+    ctx.fillText(this.regionName(), area.x + labelW, y);
     y += rowH;
 
     ctx.fillStyle = '#e8c050';
@@ -2714,7 +2719,7 @@ const GameScreen = {
     drawCartographicBorder(ctx, area.x, area.y, area.w, area.h);
 
     // Etichetta regione su targhetta chiara (leggibile su qualsiasi fondo).
-    const rTxt = 'Le Marche di Vorn';
+    const rTxt = this.regionName();
     const rFs = SF(17);
     ctx.font = `italic bold ${rFs}px "Courier New", monospace`;
     ctx.textAlign = 'left';
@@ -2751,7 +2756,7 @@ const GameScreen = {
       y += SF(12);
     };
 
-    drawSection('LUOGO ATTUALE', 'Pianura, Marche di Vorn');
+    drawSection('LUOGO ATTUALE', this.regionName());
     drawSection('VISIBILITÀ',    '5 tile (pianura)');
     drawSection('STAGIONE',      'Primavera · 12° giorno');
     drawSection('METEO',         'Sereno · vento da est');
@@ -2891,6 +2896,6 @@ const GameScreen = {
     ctx.font = FONT.caption();
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
-    ctx.fillText('Sei qui · Marche di Vorn', area.x + area.w / 2, area.y + area.h - SF(8));
+    ctx.fillText('Sei qui · ' + this.regionName(), area.x + area.w / 2, area.y + area.h - SF(8));
   },
 };
