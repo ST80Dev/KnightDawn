@@ -1,4 +1,4 @@
-// FERRO & CENERE — scene manager minimale
+// Knight Dawn — scene manager minimale
 // Gestisce il passaggio tra le schermate (titolo, gioco, ecc.).
 // Ogni scena espone: init(canvas), draw(), e opzionalmente i metodi pointer
 // onPointerMove(p, type) / onPointerDown(p, type) / onPointerUp(p, type) /

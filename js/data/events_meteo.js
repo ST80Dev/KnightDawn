@@ -1,4 +1,4 @@
-// FERRO & CENERE — Catalogo eventi meteo straordinari
+// Knight Dawn — Catalogo eventi meteo straordinari
 // Eventi di viaggio pesati basso, con cooldown alto, coerenti per
 // bioma/latitudine. Quando scattano possono sovrascrivere lo stato meteo
 // ambientale per la loro durata (vedi docs/EVENTS.md → Sistema meteo).

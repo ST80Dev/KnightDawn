@@ -1,4 +1,4 @@
-// FERRO & CENERE — configurazione globale
+// Knight Dawn — configurazione globale
 // Palette e costanti derivate da docs/GRAFICA.md
 
 const PALETTE = {

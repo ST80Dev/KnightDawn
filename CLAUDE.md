@@ -1,4 +1,4 @@
-# FERRO & CENERE — Claude Code Briefing
+# Knight Dawn — Claude Code Briefing
 
 Gioco di avventura medievale top-down, pixel art cartografico su pergamena.
 Cavaliere errante, mondo procedurale, fazioni, combattimento a turni.

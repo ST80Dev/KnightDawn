@@ -1,4 +1,4 @@
-// FERRO & CENERE — Schermata titolo
+// Knight Dawn — Schermata titolo
 // Disegna direttamente sul canvas display (vedi main.js). Le dimensioni
 // assolute passano da S(...) per restare proporzionali al canvas; il layout
 // si adatta a schermi stretti (UI.compact) e il titolo viene rimpicciolito

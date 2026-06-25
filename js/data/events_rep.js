@@ -1,4 +1,4 @@
-// FERRO & CENERE — Catalogo eventi guidati dalla reputazione
+// Knight Dawn — Catalogo eventi guidati dalla reputazione
 // Eventi di viaggio e luogo che scattano solo se rep o onore raggiungono
 // certe soglie (campo Event.if). Target: 10–15 voci.
 // Esempi:

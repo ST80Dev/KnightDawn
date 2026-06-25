@@ -1,4 +1,4 @@
-// FERRO & CENERE — Catalogo eventi POI
+// Knight Dawn — Catalogo eventi POI
 // Scene narrative all'esplorazione delle zone speciali agli estremi del
 // mondo (rovine, tempio, monolite, relitto, cripta, faro, santuario,
 // voragine). Target volumi: ~5 per kind (vedi docs/EVENTS.md).

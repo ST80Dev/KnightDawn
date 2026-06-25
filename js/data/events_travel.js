@@ -1,4 +1,4 @@
-// FERRO & CENERE — Catalogo eventi di viaggio
+// Knight Dawn — Catalogo eventi di viaggio
 // Tutti gli eventi che scattano lungo il cammino, filtrati per bioma.
 // Target di volumi: ~8 per bioma × 13 biomi (vedi docs/EVENTS.md).
 // Schema e linee guida autoriali in docs/EVENTS.md.

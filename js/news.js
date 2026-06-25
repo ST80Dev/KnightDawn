@@ -1,4 +1,4 @@
-// FERRO & CENERE — Sistema news (stub S3, implementazione completa in S6)
+// Knight Dawn — Sistema news (stub S3, implementazione completa in S6)
 //
 // In S3 questo modulo offre solo l'API che il sistema eventi userà per
 // produrre e leggere news. Niente propagazione a onde, niente rumor,

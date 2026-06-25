@@ -1,4 +1,4 @@
-// FERRO & CENERE — Catalogo eventi di luogo
+// Knight Dawn — Catalogo eventi di luogo
 // Scene narrative all'arrivo in strutture (castle/village/keep) e — in
 // futuro — al click su edifici/aree dentro il layout L1 (taverna, fabbro,
 // cappella, sala del trono, scriptorium, …).

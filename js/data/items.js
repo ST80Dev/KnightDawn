@@ -1,4 +1,4 @@
-// FERRO & CENERE — Catalogo oggetti e prezzi del mercato
+// Knight Dawn — Catalogo oggetti e prezzi del mercato
 // Economia volutamente semplice (vedi docs/EARLY_GAME.md §4):
 //  - prezzi UGUALI in tutti i castelli, nessuna stagionalità;
 //  - nessun livello di usura: ogni oggetto ha un prezzo base unico;

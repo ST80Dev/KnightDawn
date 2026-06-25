@@ -1,4 +1,4 @@
-// FERRO & CENERE — Catalogo eventi della Veglia (garzone di stalla)
+// Knight Dawn — Catalogo eventi della Veglia (garzone di stalla)
 // Hub iniziale del prologo: il cavaliere è ancora un garzone al castello.
 // Si apre con il pulsante INTERAGISCI ed è ripetibile finché dura la Veglia
 // (Calendar.inVeglia). Ogni lavoro rende poche monete e consuma giorni; con
