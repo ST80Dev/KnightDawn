@@ -28,7 +28,14 @@ const SpriteAssets = {
     if (this._state[key]) return;
     this._state[key] = 'loading';
     const img = new Image();
-    img.onload  = () => { this._img[key] = img; this._state[key] = 'ok'; };
+    img.onload  = () => {
+      this._img[key] = img; this._state[key] = 'ok';
+      // Invalida il frame per mostrare il PNG subito, senza aspettare
+      // la prossima interazione utente (es. fine turno di combattimento).
+      if (typeof window !== 'undefined' && window.GameRender && window.GameRender.invalidate) {
+        window.GameRender.invalidate();
+      }
+    };
     img.onerror = () => { this._state[key] = 'fail'; };
     img.src = this.basePath + key + '.png';
   },
