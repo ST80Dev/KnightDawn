@@ -162,6 +162,20 @@ const CastleView = {
 
   // Mura di cinta + torri angolari + porta a sud.
   _drawWalls(ctx, r) {
+    // Override PNG opzionale: palizzata di legno tilata. Se i 4 PNG sono
+    // disponibili, sostituisce le mura di pietra procedurali.
+    if (typeof SpriteAssets !== 'undefined') {
+      const wH = SpriteAssets.get('veglia/muro_h');
+      const wV = SpriteAssets.get('veglia/muro_v');
+      const arco = SpriteAssets.get('veglia/portale_arco');
+      const battenti = SpriteAssets.get('veglia/portale');
+      if (wH && wV && arco && battenti &&
+          wH.naturalWidth > 0 && wV.naturalWidth > 0 &&
+          arco.naturalWidth > 0 && battenti.naturalWidth > 0) {
+        this._drawWallsPNG(ctx, r, wH, wV, arco, battenti);
+        return;
+      }
+    }
     const t = this.wallT;
     const stone = '#9a9286', stoneHi = '#b3ab9d', stoneLo = '#6c655a';
     const x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h;
@@ -207,6 +221,55 @@ const CastleView = {
       ctx.lineTo(tx + tw + PIXEL, ty);
       ctx.closePath(); ctx.fill();
     }
+  },
+
+  // Variante PNG di _drawWalls: palizzata di legno tilata sui 4 lati con
+  // cancello al centro del lato sud. Niente torri angolari (i tile orizzontali
+  // e verticali si incrociano agli angoli, coerenti perché stesso tileset).
+  _drawWallsPNG(ctx, r, wH, wV, arco, battenti) {
+    const t = this.wallT;
+    const x0 = r.x, y0 = r.y, x1 = r.x + r.w, y1 = r.y + r.h;
+    const prev = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+
+    // Larghezza di un segmento orizzontale e di uno verticale a video.
+    const tileH = wH.naturalHeight * (t / wH.naturalHeight);   // = t
+    const segW  = Math.max(1, Math.round(wH.naturalWidth  * (t / wH.naturalHeight)));
+    const tileV = wV.naturalWidth  * (t / wV.naturalWidth);    // = t
+    const segH  = Math.max(1, Math.round(wV.naturalHeight * (t / wV.naturalWidth)));
+
+    // Cancello al centro del lato sud (arco sopra + battenti dentro).
+    const gateW = Math.max(t * 2.2, Math.min(t * 3.5, r.w * 0.18));
+    const gateX = (x0 + x1) / 2 - gateW / 2;
+
+    // Lato nord (continuo).
+    for (let x = x0; x < x1; x += segW) {
+      const w = Math.min(segW, x1 - x);
+      ctx.drawImage(wH, 0, 0, wH.naturalWidth, wH.naturalHeight, x, y0, w, tileH);
+    }
+    // Lato sud (salta il varco del cancello).
+    for (let x = x0; x < x1; x += segW) {
+      const w = Math.min(segW, x1 - x);
+      if (x + w <= gateX || x >= gateX + gateW) {
+        ctx.drawImage(wH, 0, 0, wH.naturalWidth, wH.naturalHeight, x, y1 - tileH, w, tileH);
+      }
+    }
+    // Lati est/ovest.
+    for (let y = y0; y < y1; y += segH) {
+      const h = Math.min(segH, y1 - y);
+      ctx.drawImage(wV, 0, 0, wV.naturalWidth, wV.naturalHeight, x0, y, tileV, h);
+      ctx.drawImage(wV, 0, 0, wV.naturalWidth, wV.naturalHeight, x1 - tileV, y, tileV, h);
+    }
+
+    // Cancello: arco sopra (dentro lo spessore mura), battenti chiusi sotto.
+    const archH = tileH;
+    ctx.drawImage(arco, 0, 0, arco.naturalWidth, arco.naturalHeight,
+                  gateX, y1 - tileH, gateW, archH);
+    const doorH = Math.max(t * 0.9, archH * 1.1);
+    ctx.drawImage(battenti, 0, 0, battenti.naturalWidth, battenti.naturalHeight,
+                  gateX, y1 - tileH - doorH * 0.15, gateW, doorH);
+
+    ctx.imageSmoothingEnabled = prev;
   },
 
   _drawBuilding(ctx, b, hot) {
