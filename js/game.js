@@ -243,6 +243,12 @@ const GameScreen = {
       window.GameRender.invalidate();
       return;
     }
+    // Castello: entra nel cortile (Layout L1).
+    if (s.type === 'castle' && typeof CastleView !== 'undefined') {
+      CastleView.open('visita');
+      window.GameRender.invalidate();
+      return;
+    }
     let ev = null;
     if (typeof Events !== 'undefined') ev = Events.pickLocation(s.type, s);
     if (ev) this.openChronicle(ev, { resumeAfter: false });
@@ -1627,7 +1633,8 @@ const GameScreen = {
       // Finita la Veglia (investitura), chiude la vista cortile — ma solo dopo
       // che la carta dell'investitura è stata congedata, così la transizione al
       // mondo avviene a schermo libero.
-      if (typeof Calendar !== 'undefined' && !Calendar.inVeglia
+      if (CastleView.mode === 'veglia'
+          && typeof Calendar !== 'undefined' && !Calendar.inVeglia
           && !this.chronicle && !this.market && !this.combat) {
         CastleView.close();
         this._logEvent('Esci dal castello. Davanti a te, ' + this.regionName() + '.');
@@ -1648,7 +1655,11 @@ const GameScreen = {
           Travel.stop();
           this.meta.destinazione = 'nessuna';
           this._logEvent(`Arrivi a ${s.name}.`);
-          if (typeof Events !== 'undefined') {
+          const inVeglia = (typeof Calendar !== 'undefined' && Calendar.inVeglia);
+          if (s.type === 'castle' && typeof CastleView !== 'undefined' && !inVeglia) {
+            // Castello: entra nel cortile (Layout L1) invece di una carta singola.
+            CastleView.open('visita');
+          } else if (typeof Events !== 'undefined') {
             const ev = Events.pickLocation(s.type, s);
             if (ev) this.openChronicle(ev, { resumeAfter: false });
           }
