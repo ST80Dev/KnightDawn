@@ -2,7 +2,8 @@
 
 > Obiettivo: capire se il 3D è sostenibile da sviluppatore singolo **prima** di investirci.
 > Il prototipo è riuscito se, a fine M4, camminare sul terreno reale è fluido e piacevole.
-> Se ci si impantana su camera, collisioni o prestazioni, si valuta il ritorno al 2D (tag `v2d-final`).
+> Se ci si impantana su camera, collisioni o prestazioni, si valuta come proseguire.
+> La versione 2D resta nella cronologia git (commit `2c869fa`).
 
 ## Il minimo da raggiungere
 
@@ -57,7 +58,6 @@ mostra un avviso nel HUD. M1 non deve restare bloccata in attesa dei dati reali.
 Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
 
 ### M0 — Pulizia e scheletro
-- Tag `v2d-final` su `main` **prima** di qualsiasi rimozione.
 - Rimuovere la parte 2D non più necessaria:
   `renderer.js` `tiles.js` `sprites.js` `world.js` `travel.js` `scenes.js` `title.js` `create.js`
   `saveui.js` `game.js` `castle.js` `main.js` · `sprites_preview.html` · `assets/sprites/` ·
@@ -96,7 +96,7 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
   configurabile e con fondamenta che si adattano al terreno (base che scende fino al suolo).
 - Collisioni semplici (rettangoli/cerchi sul piano XZ) contro mura e torri; la porta resta attraversabile.
 - **Accettazione:** si gira attorno al castello senza attraversare i muri e si entra dalla porta.
-- **Qui si valuta il prototipo** con l'utente: proseguire in 3D o tornare al 2D.
+- **Qui si valuta il prototipo** con l'utente: se e come proseguire.
 
 ### M5 — Aggancio alla logica esistente (solo dopo la valutazione di M4)
 - La distanza percorsa si converte in **Passi** (valore in `config.js`), che fanno avanzare `Calendar`

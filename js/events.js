@@ -66,8 +66,8 @@ const Events = {
   _ctx(extra) {
     return Object.assign({
       knight: Knight,
-      world:  World,
-      meta:   (window.GameScreen ? GameScreen.meta : null),
+      world:  (typeof World !== 'undefined') ? World : null,          // World 2D rimosso in M0
+      meta:   (typeof GameScreen !== 'undefined') ? GameScreen.meta : null,
     }, extra || {});
   },
 

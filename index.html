@@ -2,27 +2,32 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#1a0e04" />
-  <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Knight Dawn</title>
   <link rel="stylesheet" href="style.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./lib/three/three.module.js"
+      }
+    }
+  </script>
 </head>
 <body>
-  <canvas id="game"></canvas>
+  <canvas id="scena"></canvas>
+
+  <!-- Overlay HUD in HTML/CSS sopra il canvas (vuoto per ora) -->
+  <div id="hud"></div>
+
+  <!-- Contatore FPS: si mostra/nasconde con F3 -->
+  <div id="fps" hidden></div>
+
+  <!-- Logica di gioco (script classici, senza grafica): li leggono i moduli 3D come globali -->
   <script src="js/config.js"></script>
-  <script src="js/tiles.js"></script>
-  <script src="js/world.js"></script>
-  <script src="js/renderer.js"></script>
-  <script src="js/scenes.js"></script>
   <script src="js/knight.js"></script>
   <script src="js/calendar.js"></script>
-  <script src="js/travel.js"></script>
   <script src="js/news.js"></script>
   <script src="js/data/enemies.js"></script>
-  <script src="js/sprites.js"></script>
   <script src="js/combat.js"></script>
   <script src="js/events.js"></script>
   <script src="js/data/events_veglia.js"></script>
@@ -36,11 +41,8 @@
   <script src="js/data/events_rep.js"></script>
   <script src="js/data/items.js"></script>
   <script src="js/save.js"></script>
-  <script src="js/saveui.js"></script>
-  <script src="js/title.js"></script>
-  <script src="js/create.js"></script>
-  <script src="js/game.js"></script>
-  <script src="js/castle.js"></script>
-  <script src="js/main.js"></script>
+
+  <!-- Motore 3D -->
+  <script type="module" src="js/3d/main.js"></script>
 </body>
 </html>
