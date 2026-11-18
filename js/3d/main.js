@@ -205,8 +205,20 @@ function nuovaPartita() {
   window.location.reload();
 }
 
-// Riposo: azione atomica (docs/GDD.md §3). Da Vespri in poi si dorme all'aperto fino a Prima
-// (+30 Forza, la notte passa d'un colpo); di giorno una sosta di ~3 ore (+10 Forza).
+// Avanza (T): salto atomico all'inizio della prossima ora canonica, di giorno o di notte. Passa solo
+// il tempo, senza recupero: serve per non dover aspettare davvero (il tramonto, un'apertura…).
+function avanza() {
+  if (!knight || inPausa) return;
+  if (knight.stato.velEffettiva > 0.1) { messaggio('Fermati prima di far passare il tempo.'); return; }
+  const f = Calendar.avanzaAllaProssimaOra();
+  const minuti = Math.round(f * CALENDAR.SECONDI_PER_PASSO / 60);
+  const durata = minuti >= 60 ? `circa ${Math.round(minuti / 6) / 10} ore`.replace('.', ',') : `${minuti} minuti`;
+  messaggio(`Lasci passare il tempo fino a ${Calendar.oraCanonica()} (${durata}).`);
+  salvaOra();
+}
+
+// Riposo (R): azione atomica con recupero (docs/GDD.md §3). Da Vespri in poi si dorme all'aperto fino
+// a Prima (+30 Forza, la notte passa d'un colpo); di giorno una sosta di ~3 ore (+10 Forza).
 function riposa() {
   if (!knight || inPausa) return;
   if (knight.stato.velEffettiva > 0.1) { messaggio('Fermati prima di riposare.'); return; }
@@ -219,7 +231,10 @@ function riposa() {
     messaggio(`Dormi all'addiaccio fino a Prima (${n} ${n === 1 ? 'Passo' : 'Passi'})`
       + (guadagno > 0 ? `: Forza +${guadagno}.` : '.'));
   } else {
-    if (Knight.forza.cur >= Knight.forza.max) { messaggio('Sei riposato: non serve fermarsi.'); return; }
+    if (Knight.forza.cur >= Knight.forza.max) {
+      messaggio('Sei riposato. Per far passare il tempo: T (Avanza).');
+      return;
+    }
     Knight.recupera('sosta');
     Calendar.avanza(VIAGGIO.PASSI_SOSTA);
     messaggio(`Ti fermi a riposare per circa ${VIAGGIO.PASSI_SOSTA * 3} ore: `
@@ -306,7 +321,7 @@ async function init() {
   window.kd = { scene, camera, cam, controls, terrain, suolo, knight, castle, Knight, Calendar, Save };
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no'
-    + ' · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · F3: info · F8: nuova partita',
+    + ' · T: avanza all\'ora dopo · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · F3: info · F8: nuova partita',
   'aiuto');
 }
 
@@ -380,6 +395,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyC' && !e.repeat && knight) cambiaModoCamera();
   if (TASTI_CAMMINATA.includes(e.code) && !e.repeat) camminata = !camminata;
   if (e.code === 'KeyR' && !e.repeat) riposa();
+  if (e.code === 'KeyT' && !e.repeat) avanza();
   if (e.code === 'KeyP' && !e.repeat) cambiaPausa();
   if (e.code === 'F8' && !e.repeat) {
     e.preventDefault();

@@ -334,6 +334,7 @@ rivisti quando si agganciano alle Scene.
 | Contrattare al mercato (più acquisti)              | 1–2 ore           | 1/3–2/3           |
 | Curare una ferita lieve                            | 1–3 ore           | 1/3–1             |
 | Sosta di riposo di giorno (+10 Forza)              | ~3 ore            | 1                 |
+| Avanza: lasciar passare il tempo (nessun recupero) | fino alla prossima ora canonica | il resto del Passo |
 | Addestrarsi                                        | mezza giornata    | 2–4 Passi         |
 | Dormire (+30 Forza all'addiaccio, di più in locanda) | fino a Prima    | salto atomico     |
 
@@ -342,7 +343,9 @@ Esempio: attraversare la piazza (5 minuti reali ≈ 75 minuti di gioco) e parlar
 
 **Ritmo del tempo nelle Scene.** Di giorno un'ora canonica ogni 12 minuti reali: le ore di luce
 (Prima–Vespri, dalle 6 alle 21) durano circa un'ora reale; 10 minuti di esplorazione ≈ 2,5 ore di
-gioco. La notte di solito si salta dormendo; chi resta sveglio la vede passare in ~9 minuti reali, al
+gioco. Per non dover aspettare davvero c'è **Avanza** (salto alla prossima ora canonica, di
+giorno o di notte). La notte di solito si salta dormendo; chi resta sveglio la vede passare in ~9 minuti
+reali, oppure ora per ora con Avanza, al
 buio e con incontri più rischiosi: vegliare è una scelta, non un'attesa. A ogni ora canonica il mondo
 «gira» (meteo, scadenze, possibile incontro casuale, notizie), come nel 2D; gli incontri di persona
 invece nascono dai luoghi e dalle persone, senza aspettare l'ora. La Forza nelle Scene segue la

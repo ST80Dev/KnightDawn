@@ -93,6 +93,15 @@ const Calendar = {
     return n;
   },
 
+  // Salto atomico all'inizio della prossima ora canonica (Avanza): passa solo ciò che manca del Passo
+  // corrente. Ritorna la frazione di Passo trascorsa.
+  avanzaAllaProssimaOra() {
+    const mancante = 1 - this.frazione;
+    this.frazione = 0;
+    this._tick();
+    return mancante;
+  },
+
   eNotte() {
     return this.indiceNelGiorno() >= CALENDAR.INDICE_NOTTE;
   },
