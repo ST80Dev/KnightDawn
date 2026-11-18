@@ -1,12 +1,13 @@
 // Knight Dawn — motore 3D: renderer, scena, luci, render loop, contatore FPS (F3).
-// Milestone M2: cavaliere che cammina sul terreno reale. La camera è ancora OrbitControls:
-// segue il cavaliere (provvisorio, la camera in terza persona vera è M3) oppure, con C, è libera.
+// Milestone M3: cavaliere sul terreno reale con camera alle spalle (camera.js).
+// Il tasto C passa alla camera libera di debug (OrbitControls) per ispezionare il terreno.
 // Unità: 1 unità Three.js = 1 metro, asse Y verso l'alto, nord verso -Z.
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { loadTerrain } from './terrain.js';
 import { createKnight } from './knight3d.js';
+import { createFollowCamera } from './camera.js';
 
 const COLORE_CIELO = '#c4d4d6';           // azzurro-pergamena, uguale alla nebbia
 const NEBBIA = [900, 4000];               // m: inizio e fine della nebbia lineare (foschia leggera)
@@ -44,11 +45,10 @@ function avvisoHud(testo, classe = 'avviso') {
 // ─── Terreno, cavaliere, camera ─────────────────────────────────────────
 let terrain = null;
 let knight = null;
-let controls = null;
-let modoCamera = 'segui';                 // 'segui' = insegue il cavaliere · 'libera' = debug (tasto C)
-const ALTEZZA_MIN_CAMERA = { segui: 0.8, libera: 3 };   // m sopra il terreno
-const DISTANZA_CAMERA = { segui: [2.5, 60], libera: [5, 1800] };
-const DISTANZA_RIENTRO = 6;               // m: distanza della camera quando si torna a seguire
+let cam = null;                           // camera alle spalle del cavaliere
+let controls = null;                      // camera libera di debug (tasto C)
+let modoCamera = 'segui';                 // 'segui' | 'libera'
+const ALTEZZA_MIN_LIBERA = 3;             // m sopra il terreno, camera libera
 
 async function init() {
   terrain = await loadTerrain('tavullia');
@@ -61,70 +61,53 @@ async function init() {
   knight = createKnight(terrain, { x: 0, z: 0, direzione: Math.PI });
   scene.add(knight.object);
 
+  cam = createFollowCamera(camera, terrain, knight, renderer.domElement);
+
   controls = new OrbitControls(camera, renderer.domElement);
+  controls.enabled = false;
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
   controls.screenSpacePanning = false;    // il trascinamento col tasto destro scorre sul piano orizzontale
+  controls.minDistance = 5;
+  controls.maxDistance = 1800;
   controls.maxPolarAngle = THREE.MathUtils.degToRad(88);
 
-  // Camera alle spalle del cavaliere (a sud, guardando verso nord)
-  const mira = knight.puntoMira();
-  controls.target.copy(mira);
-  camera.position.set(mira.x, mira.y + 1.6, mira.z + 5.2);
-  impostaModoCamera('segui');
+  window.kd = { scene, camera, cam, controls, terrain, knight };   // per ispezione dalla console del browser
 
-  window.kd = { scene, camera, controls, terrain, knight };   // per ispezione dalla console del browser
-
-  avvisoHud('WASD/frecce: muovi · Shift: corri · trascina: ruota · rotella: zoom · C: camera libera · F3: info', 'aiuto');
+  avvisoHud('W/S: avanti/indietro · A/D o trascina col mouse: gira · Shift: corri · rotella: distanza'
+    + ' · C: camera libera · F3: info', 'aiuto');
 }
 
-function impostaModoCamera(modo) {
-  modoCamera = modo;
-  const [min, max] = DISTANZA_CAMERA[modo];
-  controls.minDistance = min;
-  controls.maxDistance = max;
-  controls.enablePan = modo === 'libera';  // seguendo il cavaliere il centro della vista è lui
-  if (modo === 'segui') {
-    // Riporta la camera vicino al cavaliere mantenendo la direzione da cui lo si guarda
-    const mira = knight.puntoMira();
-    const dir = camera.position.clone().sub(controls.target);
-    if (dir.lengthSq() < 1e-6) dir.set(0, 0.35, 1);
-    dir.normalize();
-    if (dir.y < 0.15) { dir.y = 0.15; dir.normalize(); }
-    const dist = Math.min(camera.position.distanceTo(controls.target), DISTANZA_RIENTRO);
-    controls.target.copy(mira);
-    camera.position.copy(mira).addScaledVector(dir, Math.max(dist, min));
+function cambiaModoCamera() {
+  if (modoCamera === 'segui') {
+    modoCamera = 'libera';
+    cam.disattiva();
+    controls.target.copy(knight.puntoMira());
+    controls.enabled = true;
+    controls.update();
+  } else {
+    modoCamera = 'segui';
+    controls.enabled = false;
+    cam.riattiva();
   }
 }
 
-// Seguendo: bersaglio e camera si spostano insieme al cavaliere, così l'angolo scelto col mouse resta.
-const _mira = new THREE.Vector3();
-function seguiCavaliere() {
-  knight.puntoMira(_mira);
-  const dx = _mira.x - controls.target.x, dy = _mira.y - controls.target.y, dz = _mira.z - controls.target.z;
-  controls.target.copy(_mira);
-  camera.position.x += dx;
-  camera.position.y += dy;
-  camera.position.z += dz;
-}
-
-// Dopo ogni aggiornamento della camera: niente camera sotto la superficie; in modalità libera
-// il punto osservato resta dentro l'area e appoggiato al terreno.
-function vincolaCamera() {
+// Camera libera: il punto osservato resta dentro l'area e appoggiato al terreno, la camera sopra la superficie.
+function vincolaCameraLibera() {
   const t = controls.target;
-  if (modoCamera === 'libera') {
-    const h = terrain.half;
-    t.x = THREE.MathUtils.clamp(t.x, -h, h);
-    t.z = THREE.MathUtils.clamp(t.z, -h, h);
-    const dy = terrain.getHeight(t.x, t.z) - t.y;
-    t.y += dy;
-    camera.position.y += dy;               // sposta insieme camera e bersaglio: niente scatti
-  }
-  const minY = terrain.getHeight(camera.position.x, camera.position.z) + ALTEZZA_MIN_CAMERA[modoCamera];
+  const h = terrain.half;
+  t.x = THREE.MathUtils.clamp(t.x, -h, h);
+  t.z = THREE.MathUtils.clamp(t.z, -h, h);
+  const dy = terrain.getHeight(t.x, t.z) - t.y;
+  t.y += dy;
+  camera.position.y += dy;                 // sposta insieme camera e bersaglio: niente scatti
+  const minY = terrain.getHeight(camera.position.x, camera.position.z) + ALTEZZA_MIN_LIBERA;
   if (camera.position.y < minY) camera.position.y = minY;
+}
 
-  // Nebbia: da vicino nasconde il bordo del mondo; allontanandosi si ritira per la vista d'insieme.
-  const dist = camera.position.distanceTo(t);
+// Nebbia: da vicino nasconde il bordo del mondo; allontanandosi si ritira per la vista d'insieme.
+function aggiornaNebbia(puntoOsservato) {
+  const dist = camera.position.distanceTo(puntoOsservato);
   scene.fog.near = Math.max(NEBBIA[0], dist * 0.9);
   scene.fog.far = Math.max(NEBBIA[1], scene.fog.near + 3000);
 }
@@ -143,32 +126,17 @@ const premuto = (azione) => TASTI_MOVIMENTO[azione].some((k) => tasti.has(k));
 window.addEventListener('keydown', (e) => {
   if (e.code.startsWith('Arrow')) e.preventDefault();
   tasti.add(e.code);
-  if (e.code === 'KeyC' && !e.repeat && knight) {
-    impostaModoCamera(modoCamera === 'segui' ? 'libera' : 'segui');
-  }
+  if (e.code === 'KeyC' && !e.repeat && knight) cambiaModoCamera();
 });
 window.addEventListener('keyup', (e) => tasti.delete(e.code));
 window.addEventListener('blur', () => tasti.clear());   // niente tasti "incollati" cambiando finestra
 
-// Direzione voluta nel mondo, relativa a dove guarda la camera (proiettata sul piano orizzontale).
-const _avanti = new THREE.Vector3();
-const _input = { x: 0, z: 0, corsa: false };
+const _input = { avanti: 0, gira: 0, giroMouse: 0, corsa: false };
 function leggiInput() {
-  const f = (premuto('avanti') ? 1 : 0) - (premuto('indietro') ? 1 : 0);
-  const l = (premuto('destra') ? 1 : 0) - (premuto('sinistra') ? 1 : 0);
-  _input.x = 0;
-  _input.z = 0;
+  _input.avanti = (premuto('avanti') ? 1 : 0) - (premuto('indietro') ? 1 : 0);
+  _input.gira = (premuto('destra') ? 1 : 0) - (premuto('sinistra') ? 1 : 0);
+  _input.giroMouse = cam.prendiGiroMouse();
   _input.corsa = premuto('corsa');
-  if (f === 0 && l === 0) return _input;
-  _avanti.subVectors(controls.target, camera.position).setY(0);
-  if (_avanti.lengthSq() < 1e-8) _avanti.set(0, 0, -1);
-  _avanti.normalize();
-  // destra = avanti × su = (-avanti.z, 0, avanti.x)
-  let x = _avanti.x * f - _avanti.z * l;
-  let z = _avanti.z * f + _avanti.x * l;
-  const len = Math.hypot(x, z);
-  _input.x = x / len;
-  _input.z = z / len;
   return _input;
 }
 
@@ -247,7 +215,7 @@ function aggiornaPannello(now) {
     testo += `\ncavaliere: x ${fmt(k.x)} · z ${fmt(k.z)} · quota ${fmt(k.y, 1)} m`
       + ` · pendenza ${fmt(terrain.getSlope(k.x, k.z))}° · ${fmt(k.velEffettiva, 1)} m/s`
       + (k.bloccato ? ' · bloccato' : '');
-    testo += `\ncamera: ${modoCamera === 'segui' ? 'segue il cavaliere' : 'libera'}`;
+    testo += `\ncamera: ${modoCamera === 'segui' ? 'alle spalle' : 'libera (C per tornare)'}`;
   }
   if (terrain) {
     testo += `\nterreno: ${terrain.meta.source} · ${fmt(terrain.minElev)}–${fmt(terrain.maxElev)} m`;
@@ -269,11 +237,14 @@ function frame(now) {
   tPrec = now;
   if (knight) {
     knight.update(dt, leggiInput());
-    if (modoCamera === 'segui') seguiCavaliere();
-  }
-  if (controls) {
-    controls.update();
-    vincolaCamera();
+    if (modoCamera === 'segui') {
+      cam.update(dt);
+      aggiornaNebbia(cam.mira);
+    } else {
+      controls.update();
+      vincolaCameraLibera();
+      aggiornaNebbia(controls.target);
+    }
   }
   aggiornaPannello(now);
   renderer.render(scene, camera);

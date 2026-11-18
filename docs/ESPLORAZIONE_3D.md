@@ -97,23 +97,28 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
 - Movimento: `WASD` o frecce, `Shift` per correre (camminata ~1,5 m/s, corsa ~5 m/s), rotazione fluida.
 - Segue il terreno con `getHeight`; non sale su pendenze oltre ~35°; non esce dai bordi dell'area.
 - **Accettazione:** camminata su e giù per le colline senza compenetrazioni né scatti.
-- **Stato:** implementata, in attesa del test dell'utente. Spada nel fodero al fianco sinistro (non in
+- **Stato:** completata (l'unico rilievo dell'utente riguardava la camera, risolto in M3). Spada nel fodero al fianco sinistro (non in
   mano: si esplora, non si combatte). Gambe con IK a due ossa: ogni piede cerca il terreno reale sotto
   di sé, il bacino scende quanto serve (con un limite, per non accovacciarsi) e in pendenza il passo
   si accorcia; risultato misurato: piedi entro ~1,5 cm dal suolo anche sul punto più ripido. Ombra
   finta a disco adagiata sul terreno. La fase del passo avanza con la distanza percorsa, quindi
   i piedi non scivolano e, se una pendenza blocca il cavaliere, le gambe si fermano. Contro un pendio
   troppo ripido il cavaliere prova a costeggiarlo lungo un asse.
-- **Camera provvisoria:** è ancora OrbitControls, che ora segue il cavaliere (`C` la rende libera, come
-  in M1). WASD è già relativo alla direzione della camera: costava poche righe e senza questo M2 non
-  si poteva provare. Il resto di M3 (inseguimento morbido alle spalle, camera che non entra nel terreno
-  vicino al cavaliere, limiti di zoom definitivi) resta da fare.
 
 ### M3 — Camera in terza persona
 - `js/3d/camera.js`: camera alle spalle con inseguimento morbido (lerp).
-- Trascinamento del mouse per ruotare attorno al cavaliere, rotella per lo zoom (limiti min/max).
-- La camera non entra mai sotto il terreno; la direzione di movimento è relativa alla camera.
+- ~~Trascinamento del mouse per ruotare attorno al cavaliere~~ → **deciso con l'utente:** la vista guarda
+  sempre dove guarda il cavaliere, come una "quasi prima persona"; non si gira attorno a lui per
+  guardargli dietro. Quindi comandi classici: `W`/`S` avanti/indietro, `A`/`D` girano il cavaliere,
+  trascinamento orizzontale del mouse = gira il cavaliere, verticale = alza/abbassa lo sguardo.
+  Rotella per la distanza (limiti min/max).
+- La camera non entra mai sotto il terreno; la direzione di movimento coincide con quella della camera.
 - **Accettazione:** nessuna vista dentro le colline, nessun movimento nauseante.
+- **Stato:** implementata, in attesa del test dell'utente. Camera sopra la spalla destra (il cavaliere
+  sta in basso, la vista resta libera davanti); se un dosso alle spalle copre la linea di vista, la camera
+  si alza per scavalcarlo. Girando da fermo il cavaliere fa piccoli passi sul posto. Il tasto `C` passa
+  ancora alla camera libera di debug (OrbitControls). Parametri provabili da console: `kd.cam.cfg`.
+  Misurato in headless: camera mai a meno di 45 cm dal suolo, linea di vista mai sotto il terreno.
 
 ### M4 — Castello
 - `js/3d/castle3d.js`: castello procedurale (mura, 4 torri, mastio, porta), posizionato su un punto

@@ -13,11 +13,16 @@ const PAL = (typeof PALETTE !== 'undefined') ? PALETTE : {};
 export const KNIGHT_CFG = {
   velCammino: 1.5,      // m/s
   velCorsa: 5.0,        // m/s (Shift)
+  velIndietro: 0.9,     // m/s, passo all'indietro (senza corsa)
+  velRotazione: 2.0,    // rad/s con A/D (circa 115°/s); in corsa un po' meno
   pendenzaMax: 35,      // gradi: oltre questa pendenza il cavaliere non sale
   margineBordo: 2,      // m dal bordo dell'area
   accelerazione: 8,     // 1/s: rapidità con cui la velocità raggiunge quella voluta
-  virata: 10,           // 1/s: rapidità con cui il cavaliere si gira verso la direzione voluta
+  avvioRotazione: 10,   // 1/s: rapidità con cui la rotazione da tastiera parte e si ferma
 };
+
+// Girando da fermo il cavaliere fa piccoli passi sul posto: metri di "passo" per radiante di rotazione
+const PASSO_PER_RADIANTE = 0.3;
 
 // Lunghezza di un ciclo completo del passo (due passi), in metri: cammino → corsa
 const CICLO_PASSO = [1.6, 2.6];
@@ -243,13 +248,6 @@ const clamp = THREE.MathUtils.clamp;
 const lerp = THREE.MathUtils.lerp;
 const avvicina = (rate, dt) => 1 - Math.exp(-rate * dt);   // fattore di lerp indipendente dagli FPS
 
-function angoloTra(a, b) {
-  let d = (b - a) % (Math.PI * 2);
-  if (d > Math.PI) d -= Math.PI * 2;
-  if (d < -Math.PI) d += Math.PI * 2;
-  return d;
-}
-
 /**
  * Crea il cavaliere sul terreno.
  * @param {object} terrain  oggetto restituito da loadTerrain (getHeight, getSlope, half)
@@ -265,8 +263,10 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
   const stato = {
     x: start.x, z: start.z, y: 0,
     direzione: start.direzione ?? Math.PI,
-    velocita: 0,           // m/s voluta (con accelerazione)
+    velocita: 0,           // m/s voluta (con accelerazione); negativa = all'indietro
+    velAngolare: 0,        // rad/s della rotazione da tastiera (positiva = verso destra)
     velEffettiva: 0,       // m/s realmente percorsa (0 se bloccato da una pendenza)
+    velPassoGiro: 0,       // m/s "equivalenti" dei passetti fatti girando sul posto (smussata)
     fase: 0,               // fase del ciclo del passo (radianti)
     tempo: 0,
     bloccato: false,       // true se l'ultimo passo è stato fermato da una pendenza
@@ -303,36 +303,39 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
   }
 
   /**
-   * Aggiorna movimento e animazione.
+   * Aggiorna movimento e animazione. Comandi "classici": avanti/indietro lungo la direzione
+   * in cui il cavaliere guarda, rotazione con i tasti o col mouse.
    * @param {number} dt  secondi dall'ultimo frame
-   * @param {{x:number, z:number, corsa:boolean}} input  direzione voluta nel mondo (normalizzata o nulla)
+   * @param {{avanti:number, gira:number, giroMouse:number, corsa:boolean}} input
+   *   avanti: 1 / 0 / -1 · gira: 1 = destra, -1 = sinistra · giroMouse: rad già decisi dal mouse (+ = destra)
    */
   function update(dt, input) {
     stato.tempo += dt;
-    const vuoleMuoversi = input.x !== 0 || input.z !== 0;
+    const direzionePrima = stato.direzione;
 
-    // Rotazione fluida verso la direzione voluta; rallenta mentre si gira molto
-    let fattoreVirata = 1;
-    if (vuoleMuoversi) {
-      const obiettivo = Math.atan2(input.x, input.z);
-      const diff = angoloTra(stato.direzione, obiettivo);
-      stato.direzione += diff * avvicina(cfg.virata, dt);
-      fattoreVirata = 0.35 + 0.65 * Math.max(0, Math.cos(diff));
-    }
-    const velVoluta = vuoleMuoversi ? (input.corsa ? cfg.velCorsa : cfg.velCammino) * fattoreVirata : 0;
+    // Rotazione: i tasti partono e si fermano in modo morbido, il mouse è diretto.
+    // Girare a destra (visto dall'alto, senso orario) riduce l'angolo.
+    const velRot = cfg.velRotazione * (input.corsa && input.avanti > 0 ? 0.8 : 1);
+    stato.velAngolare += (input.gira * velRot - stato.velAngolare) * avvicina(cfg.avvioRotazione, dt);
+    if (Math.abs(stato.velAngolare) < 1e-3 && input.gira === 0) stato.velAngolare = 0;
+    stato.direzione -= stato.velAngolare * dt + input.giroMouse;
+    stato.direzione = Math.atan2(Math.sin(stato.direzione), Math.cos(stato.direzione));   // in (-π, π]
+
+    const velVoluta = input.avanti > 0 ? (input.corsa ? cfg.velCorsa : cfg.velCammino)
+      : input.avanti < 0 ? -cfg.velIndietro : 0;
     stato.velocita += (velVoluta - stato.velocita) * avvicina(cfg.accelerazione, dt);
-    if (stato.velocita < 0.01 && !vuoleMuoversi) stato.velocita = 0;
+    if (Math.abs(stato.velocita) < 0.01 && input.avanti === 0) stato.velocita = 0;
 
-    // Spostamento lungo la direzione in cui il cavaliere guarda
+    // Spostamento lungo la direzione in cui il cavaliere guarda (indietro se velocità negativa)
     const passo = stato.velocita * dt;
     let percorso = 0;
     stato.bloccato = false;
-    if (passo > 0) {
+    if (passo !== 0) {
       const r = muovi(Math.sin(stato.direzione) * passo, Math.cos(stato.direzione) * passo);
-      percorso = r.distanza;
+      percorso = r.distanza * Math.sign(passo);
       stato.bloccato = r.bloccato;
     }
-    stato.velEffettiva += (percorso / Math.max(dt, 1e-4) - stato.velEffettiva) * avvicina(12, dt);
+    stato.velEffettiva += (Math.abs(percorso) / Math.max(dt, 1e-4) - stato.velEffettiva) * avvicina(12, dt);
     if (stato.velEffettiva < 0.005) stato.velEffettiva = 0;
 
     // Segue esattamente la superficie disegnata
@@ -340,7 +343,8 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     mod.root.position.set(stato.x, stato.y, stato.z);
     mod.root.rotation.y = stato.direzione;
 
-    anima(percorso);
+    const giro = Math.abs(Math.atan2(Math.sin(stato.direzione - direzionePrima), Math.cos(stato.direzione - direzionePrima)));
+    anima(dt, percorso, giro);
     aggiornaOmbra();
   }
 
@@ -361,15 +365,18 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     return terrain.getHeight(stato.x + lx * cd + lz * sd, stato.z - lx * sd + lz * cd) - stato.y;
   }
 
-  function anima(percorso) {
-    const v = stato.velEffettiva;
+  function anima(dt, percorso, giro) {
+    // Girando sul posto le gambe fanno piccoli passi, come se camminasse piano
+    const passoGiro = giro * PASSO_PER_RADIANTE;
+    if (dt > 0) stato.velPassoGiro += (passoGiro / dt - stato.velPassoGiro) * avvicina(10, dt);
+    const v = Math.max(stato.velEffettiva, stato.velPassoGiro);
     const passoF = clamp(v / cfg.velCammino, 0, 1);                                  // 0 fermo → 1 cammino
     const corsaF = clamp((v - cfg.velCammino) / (cfg.velCorsa - cfg.velCammino), 0, 1); // 0 cammino → 1 corsa
     const riposo = 1 - passoF;
 
     // La fase avanza con la distanza percorsa: i piedi non scivolano e, se bloccato, si fermano.
     const ciclo = lerp(CICLO_PASSO[0], CICLO_PASSO[1], corsaF);
-    stato.fase += percorso * Math.PI * 2 / ciclo;
+    stato.fase += (percorso + (Math.abs(percorso) < passoGiro ? passoGiro : 0)) * Math.PI * 2 / ciclo;
     const s = Math.sin(stato.fase);
 
     // In salita e in discesa il passo si accorcia, come per una persona vera
@@ -444,7 +451,7 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     ombra.position.set(stato.x, stato.y, stato.z).addScaledVector(_n, 0.04);
   }
 
-  update(0, { x: 0, z: 0, corsa: false });
+  update(0, { avanti: 0, gira: 0, giroMouse: 0, corsa: false });
 
   return {
     object,
