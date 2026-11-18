@@ -249,14 +249,22 @@ consumeranno la Carta e le azioni.
   atomica con `RECOVERY.accampamento` (+30 Forza), che fa avanzare il calendario di qualche Passo.
 - **HUD in HTML:** data (o «Veglia · giorno N») con l'ora, Forza, Salute, Volontà, Onore.
 - **Salvataggio locale** (localStorage, come da `CLAUDE.md`): posizione e direzione del cavaliere,
-  terreno corrente, stato di `Knight` e `Calendar`, autosalvataggio. Oggi `save.js` scrive su un
-  database remoto (Supabase) e contiene ancora le sezioni 2D (`World`, `GameScreen`): non si toccano
-  finché non si decide, perché toglierle cambia la struttura.
+  terreno corrente, stato di `Knight` e `Calendar`, autosalvataggio. Supabase abbandonato (deciso
+  con l'utente: lo spazio gratuito è esaurito); tolte da `save.js` anche le sezioni 2D.
 - `Calendar.velocita` (secondi reali per Passo) non serve nelle Scene: resterà per la Carta.
 - **Accettazione:** camminando, l'ora avanza in proporzione alla distanza (circa 1 Passo ogni 12 km
   in piano, di più in salita); la Forza cala, di più correndo e in salita; a Forza 0 si cammina
   soltanto e «Accampati» la ricarica facendo passare il tempo; ricaricando la pagina si riparte dal
   punto salvato con data e attributi salvati.
+- **Stato:** implementata, da provare nel browser. Misurato in headless: 5 s di corsetta (~18 m
+  equivalenti) = 0,0015 Passi e −0,09 Forza; a Forza 0 l'andatura passa a camminata anche con
+  Shift; il bivacco dà +30 Forza e fa passare 3 Passi; dopo il ricaricamento posizione, tempo e
+  attributi sono identici; F8 ricomincia da zero.
+  Scelte fatte: **un Passo per ogni ora canonica** (Prima, Terza, Sesta, Nona, Vespri, Compieta,
+  Mattutino, Lodi; il giorno comincia a Prima, ~6:00), mostrata nel pannello di stato in alto a
+  destra; F3 mostra Passi, frazione, ora e Forza esatte. Tasti: `R` accampati (solo da fermi),
+  `F8` nuova partita (con conferma). Salvataggio automatico ogni minuto, quando si lascia la
+  pagina e dopo il bivacco. La luce della scena non segue ancora l'ora del giorno.
 
 ## Carta e Scene — generatore del mondo (deciso, da realizzare dopo M5)
 

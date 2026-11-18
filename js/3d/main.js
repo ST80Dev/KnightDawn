@@ -1,5 +1,7 @@
 // Knight Dawn — motore 3D: renderer, scena, luci, render loop, contatore FPS (F3).
-// Milestone M4: cavaliere sul terreno reale con camera alle spalle (camera.js) e castello (castle3d.js).
+// M4: cavaliere sul terreno reale con camera alle spalle (camera.js) e castello (castle3d.js).
+// M5: la distanza percorsa fa avanzare Calendar e consuma la Forza di Knight; HUD di stato;
+// salvataggio in localStorage (Save, slot 0). La logica sta negli script classici in js/.
 // Il tasto C passa alla camera libera di debug (OrbitControls) per ispezionare il terreno.
 // Unità: 1 unità Three.js = 1 metro, asse Y verso l'alto, nord verso -Z.
 
@@ -12,6 +14,7 @@ import { createCastle } from './castle3d.js';
 
 const COLORE_CIELO = '#c4d4d6';           // azzurro-pergamena, uguale alla nebbia
 const NEBBIA = [900, 4000];               // m: inizio e fine della nebbia lineare (foschia leggera)
+const NOME_TERRENO = 'tavullia';          // scena di prova (terreno reale)
 
 // ─── Renderer, scena, camera ────────────────────────────────────────────
 const canvas = document.getElementById('scena');
@@ -45,6 +48,54 @@ function avvisoHud(testo, classe = 'avviso') {
   return el;
 }
 
+// Messaggio temporaneo al centro in alto (uno alla volta).
+let _messaggio = null;
+let _messaggioTimer = 0;
+function messaggio(testo, ms = 4500) {
+  if (!_messaggio) _messaggio = avvisoHud('', 'messaggio');
+  _messaggio.textContent = testo;
+  _messaggio.hidden = false;
+  clearTimeout(_messaggioTimer);
+  _messaggioTimer = setTimeout(() => { _messaggio.hidden = true; }, ms);
+}
+
+// ─── Pannello di stato: data e ora, Forza, Salute, Volontà, Onore ──────
+const pannelloStato = document.createElement('div');
+pannelloStato.className = 'stato';
+pannelloStato.hidden = true;
+const ATTRIBUTI = [['forza', 'Forza'], ['salute', 'Salute'], ['volonta', 'Volontà']];
+pannelloStato.innerHTML = '<div class="data"></div>'
+  + ATTRIBUTI.map(([id, nome]) => `<div class="attr ${id}"><span class="nome">${nome}</span>`
+    + '<span class="barra"><i></i></span><span class="val"></span></div>').join('')
+  + '<div class="onore"></div>';
+hud.appendChild(pannelloStato);
+const elData = pannelloStato.querySelector('.data');
+const elOnore = pannelloStato.querySelector('.onore');
+const elAttr = Object.fromEntries(ATTRIBUTI.map(([id]) => {
+  const riga = pannelloStato.querySelector('.attr.' + id);
+  return [id, { riga, barra: riga.querySelector('i'), val: riga.querySelector('.val') }];
+}));
+const _cacheHud = new Map();               // tocca il DOM solo quando un valore cambia
+function imposta(chiave, applica, valore) {
+  if (_cacheHud.get(chiave) === valore) return;
+  _cacheHud.set(chiave, valore);
+  applica(valore);
+}
+
+function aggiornaStato() {
+  const data = Calendar.inVeglia ? Calendar.formatEsteso() : Calendar.formatCompatto();
+  imposta('data', (v) => { elData.textContent = v; }, `${data} · ${Calendar.oraCanonica()}`);
+  for (const [id] of ATTRIBUTI) {
+    const a = Knight[id], el = elAttr[id];
+    const pct = Math.max(0, Math.min(100, (a.cur / a.max) * 100));
+    imposta(id + '.w', (v) => { el.barra.style.width = v + '%'; }, pct.toFixed(1));
+    imposta(id + '.v', (v) => { el.val.textContent = v; }, String(Math.ceil(a.cur)));
+    imposta(id + '.b', (v) => { el.riga.classList.toggle('basso', v); }, pct < 20);
+  }
+  imposta('onore', (v) => { elOnore.textContent = v; },
+    `Onore ${Knight.onore > 0 ? '+' : ''}${Knight.onore}`);
+}
+
 // ─── Terreno, cavaliere, camera ─────────────────────────────────────────
 let terrain = null;
 let knight = null;
@@ -55,8 +106,57 @@ let controls = null;                      // camera libera di debug (tasto C)
 let modoCamera = 'segui';                 // 'segui' | 'libera'
 const ALTEZZA_MIN_LIBERA = 3;             // m sopra il terreno, camera libera
 
+// ─── Partita: nuova o ripresa dal salvataggio automatico ───────────────
+let nonSalvare = false;                   // true mentre si ricomincia (niente salvataggio in uscita)
+
+function nuovaPartitaDati() {
+  Knight.init();
+  Calendar.init();
+  if (typeof Events !== 'undefined' && Events.reset) Events.reset();
+  if (typeof News !== 'undefined' && News.reset) News.reset();
+}
+
+function salvaOra() {
+  if (knight && !nonSalvare) Save.save(Save.AUTOSAVE_SLOT);
+}
+
+function nuovaPartita() {
+  if (!window.confirm('Nuova partita? Il salvataggio attuale verrà cancellato.')) return;
+  nonSalvare = true;
+  Save.stopAutosave();
+  Save.delete(Save.AUTOSAVE_SLOT);
+  window.location.reload();
+}
+
+// Bivacco: azione atomica. Recupera Forza e fa passare il tempo d'un colpo (docs/GDD.md §3).
+function accampati() {
+  if (!knight) return;
+  if (knight.stato.velEffettiva > 0.1) { messaggio('Fermati prima di accamparti.'); return; }
+  if (Knight.forza.cur >= Knight.forza.max) { messaggio('Sei riposato: non serve accamparsi.'); return; }
+  const prima = Knight.forza.cur;
+  Knight.recupera('accampamento');
+  Calendar.avanza(VIAGGIO.PASSI_ACCAMPAMENTO);
+  const ore = VIAGGIO.PASSI_ACCAMPAMENTO * 24 / CALENDAR.PASSI_PER_GIORNO;
+  messaggio(`Ti accampi: Forza +${Math.round(Knight.forza.cur - prima)}. `
+    + `Passano ${VIAGGIO.PASSI_ACCAMPAMENTO} Passi (circa ${ore} ore).`);
+  salvaOra();
+}
+
+// Tempo e fatica per distanza: ogni fotogramma la strada fatta dal cavaliere va a Calendar e Knight.
+const _prec = { x: 0, y: 0, z: 0 };
+function contaPercorso() {
+  const k = knight.stato;
+  const d = Math.hypot(k.x - _prec.x, k.z - _prec.z);
+  const salita = Math.max(0, k.y - _prec.y);
+  _prec.x = k.x; _prec.y = k.y; _prec.z = k.z;
+  if (d < 1e-6) return;
+  const andatura = k.velocita < 0 ? 'camminata' : k.andatura;   // all'indietro si va al passo
+  Calendar.avanzaMetri(d, salita);
+  Knight.consumaForzaMetri(d, salita, andatura);
+}
+
 async function init() {
-  terrain = await loadTerrain('tavullia');
+  terrain = await loadTerrain(NOME_TERRENO);
   scene.add(terrain.mesh);
   if (terrain.isFallback) {
     avvisoHud('Dati del terreno reale non trovati: terreno procedurale di prova.');
@@ -65,11 +165,32 @@ async function init() {
   castle = createCastle(terrain);
   scene.add(castle.object);
 
-  // Il cavaliere parte al centro dell'area, rivolto verso la porta del castello
+  // Partita ripresa dal salvataggio automatico, se c'è; altrimenti nuova.
+  const ripresa = await Save.load(Save.AUTOSAVE_SLOT);
+  if (!ripresa) nuovaPartitaDati();
+
+  // Nuova partita: il cavaliere parte al centro dell'area, rivolto verso la porta del castello.
+  // Partita ripresa: dal punto salvato, se riguarda questa stessa scena.
   const porta = castle.davantiPorta();
+  const sc = Save.scenaSalvata;
+  const start = (ripresa && sc && sc.terreno === NOME_TERRENO && Number.isFinite(sc.x) && Number.isFinite(sc.z))
+    ? { x: sc.x, z: sc.z, direzione: Number.isFinite(sc.direzione) ? sc.direzione : 0 }
+    : { x: 0, z: 0, direzione: Math.atan2(porta.x, porta.z) };
   suolo = componiSuolo(terrain, [castle]);
-  knight = createKnight(suolo, { x: 0, z: 0, direzione: Math.atan2(porta.x, porta.z) }, [castle]);
+  knight = createKnight(suolo, start, [castle]);
   scene.add(knight.object);
+  _prec.x = knight.stato.x; _prec.y = knight.stato.y; _prec.z = knight.stato.z;
+
+  Save.statoScena = () => ({
+    terreno: NOME_TERRENO, x: knight.stato.x, z: knight.stato.z, direzione: knight.stato.direzione,
+  });
+  Save.startAutosave();
+  window.addEventListener('pagehide', salvaOra);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') salvaOra();
+  });
+  pannelloStato.hidden = false;
+  if (ripresa) messaggio('Partita ripresa dall\'ultimo salvataggio.');
 
   cam = createFollowCamera(camera, suolo, knight, renderer.domElement, castle.solidi);
 
@@ -82,10 +203,11 @@ async function init() {
   controls.maxDistance = 1800;
   controls.maxPolarAngle = THREE.MathUtils.degToRad(88);
 
-  window.kd = { scene, camera, cam, controls, terrain, suolo, knight, castle };   // per ispezione dalla console del browser
+  // Per ispezione dalla console del browser (Knight, Calendar, Save sono comunque globali)
+  window.kd = { scene, camera, cam, controls, terrain, suolo, knight, castle, Knight, Calendar, Save };
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no'
-    + ' · rotella: distanza · C: camera libera · F3: info', 'aiuto');
+    + ' · R: accampati · rotella: distanza · C: camera libera · F3: info · F8: nuova partita', 'aiuto');
 }
 
 function cambiaModoCamera() {
@@ -135,20 +257,32 @@ const TASTI_MOVIMENTO = {
 // e la pagina non può impedirlo; chi usa WASD deve premere Ctrl da solo.
 const TASTI_CAMMINATA = ['ControlLeft', 'ControlRight'];
 let camminata = false;
-const indicatoreCamminata = document.createElement('div');
-indicatoreCamminata.className = 'andatura';
-indicatoreCamminata.textContent = 'Camminata (Ctrl per la corsetta)';
-indicatoreCamminata.hidden = true;
-document.getElementById('hud').appendChild(indicatoreCamminata);
+const indicatoreAndatura = document.createElement('div');
+indicatoreAndatura.className = 'andatura';
+indicatoreAndatura.hidden = true;
+document.getElementById('hud').appendChild(indicatoreAndatura);
+const sfinito = () => Knight.forza.cur <= 0;   // a Forza 0 niente corsa né scatto
+
+function aggiornaIndicatoreAndatura() {
+  const testo = sfinito() ? 'Sfinito: solo camminata (R per accamparti)'
+    : camminata ? 'Camminata (Ctrl per la corsetta)' : '';
+  imposta('andatura', (v) => {
+    indicatoreAndatura.textContent = v;
+    indicatoreAndatura.hidden = !v;
+    indicatoreAndatura.classList.toggle('sfinito', sfinito());
+  }, testo);
+}
 const premuto = (azione) => TASTI_MOVIMENTO[azione].some((k) => tasti.has(k));
 
 window.addEventListener('keydown', (e) => {
   if (e.code.startsWith('Arrow')) e.preventDefault();
   tasti.add(e.code);
   if (e.code === 'KeyC' && !e.repeat && knight) cambiaModoCamera();
-  if (TASTI_CAMMINATA.includes(e.code) && !e.repeat) {
-    camminata = !camminata;
-    indicatoreCamminata.hidden = !camminata;
+  if (TASTI_CAMMINATA.includes(e.code) && !e.repeat) camminata = !camminata;
+  if (e.code === 'KeyR' && !e.repeat) accampati();
+  if (e.code === 'F8' && !e.repeat) {
+    e.preventDefault();
+    nuovaPartita();
   }
 });
 window.addEventListener('keyup', (e) => tasti.delete(e.code));
@@ -159,8 +293,8 @@ function leggiInput() {
   _input.avanti = (premuto('avanti') ? 1 : 0) - (premuto('indietro') ? 1 : 0);
   _input.gira = (premuto('destra') ? 1 : 0) - (premuto('sinistra') ? 1 : 0);
   _input.giroMouse = cam.prendiGiroMouse();
-  _input.corsa = premuto('corsa');
-  _input.camminata = camminata;
+  _input.corsa = premuto('corsa') && !sfinito();
+  _input.camminata = camminata || sfinito();
   return _input;
 }
 
@@ -241,6 +375,10 @@ function aggiornaPannello(now) {
       + (k.bloccato ? ' · bloccato' : '')
       + `\nmarcia: ${k.pendenzaMarcia >= 0 ? 'salita' : 'discesa'} ${fmt(Math.abs(Math.atan(k.pendenzaMarcia)) * 180 / Math.PI)}°`
       + ` · velocità ×${fmt(k.fattorePendenza, 2)} · andatura: ${k.andatura}`;
+    const ora = Calendar.oraDelGiorno();
+    testo += `\ntempo: Passi ${Calendar.passiTotali} + ${fmt(Calendar.frazione, 3)}`
+      + ` · ore ${String(Math.floor(ora)).padStart(2, '0')}:${String(Math.floor((ora % 1) * 60)).padStart(2, '0')}`
+      + ` · Forza ${fmt(Knight.forza.cur, 2)}`;
     testo += `\ncamera: ${modoCamera === 'segui' ? 'alle spalle' : 'libera (C per tornare)'}`;
     if (castle) {
       testo += castle.dentro(k.x, k.z) ? '\ncastello: nel cortile'
@@ -267,6 +405,9 @@ function frame(now) {
   tPrec = now;
   if (knight) {
     knight.update(dt, leggiInput());
+    contaPercorso();
+    aggiornaStato();
+    aggiornaIndicatoreAndatura();
     if (modoCamera === 'segui') {
       cam.update(dt);
       aggiornaNebbia(cam.mira);

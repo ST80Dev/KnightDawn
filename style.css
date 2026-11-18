@@ -80,3 +80,80 @@ html, body {
 }
 
 #hud .andatura[hidden] { display: none; }
+
+#hud .andatura.sfinito { color: #e08a50; }
+
+/* Messaggio temporaneo (bivacco, partita ripresa…) */
+#hud .messaggio {
+  position: absolute;
+  top: 44px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  background: rgba(30, 16, 8, 0.85);
+  border: 1px solid #8a6030;
+  color: #d8c8a0;
+  font-size: 14px;
+  border-radius: 3px;
+}
+
+#hud .messaggio[hidden] { display: none; }
+
+/* Pannello di stato: data e ora, attributi, Onore */
+#hud .stato {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  min-width: 210px;
+  padding: 7px 10px 8px;
+  background: rgba(26, 14, 4, 0.72);
+  border: 1px solid #5a3a18;
+  border-radius: 3px;
+  color: #d8c8a0;
+  font-size: 13px;
+}
+
+#hud .stato[hidden] { display: none; }
+
+#hud .stato .data {
+  color: #c8a030;
+  margin-bottom: 5px;
+}
+
+#hud .stato .attr {
+  display: grid;
+  grid-template-columns: 58px 1fr 30px;
+  align-items: center;
+  gap: 6px;
+  margin: 3px 0;
+}
+
+#hud .stato .barra {
+  height: 7px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid #3a2010;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+#hud .stato .barra i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: #8a6030;
+}
+
+#hud .stato .forza .barra i   { background: #b08a3a; }
+#hud .stato .salute .barra i  { background: #9a3a2a; }
+#hud .stato .volonta .barra i { background: #4a6a8a; }
+#hud .stato .attr.basso .val  { color: #e08a50; }
+
+#hud .stato .val {
+  text-align: right;
+  font: 12px ui-monospace, Consolas, monospace;
+}
+
+#hud .stato .onore {
+  margin-top: 5px;
+  color: #c8b890;
+}

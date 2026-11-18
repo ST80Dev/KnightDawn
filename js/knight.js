@@ -3,7 +3,8 @@
 // per costi di viaggio.
 //
 // Attributi:
-//   Forza   (0-100) — energia di viaggio; si consuma tile per tile
+//   Forza   (0-100) — energia di viaggio; si consuma con la distanza (Scene 3D:
+//                     consumaForzaMetri; Carta: consumaForza per bioma)
 //   Volontà (0-100) — forza mentale; cala con eventi oscuri e paura
 //   Salute  (0-100) — integrità corporea; cala in combattimento (0 = morte)
 //   Onore   (-5/+5) — statura morale; apre e chiude porte con fazioni e NPC
@@ -158,6 +159,18 @@ const Knight = {
       }
     }
     return true;
+  },
+
+  // Consumo di Forza per distanza nelle Scene 3D (docs/ESPLORAZIONE_3D.md, M5).
+  // metri: distanza orizzontale; salita: dislivello positivo in metri; andatura: chiave di
+  // VIAGGIO.FORZA_ANDATURA ('camminata' | 'corsetta' | 'scatto'). Niente arrotondamenti: arriva
+  // un pezzetto per fotogramma.
+  consumaForzaMetri(metri, salita, andatura) {
+    const molt = VIAGGIO.FORZA_ANDATURA[andatura] || 1;
+    const equivalenti = metri + Math.max(0, salita || 0) * VIAGGIO.METRI_PER_METRO_SALITA;
+    const cavallo = this.isMounted() ? 0.7 : 1;
+    const costo = equivalenti * molt * cavallo * this.forza.max / VIAGGIO.METRI_PER_FORZA_PIENA;
+    this.forza.cur = Math.max(0, this.forza.cur - costo);
   },
 
   // Applica recupero da sosta.  tipo: chiave di RECOVERY.

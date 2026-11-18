@@ -1,7 +1,9 @@
 // Knight Dawn — calendario del mondo
 // Gerarchia: Era → Luce → Stagione → Diario → Passo
 //
-// 1 Passo    = 1 tile di viaggio (~2-3 ore in-fiction)
+// 1 Passo    = ~3 ore in-fiction (unità di tempo; nelle Scene 3D la distanza si
+//              converte in frazioni di Passo, vedi VIAGGIO in config.js)
+// 1 giorno   = 8 Passi, uno per ora canonica (Prima, Terza, … Lodi)
 // 1 Diario   = 200 Passi  (~25 giorni, "un mese")
 // 1 Stagione = 3 Diari = 600 Passi  (~2,5 mesi)
 // 1 Luce     = 4 Stagioni = 12 Diari = 2.400 Passi  (~10 mesi, "un anno")
@@ -18,6 +20,11 @@ const CALENDAR = {
   PASSI_PER_STAGIONE:  600,   // 200 × 3
   PASSI_PER_LUCE:      2400,  // 600 × 4
   PASSI_PER_ERA:       12000, // 2400 × 5
+  PASSI_PER_GIORNO:    8,
+
+  // Un Passo per ogni ora canonica; il giorno di gioco comincia a Prima (~6:00).
+  ORE_CANONICHE: ['Prima', 'Terza', 'Sesta', 'Nona', 'Vespri', 'Compieta', 'Mattutino', 'Lodi'],
+  ORA_INIZIO_GIORNO: 6,
 
   NOMI_STAGIONI: ['Primavera', 'Estate', 'Autunno', 'Inverno'],
 
@@ -27,7 +34,8 @@ const CALENDAR = {
 };
 
 const Calendar = {
-  ppiTotali: 0,  // passi totali dalla creazione
+  passiTotali: 0,  // passi totali dalla creazione
+  frazione: 0,     // parte del Passo corrente già trascorsa (0–1): la accumulano le Scene 3D
   era: 1,
   luce: 1,
   stagione: 0,   // indice 0-3 → Primavera..Inverno
@@ -35,20 +43,55 @@ const Calendar = {
   passo: 1,      // 1-based dentro il diario corrente
 
   inVeglia: true, // true fino all'evento di soglia
-  giornoVeglia: 0,
+  giornoVeglia: 1, // ricavato dai Passi: 8 Passi = 1 giorno
 
   velocita: CALENDAR.SPEED_DEFAULT, // sec per passo corrente
 
   init() {
     this.passiTotali  = 0;
+    this.frazione     = 0;
     this.era          = 1;
     this.luce         = 1;
     this.stagione     = 0;
     this.diario       = 1;
     this.passo        = 1;
     this.inVeglia     = true;
-    this.giornoVeglia = 0;
+    this.giornoVeglia = 1;
     this.velocita     = CALENDAR.SPEED_DEFAULT;
+  },
+
+  // Avanza di una frazione di Passo (anche minuscola, ogni fotogramma): i Passi interi scattano
+  // quando la frazione accumulata supera 1.
+  avanzaFrazione(f) {
+    if (!(f > 0)) return;
+    this.frazione += f;
+    while (this.frazione >= 1) {
+      this.frazione -= 1;
+      this._tick();
+    }
+  },
+
+  // Tempo per distanza nelle Scene 3D: metri orizzontali + sovrappiù per la salita.
+  // L'andatura non conta: correndo si copre la stessa distanza prima, non si "spende" più tempo.
+  avanzaMetri(metri, salita) {
+    const equivalenti = metri + Math.max(0, salita || 0) * VIAGGIO.METRI_PER_METRO_SALITA;
+    this.avanzaFrazione(equivalenti / VIAGGIO.METRI_PER_PASSO);
+  },
+
+  // Indice del Passo nel giorno (0 = Prima … 7 = Lodi).
+  indiceNelGiorno() {
+    const n = this.inVeglia ? this.passiTotali : this.passo - 1;
+    return ((n % CALENDAR.PASSI_PER_GIORNO) + CALENDAR.PASSI_PER_GIORNO) % CALENDAR.PASSI_PER_GIORNO;
+  },
+
+  oraCanonica() {
+    return CALENDAR.ORE_CANONICHE[this.indiceNelGiorno()];
+  },
+
+  // Ora approssimativa (0–24, con decimali) per il pannello F3 e, più avanti, la luce del giorno.
+  oraDelGiorno() {
+    const ore = 24 / CALENDAR.PASSI_PER_GIORNO;
+    return (CALENDAR.ORA_INIZIO_GIORNO + (this.indiceNelGiorno() + this.frazione) * ore) % 24;
   },
 
   avanza(n) {
@@ -60,7 +103,7 @@ const Calendar = {
     this.passiTotali++;
 
     if (this.inVeglia) {
-      this.giornoVeglia++;
+      this.giornoVeglia = 1 + Math.floor(this.passiTotali / CALENDAR.PASSI_PER_GIORNO);
       return;
     }
 
@@ -141,6 +184,7 @@ const Calendar = {
   toJSON() {
     return {
       passiTotali:  this.passiTotali,
+      frazione:     this.frazione,
       era:          this.era,
       luce:         this.luce,
       stagione:     this.stagione,
@@ -155,13 +199,14 @@ const Calendar = {
   fromJSON(data) {
     if (!data) return;
     this.passiTotali  = data.passiTotali  || 0;
+    this.frazione     = data.frazione     || 0;
     this.era          = data.era          || 1;
     this.luce         = data.luce         || 1;
     this.stagione     = data.stagione     || 0;
     this.diario       = data.diario       || 1;
     this.passo        = data.passo        || 1;
     this.inVeglia     = data.inVeglia !== undefined ? data.inVeglia : true;
-    this.giornoVeglia = data.giornoVeglia || 0;
+    this.giornoVeglia = data.giornoVeglia || 1;
     this.velocita     = data.velocita     || CALENDAR.SPEED_DEFAULT;
   },
 };

@@ -74,6 +74,16 @@ const MAP_ZOOM_DEFAULT = 5; // indice → 10 px/tile
 // S(...) (vedi main.js) per restare proporzionate al canvas attuale.
 const PIXEL = 2;
 
+// Tempo e fatica per distanza nelle Scene 3D (docs/ESPLORAZIONE_3D.md, M5). Valori provvisori.
+// Il Passo è un'unità di tempo (~3 ore): la distanza percorsa si converte in frazioni di Passo.
+const VIAGGIO = {
+  METRI_PER_PASSO:        12000,  // a piedi, in piano: ~12 km ogni Passo di marcia
+  METRI_PER_METRO_SALITA: 6.7,    // regola tipo Naismith: 600 m di salita ≈ 1 ora ≈ 4 km in piano
+  METRI_PER_FORZA_PIENA:  30000,  // 100 di Forza ≈ 30 km in piano camminando
+  FORZA_ANDATURA: { camminata: 1, corsetta: 1.5, scatto: 3 },  // moltiplicatori di Forza al metro
+  PASSI_ACCAMPAMENTO:     3,      // un bivacco (+30 Forza, RECOVERY.accampamento) dura ~9 ore
+};
+
 // Seed RNG semplice (mulberry32) per texture procedurali
 function mulberry32(seed) {
   let a = seed >>> 0;

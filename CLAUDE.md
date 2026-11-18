@@ -60,5 +60,6 @@ architettura: quelle stanno in `docs/`. Aggiornare la fase corrente a ogni cambi
 ## Fase corrente
 
 **Prototipo 3D valutato: si prosegue con Carta e Scene** (`docs/GDD.md` §2 *Il mondo*). M0–M4 completate.
-**Ora: M5 ridotta** (tempo e Forza per distanza, HUD, salvataggio locale), poi prototipo della Carta.
+**Ora: M5 ridotta implementata, in prova** (tempo e Forza per distanza, HUD, salvataggio locale);
+poi prototipo del generatore del mondo.
 Ordine e criteri in `docs/ESPLORAZIONE_3D.md`. La versione 2D resta nella cronologia git (`2c869fa`).
