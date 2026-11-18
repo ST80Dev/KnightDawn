@@ -33,16 +33,22 @@ persona che ci cammina sopra seguendo il terreno, e un castello low-poly in cui 
   ```json
   { "name": "tavullia", "cols": 257, "rows": 257, "cellSize": 7.8125,
     "sizeMeters": 2000, "center": { "lat": 43.8985, "lon": 12.7517 },
+    "centerUTM": { "x": 319435.68, "y": 4863056.65 },
     "crs": "EPSG:32633", "minElev": 0, "maxElev": 0, "source": "TINITALY 10m" }
   ```
-- Le coordinate del centro sono **da verificare** sul DEM reale.
+- Le coordinate del centro sono **da verificare**: sul DEM il punto cade su un versante a ~141 m,
+  mentre il paese è dato a ~170 m; c'è un dosso a 172 m circa 250 m più a est. L'abitato è comunque
+  dentro l'area. Spostare il centro = rilanciare lo script con `--lat/--lon`.
 
 ### Generazione (`tools/dem/`)
 
-Gli script girano **sul PC dell'utente**, perché l'ambiente cloud non raggiunge i server dei dati.
-- `make_heightmap.py` — input: un GeoTIFF (TINITALY 10 m dell'INGV oppure Copernicus GLO-30).
-  Riproietta in EPSG:32633, ritaglia 2×2 km attorno al centro, ricampiona a 257×257 (bilineare)
-  e scrive `.bin` + `.json`. Dipendenze: `rasterio` e `numpy` (oppure GDAL da riga di comando).
+Gli script girano sul PC dell'utente, ma anche nell'ambiente cloud, che raggiunge le fonti su AWS
+(Copernicus, Terrarium); TINITALY invece no (va scaricato a mano).
+- `make_heightmap.py` — input: un GeoTIFF (TINITALY 10 m dell'INGV) oppure `--copernicus`, che legge
+  la tile Copernicus GLO-30 pubblica su AWS senza registrazione. Riproietta in EPSG:32633, ritaglia
+  2×2 km attorno al centro, ricampiona a 257×257 (**cubica**: la bilineare, ingrandendo dati a 30 m,
+  lascia pieghe a griglia visibili con il flat shading) e scrive `.bin` + `.json`.
+  Dipendenze: `rasterio` e `numpy`.
 - `fetch_terrarium.py` — alternativa senza registrazione: scarica le tile pubbliche AWS
   "Terrarium" (`elevation-tiles-prod`), le decodifica (`(R*256 + G + B/256) - 32768`),
   le unisce e riusa la stessa pipeline. Qualità inferiore (dati ~30 m), ma utile per partire.
@@ -72,10 +78,16 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
 
 ### M1 — Terreno
 - `js/3d/terrain.js`: carica `.bin` + `.json` (o fallback), crea la mesh, colora i vertici, luci, nebbia.
-- Espone `getHeight(x, z)` (interpolazione bilineare) e `getSlope(x, z)`: le useranno gli altri moduli.
+- Espone `getHeight(x, z)` e `getSlope(x, z)` (gradi): le useranno gli altri moduli.
+  L'interpolazione è sul **triangolo disegnato** (diagonale NE–SO), non bilineare: così la quota
+  coincide esattamente con la superficie visibile (la bilineare può scostarsi di decine di cm).
 - Camera libera di debug (orbitale) attivabile per ispezionare il terreno.
 - `tools/dem/` completo con README.
 - **Accettazione:** il rilievo è riconoscibile (con dati reali), almeno 60 FPS, nessuna cucitura visibile.
+- **Stato:** implementata con dati Copernicus GLO-30 (quote 36–230 m). Camera di debug = OrbitControls
+  (`lib/three/addons/`), attiva di default finché non esiste il cavaliere. `F3` mostra anche fonte dei
+  dati, quota e pendenza sotto il cursore. In attesa del test dell'utente.
+- Nota per M2: con questi dati la pendenza massima è ~26°, quindi il limite di 35° non scatta mai.
 
 ### M2 — Cavaliere
 - `js/3d/knight3d.js`: cavaliere costruito con primitive (busto, testa con elmo, braccia, gambe,
