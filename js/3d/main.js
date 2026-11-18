@@ -464,25 +464,29 @@ function puntoPartenza(c) {
   return { cx: c.cols * c.cella / 2, cz: c.rows * c.cella / 2 };
 }
 
-/** Il seme del mondo va nell'indirizzo: ricaricando o condividendo il link si ritrova lo stesso mondo. */
+/**
+ * Il seme del mondo va nell'indirizzo: ricaricando o condividendo il link si ritrova lo stesso mondo.
+ * `?terreno=tavullia` resta solo se la Scena attuale è Tavullia.
+ */
 function scriviIndirizzo() {
   const url = new URL(window.location.href);
   if (carta) {
     const testo = url.searchParams.get('seme');
     if (testo === null || semeDaTesto(testo) !== carta.seme) url.searchParams.set('seme', String(carta.seme));
-    url.searchParams.delete('terreno');
   }
+  if (scenaAttuale?.tipo === 'tavullia') url.searchParams.set('terreno', 'tavullia');
+  else url.searchParams.delete('terreno');
   window.history.replaceState(null, '', url);
 }
 
-/** Dalla Carta: entra nella Scena centrata sulla cella (x, y) della Carta indicata. */
+/** Dalla Carta: entra nella Scena centrata nel punto (x, y) in km della Carta indicata (al metro). */
 async function entraDallaCarta(cartaScelta, x, y) {
   carta = cartaScelta;
-  await caricaScena({ tipo: 'mondo', cx: (x + 0.5) * carta.cella, cz: (y + 0.5) * carta.cella });
+  await caricaScena({ tipo: 'mondo', cx: Math.round(x * carta.cella), cz: Math.round(y * carta.cella) });
   posizionaCavaliere(0, 0, Math.PI);
   scriviIndirizzo();
   cartaVista.chiudi();
-  messaggio(`Scena a ${x}, ${y} km dall'angolo nord-ovest (seme ${carta.seme}).`);
+  messaggio(`Scena a ${fmt(x, 2)}, ${fmt(y, 2)} km dall'angolo nord-ovest (seme ${carta.seme}).`);
   salvaOra();
 }
 
@@ -491,9 +495,7 @@ async function entraTavullia() {
   await caricaScena({ tipo: 'tavullia' });
   const porta = castle.davantiPorta();
   posizionaCavaliere(0, 0, Math.atan2(porta.x, porta.z));
-  const url = new URL(window.location.href);
-  url.searchParams.set('terreno', 'tavullia');
-  window.history.replaceState(null, '', url);
+  scriviIndirizzo();
   cartaVista.chiudi();
   messaggio('Tavullia: terreno reale, scena di prova. Dalla Carta (M) si torna al mondo generato.');
   salvaOra();
@@ -506,8 +508,16 @@ async function init() {
   const sc = ripresa ? Save.scenaSalvata : null;
   const finiti = (...v) => v.every(Number.isFinite);
 
+  // Seme del mondo: dall'indirizzo, poi dal salvataggio (anche se la partita è a Tavullia), altrimenti a caso.
+  const testo = PARAMETRI.get('seme');
+  const seme = testo ? semeDaTesto(testo)
+    : (sc && Number.isFinite(sc.seme)) ? sc.seme
+      : Math.floor(Math.random() * 1e6);
+
   if (TAVULLIA) {
-    // Tavullia: dal punto salvato se riguarda questa scena, altrimenti al centro rivolti alla porta.
+    // Tavullia: anche qui la partita ha il suo mondo (la Carta, M, riporta lì e non a un seme a caso).
+    carta = await cartaDelMondo(seme);
+    // Dal punto salvato se riguarda questa scena, altrimenti al centro rivolti alla porta.
     await caricaScena({ tipo: 'tavullia' });
     const porta = castle.davantiPorta();
     if (sc && sc.terreno === 'tavullia' && finiti(sc.x, sc.z)) {
@@ -515,12 +525,8 @@ async function init() {
     } else {
       posizionaCavaliere(0, 0, Math.atan2(porta.x, porta.z));
     }
+    scriviIndirizzo();
   } else {
-    // Mondo generato: il seme viene dall'indirizzo, poi dal salvataggio, altrimenti a caso.
-    const testo = PARAMETRI.get('seme');
-    const seme = testo ? semeDaTesto(testo)
-      : (sc && sc.terreno === 'mondo' && Number.isFinite(sc.seme)) ? sc.seme
-        : Math.floor(Math.random() * 1e6);
     carta = await cartaDelMondo(seme);
     if (sc && sc.terreno === 'mondo' && sc.seme === seme && finiti(sc.cx, sc.cz, sc.x, sc.z)) {
       await caricaScena({ tipo: 'mondo', cx: sc.cx, cz: sc.cz });
@@ -535,7 +541,7 @@ async function init() {
   Save.statoScena = () => {
     const k = knight.stato;
     return scenaAttuale.tipo === 'tavullia'
-      ? { terreno: 'tavullia', x: k.x, z: k.z, direzione: k.direzione }
+      ? { terreno: 'tavullia', seme: carta?.seme, x: k.x, z: k.z, direzione: k.direzione }
       : { terreno: 'mondo', seme: carta.seme, cx: scenaAttuale.cx, cz: scenaAttuale.cz, x: k.x, z: k.z, direzione: k.direzione };
   };
   Save.startAutosave();

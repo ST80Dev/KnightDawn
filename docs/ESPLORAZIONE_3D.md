@@ -489,6 +489,14 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
      ultime 3 Carte: ricaricando con lo stesso seme ~1 s. `?rigenera` ignora la cache. Non è un
      salvataggio (si salva solo il seme): `VERSIONE_GENERATORE` in `carta.js` va cambiata a ogni modifica
      che cambia le Carte. Stesso codice di controllo nel Worker e in Node (seme 48213 → `39857c7c`).
+   **Vista della Carta: zoom (richiesta dell'utente).** Rotella attorno al cursore fino a ×40 (una cella ~60 px),
+   trascinamento per spostarsi, «Vista intera», «Centra sul cavaliere» (×12); clic senza trascinamento = Scena
+   centrata nel punto esatto (al metro, non più al centro della cella); coordinate al centesimo di km sotto il
+   cursore. Fiumi e segni in pixel dello schermo (laghi e fiumi precalcolati come Path2D); rilievo a celle nette
+   a vista intera, sfumato da ×3.
+   **Tavullia e mondo della partita.** «Tavullia (prova)» è solo la scena di prova di 2×2 km, non la modalità
+   reale (milestone dopo M6). Anche a Tavullia la partita conserva il suo mondo (seme nel salvataggio e
+   nell'indirizzo): la Carta riporta lì e non a un seme a caso.
 5. **Orizzonte** (inserito dopo il passo 4): oltre il blocco di 2×2 km non si vedeva nulla, nemmeno una
    catena a pochi km. Terreno lontano solo da guardare, dalla Carta già in memoria (`js/3d/orizzonte.js`).
    *Prova:* dal pedemonte si vedono le montagne lontane; nessuna fessura al raccordo col blocco; FPS.
