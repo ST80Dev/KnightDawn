@@ -432,6 +432,20 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
      piatte i corsi minori scavano solo il proprio canale (che apre il varco e svuota la conca; senza, i
      laghi diventavano ~500, con i versanti a V i solchi vicini si abbassavano a vicenda); le dita larghe
      una cella si tolgono (una passata). 25–53 laghi per seme; verifica dei fiumi superata su 5 semi.
+   **Secondo ritocco (utente: ancora troppi rettilinei, laghi poco verosimili).**
+   - Le valli dei fiumi (bacino ≥ 150 km²) si scavano lungo i tracciati curvi (anse comprese), con il letto
+     interpolato che scende sempre; i rigagnoli minori lungo le celle come prima. I tracciati finali sono
+     proprio quelli: ricavati di nuovo dal secondo drenaggio a celle da 1 km, le anse si perdevano
+     (sinuosità mediana su finestre di 20 km: 1,22 contro 1,72). Ora 1,58 (90° percentile 2,15; i fiumi
+     reali stanno in media tra 1,2 e 1,5, quelli di pianura con meandri oltre 2). Tracciati a punti
+     (x, y, bacino, letto): il letto servirà alle Scene (passo 6). Dentro i laghi il tracciato si interrompe.
+   - Anse ampie anche in collina (la valle le segue); spostamento dei punti fino a 1,5 km in pianura su
+     9 e 30 km. I corsi che scendono dritti dalle catene restano in parte dritti (come i fiumi appenninici
+     verso l'Adriatico): piegarli di più vorrebbe dire tagliare i rilievi.
+   - Vista: laghi con contorni smussati (marching squares su un campo ammorbidito), non a quadretti.
+   - Laghi 64–109 per seme (le valli curve lasciano qualche conca in più). Carta ~0,85–0,95 s.
+   - Pulsante «Tavullia (prova)» nella vista della Carta: carica la scena di prova senza ricaricare la
+     pagina; un clic sulla Carta riporta al mondo generato.
 5. **Orizzonte** (inserito dopo il passo 4): oltre il blocco di 2×2 km non si vedeva nulla, nemmeno una
    catena a pochi km. Terreno lontano solo da guardare, dalla Carta già in memoria (`js/3d/orizzonte.js`).
    *Prova:* dal pedemonte si vedono le montagne lontane; nessuna fessura al raccordo col blocco; FPS.

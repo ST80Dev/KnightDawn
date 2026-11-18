@@ -280,7 +280,9 @@ export function generaCarta(seme, opzioni = {}) {
     },
     controllo: codiceControllo(quota),
   };
-  carta.fiumi = tracciaFiumi(carta);   // tronchi curvi (km): vista della Carta e, al passo 6, Scene
+  // Tronchi curvi (km, punti x, y, bacino, letto) lungo cui sono scavate le valli: li usano la vista della
+  // Carta e, al passo 6, le Scene (il letto scende sempre).
+  carta.fiumi = dren.fiumi;
   carta.statistiche.ms = performance.now() - t0;
   return carta;
 }
@@ -698,7 +700,7 @@ function flusso(cols, rows, riempita, foce, acque, seme) {
  *   2. Versanti: ogni cella vicina a un fiume si abbassa VERSO il letto secondo un profilo a V, mai sotto:
  *      lo scavo non crea conche nuove.
  */
-function scavaValli(cols, rows, quota, acque, bacino, ricevente, ordine, piatta) {
+function scavaValli(cols, rows, quota, acque, bacino, ricevente, ordine, piatta, seme) {
   const V = DRENAGGIO.valli;
   const n = cols * rows;
   const letto = new Float32Array(n).fill(NaN);
@@ -722,6 +724,7 @@ function scavaValli(cols, rows, quota, acque, bacino, ricevente, ordine, piatta)
       if (b < nuova[i]) nuova[i] = b;
       continue;
     }
+    if (bacino[i] >= DRENAGGIO.fiume) continue;          // i fiumi scavano lungo i tracciati curvi (sotto)
     const raggio = Math.min(V.raggioMax, V.raggioBase + V.raggioPer * Math.sqrt(bacino[i]));
     const r = Math.ceil(raggio), x0 = i % cols, y0 = (i - x0) / cols;
     for (let dy = -r; dy <= r; dy++) {
@@ -741,7 +744,33 @@ function scavaValli(cols, rows, quota, acque, bacino, ricevente, ordine, piatta)
       }
     }
   }
+  // Fiumi: la valle si scava lungo il tracciato curvo (anse comprese), con il letto che scende sempre
+  // (interpolato tra i letti delle celle). Scavata lungo la catena di celle, la valle restava dritta e le
+  // anse sarebbero finite a mezza costa.
+  const tracciati = tracciaFiumi({ cols, rows, quota, acque, ricevente, bacino, sogliaFiume: DRENAGGIO.fiume,
+    seme, cella: CARTA_PREDEFINITA.cella, letto }, { spostamento: true, anse: TRACCIATI.anse });
+  for (const f of tracciati) {
+    for (let k = 0; k < f.length; k += 2 * PASSO_PUNTO) {     // un punto ogni 0,4 km basta (raggi ≥ 1,5 km)
+      const px = f[k], py = f[k + 1], b = f[k + 3];
+      if (Number.isNaN(b)) continue;
+      const raggio = Math.min(V.raggioMax, V.raggioBase + V.raggioPer * Math.sqrt(f[k + 2]));
+      const x0 = Math.floor(px - raggio), x1 = Math.ceil(px + raggio);
+      const y0 = Math.floor(py - raggio), y1 = Math.ceil(py + raggio);
+      for (let y = Math.max(0, y0); y <= Math.min(rows - 1, y1); y++) {
+        for (let x = Math.max(0, x0); x <= Math.min(cols - 1, x1); x++) {
+          const j = y * cols + x;
+          if (acque[j] || quota[j] <= b) continue;
+          const dx = x + 0.5 - px, dy = y + 0.5 - py;
+          const t = Math.sqrt(dx * dx + dy * dy) / raggio;
+          if (t >= 1) continue;
+          const q = b + (quota[j] - b) * t;
+          if (q < nuova[j]) nuova[j] = q;
+        }
+      }
+    }
+  }
   for (let i = 0; i < n; i++) if (!acque[i]) quota[i] = nuova[i] < 1 ? 1 : nuova[i];
+  return tracciati;
 }
 
 /**
@@ -767,7 +796,7 @@ export function drenaggio(cols, rows, quota, mare, seme = 0) {
 
   // Primo drenaggio: dove scorrerebbe l'acqua sul rilievo di partenza → valli.
   const f0 = flusso(cols, rows, riempi(cols, rows, quota, foce), foce, acque, sF);
-  scavaValli(cols, rows, quota, acque, f0.bacino, f0.ricevente, f0.ordine, f0.piatta);
+  const tracciati = scavaValli(cols, rows, quota, acque, f0.bacino, f0.ricevente, f0.ordine, f0.piatta, seme);
 
   // Secondo drenaggio sul rilievo scavato: laghi nelle conche profonde, le altre colmate.
   const riempita = riempi(cols, rows, quota, foce);
@@ -837,7 +866,26 @@ export function drenaggio(cols, rows, quota, mare, seme = 0) {
   // Conche non lacustri colmate: la quota della terra è la superficie riempita (letto mai in salita).
   for (let i = 0; i < n; i++) if (acque[i] === ACQUA.TERRA && riempita[i] > quota[i]) quota[i] = riempita[i];
   const { ricevente, bacino } = flusso(cols, rows, riempita, foce, acque, sF);
-  return { acque, livello, ricevente, bacino, laghi };
+
+  // Tracciati dei fiumi: quelli lungo cui sono state scavate le valli (il fiume sta sul fondo della sua
+  // valle curva). Ricavati di nuovo dal secondo drenaggio, a celle da 1 km, le anse si perdevano
+  // (sinuosità mediana 1,22 contro 1,72). Dentro i laghi nati dal secondo drenaggio il tracciato si interrompe.
+  const fiumi = [];
+  for (const f of tracciati) {
+    let pezzo = [];
+    for (let k = 0; k < f.length; k += PASSO_PUNTO) {
+      const c = Math.floor(f[k]), r = Math.floor(f[k + 1]);
+      const inLago = c >= 0 && r >= 0 && c < cols && r < rows && acque[r * cols + c] === ACQUA.LAGO;
+      if (inLago) {
+        if (pezzo.length >= 2 * PASSO_PUNTO) fiumi.push(Float32Array.from(pezzo));
+        pezzo = [];
+        continue;
+      }
+      for (let v = 0; v < PASSO_PUNTO; v++) pezzo.push(f[k + v]);
+    }
+    if (pezzo.length >= 2 * PASSO_PUNTO) fiumi.push(Float32Array.from(pezzo));
+  }
+  return { acque, livello, ricevente, bacino, laghi, fiumi };
 }
 
 // ─── Tracciati dei fiumi ────────────────────────────────────────────────
@@ -853,26 +901,33 @@ export function drenaggio(cols, rows, quota, mare, seme = 0) {
 //      bacino e si riducono con la pendenza; nulle agli estremi; al massimo ~0,65 km dal fondovalle.
 
 const TRACCIATI = {
-  spostamento: { montagna: 0.12, pianura: 0.42, lunghezza: 9 },   // km
+  // Spostamento dolce dei punti delle celle, su due scale (km): spezza i rettilinei lunghi.
+  // La valle si scava lungo il tracciato, quindi lo spostamento può piegare il corso su decine di km.
+  spostamento: { montagna: 0.25, pianura: 1.5, lunghezze: [9, 30] },
   pendenza: [0.015, 0.07],      // m/m: da qui in giù è «pianura», da qui in su «montagna»
-  anse: { lunghezzaBase: 2.2, lunghezzaPer: 0.25, lunghezzaMax: 9, ampiezza: 0.28, ampiezzaMax: 0.65 },
+  // Anse: lunghezza d'onda (km) dal bacino; ampiezza = frazione della lunghezza d'onda, limitata da un tetto
+  // che va da montagna a pianura. Sono le anse lungo cui si scavano le valli (passo 4).
+  // Le valli si scavano lungo le anse: possono essere ampie anche in collina (solo la montagna le stringe).
+  anse: { lunghezzaBase: 3, lunghezzaPer: 0.3, lunghezzaMax: 12, ampiezza: 0.4, tetto: [0.3, 1.8], forma: 1 },
   passo: 0.2,                   // km tra i punti del tracciato
 };
+const PASSO_PUNTO = 4;          // valori per punto: x, y (km), bacino (km²), letto (m; NaN se non noto)
 
-/** Chaikin su punti (x, y, bacino) a terne, estremi fermi. */
+/** Chaikin su punti a gruppi di PASSO_PUNTO valori, estremi fermi. */
 function chaikin(p, volte) {
+  const S = PASSO_PUNTO;
   for (let v = 0; v < volte; v++) {
-    const n = p.length / 3;
+    const n = p.length / S;
     if (n < 3) return p;
-    const q = [p[0], p[1], p[2]];
+    const q = p.slice(0, S);
     for (let k = 0; k < n - 1; k++) {
-      const a = k * 3, b = a + 3;
+      const a = k * S, b = a + S;
       for (const f of [0.25, 0.75]) {
         if ((k === 0 && f === 0.25) || (k === n - 2 && f === 0.75)) continue;
-        q.push(p[a] + (p[b] - p[a]) * f, p[a + 1] + (p[b + 1] - p[a + 1]) * f, p[a + 2] + (p[b + 2] - p[a + 2]) * f);
+        for (let c = 0; c < S; c++) q.push(p[a + c] + (p[b + c] - p[a + c]) * f);
       }
     }
-    q.push(p[p.length - 3], p[p.length - 2], p[p.length - 1]);
+    for (let c = 0; c < S; c++) q.push(p[p.length - S + c]);
     p = q;
   }
   return p;
@@ -880,33 +935,39 @@ function chaikin(p, volte) {
 
 /** Ricampiona a passo costante (km). */
 function ricampiona(p, passo) {
-  const q = [p[0], p[1], p[2]];
+  const S = PASSO_PUNTO;
+  const q = p.slice(0, S);
   let resto = 0;
-  for (let k = 3; k < p.length; k += 3) {
-    const dx = p[k] - p[k - 3], dy = p[k + 1] - p[k - 2], l = Math.sqrt(dx * dx + dy * dy);
+  for (let k = S; k < p.length; k += S) {
+    const dx = p[k] - p[k - S], dy = p[k + 1] - p[k - S + 1], l = Math.sqrt(dx * dx + dy * dy);
     let s = passo - resto;
     while (s <= l) {
       const f = s / l;
-      q.push(p[k - 3] + dx * f, p[k - 2] + dy * f, p[k - 1] + (p[k + 2] - p[k - 1]) * f);
+      for (let c = 0; c < S; c++) q.push(p[k - S + c] + (p[k + c] - p[k - S + c]) * f);
       s += passo;
     }
     resto = l - (s - passo);
   }
-  const u = p.length - 3;
-  if (q[q.length - 3] !== p[u] || q[q.length - 2] !== p[u + 1]) q.push(p[u], p[u + 1], p[u + 2]);
+  const u = p.length - S;
+  if (q[q.length - S] !== p[u] || q[q.length - S + 1] !== p[u + 1]) for (let c = 0; c < S; c++) q.push(p[u + c]);
   return q;
 }
 
 /**
- * Tracciati dei fiumi della Carta: tronchi come Float32Array di terne (x, y, bacino), x e y in km dal
- * bordo ovest e nord, dalla sorgente verso la foce.
+ * Tracciati dei fiumi: tronchi come Float32Array di punti (x, y, bacino, letto), x e y in km dal bordo
+ * ovest e nord, dalla sorgente verso la foce.
+ * @param {object} dati  cols, rows, quota, acque, ricevente, bacino, sogliaFiume, seme, cella; letto (facoltativo)
+ * @param {{ spostamento?: boolean, anse?: object }} opzioni  spostamento dei punti delle celle e parametri delle anse
  */
-export function tracciaFiumi(carta) {
-  const { cols, rows, quota, acque, ricevente, bacino, sogliaFiume, seme } = carta;
+export function tracciaFiumi(dati, opzioni = {}) {
+  const { cols, rows, quota, acque, ricevente, bacino, sogliaFiume, seme, cella, letto = null } = dati;
   const n = cols * rows;
-  const T = TRACCIATI;
+  const T = TRACCIATI, S = PASSO_PUNTO;
+  const sposta = opzioni.spostamento ?? true;
+  const AN = opzioni.anse ?? T.anse;
   const fiume = (i) => i >= 0 && acque[i] === ACQUA.TERRA && bacino[i] >= sogliaFiume;
   const sX = derivaSeme(seme, 51), sY = derivaSeme(seme, 52), sA = derivaSeme(seme, 53);
+  const lettoDi = (i) => (letto ? letto[i] : NaN);
 
   // Affluenti (in forma compatta) e lunghezza massima del percorso a monte di ogni cella di fiume.
   const nAff = new Int32Array(n + 1);
@@ -930,14 +991,18 @@ export function tracciaFiumi(carta) {
   // Pendenza locale (m/m) e quanto la cella è «di pianura» (1) o «di montagna» (0).
   const pianeggiante = (c, r) => {
     const q = (x, y) => quota[Math.min(rows - 1, Math.max(0, y)) * cols + Math.min(cols - 1, Math.max(0, x))];
-    const gx = (q(c + 1, r) - q(c - 1, r)) / (2 * carta.cella), gy = (q(c, r + 1) - q(c, r - 1)) / (2 * carta.cella);
+    const gx = (q(c + 1, r) - q(c - 1, r)) / (2 * cella), gy = (q(c, r + 1) - q(c, r - 1)) / (2 * cella);
     return 1 - smoothstep(T.pendenza[0], T.pendenza[1], Math.sqrt(gx * gx + gy * gy));
   };
-  // Punto di una cella: centro più uno spostamento dolce (lo stesso per tutti i tronchi che ci passano).
+  // Punto di una cella: centro più (se richiesto) uno spostamento dolce, lo stesso per tutti i tronchi
+  // che ci passano (così si agganciano).
   const punto = (i) => {
     const c = i % cols, r = (i - c) / cols;
+    if (!sposta) return [c + 0.5, r + 0.5];
     const A = T.spostamento.montagna + (T.spostamento.pianura - T.spostamento.montagna) * pianeggiante(c, r);
-    return [c + 0.5 + A * fbm(c, r, sX, T.spostamento.lunghezza, 3), r + 0.5 + A * fbm(c, r, sY, T.spostamento.lunghezza, 3)];
+    const [l1, l2] = T.spostamento.lunghezze;
+    return [c + 0.5 + A * (0.6 * fbm(c, r, sX, l1, 3) + 0.4 * fbm(c, r, sX ^ 0x9e3779b9, l2, 2)),
+      r + 0.5 + A * (0.6 * fbm(c, r, sY, l1, 3) + 0.4 * fbm(c, r, sY ^ 0x9e3779b9, l2, 2))];
   };
 
   // 1. Tronchi, dalla foce verso monte.
@@ -961,45 +1026,46 @@ export function tracciaFiumi(carta) {
     }
     celle.reverse();                               // dalla sorgente verso valle
     const p = [];
-    for (const c of celle) { const [x, y] = punto(c); p.push(x, y, bacino[c]); }
+    for (const c of celle) { const [x, y] = punto(c); p.push(x, y, bacino[c], lettoDi(c)); }
     if (valle >= 0) {                              // affluente: finisce sul punto della confluenza
-      const [x, y] = punto(valle); p.push(x, y, bacino[valle]);
+      const [x, y] = punto(valle); p.push(x, y, bacino[valle], lettoDi(valle));
     } else {                                       // foce: a metà tra l'ultima cella e l'acqua
       const j = ricevente[inizio];
       if (j >= 0) {
         const cj = j % cols, rj = (j - cj) / cols, ci = inizio % cols, ri = (inizio - ci) / cols;
-        p.push((ci + cj) / 2 + 0.5, (ri + rj) / 2 + 0.5, bacino[inizio]);
+        p.push((ci + cj) / 2 + 0.5, (ri + rj) / 2 + 0.5, bacino[inizio], lettoDi(inizio));
       }
     }
-    if (p.length >= 6) tronchi.push(p);
+    if (p.length >= 2 * S) tronchi.push(p);
   }
 
   // 2–4. Angoli arrotondati, anse, ancora un arrotondamento.
-  const AN = T.anse;
   return tronchi.map((p0, k) => {
-    let p = ricampiona(chaikin(p0, 2), T.passo);
-    const m = p.length / 3;
+    const p = ricampiona(chaikin(p0, 3), T.passo);
+    const m = p.length / S;
     let L = 0;
     const s = new Float64Array(m);
     for (let i = 1; i < m; i++) {
-      const dx = p[i * 3] - p[i * 3 - 3], dy = p[i * 3 + 1] - p[i * 3 - 2];
+      const dx = p[i * S] - p[i * S - S], dy = p[i * S + 1] - p[i * S - S + 1];
       L += Math.sqrt(dx * dx + dy * dy);
       s[i] = L;
     }
     const q = p.slice();
     for (let i = 1; i < m - 1; i++) {
-      const b = p[i * 3 + 2];
+      const b = p[i * S + 2];
       const lambda = Math.min(AN.lunghezzaMax, AN.lunghezzaBase + AN.lunghezzaPer * Math.sqrt(b));
-      const c = Math.floor(p[i * 3]), r = Math.floor(p[i * 3 + 1]);
-      const a = Math.min(AN.ampiezzaMax, lambda * AN.ampiezza * pianeggiante(c, r));
+      const c = Math.floor(p[i * S]), r = Math.floor(p[i * S + 1]);
+      // «forma» 1: l'ampiezza segue la pianeggianza; 2: il suo quadrato (anse solo dove è proprio piano).
+      const f = pianeggiante(c, r), ff = AN.forma === 2 ? f * f : f;
+      const a = Math.min(AN.tetto[0] + (AN.tetto[1] - AN.tetto[0]) * ff, lambda * AN.ampiezza * (0.25 + 0.75 * f));
       const smorza = smoothstep(0, lambda * 0.5, s[i]) * smoothstep(0, lambda * 0.5, L - s[i]);
-      const g = fbm(s[i], k * 13.7, sA, lambda, 2);
-      let tx = p[i * 3 + 3] - p[i * 3 - 3], ty = p[i * 3 + 4] - p[i * 3 - 2];
+      const g = fbm(s[i], k * 13.7, sA, lambda, 3);
+      let tx = p[i * S + S] - p[i * S - S], ty = p[i * S + S + 1] - p[i * S - S + 1];
       const tl = Math.sqrt(tx * tx + ty * ty) || 1;
       tx /= tl; ty /= tl;
-      q[i * 3] += -ty * a * g * smorza;
-      q[i * 3 + 1] += tx * a * g * smorza;
+      q[i * S] += -ty * a * g * smorza;
+      q[i * S + 1] += tx * a * g * smorza;
     }
-    return Float32Array.from(chaikin(q, 1));
+    return Float32Array.from(chaikin(q, 2));
   });
 }

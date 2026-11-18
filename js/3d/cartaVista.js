@@ -50,11 +50,13 @@ function tinta(scala, t) {
 
 /** Pixel RGBA (una cella = un pixel) della Carta: tinte per quota, rilievo ombreggiato, costa. */
 export function disegnaRilievo(carta, pixel = new Uint8ClampedArray(carta.cols * carta.rows * 4)) {
-  const { cols, rows, quota, mare, acque } = carta;
+  const { cols, rows, quota, mare, acque, livelloAcqua } = carta;
+  const lago = (i) => acque && acque[i] === ACQUA.LAGO;
   const q = (x, y) => {
     x = x < 0 ? 0 : x >= cols ? cols - 1 : x;
     y = y < 0 ? 0 : y >= rows ? rows - 1 : y;
-    const v = quota[y * cols + x];
+    const i = y * cols + x;
+    const v = lago(i) ? livelloAcqua[i] : quota[i];   // i laghi (disegnati sopra, smussati) sono piani
     return v > 0 ? v : 0;                       // il mare è piatto per l'ombreggiatura
   };
   const piatto = LUCE[2];
@@ -62,9 +64,7 @@ export function disegnaRilievo(carta, pixel = new Uint8ClampedArray(carta.cols *
     for (let x = 0; x < cols; x++) {
       const i = y * cols + x;
       let c;
-      if (acque && (acque[i] === ACQUA.LAGO || acque[i] === ACQUA.LAGO_COSTIERO)) {
-        c = LAGO;
-      } else if (mare[i]) {
+      if (mare[i]) {
         c = tinta([[0, MARE_BASSO], [1, MARE_FONDO]], Math.sqrt(Math.min(1, -quota[i] / 2500)));
       } else {
         const dx = (q(x + 1, y) - q(x - 1, y)) * 0.5 / carta.cella * ESAGERAZIONE;
@@ -72,7 +72,7 @@ export function disegnaRilievo(carta, pixel = new Uint8ClampedArray(carta.cols *
         const l = Math.sqrt(dx * dx + dy * dy + 1);
         const luce = (-dx * LUCE[0] - dy * LUCE[1] + LUCE[2]) / l / piatto;
         const ombra = 0.55 + 0.45 * Math.min(1.5, Math.max(0, luce));
-        c = tinta(TERRA, quota[i]).map((v) => v * ombra);
+        c = tinta(TERRA, lago(i) ? livelloAcqua[i] : quota[i]).map((v) => v * ombra);
         const costa = (x > 0 && mare[i - 1]) || (x < cols - 1 && mare[i + 1])
           || (y > 0 && mare[i - cols]) || (y < rows - 1 && mare[i + cols]);
         if (costa) c = c.map((v, k) => v * 0.45 + COSTA[k] * 0.55);
@@ -93,6 +93,7 @@ const fmt = (n, d = 0) => n.toLocaleString('it-IT', { minimumFractionDigits: d, 
  *   cartaAttuale?: () => (object|null),             // Carta del mondo della partita
  *   posizione?: () => ({x:number, y:number}|null),  // cavaliere sulla Carta (km da ovest e da nord)
  *   onScegli?: (carta: object, x: number, y: number) => void,   // clic su una cella di terra
+ *   onTavullia?: () => void,                        // pulsante «Tavullia (prova)»
  * }} opzioni
  */
 export function createCartaVista(contenitore, opzioni = {}) {
@@ -105,6 +106,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
       <label>Seme <input type="text" class="seme" spellcheck="false" autocomplete="off"></label>
       <button type="button" class="genera">Genera</button>
       <button type="button" class="casuale">Seme casuale</button>
+      <button type="button" class="tavullia" title="Terreno reale di Tavullia con il castello (scena di prova)">Tavullia (prova)</button>
       <span class="legenda" title="Colore = quota, non biomi (biomi al passo 7)">quota 0 <i></i> 3500 m · non biomi · <b>○</b> massicci</span>
       <span class="info"></span>
       <span class="tasto">clic sulla terra: vai lì · M: torna alla scena</span>
@@ -175,10 +177,10 @@ export function createCartaVista(contenitore, opzioni = {}) {
       ctx.beginPath();
       for (const f of fiumi) {
         let aperto = false;
-        for (let i = 3; i < f.length; i += 3) {
+        for (let i = 4; i < f.length; i += 4) {        // punti: x, y, bacino, letto
           const b = f[i + 2];
           if (b < da || b >= a) { aperto = false; continue; }
-          if (!aperto) { ctx.moveTo(f[i - 3], f[i - 2]); aperto = true; }
+          if (!aperto) { ctx.moveTo(f[i - 4], f[i - 3]); aperto = true; }
           ctx.lineTo(f[i], f[i + 1]);
         }
       }
@@ -186,12 +188,59 @@ export function createCartaVista(contenitore, opzioni = {}) {
     }
   }
 
-  /** Rilievo, fiumi, massicci e (se è la Carta della partita) il cavaliere. */
+  /**
+   * Laghi con contorni smussati: marching squares sul campo «lago» (1/0 ai centri delle celle) ammorbidito
+   * con un filtro 3×3, soglia 0,5. A quadretti da 1 km sembravano macchie squadrate.
+   */
+  function disegnaLaghi() {
+    const { cols, rows, acque } = carta;
+    if (!acque) return;
+    const v = new Float32Array(cols * rows);
+    const k = [1, 2, 1, 2, 4, 2, 1, 2, 1];
+    for (let y = 1; y < rows - 1; y++) {
+      for (let x = 1; x < cols - 1; x++) {
+        let somma = 0, t = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const a = acque[(y + dy) * cols + x + dx];
+            if (a === ACQUA.LAGO || a === ACQUA.LAGO_COSTIERO) somma += k[t];
+            t++;
+          }
+        }
+        v[y * cols + x] = somma / 16;
+      }
+    }
+    ctx.fillStyle = `rgb(${LAGO.join(',')})`;
+    ctx.beginPath();
+    const angoli = [[0, 0], [1, 0], [1, 1], [0, 1]];
+    for (let y = 0; y < rows - 1; y++) {
+      for (let x = 0; x < cols - 1; x++) {
+        const w = [v[y * cols + x], v[y * cols + x + 1], v[(y + 1) * cols + x + 1], v[(y + 1) * cols + x]];
+        if (w[0] < 0.5 && w[1] < 0.5 && w[2] < 0.5 && w[3] < 0.5) continue;
+        const punti = [];
+        for (let a = 0; a < 4; a++) {
+          const b = (a + 1) % 4;
+          if (w[a] >= 0.5) punti.push(angoli[a]);
+          if ((w[a] >= 0.5) !== (w[b] >= 0.5)) {
+            const t = (0.5 - w[a]) / (w[b] - w[a]);
+            punti.push([angoli[a][0] + (angoli[b][0] - angoli[a][0]) * t, angoli[a][1] + (angoli[b][1] - angoli[a][1]) * t]);
+          }
+        }
+        ctx.moveTo(x + 0.5 + punti[0][0], y + 0.5 + punti[0][1]);
+        for (let p = 1; p < punti.length; p++) ctx.lineTo(x + 0.5 + punti[p][0], y + 0.5 + punti[p][1]);
+        ctx.closePath();
+      }
+    }
+    ctx.fill();
+  }
+
+  /** Rilievo, laghi, fiumi, massicci e (se è la Carta della partita) il cavaliere. */
   function ridisegna() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(rilievo, 0, 0, canvas.width, canvas.height);
     ctx.setTransform(SCALA, 0, 0, SCALA, 0, 0);       // da qui in poi: coordinate in celle
+    disegnaLaghi();
     disegnaFiumi();
     ctx.strokeStyle = COLORE_MASSICCI;
     ctx.lineWidth = 0.8;
@@ -267,6 +316,9 @@ export function createCartaVista(contenitore, opzioni = {}) {
 
   el.querySelector('.genera').addEventListener('click', () => genera(inSeme.value));
   el.querySelector('.casuale').addEventListener('click', () => genera(''));
+  const btnTavullia = el.querySelector('.tavullia');
+  if (opzioni.onTavullia) btnTavullia.addEventListener('click', () => opzioni.onTavullia());
+  else btnTavullia.hidden = true;
   inSeme.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') genera(inSeme.value);
     e.stopPropagation();                         // i tasti del gioco non devono scattare scrivendo

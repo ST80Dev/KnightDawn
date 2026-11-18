@@ -458,6 +458,19 @@ async function entraDallaCarta(cartaScelta, x, y) {
   salvaOra();
 }
 
+/** Dalla Carta: la scena di prova di Tavullia (terreno reale, castello). La Carta resta quella del mondo. */
+async function entraTavullia() {
+  await caricaScena({ tipo: 'tavullia' });
+  const porta = castle.davantiPorta();
+  posizionaCavaliere(0, 0, Math.atan2(porta.x, porta.z));
+  const url = new URL(window.location.href);
+  url.searchParams.set('terreno', 'tavullia');
+  window.history.replaceState(null, '', url);
+  cartaVista.chiudi();
+  messaggio('Tavullia: terreno reale, scena di prova. Dalla Carta (M) si torna al mondo generato.');
+  salvaOra();
+}
+
 async function init() {
   // Partita ripresa dal salvataggio automatico, se c'è; altrimenti nuova.
   const ripresa = await Save.load(Save.AUTOSAVE_SLOT);
@@ -581,6 +594,9 @@ const cartaVista = createCartaVista(document.body, {
     : null),
   onScegli: (c, x, y) => {
     entraDallaCarta(c, x, y).catch((err) => { console.error('[scena]', err); messaggio(`Errore: ${err.message}`); });
+  },
+  onTavullia: () => {
+    entraTavullia().catch((err) => { console.error('[scena]', err); messaggio(`Errore: ${err.message}`); });
   },
 });
 const TASTI_MOVIMENTO = {
