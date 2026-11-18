@@ -20,18 +20,11 @@ const FORMA = {
   deformazione: { lunghezza: 200, ampiezza: 55, ottave: 3 },   // deformazione del dominio
   continente: { lunghezza: 240, ottave: 7, guadagno: 0.55 },   // forma d'insieme e dettaglio delle coste
   scalaGrande: { lunghezza: 650, peso: 0.45 },                 // masse di terra, golfi e mari interni
-  // Verso i bordi: un abbassamento largo e dolce più uno stretto, di larghezza variabile (le coste non
-  // corrono parallele al bordo). Troppo forte consumerebbe tutto il mare nella cornice.
-  bordoLargo: { larghezza: 150, profondita: 0.45 },
-  bordoStretto: { larghezza: 25, variazione: 15, profondita: 0.5 },
-  // Sicurezza: entro 5–45 km dal bordo una penalità che cresce verso il bordo, perché il mare ci sia
-  // anche dove il rumore è forte. Agisce prima del quantile: la parte di mare resta quella voluta.
-  costaMinima: { distanza: 25, variazione: 20, pendenza: 0.03 },
+  // Bordi: nessun anello di mare forzato (regola del 2D, docs/WORLD_GEN.md in 2c869fa). I bordi possono
+  // essere terra o mare secondo il rumore; solo una leggera spinta verso il mare negli ultimi km.
+  bordo: { larghezza: 40, profondita: 0.15 },
   inclinazione: 0.30,                                          // quanto un lato può avere più mare
-  // Mare per quantile, compreso quello attorno al continente. Il GDD dice 10–22 %, ma la sola fascia
-  // di mare lungo i bordi di 600×450 km vale ~15 %: con 10–22 % non restano golfi né mari interni.
-  // [Proposta da confermare con l'utente] 25–38 %.
-  mare: [0.25, 0.38],
+  mare: [0.10, 0.22],                                          // parte della superficie (GDD)
   montagna: [0.045, 0.10],                                     // parte della terra con catene alte (GDD)
   pianura: 0.5, saturazione: 0.35,                             // quota grezza fuori dalle catene
   // Catene: lungo le linee di zero di un rumore su grande scala (linee lunghe e sinuose), solo dove una
@@ -73,10 +66,10 @@ export function generaCarta(seme, opzioni = {}) {
   };
 
   const sW = derivaSeme(seme, 11), sW2 = derivaSeme(seme, 12), sC = derivaSeme(seme, 13);
-  const sG = derivaSeme(seme, 14), sB = derivaSeme(seme, 15);
+  const sG = derivaSeme(seme, 14);
   const sL = derivaSeme(seme, 16), sM = derivaSeme(seme, 17), sD = derivaSeme(seme, 18);
   const D = FORMA.deformazione, K = FORMA.continente, G = FORMA.scalaGrande;
-  const BL = FORMA.bordoLargo, BS = FORMA.bordoStretto, R = FORMA.catene;
+  const BO = FORMA.bordo, R = FORMA.catene;
   const cx = (cols - 1) / 2, cy = (rows - 1) / 2, raggio = Math.max(cx, cy);
   const inc = carattere.inclinazione;
   const distBordo = (x, y) => Math.min(x, y, cols - 1 - x, rows - 1 - y);
@@ -92,13 +85,8 @@ export function generaCarta(seme, opzioni = {}) {
       let e = fbm(wx, wy, sC, K.lunghezza, K.ottave, K.guadagno) + G.peso * fbm(wx, wy, sG, G.lunghezza, 2);
 
       const d = distBordo(x, y);
-      const tl = 1 - smoothstep(0, BL.larghezza, d);
-      const ts = 1 - smoothstep(0, BS.larghezza + BS.variazione * fbm(x, y, sB, 140, 2), d);
-      e -= BL.profondita * tl * tl + BS.profondita * ts * ts;
+      e -= BO.profondita * (1 - smoothstep(0, BO.larghezza, d));
       e -= inc.forza * ((x - cx) * inc.x + (y - cy) * inc.y) / raggio;
-      const cm = FORMA.costaMinima;
-      const dentro = cm.distanza + cm.variazione * fbm(x, y, sB ^ 0x5bd1e995, 120, 3) - d;
-      if (dentro > 0) e -= cm.pendenza * dentro;
 
       const i = y * cols + x;
       base[i] = e;
@@ -147,7 +135,6 @@ export function generaCarta(seme, opzioni = {}) {
     for (let x = 0; x < cols; x++) {
       const i = y * cols + x;
       let e = base[i] - livello;
-      if (distBordo(x, y) < 2 && e >= 0) e = -0.001;        // la cornice esterna è sempre mare
       if (e >= 0) {
         const m = smoothstep(sogliaMaschera, sogliaMaschera + R.rampaMaschera, maschera[i]);
         const c = profilo[i] * m * smoothstep(0.0, 0.1, e);   // niente catene a picco sul mare

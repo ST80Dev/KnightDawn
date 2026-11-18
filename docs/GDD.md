@@ -151,6 +151,11 @@ quando servono (tecnica e rischi in `docs/ESPLORAZIONE_3D.md`, «Modalità reale
 - **Varietà:** una regione vera ha meno tipi di paesaggio (in Italia niente deserto). Regge se la
   regione va dal mare alle montagne; le regole di varietà valgono per la copertura, non per il rilievo.
   Il contenuto legato ai biomi assenti (es. eventi del deserto) in questa modalità non compare.
+- **Distanze accorciate** [proposta dell'utente, novembre 2026]: per viaggiare tra regioni diverse
+  (es. l'Europa) senza decine di giorni di gioco, sulla Carta una cella vale *k* km reali ma costa come
+  1 km del mondo generato. Con *k* scelto in modo che la Carta resti di ~600×450 celle, il ritmo di
+  viaggio è lo stesso delle due modalità (Italia *k* ≈ 2, Europa *k* ≈ 6–7). Le Scene restano 1:1: è la
+  stessa distinzione già prevista tra tempo della marcia (Carta) e tempo della presenza (Scene).
 - [TBD] Clima reale oppure «compresso» per latitudine come nel mondo generato (varietà ravvicinata su
   rilievo vero); regione fissa o scelta dal giocatore.
 
