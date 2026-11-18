@@ -1,4 +1,4 @@
-// Knight Dawn — cavaliere 3D (milestone M2)
+// Knight Dawn — cavaliere 3D (milestone M2; collisioni con il castello da M4)
 // Modello low-poly costruito con primitive Three.js, animazione procedurale e movimento sul terreno.
 //
 // Convenzioni del modello: origine ai piedi, asse Y in alto, il cavaliere guarda verso +Z locale.
@@ -17,6 +17,7 @@ export const KNIGHT_CFG = {
   velRotazione: 2.0,    // rad/s con A/D (circa 115°/s); in corsa un po' meno
   pendenzaMax: 35,      // gradi: oltre questa pendenza il cavaliere non sale
   margineBordo: 2,      // m dal bordo dell'area
+  raggio: 0.4,          // m: ingombro sul piano contro mura e torri (spalle + scudo)
   accelerazione: 8,     // 1/s: rapidità con cui la velocità raggiunge quella voluta
   avvioRotazione: 10,   // 1/s: rapidità con cui la rotazione da tastiera parte e si ferma
 };
@@ -252,8 +253,10 @@ const avvicina = (rate, dt) => 1 - Math.exp(-rate * dt);   // fattore di lerp in
  * Crea il cavaliere sul terreno.
  * @param {object} terrain  oggetto restituito da loadTerrain (getHeight, getSlope, half)
  * @param {{x:number, z:number, direzione?:number}} start  posizione iniziale; direzione in radianti (0 = +Z, π = nord)
+ * @param {Array<{spingiFuori:(x:number, z:number, r:number) => ({x:number, z:number}|null)}>} [ostacoli]
+ *   oggetti solidi (es. il castello): spingono il cavaliere fuori dal loro ingombro
  */
-export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }) {
+export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }, ostacoli = []) {
   const cfg = { ...KNIGHT_CFG };
   const mod = buildModel();
   const ombra = buildOmbra();
@@ -281,22 +284,33 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     return !(h1 > h0 + 1e-4 && terrain.getSlope(x, z) > cfg.pendenzaMax);
   }
 
+  // Punto (x, z) spinto fuori da mura e torri: contro un muro il cavaliere ci scivola lungo.
+  function fuoriDagliOstacoli(x, z) {
+    for (const o of ostacoli) {
+      const p = o.spingiFuori(x, z, cfg.raggio);
+      if (p) { x = p.x; z = p.z; }
+    }
+    return [x, z];
+  }
+
   // Sposta di (dx, dz). Se il passo è bloccato prova a scivolare lungo un solo asse,
   // così contro un pendio ripido il cavaliere lo costeggia invece di fermarsi di colpo.
   function muovi(dx, dz) {
     const L = lim();
+    const voluto = Math.hypot(dx, dz);
     const tentativi = Math.abs(dx) >= Math.abs(dz)
       ? [[dx, dz], [dx, 0], [0, dz]]
       : [[dx, dz], [0, dz], [dx, 0]];
     for (const [tx, tz] of tentativi) {
       if (tx === 0 && tz === 0) continue;
-      const nx = clamp(stato.x + tx, -L, L);
-      const nz = clamp(stato.z + tz, -L, L);
+      let [nx, nz] = fuoriDagliOstacoli(stato.x + tx, stato.z + tz);
+      nx = clamp(nx, -L, L);
+      nz = clamp(nz, -L, L);
       if (puoAndare(nx, nz)) {
         const d = Math.hypot(nx - stato.x, nz - stato.z);
         stato.x = nx;
         stato.z = nz;
-        return { distanza: d, bloccato: tx !== dx || tz !== dz };
+        return { distanza: d, bloccato: tx !== dx || tz !== dz || d < voluto * 0.6 };
       }
     }
     return { distanza: 0, bloccato: true };

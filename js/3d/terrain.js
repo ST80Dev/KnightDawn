@@ -276,3 +276,34 @@ function proceduralHeights(meta) {
   }
   return h;
 }
+
+// ─── Suolo: terreno + strutture ─────────────────────────────────────────
+
+/**
+ * Suolo calpestabile: il terreno naturale, sostituito dove serve da superfici costruite
+ * (terrapieno del cortile, rampe, più avanti pavimenti). Stessa interfaccia del terreno,
+ * così cavaliere e camera non distinguono tra i due.
+ * @param {object} terrain  oggetto restituito da loadTerrain
+ * @param {Array<{quotaSuolo:(x:number, z:number) => (number|null)}>} strutture
+ */
+export function componiSuolo(terrain, strutture) {
+  function costruita(x, z) {
+    for (const s of strutture) {
+      const h = s.quotaSuolo(x, z);
+      if (h !== null) return h;
+    }
+    return null;
+  }
+  function getHeight(x, z) {
+    const h = costruita(x, z);
+    return h !== null ? h : terrain.getHeight(x, z);
+  }
+  function getSlope(x, z) {
+    if (costruita(x, z) === null) return terrain.getSlope(x, z);
+    const e = 0.3;
+    const gx = (getHeight(x + e, z) - getHeight(x - e, z)) / (2 * e);
+    const gz = (getHeight(x, z + e) - getHeight(x, z - e)) / (2 * e);
+    return Math.atan(Math.hypot(gx, gz)) * 180 / Math.PI;
+  }
+  return { ...terrain, terreno: terrain, getHeight, getSlope };
+}
