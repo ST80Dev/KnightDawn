@@ -70,3 +70,92 @@ export function verificaFiumi(carta) {
   }
   return { ok: errori.length === 0, celle, sorgenti, foci, errori, salitaMassima };
 }
+
+// ─── Punti panoramici (regola decisa con l'utente) ─────────────────────
+// Da quasi ogni punto della terra, entro PANORAMI.raggio km, c'è un'altura da cui si vede lontano: in almeno
+// PANORAMI.direzioni delle direzioni (32 raggi) qualcosa tra PANORAMI.vista e PANORAMI.vista + PANORAMI.oltre
+// km sporge sopra tutto ciò che sta davanti (colline e crinali lontani, non il suolo esattamente a 20 km,
+// che in collina sta quasi sempre dietro un rilievo). Sulla Carta (celle da 1 km), con la curvatura della
+// Terra (raggio efficace 7/6 per la rifrazione).
+// La regola vale sotto PANORAMI.quotaMassima (pianura, collina, pedemonte): in montagna tra una cima e
+// l'altra c'è quasi sempre un crinale più alto, ed è giusto così. «In una direzione»: basta un quarto delle
+// direzioni (un settore di 90°).
+export const PANORAMI = {
+  raggio: 10, vista: 20, oltre: 10, direzioni: 0.25, soglia: 0.9, quotaMassima: 1500,
+  // Punti di osservazione: le cime locali (finestra 3×3 km) e un punto ogni `griglia` km anche sui versanti
+  // (da un costone a metà versante si guarda a valle lontano; contando solo le cime, i fianchi delle catene
+  // risultavano scoperti).
+  occhio: 2, finestra: 1, griglia: 3, passo: 0.5, raggi: 16,
+};
+
+/**
+ * @returns {{ ok: boolean, punti: number[][], copertura: number, soglia: number, raggio: number,
+ *   candidati: number }}  punti: [x, y] delle celle panoramiche; copertura: parte della terra entro raggio km
+ */
+export function verificaPanorami(carta) {
+  const { cols, rows, quota, acque } = carta;
+  const P = PANORAMI, n = cols * rows;
+  const R = 6371 * 7 / 6;                                  // km
+  const q = (x, y) => {                                    // m, superficie (acqua a quota 0)
+    const c = Math.min(cols - 1, Math.max(0, Math.round(x - 0.5))), r = Math.min(rows - 1, Math.max(0, Math.round(y - 0.5)));
+    const i = r * cols + c;
+    return acque[i] === ACQUA.MARE || acque[i] === ACQUA.LAGO_COSTIERO ? 0 : acque[i] === ACQUA.LAGO ? carta.livelloAcqua[i] : quota[i];
+  };
+  const dir = Array.from({ length: P.raggi }, (_, k) => [Math.cos(2 * Math.PI * k / P.raggi), Math.sin(2 * Math.PI * k / P.raggi)]);
+  const punti = [];
+  let candidati = 0;
+  const panoramica = new Uint8Array(n);
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const i = y * cols + x;
+      if (acque[i]) continue;
+      // Candidati: cime locali (la cella più alta nella finestra attorno) e punti della griglia.
+      let cima = x % P.griglia === 0 && y % P.griglia === 0 ? 'griglia' : true;
+      for (let dy = -P.finestra; dy <= P.finestra && cima; dy++) {
+        for (let dx = -P.finestra; dx <= P.finestra; dx++) {
+          const xx = x + dx, yy = y + dy;
+          if (xx < 0 || yy < 0 || xx >= cols || yy >= rows || (dx === 0 && dy === 0)) continue;
+          if (cima === true && quota[yy * cols + xx] > quota[i]) { cima = false; break; }
+        }
+      }
+      if (!cima) continue;
+      candidati++;
+      const occhio = quota[i] + P.occhio;
+      let visibili = 0;
+      for (const [ux, uy] of dir) {
+        let davanti = -Infinity, lontano = -Infinity;
+        for (let s = P.passo; s <= P.vista + P.oltre + 1e-9; s += P.passo) {
+          const h = q(x + 0.5 + ux * s, y + 0.5 + uy * s) - s * s / (2 * R) * 1000;
+          const pendenza = (h - occhio) / (s * 1000);
+          if (s < P.vista) { if (pendenza > davanti) davanti = pendenza; } else if (pendenza > lontano) lontano = pendenza;
+        }
+        if (lontano > davanti) visibili++;
+      }
+      if (visibili >= P.direzioni * P.raggi) { panoramica[i] = 1; punti.push([x, y]); }
+    }
+  }
+  // Copertura: terra entro P.raggio km (8 vicini) da una cella panoramica.
+  const d = new Int32Array(n).fill(-1), coda = new Int32Array(n);
+  let testa = 0, fine = 0;
+  for (let i = 0; i < n; i++) if (panoramica[i]) { d[i] = 0; coda[fine++] = i; }
+  while (testa < fine) {
+    const i = coda[testa++], x = i % cols, y = (i - x) / cols;
+    if (d[i] >= P.raggio) continue;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx, yy = y + dy;
+        if (xx < 0 || yy < 0 || xx >= cols || yy >= rows) continue;
+        const j = yy * cols + xx;
+        if (d[j] < 0) { d[j] = d[i] + 1; coda[fine++] = j; }
+      }
+    }
+  }
+  let terra = 0, coperta = 0, terraM = 0, copertaM = 0;
+  for (let i = 0; i < n; i++) {
+    if (acque[i]) continue;
+    if (quota[i] < P.quotaMassima) { terra++; if (d[i] >= 0) coperta++; } else { terraM++; if (d[i] >= 0) copertaM++; }
+  }
+  const copertura = terra ? coperta / terra : 0;
+  return { ok: copertura >= P.soglia, punti, copertura, coperturaMontagna: terraM ? copertaM / terraM : 0,
+    soglia: P.soglia, raggio: P.raggio, quotaMassima: P.quotaMassima, candidati };
+}

@@ -362,6 +362,11 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
    400–550 m: troppo dolci. Le valli fluviali (passo 4) e il dettaglio delle Scene (passo 3) aggiungono
    rilievo. Limiti noti: a 1 km per cella le colline restano «a macchie» finché il drenaggio non scava
    le valli; dove due linee di catena si incrociano può nascere un nodo montuoso a macchia.
+   **Ritocco (richiesta dell'utente): massicci meno identici e meno piramidali.** Ognuno ha un tipo (cupola,
+   cono a fianchi concavi, cresta allungata 1,8–2,8 volte, gruppo di 2–4 cime), un profilo misto
+   cono/conca/cupola con pesi propri, un versante più ripido dell'altro, contorno a lobi, spalle e
+   terrazzi a quote diverse secondo la direzione, creste ridged sui fianchi; almeno 30 km dal bordo della
+   Carta. Posizione, raggio e cima restano quelli di prima (stesso generatore).
 3. **Scena dalla Carta con il dettaglio**: clic sulla Carta → blocco 257×257 (interpolazione liscia +
    dettaglio su più scale in coordinate del mondo) passato a `terrain.js` nello stesso formato;
    coordinate locali; `M` riporta alla Carta. Il mondo generato diventa l'avvio predefinito, Tavullia
@@ -415,6 +420,75 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
    Carta sono larghe chilometri (in 2 km se ne vede un fianco) e non c'è ancora acqua né alveo: passo 5;
    i laghi in quota nelle Scene sono conche asciutte (passo 5); la pioggia è uniforme (con l'umidità del
    passo 6 i bacini cambieranno).
+   **Ritocchi (richiesta dell'utente: fiumi troppo rettilinei, angoli a 90°, laghi «a pettine»).**
+   - Tracciati curvi (`tracciaFiumi` in `carta.js`, `carta.fiumi`): rete in tronchi (a ogni confluenza
+     prosegue il ramo più lungo a monte), punti delle celle spostati da un campo dolce (fino a 0,42 km in
+     pianura, 0,12 in montagna; stesso punto per tutti i tronchi di una cella, quindi si agganciano),
+     angoli arrotondati (Chaikin), anse laterali con lunghezza d'onda 2–9 km e ampiezza fino a 0,65 km,
+     grandi in pianura e collina, piccole in montagna, nulle agli estremi. Sono questi i tracciati da
+     scavare nelle Scene al passo 6. La vista della Carta li disegna al posto delle catene di celle.
+   - Laghi: lago = l'intera conca colmata (fino allo sfioro) se profonda oltre 3 m in qualche punto e
+     ampia ≥ 4 km² (contando solo le celle profonde, i canaletti davano laghi a strisce); nelle zone
+     piatte i corsi minori scavano solo il proprio canale (che apre il varco e svuota la conca; senza, i
+     laghi diventavano ~500, con i versanti a V i solchi vicini si abbassavano a vicenda); le dita larghe
+     una cella si tolgono (una passata). 25–53 laghi per seme; verifica dei fiumi superata su 5 semi.
+   **Secondo ritocco (utente: ancora troppi rettilinei, laghi poco verosimili).**
+   - Le valli dei fiumi (bacino ≥ 150 km²) si scavano lungo i tracciati curvi (anse comprese), con il letto
+     interpolato che scende sempre; i rigagnoli minori lungo le celle come prima. I tracciati finali sono
+     proprio quelli: ricavati di nuovo dal secondo drenaggio a celle da 1 km, le anse si perdevano
+     (sinuosità mediana su finestre di 20 km: 1,22 contro 1,72). Ora 1,58 (90° percentile 2,15; i fiumi
+     reali stanno in media tra 1,2 e 1,5, quelli di pianura con meandri oltre 2). Tracciati a punti
+     (x, y, bacino, letto): il letto servirà alle Scene (passo 6). Dentro i laghi il tracciato si interrompe.
+   - Anse ampie anche in collina (la valle le segue); spostamento dei punti fino a 1,5 km in pianura su
+     9 e 30 km. I corsi che scendono dritti dalle catene restano in parte dritti (come i fiumi appenninici
+     verso l'Adriatico): piegarli di più vorrebbe dire tagliare i rilievi.
+   - Vista: laghi con contorni smussati (marching squares su un campo ammorbidito), non a quadretti.
+   - Laghi 64–109 per seme (le valli curve lasciano qualche conca in più). Carta ~0,85–0,95 s.
+   - Pulsante «Tavullia (prova)» nella vista della Carta: carica la scena di prova senza ricaricare la
+     pagina; un clic sulla Carta riporta al mondo generato.
+   **Revisione del rilievo (decisa con l'utente): più collina, poggi al posto dei massicci, punti panoramici.**
+   - Fasce: pianura 25–35 %, collina 45–55 %, pedemonte 8–12 %, montagna 4,5–10 % (misurate dopo lo scavo:
+     pianura ~35–40 %, collina ~43–48 %: lo scavo riporta in basso una parte della collina). Zone collinari
+     più estese (soglia del campo più bassa).
+   - Massicci isolati tolti. **Poggi**: 1400–1800 per seme, 80–300 m, larghi 2–5 km, fitti o radi secondo un
+     campo su grande scala (distanza minima 4–14 km), molti piccoli e pochi grandi, allungati lungo un campo di
+     direzioni dolce, il 15 % a sommità larga; messi **dopo** il drenaggio e lontani dai corsi d'acqua (prima
+     del drenaggio chiudevano conche: ~150 laghetti in più).
+   - Letto dei fiumi dalle sorgenti verso la foce, mai più alto a valle: il fiume taglia il bordo delle conche
+     (breccia, fino a 60 m oltre lo scavo normale) e le svuota; sui fondi piatti i corsi minori non scavano
+     (davano solchi paralleli). Laghi: conche > 20 m e ≥ 10 km² (75–99 per seme).
+   - `verificaPanorami` (in `verifica.js`): cime locali (finestra 5×5 km); panoramica se in ≥ 25 % di 32
+     direzioni qualcosa tra 20 e 30 km sporge sopra tutto ciò che sta davanti (curvatura compresa); copertura =
+     terra sotto 1500 m entro 10 km da una cima panoramica. **Oggi 79–82 %: la regola (≥ 90 %) non è ancora
+     rispettata.** In montagna 14–24 % (lì la regola non vale). La vista lo riporta; i punti si mostrano col
+     pulsante «Punti panoramici».
+   - Foschia diurna da 8 a 50 km (salire per guardare lontano è un'azione di gioco).
+   - Limiti: Carta ~1,2–1,5 s (oltre la soglia prevista per il Web Worker); in pianura i poggi piccoli sulla
+     Carta sembrano puntini regolari (rischio «pluriball», da giudicare in 3D); le conche restano molte perché il
+     rilievo collinare viene da rumore: il rimedio vero è l'erosione fluviale (stream power), proposta all'utente.
+   **Erosione fluviale, Web Worker e cache (approvati dall'utente).**
+   - `erosioneFluviale` (in `carta.js`): «stream power» con lo schema implicito di Braun e Willett (2013),
+     senza sollevamento: 24 passi, ogni cella si avvicina alla cella a valle con peso 0,004·√(bacino km²);
+     direzioni di flusso ricalcolate ogni 3 passi (riempimento e zone piatte del drenaggio). Poi
+     `mappaFasce` rimette le quote sulle fasce decise (trasformazione monotona: i fiumi scendono ancora).
+     Laghi 44–67 per seme (prima 75–99); scavo semplice più leggero (k = 5). Fasce misurate: pianura 34–38 %,
+     collina 46–49 % (si assegna il 5 % di collina in più perché lo scavo successivo ne abbassa una parte).
+   - Tracciati: confluenza anticipata (un corso entro 1,5 km da uno più grande lo raggiunge lì; sui
+     fondovalle larghi in pendenza uniforme i rigagnoli scendevano paralleli). Sinuosità mediana 1,49.
+     Restano coppie di fiumi grandi paralleli a qualche km in fondovalle larghi (come nelle pianure alluvionali).
+   - Poggi: raggio minimo 1,6 km (sotto erano quadratini di una cella); 12 % «belvedere» di 300–450 m.
+   - Punti panoramici: osservazione anche sui versanti (un punto ogni 3 km oltre alle cime locali 3×3 km;
+     contando solo le cime i fianchi delle catene risultavano scoperti), 16 direzioni. **Regola rispettata:
+     97–99 % della terra sotto i 1500 m** (montagna 44–62 %). Su una pianura piatta non passa (da 2 m
+     d'altezza l'orizzonte è a ~5 km).
+   - **Web Worker** (`js/mondo/lavoratore.js`, lato pagina `js/mondo/generatore.js`): generazione e
+     verifiche fuori dal filo della pagina, schermata «Generazione del mondo» con avanzamento per fasi;
+     anteprime dalla Carta con l'avanzamento nella barra. Se il Worker non parte, si genera nella pagina.
+     Misurato (Chromium headless): Carta ~3,4 s, prima apertura ~4,8 s.
+   - **Cache** in IndexedDB (database «knightdawn», archivio «carte»), chiave «VERSIONE_GENERATORE|seme»,
+     ultime 3 Carte: ricaricando con lo stesso seme ~1 s. `?rigenera` ignora la cache. Non è un
+     salvataggio (si salva solo il seme): `VERSIONE_GENERATORE` in `carta.js` va cambiata a ogni modifica
+     che cambia le Carte. Stesso codice di controllo nel Worker e in Node (seme 48213 → `39857c7c`).
 5. **Orizzonte** (inserito dopo il passo 4): oltre il blocco di 2×2 km non si vedeva nulla, nemmeno una
    catena a pochi km. Terreno lontano solo da guardare, dalla Carta già in memoria (`js/3d/orizzonte.js`).
    *Prova:* dal pedemonte si vedono le montagne lontane; nessuna fessura al raccordo col blocco; FPS.
@@ -431,6 +505,10 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
    generato: Tavullia resta com'era. F3: triangoli e tempo dell'orizzonte. Limiti noti: FPS su GPU vera da
    misurare (in headless il rendering è software e non fa testo); colori come il blocco (biomi al passo 7);
    oltre il confine della Carta l'orizzonte prolunga piatto l'ultimo bordo.
+   **Correzione (segnalata dall'utente): nebbia sulla distanza vera.** Three.js calcola la nebbia sulla
+   profondità lungo l'asse della camera: i monti ai lati dello schermo ricevevano meno nebbia e sparivano
+   girandosi verso di loro. Ora `fog_vertex` usa la distanza dalla camera (sostituzione del pezzo di
+   shader da `main.js`, senza toccare `lib/three/`). Foschia di giorno da 3 a 50 km.
 6. **Fiumi nella Scena**: tracciato liscio (non a celle), letto scavato sempre in discesa, superficie
    dell'acqua. *Prova:* il fiume sta in una valle, scende, prosegue senza stacchi nel blocco accanto.
 7. **Temperatura, umidità, biomi** (fasi 6–7) e limite delle nevi nello shader; colori della Scena per

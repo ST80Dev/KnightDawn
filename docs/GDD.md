@@ -171,8 +171,9 @@ Regole già definite nel 2D (`WORLD_GEN.md` e `world.js`, commit `2c869fa`), che
   frastagliati da un rumore, quindi niente bande nette.
 - **Catene montuose come creste** (rumore *ridged*), non altopiani a blob, con roccia ai piedi e
   colline ai fianchi.
-- **Quote per quantile**: mare (10–22 %), colline (~20 %) e montagne (4,5–10 %) sono quote fisse
-  della superficie. Ogni mondo ha abbastanza mare e montagna, ma con forma sempre diversa
+- **Quote per quantile**: mare (10–22 %) e, sulla terra, pianura (25–35 %), collina (45–55 %),
+  pedemonte (8–12 %) e montagna (4,5–10 %) sono quote fisse della superficie [rivisto con l'utente a
+  novembre 2026: più collina che pianura, per salire e guardare lontano]. Ogni mondo ha abbastanza mare e montagna, ma con forma sempre diversa
   (coste, isole, istmi, canali).
 - **Boschi a grumi**, non tappeto uniforme. Più **micro-grumi di varietà** (3–5 celle, forma
   irregolare) per rompere ogni distesa: roccia e laghetti ghiacciati nella neve, ecc.
@@ -186,8 +187,13 @@ Regole già definite nel 2D (`WORLD_GEN.md` e `world.js`, commit `2c869fa`), che
   dungeon, castelli collegati, varietà di biomi.
 
 Regole **nuove** per il 3D e per la varietà ravvicinata:
-- **Massicci isolati.** Una montagna alta (1500–3000 m) può sorgere anche in mezzo a una zona
-  collinare, non solo nelle catene. Ha neve in cima se supera il limite delle nevi.
+- **Poggi** [al posto dei massicci isolati, deciso con l'utente a novembre 2026: i coni di 1500–3000 m
+  sembravano vulcani]. Molti rialzi arrotondati di 80–300 m, larghi 2–5 km, nelle zone basse: si sale
+  per guardare lontano. Niente mosaico ripetuto pianura/colle: fitti o radi secondo zone ampie, misure
+  e forme diverse, allineati in dorsali e gruppi. Non sui corsi d'acqua.
+- **Punti panoramici** [regola decisa con l'utente]: sotto i 1500 m, da quasi ogni punto (≥ 90 % della
+  terra) entro ~10 km c'è un'altura da cui si vede a 20–30 km in almeno una direzione (un settore di 90°).
+  In montagna tra una cima e l'altra c'è quasi sempre un crinale più alto: lì la regola non vale.
 - **Limite delle nevi** calcolato da latitudine (temperatura) e stagione: d'inverno scende, d'estate
   sale. Neve e ghiaccio dipendono da quota e temperatura, non da un bioma dipinto.
 - **Accostamenti vietati**: niente deserto caldo vicino a neve o ghiacciai, e niente palude in
@@ -199,7 +205,7 @@ Regole **nuove** per il 3D e per la varietà ravvicinata:
   [valori TBD, da tarare giocando].
 - **Transizioni brevi** (1–3 km) e irregolari tra un paesaggio e l'altro, non lunghe sfumature.
 - **Quote in metri** (il 2D usava valori normalizzati): pianure 0–200 m, colline 200–700 m
-  (come il Montefeltro), catene 1500–3500 m, massicci isolati 1500–3000 m [TBD].
+  (come il Montefeltro), pedemonte 700–1500 m, catene 1500–3500 m, poggi 80–300 m sul terreno.
 - **Dentro le Scene** (blocchi di 2×2 km), dettaglio locale coerente col bioma della cella: rocce,
   calanchi, fossi, stagni, radure, alberi isolati.
 - **I fiumi scendono davvero.** Nel 2D seguivano la distanza dal mare, non la quota. In 3D il loro
@@ -220,7 +226,7 @@ stile di architettura.
 
 **Strutture:** castelli, villaggi, città, rovine, dungeon, porti, monasteri, accampamenti, torri,
 valichi, ponti, guadi
-**Elementi naturali:** fiumi, laghi, passi montani, foreste fitte, paludi, coste, deserti, massicci isolati
+**Elementi naturali:** fiumi, laghi, passi montani, foreste fitte, paludi, coste, deserti, poggi
 
 #### Scoperta
 
