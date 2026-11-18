@@ -140,6 +140,25 @@ paragone per la credibilità del terreno generato.
 **Dimensioni** [TBD, proposta]: circa **600×450 km**, Carta a celle di 1 km. Attraversarlo da nord
 a sud a piedi richiede ~15 giorni di gioco e ~10 minuti reali (vedi §3 *Viaggio*).
 
+**Modalità reale** [dopo M6, decisa con l'utente a novembre 2026]. Seconda modalità, accanto al mondo
+generato, da giocare sapendo che rispecchia una regione vera: **rilievo reale** (coste, valli, montagne),
+mentre copertura (boschi, rocce, paludi), clima, luoghi, nomi e fazioni sono **generati con le stesse
+regole** del mondo inventato. Non riproduce città, paesi e borghi veri. I fiumi principali coincidono
+con quelli veri (il drenaggio li ritrova nelle valli che hanno scavato); si sceglie quanti mostrarne.
+Il mondo può essere grande quanto quello generato (es. 600×450 km): i dati del terreno si scaricano
+quando servono (tecnica e rischi in `docs/ESPLORAZIONE_3D.md`, «Modalità reale»).
+- **Rinuncia accettata:** si perde parte della scoperta (si sa già dove sono montagne e valichi).
+- **Varietà:** una regione vera ha meno tipi di paesaggio (in Italia niente deserto). Regge se la
+  regione va dal mare alle montagne; le regole di varietà valgono per la copertura, non per il rilievo.
+  Il contenuto legato ai biomi assenti (es. eventi del deserto) in questa modalità non compare.
+- **Distanze accorciate** [proposta dell'utente, novembre 2026]: per viaggiare tra regioni diverse
+  (es. l'Europa) senza decine di giorni di gioco, sulla Carta una cella vale *k* km reali ma costa come
+  1 km del mondo generato. Con *k* scelto in modo che la Carta resti di ~600×450 celle, il ritmo di
+  viaggio è lo stesso delle due modalità (Italia *k* ≈ 2, Europa *k* ≈ 6–7). Le Scene restano 1:1: è la
+  stessa distinzione già prevista tra tempo della marcia (Carta) e tempo della presenza (Scene).
+- [TBD] Clima reale oppure «compresso» per latitudine come nel mondo generato (varietà ravvicinata su
+  rilievo vero); regione fissa o scelta dal giocatore.
+
 #### Regole di generazione: varietà ravvicinata, coerenza di massima
 
 Il mondo **non è verosimile in scala**: i paesaggi diversi stanno molto più vicini che nella
@@ -159,6 +178,9 @@ Regole già definite nel 2D (`WORLD_GEN.md` e `world.js`, commit `2c869fa`), che
   irregolare) per rompere ogni distesa: roccia e laghetti ghiacciati nella neve, ecc.
 - **Fiumi** dalle alture al mare, con meandri; in un minimo locale formano un lago.
 - **Carattere per seme**: più o meno mare, catene, boschi, deserto; mondi diversi tra loro.
+- **Bordi liberi**: il mondo non è per forza un'isola; ai bordi c'è terra o mare secondo il rumore
+  (anche una catena che arriva all'orlo). Un bordo di terra è un **confine invalicabile** (terre
+  selvagge oltre le quali non si va) [deciso a novembre 2026].
 - **Luoghi ignoti agli estremi** (nord, sud, isola remota), di natura nascosta finché non raggiunti.
 - Vincoli di validità: abbastanza castelli e villaggi, almeno un porto se c'è costa, rovine e
   dungeon, castelli collegati, varietà di biomi.

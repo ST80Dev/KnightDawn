@@ -313,8 +313,110 @@ Design di gioco e regole di generazione in `docs/GDD.md` §2 *Il mondo* e §3 *V
 generata, con passaggio Carta ↔ Scena) → rocca e borgo → vegetazione e oggetti sparsi → luoghi, fazioni e nomi
 generati.
 
-**Prima del codice:** proporre all'utente un piano a piccoli passi, ciascuno da provare nel browser
-(il rischio maggiore è la credibilità del rilievo: valli e fiumi).
+**Il rischio maggiore è la credibilità del rilievo nelle Scene.** Una Scena di 2×2 km copre circa
+2×2 celle della Carta: dalla Carta riceve solo l'andamento d'insieme. Valli e crinali alla scala di
+Tavullia (300–800 m) nascono dal **dettaglio della Scena**, che deve dipendere solo dalle coordinate
+del mondo (niente erosione idraulica per blocco: lascerebbe giunture). L'erosione della Carta serve per
+le grandi valli fluviali e per le catene. Rischio tipico del rumore: conche chiuse sparse (alcune
+possono diventare stagni; troppe tradiscono il generatore).
+
+### Piano approvato (novembre 2026): 7 passi, ciascuno provato nel browser
+
+1. **Seme e rumore deterministici; vista di sviluppo della Carta** (tasto `M`, oppure `?carta`
+   nell'indirizzo): seme, rilievo ombreggiato del continente (fase 1), livello del mare per quantile,
+   tempo di generazione e codice di controllo. *Prova:* semi diversi → mondi diversi; stesso seme →
+   stesso codice di controllo, anche su un altro browser.
+   **Stato: fatto, da provare dall'utente.** Generazione ~250–350 ms per Carta (niente Web Worker per
+   ora). Stesso codice di controllo in Node e in Chromium (stesso motore V8: la prova su Firefox resta
+   all'utente). Forma: fBm con dominio deformato più una scala molto grande (golfi, mari interni,
+   penisole), mare per quantile al 10–22 %, inclinazione per seme (più mare da un lato). **Bordi liberi**
+   come nel 2D (`docs/WORLD_GEN.md` in `2c869fa`: «niente anello d'acqua forzato»): terra o mare secondo
+   il rumore, con una leggera spinta verso il mare negli ultimi 40 km; il mondo non è sempre un'isola.
+   (Una prima versione forzava il mare lungo i bordi e alzava il mare al 25–38 %: scartata, violava la
+   regola.) Catene lungo le linee di zero di un rumore liscio su grande scala (linee lunghe e sinuose),
+   con contrafforti *ridged*, in tratti scelti da una maschera la cui soglia si cerca perché le catene
+   coprano il 4,5–10 % della terra. Limiti noti: i mari chiusi sono ancora «mare» (laghi e mari si
+   distinguono al passo 4); l'interno è piatto finché il passo 2 non aggiunge colline e quote in metri;
+   isole al largo rare. Un bordo di terra è un **confine invalicabile** (deciso con l'utente).
+   La vista colora **solo la quota**, a un tono (più alto = più scuro), con legenda: la prima scala
+   verde-ocra-bianco si leggeva come biomi (prati, deserti, neve), che arrivano al passo 6.
+2. **Quote in metri e massicci isolati** (fasi 2–3); al passaggio del mouse quota e coordinate della
+   cella. *Prova:* pianure 0–200 m, colline 200–700 m, catene 1500–3500 m; istogramma delle quote.
+   **Stato: fatto, da provare dall'utente.** Un campo «composto» (pianure + colline + catene) si
+   rimappa in metri con una curva a fasce fissate per quantile sulla terra: pianura 0–200 m (~65 %),
+   collina 200–700 m (17–25 %, GDD ~20 %), pedemonte 700–1500 m (5–9 %), montagna da 1500 m alla cima
+   (4,5–10 %, cima 2800–3500 m per seme). Dentro le fasce la curva è lineare sul valore composto, tranne
+   la montagna, mappata per rango (curva r^1,25): in lineare pochi picchi schiacciavano le catene appena
+   sopra i 1500 m. Colline: zone da un campo su grande scala e dai fianchi delle catene, con rampa larga
+   (salgono gradualmente dalla pianura) e rilievo interno ad alto contrasto. Catene: creste e selle
+   anche sulla spina. Massicci isolati: 3–7 per seme, 1500–3000 m, raggio 9–19 km, a ≥ 25 km dalla
+   costa, ≥ 50 km dalle catene e ≥ 100 km tra loro, coni irregolari (raggio variabile con la direzione,
+   senza trigonometria). Fondali fino a −2500 m. Vista: quota e fascia sotto il cursore, istogramma a
+   passi di 100 m, parti per fascia, massicci cerchiati. Generazione ~350–550 ms.
+   **Misura del rilievo** (dislivello mediano in finestre di 5×5 km, 8 semi): pianura ~30 m, collina
+   180–250 m, pedemonte 380–700 m, montagna 500–810 m (90° percentile 1000–1500 m). Riferimento:
+   Tavullia ha 194 m di dislivello in 2 km. Le prime versioni avevano colline a 100–140 m e montagne a
+   400–550 m: troppo dolci. Le valli fluviali (passo 4) e il dettaglio delle Scene (passo 3) aggiungono
+   rilievo. Limiti noti: a 1 km per cella le colline restano «a macchie» finché il drenaggio non scava
+   le valli; dove due linee di catena si incrociano può nascere un nodo montuoso a macchia.
+3. **Scena dalla Carta con il dettaglio**: clic sulla Carta → blocco 257×257 (interpolazione liscia +
+   dettaglio su più scale in coordinate del mondo) passato a `terrain.js` nello stesso formato;
+   coordinate locali; `M` riporta alla Carta. Il mondo generato diventa l'avvio predefinito, Tavullia
+   si carica con `?terreno=tavullia`; il salvataggio tiene seme e posizione nel mondo. *Prova:*
+   confronto con Tavullia, a occhio e con i percentili della pendenza in F3; due blocchi vicini combaciano.
+   **Stato: fatto, da provare dall'utente.** `js/mondo/scena.js`: quota del mondo = Carta interpolata
+   con una B-spline cubica (liscia, senza pieghe a griglia) + fBm «eroso» (alla Quílez: le ottave fini si
+   smorzano dove la pendenza accumulata è forte), 6 ottave da 1400 m a ~44 m (più fini davano solo
+   tremolio sotto la griglia da 7,8 m). Ampiezza dalla quota della Carta: ~8 m in pianura, cresce forte
+   dalla collina (rampa 120–420 m), tetto 480 m in montagna; piena anche sulla costa. Generazione di una
+   Scena 20–30 ms; giuntura tra blocchi vicini 0 m (la quota è funzione pura delle coordinate del mondo).
+   `terrain.js` esporta `createTerrain` (griglia in memoria). In `main.js` un «suolo» intermedio rimanda al
+   terreno attivo: si cambia Scena senza ricaricare la pagina; il castello resta solo a Tavullia
+   (`?terreno=tavullia`). Mare: superficie a quota 0 se la Scena scende sotto; il cavaliere non entra
+   oltre 0,6 m d'acqua; la camera non va sotto il pelo dell'acqua. Carta (tasto M): mostra il mondo della
+   partita con il cavaliere; clic sulla terra = Scena centrata lì (anche da un'anteprima di un altro seme,
+   che diventa il mondo della partita). Salvataggio: seme, centro della Scena e posizione. Nuova partita
+   (F8) = nuovo mondo a caso; si parte in collina (250–600 m) vicino al centro della Carta. F3: pendenze
+   della Scena (p50, p90, p99) e posizione nel mondo. Sulla Carta il fondale vicino alla costa è passato
+   a −40 m: a −5 m l'interpolazione spostava la costa al largo e il mare quasi spariva dalle Scene.
+   **Misure** (seme 48213; pendenza p50 / p90 / p99): Tavullia 8,5° / 13,1° / 19,9° (36–230 m); collina
+   bassa 8,2° / 13,3° / 19,2° (173–507 m); collina 10,4° / 18,5° / 26° (331–664 m); pedemonte 16° / 29° /
+   38°; montagna 21° / 37° / 48° (le prime versioni: 28° / 47° / 58°, quasi impraticabile con il limite di
+   35° del cavaliere); pianura 0,6° / 1,1° / 1,7°. Limiti noti: le montagne sono «a panettone», senza
+   creste nette né valli a V (attese dal drenaggio, passo 4); i colori del terreno sono quelli di Tavullia
+   (relativi alla quota del blocco, a quadretti dove la pendenza passa le soglie del bosco): si rifanno con
+   i biomi (passo 6); dentro una Scena la costa è un arco dolce; si esce da una Scena solo dalla Carta.
+4. **Drenaggio sulla Carta**: riempimento delle conche (*priority-flood*), direzioni di flusso, flusso
+   accumulato, fiumi e laghi (fase 5); valli scavate in proporzione al flusso (fase 4, versione semplice;
+   se non basta, erosione fluviale *stream power*, da decidere guardando il risultato). *Prova:* verifica
+   automatica che ogni fiume scenda sempre e finisca in mare o in un lago.
+5. **Fiumi nella Scena**: tracciato liscio (non a celle), letto scavato sempre in discesa, superficie
+   dell'acqua. *Prova:* il fiume sta in una valle, scende, prosegue senza stacchi nel blocco accanto.
+6. **Temperatura, umidità, biomi** (fasi 6–7) e limite delle nevi nello shader; colori della Scena per
+   bioma. *Prova:* livelli della Carta; neve sulle cime.
+7. **Regole di varietà e verifica automatica** (fase 8) su N semi, con esito per regola. Con i passi 3 e
+   5 chiude l'accettazione.
+
+### Decisioni prese con il piano
+- **File:** `js/mondo/` con moduli ES **senza Three.js né DOM** (regola 9, e pronti per un Web Worker):
+  `rumore.js` (generatore pseudo-casuale e rumori), `carta.js` (generatore), poi `verifica.js` e
+  `scena.js` (blocco di quote per una Scena). La vista di sviluppo della Carta è `js/3d/cartaVista.js`.
+  `terrain.js` esporterà la costruzione del terreno da una griglia in memoria.
+- **Fuori da M6:** luoghi (castelli, villaggi, porti, rovine), strade e porti: vanno con la milestone
+  «luoghi, fazioni e nomi generati». La fase 9 qui sotto resta come traccia. Della costa sì.
+- **Castello** solo nella scena di prova di Tavullia fino a «rocca e borgo» (oggi verrebbe piazzato alla
+  cieca, anche su un pendio o in un fiume).
+- **Le fasi dal drenaggio ai luoghi (5–9) lavorano su una quota qualunque**, senza dipendere da come è
+  stata creata: generatore oppure dati reali (modalità reale, sotto). La Scena si costruisce da un oggetto
+  «Carta» (griglia di quote a 1 km + metadati), non dal generatore. Le correzioni di varietà devono poter
+  agire solo sulla copertura (boschi, rocce, paludi), senza toccare il rilievo.
+- **Determinismo anche tra browser:** hash su interi (`Math.imul`) e, nelle parti che decidono la forma
+  del mondo, solo operazioni dal risultato esatto (`+ − × ÷`, `Math.sqrt`, `Math.floor`). [Probabile]
+  `Math.sin`, `Math.exp`, `Math.pow` possono differire tra i motori JS, e l'erosione amplifica lo scarto.
+- **Web Worker** solo se la generazione blocca la pagina per più di ~1–2 s (da confermare: è un
+  cambio architetturale).
+- Il passaggio Carta ↔ Scena di M6 è uno strumento di sviluppo: non costa tempo e non usa A*
+  (viaggio, fase S2). La vista della Carta non è ancora la Carta del cronista (fase G3).
 
 **Accettazione di M6:** camminando in una Scena generata, il terreno è
 credibile quanto quello reale di Tavullia. Sulla Carta le regole di varietà del GDD sono rispettate,
@@ -326,7 +428,7 @@ estensione massima delle aree uniformi.
 - **Determinismo.** Stesso seme, stesso mondo. Ogni Scena si rigenera identica dal seme e dalla
   posizione: non si salva il terreno, solo il seme.
 - **Carta:** ~600×450 celle da 1 km (~270 000 celle). Per ogni cella: quota in metri, bioma,
-  temperatura, umidità, segni di fiume, strada, costa e porto. [Probabile] La generazione richiede
+  temperatura, umidità, segni di fiume e costa (strade e porti dopo M6, con i luoghi). [Probabile] La generazione richiede
   pochi secondi in JS; se blocca la pagina, si sposta in un Web Worker.
 - **Fasi del generatore** (punto di partenza: `world.js` del 2D, commit `2c869fa`):
   1. rumore fBm, forma del continente e rumore *ridged* per le catene;
@@ -339,7 +441,7 @@ estensione massima delle aree uniformi.
   6. temperatura (latitudine, quota, rumore) e umidità;
   7. biomi;
   8. correzioni per le regole di varietà e per gli accostamenti vietati;
-  9. luoghi (castelli, villaggi, porti, rovine) con i vincoli di validità.
+  9. luoghi (castelli, villaggi, porti, rovine) con i vincoli di validità (**dopo M6**).
 - **Scene:** blocco di 2×2 km ricavato dalla Carta per interpolazione liscia, più dettaglio
   procedurale su più scale coerente col bioma (rocce in montagna, calanchi in collina, fossi,
   stagni). I fiumi della Carta sono scavati nel blocco. Il dettaglio dipende dalle coordinate del
@@ -351,11 +453,35 @@ estensione massima delle aree uniformi.
   farebbero tremare la scena.
 - **Neve:** limite delle nevi da temperatura e stagione, applicato al colore del terreno nello
   shader.
-- **Tavullia** resta in `assets/terrain/` come scena di prova, caricabile a parte ([TBD] come, per
-  esempio con un parametro nell'indirizzo). `tools/dem` resta per rigenerarla e per tarare il
+- **Tavullia** resta in `assets/terrain/` come scena di prova, caricabile a parte con `?terreno=tavullia`
+  nell'indirizzo (dal passo 3). `tools/dem` resta per rigenerarla e per tarare il
   generatore (es. confronto delle pendenze generate con quelle reali).
 - **Architettura per area culturale:** la prima è quella attuale (mattoni, rocca); le altre si
   aggiungono con le aree culturali.
+
+### Modalità reale (dopo M6, milestone a sé)
+
+Seconda modalità di gioco (design in `docs/GDD.md` §2 *Il mondo*): **rilievo reale** di una regione,
+con copertura, fiumi mostrati, clima, luoghi, nomi e fazioni generati dalle stesse fasi 5–9.
+- **Dati scaricati quando servono** (eccezione alla regola 5 di `CLAUDE.md`, solo per questa modalità):
+  tile **Terrarium** su AWS (`elevation-tiles-prod`, PNG decodificati dal browser senza librerie).
+  Verificato (novembre 2026): leggibili da qualsiasi sito (`Access-Control-Allow-Origin: *`); in Italia
+  la fonte è EU-DEM (~25 m), file fermi dal 2017; una tile a zoom 13 (~3,5×3,5 km) pesa ~100 KB, quindi
+  100–400 KB per Scena; la Carta di 600×450 km a ~1 km richiede una decina di tile a zoom basso (~1 MB).
+  Copernicus invece non è leggibile dal browser (niente intestazione CORS): resta per `tools/dem`.
+- **Rischi:** servizio gratuito senza garanzie di durata (Mapzen ha chiuso nel 2018, le tile sono
+  ospitate dal programma Open Data di AWS) → cache nel browser delle zone visitate e messaggio chiaro
+  se il servizio non risponde; funziona solo online; attribuzione delle fonti nei crediti.
+- **Proiezione:** nelle tile la scala varia con la latitudine (~10 % su 600 km nord-sud): riproiettare
+  su un piano locale in metri, come fa `make_heightmap.py`.
+- **Decodifica:** [Probabile] le correzioni di colore del browser alterano le quote; decodificare senza
+  conversione di spazio colore e verificarlo.
+- **Primo passo:** prova di fattibilità: scaricare Tavullia nel browser e confrontare quote e pendenze
+  con `tavullia.bin` (Copernicus; Terrarium usa EU-DEM: dati diversi, qualità simile).
+- I fiumi principali coincideranno con quelli veri: il drenaggio sulla quota reale li ritrova nelle
+  valli che hanno scavato. Si sceglie quanti mostrarne, non dove.
+- Copernicus e Terrarium includono edifici e alberi (modelli di superficie): i paesi veri lasciano
+  piccoli rilievi dove nel gioco non ci sono.
 
 ## Fuori dal prototipo (non farlo ora)
 
