@@ -15,7 +15,12 @@ export const KNIGHT_CFG = {
   velCorsa: 5.0,        // m/s (Shift)
   velIndietro: 0.9,     // m/s, passo all'indietro (senza corsa)
   velRotazione: 2.0,    // rad/s con A/D (circa 115°/s); in corsa un po' meno
-  pendenzaMax: 35,      // gradi: oltre questa pendenza il cavaliere non sale
+  pendenzaMax: 35,      // gradi: oltre questa pendenza, nella direzione di marcia, il cavaliere non sale
+  // Velocità secondo la pendenza nella direzione di marcia (curva tipo Tobler, ammorbidita per il gioco):
+  // un po' più veloce sulle discese dolci (~3°), più lento in salita e sulle discese ripide.
+  pendenzaK: 2.0,       // ripidità della curva (Tobler reale: 3,5)
+  fattoreMin: 0.5,      // mai sotto metà della velocità in piano: il gioco resta giocabile
+  fattoreMax: 1.1,      // massimo, sulle discese dolci
   margineBordo: 2,      // m dal bordo dell'area
   raggio: 0.4,          // m: ingombro sul piano contro mura e torri (spalle + scudo)
   accelerazione: 8,     // 1/s: rapidità con cui la velocità raggiunge quella voluta
@@ -273,15 +278,32 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     fase: 0,               // fase del ciclo del passo (radianti)
     tempo: 0,
     bloccato: false,       // true se l'ultimo passo è stato fermato da una pendenza
+    pendenzaMarcia: 0,     // tangente della pendenza nella direzione di marcia (+ = salita)
+    fattorePendenza: 1,    // moltiplicatore di velocità dovuto alla pendenza
   };
 
   const lim = () => terrain.half - cfg.margineBordo;
 
   // Un punto è raggiungibile se non obbliga a salire su una pendenza oltre il limite.
+  // Conta la pendenza nella direzione del passo: un versante ripido si può tagliare di traverso.
   function puoAndare(x, z) {
-    const h0 = terrain.getHeight(stato.x, stato.z);
-    const h1 = terrain.getHeight(x, z);
-    return !(h1 > h0 + 1e-4 && terrain.getSlope(x, z) > cfg.pendenzaMax);
+    const d = Math.hypot(x - stato.x, z - stato.z);
+    if (d < 1e-5) return true;
+    const salita = terrain.getHeight(x, z) - terrain.getHeight(stato.x, stato.z);
+    return !(salita > 0 && Math.atan(salita / d) > cfg.pendenzaMax * Math.PI / 180);
+  }
+
+  // Pendenza (tangente, + = salita) lungo la direzione (dx, dz) unitaria, dal punto attuale a 1 m
+  // più avanti: solo in avanti, così un muro alle spalle (suolo diverso sotto le mura) non conta.
+  function pendenzaLungo(dx, dz) {
+    const e = 1.0;
+    return (terrain.getHeight(stato.x + dx * e, stato.z + dz * e) - terrain.getHeight(stato.x, stato.z)) / e;
+  }
+
+  /** Fattore di velocità per una pendenza g (tangente) nella direzione di marcia. */
+  function fattorePendenza(g) {
+    const f = Math.exp(-cfg.pendenzaK * Math.abs(g + 0.05)) / Math.exp(-cfg.pendenzaK * 0.05);
+    return clamp(f, cfg.fattoreMin, cfg.fattoreMax);
   }
 
   // Punto (x, z) spinto fuori da mura e torri: contro un muro il cavaliere ci scivola lungo.
@@ -335,8 +357,12 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     stato.direzione -= stato.velAngolare * dt + input.giroMouse;
     stato.direzione = Math.atan2(Math.sin(stato.direzione), Math.cos(stato.direzione));   // in (-π, π]
 
-    const velVoluta = input.avanti > 0 ? (input.corsa ? cfg.velCorsa : cfg.velCammino)
-      : input.avanti < 0 ? -cfg.velIndietro : 0;
+    const verso = input.avanti > 0 ? 1 : input.avanti < 0 ? -1 : 0;
+    stato.pendenzaMarcia = verso === 0 ? 0
+      : pendenzaLungo(Math.sin(stato.direzione) * verso, Math.cos(stato.direzione) * verso);
+    stato.fattorePendenza = fattorePendenza(stato.pendenzaMarcia);
+    const velVoluta = stato.fattorePendenza * (input.avanti > 0 ? (input.corsa ? cfg.velCorsa : cfg.velCammino)
+      : input.avanti < 0 ? -cfg.velIndietro : 0);
     stato.velocita += (velVoluta - stato.velocita) * avvicina(cfg.accelerazione, dt);
     if (Math.abs(stato.velocita) < 0.01 && input.avanti === 0) stato.velocita = 0;
 
