@@ -13,6 +13,8 @@ persona che ci cammina sopra seguendo il terreno, e un castello low-poly in cui 
 ## Stile visivo
 
 - Low-poly, *flat shading*, colori pieni: niente texture fotografiche.
+  **Tendenza decisa per il terreno** (da applicare dopo M4): più realistico, sfumato e con
+  imperfezioni; cavaliere e castello restano low-poly. Dettagli in M4, «Dopo la valutazione».
 - Palette ispirata alla pergamena di `js/config.js` (`PALETTE`), adattata alla luce 3D.
 - Colore del terreno per vertice, in base ad altitudine e pendenza (prato → bosco → roccia).
 - Luce direzionale (sole) + luce emisferica + nebbia leggera per nascondere il bordo del mondo.
@@ -126,6 +128,16 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
 - Collisioni semplici (rettangoli/cerchi sul piano XZ) contro mura e torri; la porta resta attraversabile.
 - **Accettazione:** si gira attorno al castello senza attraversare i muri e si entra dalla porta.
 - **Qui si valuta il prototipo** con l'utente: se e come proseguire.
+- **Dopo la valutazione — realismo del terreno (deciso con l'utente, da fare se il prototipo prosegue):**
+  il terreno a facce piatte dà l'idea di "generato al computer" (stacchi netti tra triangoli da 7,8 m).
+  Provato e **scartato**: solo sfumare (smooth shading + macchie di colore) → tappeto uniforme, rilievo
+  meno leggibile; micro-rilievo geometrico → invisibile dalla vista di gioco e mesh 4× più pesante.
+  Direzione scelta, senza texture né asset esterni:
+  1. Superficie sfumata (normali per vertice) **+ dettaglio procedurale nello shader** in coordinate
+     mondo, su scale 0,5–10 m: ciuffi chiari/scuri, chiazze di terra, passaggio al bosco per pendenza.
+  2. **Oggetti sparsi** con primitive e *instancing*: ciuffi d'erba, sassi, cespugli, alberi.
+  Cambia lo stile scritto sopra: aggiornarlo quando si fa. Ombre nette su versanti: già regolabili con
+  il rapporto sole/luce emisferica; ombre proiettate solo per cavaliere/castello.
 
 ### M5 — Aggancio alla logica esistente (solo dopo la valutazione di M4)
 - La distanza percorsa si converte in **Passi** (valore in `config.js`), che fanno avanzare `Calendar`
