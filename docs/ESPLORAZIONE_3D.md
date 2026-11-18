@@ -211,7 +211,7 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
     invariate: la lentezza è voluta (il garzone parte a piedi, `docs/EARLY_GAME.md`).
   - **Cavallo**: trotto ~4 m/s, galoppo ~12–14 m/s. Milestone a sé (modello e animazione da codice).
   - **Viaggio su mappa** per i km: si sceglie la destinazione, il tragitto si risolve in tempo di gioco,
-    Passi, Forza ed eventi di viaggio (logica già esistente, agganciata da M5). **Ci si può fermare
+    Passi, Forza ed eventi di viaggio (logica già esistente, agganciata da M5 e dalla Carta). **Ci si può fermare
     quando si vuole**: si carica il blocco di terreno in quel punto e si esplora in 3D; poi si riparte
     dalla mappa. Anche gli eventi (imboscate, incontri) possono fermare il viaggio e portare in 3D lì.
   - **"Vai a"** dentro l'area locale (300 m–1 km): destinazione indicata, dissolvenza, il tempo avanza
@@ -287,25 +287,36 @@ Nel 2D 1 Passo era 1 tile; ora il **Passo è solo un'unità di tempo** (~3 ore, 
   e ~3 di notte, e si ferma con `P`; sole, cielo e luce seguono l'ora; la Forza cala con la distanza,
   di più correndo e in salita; a Forza 0 si cammina soltanto; `R` riposa di giorno e fa dormire fino a
   Prima di sera; ricaricando la pagina si riparte dal punto salvato con data e attributi salvati.
-- **Stato:** implementata, da provare nel browser. Misurato in headless: 4 s da fermi di giorno =
-  0,0056 Passi (atteso 0,0057), 3 s di notte = 0,0163 (atteso 0,0167); in pausa il tempo non cambia;
-  dormire da Compieta porta a Prima del giorno dopo; la sosta di giorno dà +10 Forza e 1 Passo; da fermi 4 s di giorno danno +0,053 Forza (atteso
-  0,053) e `T` da 0,3 del Passo +7; dopo
-  il ricaricamento posizione, tempo e attributi sono identici; F8 ricomincia da zero.
+- **Stato: completata** (novembre 2026). Provati dall'utente su Pages: ritmo del tempo, giorno/notte,
+  notte buia con visibilità solo vicina, torce della porta, `T`, `R`, pausa. **Verifiche dell'utente in
+  sospeso** (si è deciso di passare a M6 senza aspettarle; rischio basso, già verificate in headless):
+  ripresa dal salvataggio dopo il ricaricamento (posizione, ora, Forza; `F8` riparte da zero) e Forza
+  a 0 (solo camminata, `R` la ricarica; per provarla: `Knight.forza.cur = 0` dalla console).
+  Misurato in headless: 4 s da fermi di giorno = 0,0056 Passi (atteso 0,0057), 3 s di notte = 0,0163
+  (atteso 0,0167); in pausa il tempo non cambia; dormire da Compieta porta a Prima del giorno dopo; la
+  sosta di giorno dà +10 Forza e 1 Passo; da fermi 4 s di giorno danno +0,053 Forza (atteso 0,053) e
+  `T` da 0,3 del Passo +7; dopo il ricaricamento posizione, tempo e attributi sono identici; F8
+  ricomincia da zero.
+  Rimandati, fuori da M5: le stagioni non cambiano la durata del giorno; velocità della Carta da
+  allineare (GDD 3–60 s per Passo, `calendar.js` 4–30); eventi già scritti con costi in Passi interi
+  da rivedere quando si agganciano alle Scene.
   **Un Passo per ogni ora canonica** (Prima, Terza, Sesta, Nona, Vespri, Compieta, Mattutino, Lodi;
   il giorno comincia a Prima, ~6:00), nel pannello di stato in alto a destra; F3 mostra Passi,
   frazione, ora, rapporto giorno/notte, altezza del sole e Forza esatte. `F8` nuova partita (con
   conferma). Salvataggio automatico ogni minuto, quando si lascia la pagina e dopo ogni riposo.
 
-## Carta e Scene — generatore del mondo (deciso, da realizzare dopo M5)
+## M6 — Prototipo del generatore del mondo (Carta e Scene) — fase corrente
 
 Design di gioco e regole di generazione in `docs/GDD.md` §2 *Il mondo* e §3 *Viaggio*. Qui la tecnica.
 
-**Ordine proposto:** M5 ridotta → **prototipo del generatore** (Carta più una Scena generata, con
-passaggio Carta ↔ Scena) → rocca e borgo → vegetazione e oggetti sparsi → luoghi, fazioni e nomi
+**Ordine proposto:** M5 (completata) → **M6, prototipo del generatore** (Carta più una Scena
+generata, con passaggio Carta ↔ Scena) → rocca e borgo → vegetazione e oggetti sparsi → luoghi, fazioni e nomi
 generati.
 
-**Accettazione del prototipo del generatore:** camminando in una Scena generata, il terreno è
+**Prima del codice:** proporre all'utente un piano a piccoli passi, ciascuno da provare nel browser
+(il rischio maggiore è la credibilità del rilievo: valli e fiumi).
+
+**Accettazione di M6:** camminando in una Scena generata, il terreno è
 credibile quanto quello reale di Tavullia. Sulla Carta le regole di varietà del GDD sono rispettate,
 con una verifica automatica: tipi di paesaggio per finestra, distanza tra deserto e neve,
 estensione massima delle aree uniformi.
