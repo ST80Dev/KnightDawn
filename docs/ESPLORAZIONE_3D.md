@@ -342,6 +342,23 @@ possono diventare stagni; troppe tradiscono il generatore).
    verde-ocra-bianco si leggeva come biomi (prati, deserti, neve), che arrivano al passo 6.
 2. **Quote in metri e massicci isolati** (fasi 2–3); al passaggio del mouse quota e coordinate della
    cella. *Prova:* pianure 0–200 m, colline 200–700 m, catene 1500–3500 m; istogramma delle quote.
+   **Stato: fatto, da provare dall'utente.** Un campo «composto» (pianure + colline + catene) si
+   rimappa in metri con una curva a fasce fissate per quantile sulla terra: pianura 0–200 m (~65 %),
+   collina 200–700 m (17–25 %, GDD ~20 %), pedemonte 700–1500 m (5–9 %), montagna da 1500 m alla cima
+   (4,5–10 %, cima 2800–3500 m per seme). Dentro le fasce la curva è lineare sul valore composto, tranne
+   la montagna, mappata per rango (curva r^1,25): in lineare pochi picchi schiacciavano le catene appena
+   sopra i 1500 m. Colline: zone da un campo su grande scala e dai fianchi delle catene, con rampa larga
+   (salgono gradualmente dalla pianura) e rilievo interno ad alto contrasto. Catene: creste e selle
+   anche sulla spina. Massicci isolati: 3–7 per seme, 1500–3000 m, raggio 9–19 km, a ≥ 25 km dalla
+   costa, ≥ 50 km dalle catene e ≥ 100 km tra loro, coni irregolari (raggio variabile con la direzione,
+   senza trigonometria). Fondali fino a −2500 m. Vista: quota e fascia sotto il cursore, istogramma a
+   passi di 100 m, parti per fascia, massicci cerchiati. Generazione ~350–550 ms.
+   **Misura del rilievo** (dislivello mediano in finestre di 5×5 km, 8 semi): pianura ~30 m, collina
+   180–250 m, pedemonte 380–700 m, montagna 500–810 m (90° percentile 1000–1500 m). Riferimento:
+   Tavullia ha 194 m di dislivello in 2 km. Le prime versioni avevano colline a 100–140 m e montagne a
+   400–550 m: troppo dolci. Le valli fluviali (passo 4) e il dettaglio delle Scene (passo 3) aggiungono
+   rilievo. Limiti noti: a 1 km per cella le colline restano «a macchie» finché il drenaggio non scava
+   le valli; dove due linee di catena si incrociano può nascere un nodo montuoso a macchia.
 3. **Scena dalla Carta con il dettaglio**: clic sulla Carta → blocco 257×257 (interpolazione liscia +
    dettaglio su più scale in coordinate del mondo) passato a `terrain.js` nello stesso formato;
    coordinate locali; `M` riporta alla Carta. Il mondo generato diventa l'avvio predefinito, Tavullia

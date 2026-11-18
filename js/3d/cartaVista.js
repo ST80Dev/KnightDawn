@@ -8,18 +8,22 @@
 import { generaCarta } from '../mondo/carta.js';
 import { semeDaTesto } from '../mondo/rumore.js';
 
-// Colori del rilievo: SOLO quota (grezza 0…1), a un solo tono, più alto = più scuro. Niente verdi, ocra
-// o bianchi: si leggerebbero come biomi (prati, deserti, neve), che arrivano al passo 6 come livello a sé.
+// Colori del rilievo: SOLO quota (metri), a un solo tono, più alto = più scuro. Niente verdi, ocra o
+// bianchi: si leggerebbero come biomi (prati, deserti, neve), che arrivano al passo 6 come livello a sé.
+// Una tappa per ogni limite di fascia: pianura 0–200, collina 200–700, pedemonte 700–1500, montagna.
 const TERRA = [
-  [0.00, [232, 222, 196]],
-  [0.25, [204, 186, 152]],
-  [0.50, [168, 146, 114]],
-  [0.75, [128, 108, 86]],
-  [1.00, [84, 70, 58]],
+  [0, [236, 228, 204]],
+  [200, [212, 196, 162]],
+  [700, [178, 156, 122]],
+  [1500, [132, 112, 90]],
+  [3500, [76, 62, 52]],
 ];
+const FASCE = [['pianura', 0, 200], ['collina', 200, 700], ['pedemonte', 700, 1500], ['montagna', 1500, Infinity]];
 const MARE_BASSO = [122, 158, 168], MARE_FONDO = [40, 70, 92];
 const COSTA = [70, 52, 30];
-const ESAGERAZIONE = 14;          // quanto il rilievo grezzo pesa nell'ombreggiatura
+const ESAGERAZIONE = 6;           // quanto il rilievo pesa nell'ombreggiatura
+const COLORE_MASSICCI = 'rgba(150, 40, 30, 0.85)';
+const fasciaDi = (m) => FASCE.find(([, a, b]) => m >= a && m < b)?.[0] ?? 'montagna';
 const LUCE = (() => {             // luce da nord-ovest, alta 45°
   const x = -1, y = -1, z = 1.4142135623730951;
   const l = Math.sqrt(x * x + y * y + z * z);
@@ -52,10 +56,10 @@ export function disegnaRilievo(carta, pixel = new Uint8ClampedArray(carta.cols *
       const i = y * cols + x;
       let c;
       if (mare[i]) {
-        c = tinta([[0, MARE_BASSO], [1, MARE_FONDO]], Math.min(1, -quota[i] * 1.6));
+        c = tinta([[0, MARE_BASSO], [1, MARE_FONDO]], Math.sqrt(Math.min(1, -quota[i] / 2500)));
       } else {
-        const dx = (q(x + 1, y) - q(x - 1, y)) * 0.5 * ESAGERAZIONE;
-        const dy = (q(x, y + 1) - q(x, y - 1)) * 0.5 * ESAGERAZIONE;
+        const dx = (q(x + 1, y) - q(x - 1, y)) * 0.5 / carta.cella * ESAGERAZIONE;
+        const dy = (q(x, y + 1) - q(x, y - 1)) * 0.5 / carta.cella * ESAGERAZIONE;
         const l = Math.sqrt(dx * dx + dy * dy + 1);
         const luce = (-dx * LUCE[0] - dy * LUCE[1] + LUCE[2]) / l / piatto;
         const ombra = 0.55 + 0.45 * Math.min(1.5, Math.max(0, luce));
@@ -87,15 +91,22 @@ export function createCartaVista(contenitore, opzioni = {}) {
       <label>Seme <input type="text" class="seme" spellcheck="false" autocomplete="off"></label>
       <button type="button" class="genera">Genera</button>
       <button type="button" class="casuale">Seme casuale</button>
-      <span class="legenda" title="Colore = quota, non biomi (biomi al passo 6)">quota <i></i> bassa → alta · non biomi</span>
+      <span class="legenda" title="Colore = quota, non biomi (biomi al passo 6)">quota 0 <i></i> 3500 m · non biomi · <b>○</b> massicci</span>
       <span class="info"></span>
       <span class="tasto">M: torna alla scena</span>
     </div>
     <div class="area"><canvas></canvas></div>
-    <div class="cursore">&nbsp;</div>`;
+    <div class="piede">
+      <div class="cursore">&nbsp;</div>
+      <div class="fasce"></div>
+      <canvas class="istogramma" width="360" height="56" title="Quote della terra, a passi di 100 m"></canvas>
+    </div>`;
   contenitore.appendChild(el);
   el.querySelector('.legenda i').style.background = 'linear-gradient(to right, '
-    + TERRA.map(([t, c]) => `rgb(${c.join(',')}) ${t * 100}%`).join(', ') + ')';
+    + TERRA.map(([, c], k) => `rgb(${c.join(',')}) ${k / (TERRA.length - 1) * 100}%`).join(', ') + ')';
+  el.querySelector('.legenda b').style.color = COLORE_MASSICCI;
+  const elFasce = el.querySelector('.fasce');
+  const isto = el.querySelector('.istogramma');
 
   const inSeme = el.querySelector('.seme');
   const elInfo = el.querySelector('.info');
@@ -122,6 +133,14 @@ export function createCartaVista(contenitore, opzioni = {}) {
     const img = ctx.createImageData(carta.cols, carta.rows);
     disegnaRilievo(carta, img.data);
     ctx.putImageData(img, 0, 0);
+    ctx.strokeStyle = COLORE_MASSICCI;
+    ctx.lineWidth = 1.5;
+    for (const m of carta.massicci) {
+      ctx.beginPath();
+      ctx.arc(m.x + 0.5, m.y + 0.5, m.raggio * 1.3, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    disegnaIstogramma();
     const s = carta.statistiche;
     elInfo.textContent = `${carta.cols}×${carta.rows} km · mare ${fmt(s.frazioneMare * 100, 1)} %`
       + ` · ${fmt(s.ms)} ms · controllo ${carta.controllo}`;
@@ -130,6 +149,32 @@ export function createCartaVista(contenitore, opzioni = {}) {
     url.searchParams.set('seme', t);
     window.history.replaceState(null, '', url);
     adatta();
+  }
+
+  // Istogramma delle quote della terra (passi di 100 m, altezza in radice quadrata per vedere le code)
+  // e parte della terra per fascia.
+  function disegnaIstogramma() {
+    const passo = 100, nBin = 36;
+    const conta = new Uint32Array(nBin);
+    for (let i = 0; i < carta.quota.length; i++) {
+      if (carta.mare[i]) continue;
+      conta[Math.min(nBin - 1, Math.floor(carta.quota[i] / passo))]++;
+    }
+    const max = Math.sqrt(Math.max(...conta)) || 1;
+    const c2 = isto.getContext('2d');
+    c2.clearRect(0, 0, isto.width, isto.height);
+    const w = isto.width / nBin;
+    for (let b = 0; b < nBin; b++) {
+      const h = Math.sqrt(conta[b]) / max * (isto.height - 2);
+      c2.fillStyle = `rgb(${tinta(TERRA, (b + 0.5) * passo).map(Math.round).join(',')})`;
+      c2.fillRect(b * w + 0.5, isto.height - h, w - 1, h);
+    }
+    c2.fillStyle = '#8a6030';
+    for (const [, a] of FASCE.slice(1)) c2.fillRect(a / passo * w - 0.5, 0, 1, isto.height);
+    const f = carta.statistiche.fasce, pc = (x) => fmt(x * 100, 1) + ' %';
+    elFasce.textContent = `pianura ${pc(f.pianura)} · collina ${pc(f.collina)} · pedemonte ${pc(f.pedemonte)}`
+      + ` · montagna ${pc(f.montagna)} · cima ${fmt(carta.statistiche.cima)} m`
+      + ` · massicci ${carta.massicci.length} (${carta.massicci.map((m) => fmt(m.cima)).join(', ')} m)`;
   }
 
   function apri() {
@@ -163,8 +208,8 @@ export function createCartaVista(contenitore, opzioni = {}) {
     const i = y * carta.cols + x;
     const q = carta.quota[i];
     elCursore.textContent = `cella ${x}, ${y} (km da ovest, da nord) · `
-      + (carta.mare[i] ? `mare, profondità grezza ${fmt(-q, 2)}`
-        : `terra, quota grezza ${fmt(q, 2)} · catena ${fmt(carta.catena[i], 2)}`);
+      + (carta.mare[i] ? `mare, profondità ${fmt(-q)} m`
+        : `quota ${fmt(q)} m (${fasciaDi(q)}) · catena ${fmt(carta.catena[i], 2)}`);
   });
   canvas.addEventListener('pointerleave', () => { elCursore.innerHTML = '&nbsp;'; });
 
