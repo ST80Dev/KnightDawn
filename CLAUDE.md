@@ -1,7 +1,8 @@
 # Knight Dawn — Claude Code Briefing
 
-Gioco di avventura medievale in **3D low-poly stilizzato**, terza persona, su **geografia reale**
-(primo territorio: dintorni di Tavullia, Marche). Cavaliere errante, fazioni, combattimento a turni.
+Gioco di avventura medievale-fantasy in 3D, terza persona, su un **mondo inventato generato a ogni
+partita** (il terreno reale di Tavullia resta come scena di prova). Due livelli: **Carta** (viaggio a
+tempo compresso) e **Scene 3D** (di persona, 1:1). Cavaliere errante, fazioni, combattimento a turni.
 Il movimento di esplorazione è in tempo reale; il combattimento **resta a turni**.
 **NON** è costruzione/civiltà, **NON** è un action game, **NON** è realismo fotografico.
 
@@ -26,8 +27,8 @@ instabile durante lo sviluppo. In alternativa in locale con `python -m http.serv
 
 | Sistema | Documento |
 |---|---|
-| Esplorazione 3D, terreno, milestone attuali | `docs/ESPLORAZIONE_3D.md` ⭐ |
-| Visione e meccaniche (le parti su mappa a tile sono superate) | `docs/GDD.md` |
+| Scene 3D, terreno, generatore del mondo, milestone attuali | `docs/ESPLORAZIONE_3D.md` ⭐ |
+| Visione, mondo e regole di generazione, tempo, meccaniche | `docs/GDD.md` |
 | Combattimento | `docs/COMBAT.md` |
 | Eventi | `docs/EVENTS.md` |
 | Inizio gioco, ranghi, mercato | `docs/EARLY_GAME.md` |
@@ -58,8 +59,8 @@ architettura: quelle stanno in `docs/`. Aggiornare la fase corrente a ogni cambi
 
 ## Fase corrente
 
-**Passaggio al 3D — prototipo minimo (M0→M5).** Dettagli e criteri di accettazione in
-`docs/ESPLORAZIONE_3D.md`. La versione 2D resta nella cronologia git (commit `2c869fa`).
-M0–M4 completate; **ora: valutazione del prototipo** (velocità di movimento in discussione).
-Dopo M4: stile simil-realistico spinto al massimo col solo codice; apporti esterni da decidere poi
-(vedi `docs/ESPLORAZIONE_3D.md`, M4).
+**Prototipo 3D valutato: si prosegue con Carta e Scene** (`docs/GDD.md` §2 *Il mondo*). M0–M4 completate.
+**Ora: M5 implementata, in prova** (tempo reale compresso nelle Scene, giorno/notte, Forza per distanza,
+HUD, pausa, salvataggio locale);
+poi prototipo del generatore del mondo.
+Ordine e criteri in `docs/ESPLORAZIONE_3D.md`. La versione 2D resta nella cronologia git (`2c869fa`).

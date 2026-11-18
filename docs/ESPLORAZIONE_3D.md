@@ -4,6 +4,11 @@
 > Il prototipo è riuscito se, a fine M4, camminare sul terreno reale è fluido e piacevole.
 > Se ci si impantana su camera, collisioni o prestazioni, si valuta come proseguire.
 > La versione 2D resta nella cronologia git (commit `2c869fa`).
+>
+> **Esito della valutazione (novembre 2026): il prototipo prosegue.** Il gioco diventa **Carta e
+> Scene** su un **mondo inventato, generato a ogni partita** (`docs/GDD.md` §2 *Il mondo*).
+> Il terreno reale di Tavullia resta come scena di prova. Questo documento copre le Scene 3D,
+> il terreno e il generatore del mondo (sezione «Carta e Scene»).
 
 ## Il minimo da raggiungere
 
@@ -183,6 +188,13 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
   - Edifici generati da codice (regola 6). **Non si entra negli edifici**: avvicinandosi alla porta
     si apre la Carta del cronista. Niente interni 3D.
   - Gli edifici poggiano sul suolo composto (`componiSuolo`): ogni edificio porta la sua quota.
+  - **Persone con cui parlare (deciso con l'utente):** niente aloni permanenti su tutti. Tre livelli:
+    da lontano nessun segno (al più indizi naturali: chi ti guarda, chi fa un cenno, chi sta in
+    disparte); entro ~8–10 m chi ha qualcosa da dire mostra un **piccolo simbolo sopra la testa** in
+    stile manoscritto (sigillo o pergamena, diverso per incarico, informazione, commercio); vicinissimo
+    compare «E: parla» col nome, se noto. Simbolo come sprite (costo trascurabile); un contorno luminoso
+    vero richiede post-elaborazione: semmai solo sul personaggio inquadrato. Le azioni costano la loro
+    durata plausibile (`docs/GDD.md` §3).
 
 - **Dopo la valutazione — movimento e viaggio (deciso con l'utente):** a scala reale anche 200 m di
   corsa sono lunghi; il terreno **non** si miniaturizza. Due scale, ognuna coerente:
@@ -194,10 +206,10 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
     quando si vuole**: si carica il blocco di terreno in quel punto e si esplora in 3D; poi si riparte
     dalla mappa. Anche gli eventi (imboscate, incontri) possono fermare il viaggio e portare in 3D lì.
   - **"Vai a"** dentro l'area locale (300 m–1 km): destinazione indicata, dissolvenza, il tempo avanza
-    in base alla distanza. Un moltiplicatore di velocità al massimo 2x, solo come comodità: a 4x e oltre
+    quanto servirebbe a piedi. Un moltiplicatore di velocità al massimo 2x, solo come comodità: a 4x e oltre
     animazione e camera diventano nauseanti e non basterebbe comunque per i km.
-  - Il tempo di gioco segue sempre la **distanza percorsa**, non i secondi reali: tutti i modi restano
-    coerenti con il calendario.
+  - Tempo: sulla Carta segue la **distanza**; nelle Scene il **tempo reale compresso** (×15 di giorno,
+    ×60 di notte; deciso in M5, `docs/GDD.md` §3). Le due scale non coincidono, ed è voluto.
   - **Andature — fatto** (dopo il test di M4: a passo d'uomo, senza niente da fare nel terreno, anche
     1 km di dintorni richiede troppo tempo reale): **corsetta 3,2 m/s** come andatura normale (`W` o
     freccia su), **scatto 6 m/s** con `Shift`, **camminata 1,5 m/s** con l'interruttore `Ctrl` (indicatore
@@ -212,28 +224,108 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
     ripide, **mai sotto ×0,5** (sul punto più ripido, ~30°: cammino 0,75 m/s, corsa 2,5 m/s). Di traverso
     si rallenta poco. Anche il blocco a 35° ora conta la pendenza del passo, non quella del versante:
     un pendio ripido si può tagliare di traverso. F3 mostra pendenza di marcia e fattore.
-  - **Pendenza e fatica**: in M5 il consumo di Forza (e i Passi) crescono con pendenza e corsa, non solo
-    con la distanza; altrimenti una salita costa tempo reale ma non tempo di gioco.
+  - **Pendenza e fatica — fatto in M5**: il consumo di Forza cresce con la distanza, la salita e
+    l'andatura. Sulla Carta la salita costerà anche tempo; nelle Scene il tempo è quello reale compresso.
   - **Cadute** (dopo M5): oltre ~30–35° in discesa o di traverso, probabilità di scivolare per metro che
     cresce con pendenza e velocità (correndo molto di più); scivolata di qualche metro, danno alla Salute,
     costo di Forza; avviso "terreno ripido" nell'HUD. È un rischio scelto, risolto come un evento:
     **non** una prova di abilità (il gioco non è un action game). Oggi la discesa non ha limiti.
   - Cavallo: stessa curva con parametri propri (sale bene i pendii moderati, scende i ripidi con molta
     cautela, rifiuta prima di un uomo, indicativamente oltre 25–30°).
-  - Richiede il **terreno a blocchi** per tutta la regione giocabile (pipeline `tools/dem` già adatta;
-    ~132 KB per blocco di 2×2 km, ~53 MB per 40×40 km) e il caricamento del blocco accanto al bordo
-    (prima con dissolvenza, senza stacchi poi). Da decidere: estensione del mondo, blocchi generati
-    ovunque o solo vicino a strade e luoghi, strade per il viaggio.
-  - Ordine proposto: dopo M5 e dopo rocca e borgo; va insieme a vegetazione e oggetti sparsi,
-    altrimenti fermarsi "nel nulla" non offre niente.
+  - Richiede il **terreno a blocchi** e il caricamento del blocco accanto al bordo (prima con
+    dissolvenza, poi senza stacchi). Estensione del mondo, formato e provenienza dei dati sono decisi
+    in «Carta e Scene», più sotto.
+  - Fermarsi "nel nulla" offre qualcosa solo con vegetazione e oggetti sparsi: vanno fatti insieme.
 
-### M5 — Aggancio alla logica esistente (solo dopo la valutazione di M4)
-- La distanza percorsa si converte in **Passi** (valore in `config.js`), che fanno avanzare `Calendar`
-  e consumano Forza tramite `Knight`.
-- HUD in HTML: data, Forza, Onore. Salvataggio della posizione con `Save`.
-- **Accettazione:** camminando, la data avanza e la Forza cala come nel gioco 2D.
+### M5 — Aggancio alla logica esistente (ridotta, dopo la valutazione di M4)
+Nel 2D 1 Passo era 1 tile; ora il **Passo è solo un'unità di tempo** (~3 ore, `docs/GDD.md` §3).
+- **Tempo reale compresso (ricalibrato con l'utente dopo la prima prova):** il primo modello (tempo
+  per distanza, 12 km per Passo) dava ~30 minuti di gioco ogni 10 minuti reali e un'ora canonica ogni
+  ~ora reale: nelle Scene il tempo era quasi fermo. Ora `TEMPO_SCENA` in `config.js`: **×15 di giorno**
+  (Prima–Vespri: un'ora canonica ogni 12 minuti reali) e **×60 di notte** (Compieta–Lodi: ogni
+  3 minuti), anche da fermi. `METRI_PER_PASSO` e la regola della salita restano per la Carta.
+- **`Calendar` accumula frazioni di Passo** (`avanzaTempoReale`, `avanzaMinuti`, `avanzaFinoA`).
+  Veglia: il giorno si ricava dai Passi (8 Passi = 1 giorno), non più un giorno per Passo.
+- **Forza per distanza:** nuova funzione in `Knight` che riceve metri, dislivello e andatura (solo
+  numeri: niente Three.js, regola 9). Scala provvisoria: 100 di Forza ≈ 30 km in piano camminando;
+  corsetta ×1,5, scatto ×3 al metro; un metro di salita vale ~6,7 m in piano. `TRAVEL_COST` per
+  bioma resta per la Carta.
+- **Forza a 0:** niente corsa né scatto, solo camminata. Tasto `R` (riposa), azione atomica, solo
+  da fermi: da Vespri in poi si dorme all'addiaccio fino a Prima (`RECOVERY.accampamento`, +30 Forza);
+  di giorno una sosta di ~3 ore (`RECOVERY.sosta`, +10 Forza).
+- **Pausa** con `P`: nulla scorre. La scheda nascosta ferma il ciclo di disegno: pausa automatica.
+- **Ciclo giorno/notte:** sole che segue l'ora (alba alle 5, tramonto alle 20, massimo 55°), colore
+  di luce, cielo e nebbia; crepuscolo caldo; di notte luna fredda e fissa, paesaggio scuro ma
+  leggibile; la luce propria delle mura e l'ombra del cavaliere si abbassano. Niente stagioni per ora.
+- **HUD in HTML:** data (o «Veglia · giorno N») con l'ora, Forza, Salute, Volontà, Onore.
+- **Salvataggio locale** (localStorage, come da `CLAUDE.md`): posizione e direzione del cavaliere,
+  terreno corrente, stato di `Knight` e `Calendar`, autosalvataggio. Supabase abbandonato (deciso
+  con l'utente: lo spazio gratuito è esaurito); tolte da `save.js` anche le sezioni 2D.
+- `Calendar.velocita` (secondi reali per Passo) non serve nelle Scene: resterà per la Carta.
+- **Accettazione:** il tempo scorre anche da fermi, un'ora canonica ogni ~12 minuti reali di giorno
+  e ~3 di notte, e si ferma con `P`; sole, cielo e luce seguono l'ora; la Forza cala con la distanza,
+  di più correndo e in salita; a Forza 0 si cammina soltanto; `R` riposa di giorno e fa dormire fino a
+  Prima di sera; ricaricando la pagina si riparte dal punto salvato con data e attributi salvati.
+- **Stato:** implementata, da provare nel browser. Misurato in headless: 4 s da fermi di giorno =
+  0,0056 Passi (atteso 0,0057), 3 s di notte = 0,0163 (atteso 0,0167); in pausa il tempo non cambia;
+  dormire da Compieta porta a Prima del giorno dopo; la sosta di giorno dà +10 Forza e 1 Passo; dopo
+  il ricaricamento posizione, tempo e attributi sono identici; F8 ricomincia da zero.
+  **Un Passo per ogni ora canonica** (Prima, Terza, Sesta, Nona, Vespri, Compieta, Mattutino, Lodi;
+  il giorno comincia a Prima, ~6:00), nel pannello di stato in alto a destra; F3 mostra Passi,
+  frazione, ora, rapporto giorno/notte, altezza del sole e Forza esatte. `F8` nuova partita (con
+  conferma). Salvataggio automatico ogni minuto, quando si lascia la pagina e dopo ogni riposo.
+
+## Carta e Scene — generatore del mondo (deciso, da realizzare dopo M5)
+
+Design di gioco e regole di generazione in `docs/GDD.md` §2 *Il mondo* e §3 *Viaggio*. Qui la tecnica.
+
+**Ordine proposto:** M5 ridotta → **prototipo del generatore** (Carta più una Scena generata, con
+passaggio Carta ↔ Scena) → rocca e borgo → vegetazione e oggetti sparsi → luoghi, fazioni e nomi
+generati.
+
+**Accettazione del prototipo del generatore:** camminando in una Scena generata, il terreno è
+credibile quanto quello reale di Tavullia. Sulla Carta le regole di varietà del GDD sono rispettate,
+con una verifica automatica: tipi di paesaggio per finestra, distanza tra deserto e neve,
+estensione massima delle aree uniformi.
+
+- **Tutto nel browser, dal seme.** Niente dati scaricati e niente dipendenze esterne: la regola 5
+  resta com'è e il peso del gioco non cambia.
+- **Determinismo.** Stesso seme, stesso mondo. Ogni Scena si rigenera identica dal seme e dalla
+  posizione: non si salva il terreno, solo il seme.
+- **Carta:** ~600×450 celle da 1 km (~270 000 celle). Per ogni cella: quota in metri, bioma,
+  temperatura, umidità, segni di fiume, strada, costa e porto. [Probabile] La generazione richiede
+  pochi secondi in JS; se blocca la pagina, si sposta in un Web Worker.
+- **Fasi del generatore** (punto di partenza: `world.js` del 2D, commit `2c869fa`):
+  1. rumore fBm, forma del continente e rumore *ridged* per le catene;
+  2. quote in metri con una curva di distribuzione delle altezze;
+  3. massicci isolati: pochi e sparsi, a cono irregolare;
+  4. erosione semplificata a scala di Carta, per valli credibili [Ipotesi: da provare, è la parte
+     più incerta];
+  5. fiumi dal drenaggio sulla quota (flusso accumulato), con letto sempre in discesa; laghi nei
+     minimi;
+  6. temperatura (latitudine, quota, rumore) e umidità;
+  7. biomi;
+  8. correzioni per le regole di varietà e per gli accostamenti vietati;
+  9. luoghi (castelli, villaggi, porti, rovine) con i vincoli di validità.
+- **Scene:** blocco di 2×2 km ricavato dalla Carta per interpolazione liscia, più dettaglio
+  procedurale su più scale coerente col bioma (rocce in montagna, calanchi in collina, fossi,
+  stagni). I fiumi della Carta sono scavati nel blocco. Il dettaglio dipende dalle coordinate del
+  mondo, non da quelle del blocco: tra un blocco e l'altro non ci sono giunture.
+- **Stesso formato del terreno di oggi** (griglia di quote più metadati), costruito in memoria:
+  `terrain.js` lo usa senza sapere se viene da un file o dal generatore.
+- **Coordinate:** piano in metri, nessuna proiezione geografica. Ogni Scena usa coordinate locali
+  centrate sul suo blocco: a centinaia di km dall'origine i numeri a 32 bit della scheda video
+  farebbero tremare la scena.
+- **Neve:** limite delle nevi da temperatura e stagione, applicato al colore del terreno nello
+  shader.
+- **Tavullia** resta in `assets/terrain/` come scena di prova, caricabile a parte ([TBD] come, per
+  esempio con un parametro nell'indirizzo). `tools/dem` resta per rigenerarla e per tarare il
+  generatore (es. confronto delle pendenze generate con quelle reali).
+- **Architettura per area culturale:** la prima è quella attuale (mattoni, rocca); le altre si
+  aggiungono con le aree culturali.
 
 ## Fuori dal prototipo (non farlo ora)
 
-Multiplayer, server/VPS, NPC con IA, mondo a blocchi più grande di 2×2 km, mobile/touch,
-modelli esterni, combattimento in 3D, ombre di alta qualità.
+Multiplayer, server/VPS, NPC con IA, mobile/touch, modelli esterni, combattimento in 3D, ombre di
+alta qualità. Il mondo più grande di 2×2 km non è più escluso: è pianificato dopo M5
+(«Carta e Scene»).

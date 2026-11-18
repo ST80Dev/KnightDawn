@@ -1,7 +1,9 @@
 # Knight Dawn — Game Design Document
 
 > Documento vivo. Le sezioni marcate [TBD] sono da definire.
-> Ultimo aggiornamento: sessione di design iniziale.
+> Ultimo aggiornamento: novembre 2026 — il gioco diventa **Carta e Scene su un mondo inventato,
+> generato a ogni partita** (§2 *Il mondo*, §3 *Tempo e calendario*, §3 *Viaggio*). Le parti sulla
+> mappa a tile del 2D sono superate dove lo dicono queste sezioni.
 
 ---
 
@@ -12,6 +14,10 @@ ci navighi dentro. Non costruisci castelli: attraversi quelli degli altri.
 Il mondo ha fazioni, segreti, stagioni, tensioni politiche che si muovono
 indipendentemente da te. Tu sei un viandante con una spada e una storia da scrivere.
 
+Il mondo è **inventato e generato a ogni partita** (seme condivisibile): forma, rilievo, mari,
+fiumi, climi, luoghi, fazioni. Non si sa cosa c'è oltre l'orizzonte finché non ci si va.
+Lo stile resta medievale, come il castello attuale. Dettagli in §2 *Il mondo*.
+
 ### Tono e ispirazioni
 
 - **House of the Dragon:** intrighi di casata, tradimenti, ambiguità morale, drago come forza
@@ -21,8 +27,9 @@ indipendentemente da te. Tu sei un viandante con una spada e una storia da scriv
 - **Lupo Solitario (Librogame):** il cavaliere solitario con abilità speciali,
   l'equipaggiamento che conta, i combattimenti letali, il mondo ostile.
   MA senza la struttura a scelte del librogame — il gioco è esplorativo, non narrativo-ramificato.
-- **Monkey Island / King's Quest:** estetica pixel art, dettaglio negli ambienti,
-  il piacere di esplorare un mondo disegnato con cura.
+- **Monkey Island / King's Quest:** dettaglio negli ambienti, il piacere di esplorare un mondo
+  disegnato con cura. (L'estetica pixel art valeva per il 2D: ora il gioco è in 3D, vedi
+  `docs/ESPLORAZIONE_3D.md`.)
 
 ### Cosa NON è
 
@@ -63,8 +70,8 @@ Si definisce attraverso le scelte di gioco:
   "L'Ombra del Cervo", "Il Pellegrino Silenzioso")
 
 **Attributi base:**
-- **Forza** (0-100) — energia di viaggio e combattimento; si consuma tile per tile
-  secondo il bioma (costi frazionari su pianura, interi su terreni ostili)
+- **Forza** (0-100) — energia di viaggio e combattimento; si consuma con la distanza, secondo
+  terreno, pendenza e andatura (100 ≈ una giornata di marcia; vedi §3 *Viaggio*)
 - **Volontà** (0-100) — forza mentale; cala con eventi oscuri, paura, magia nemica
 - **Salute** (0-100) — integrità corporea; cala in combattimento (0 = morte)
 - **Onore** (-5/+5) — statura morale bipolare; apre e chiude porte con fazioni e NPC
@@ -109,11 +116,102 @@ Dettagli (paga, fedeltà, eventi) → `### Compagnia e covi` in §3.
 
 ### Il mondo
 
-Grande mappa generata proceduralmente. Nebbia di guerra — scopri esplorando.
+> Deciso a novembre 2026, dopo la valutazione del prototipo 3D. Per un giorno si è scelta la
+> geografia reale; scartata perché toglie la scoperta: si saprebbe già dove sono montagne, mari e
+> valichi. Tecnica in `docs/ESPLORAZIONE_3D.md`, «Carta e Scene».
 
-**Biomi:** pianura, foresta, montagna, palude, costa, deserto, neve, colline, lande vulcaniche
-**Strutture:** castelli, villaggi, rovine, dungeon, porti, monasteri, accampamenti, torri
-**Elementi naturali:** fiumi, laghi, passi montani, foreste fitte, paludi, coste
+**Mondo inventato, generato a ogni partita.** Forma del continente, rilievo, mari, fiumi, climi,
+luoghi, fazioni e nomi nascono dal seme. Il seme si può condividere per giocare lo stesso mondo.
+Stile **medievale**, come il castello attuale; tono medievale-fantasy oscuro (§1).
+Il terreno reale di **Tavullia** resta solo come **scena di prova** per lo sviluppo e come metro di
+paragone per la credibilità del terreno generato.
+
+**Due livelli: Carta e Scene.**
+- **Carta del cronista** (livello strategico): viaggio con tempo compresso, eventi a ogni Passo,
+  fazioni, notizie, scadenze. Qui vive quasi intera la logica del 2D.
+- **Scene 3D** (livello di persona): arrivando in un luogo, fermandosi, o quando un evento
+  ferma il viaggio, si è lì in 3D a scala 1:1 e ci si muove liberamente nei dintorni. In scena il tempo
+  scorre col tempo reale, compresso (§3 *Tempo e calendario*); le azioni costano la loro durata
+  plausibile, alla conferma. Il combattimento resta a turni.
+- Nelle Scene il tempo scorre al ritmo della presenza (di giorno un'ora canonica ogni ~12 minuti
+  reali); i giorni di viaggio si consumano sulla Carta. Il gioco di persona si ottiene con scene **dense**
+  (castello, borgo, dintorni di 1–2 km con cose da fare), non con distanze lunghe a piedi.
+
+**Dimensioni** [TBD, proposta]: circa **600×450 km**, Carta a celle di 1 km. Attraversarlo da nord
+a sud a piedi richiede ~15 giorni di gioco e ~10 minuti reali (vedi §3 *Viaggio*).
+
+#### Regole di generazione: varietà ravvicinata, coerenza di massima
+
+Il mondo **non è verosimile in scala**: i paesaggi diversi stanno molto più vicini che nella
+realtà, perché viaggiare offra sempre qualcosa. Resta però **coerente**: nessun accostamento
+assurdo.
+
+Regole già definite nel 2D (`WORLD_GEN.md` e `world.js`, commit `2c869fa`), che **restano**:
+- **Clima per latitudine**: nord freddo (neve, tundra, mare ghiacciato), sud caldo (deserti,
+  pianure aride), centro temperato. La temperatura cala con la quota. I confini tra le fasce sono
+  frastagliati da un rumore, quindi niente bande nette.
+- **Catene montuose come creste** (rumore *ridged*), non altopiani a blob, con roccia ai piedi e
+  colline ai fianchi.
+- **Quote per quantile**: mare (10–22 %), colline (~20 %) e montagne (4,5–10 %) sono quote fisse
+  della superficie. Ogni mondo ha abbastanza mare e montagna, ma con forma sempre diversa
+  (coste, isole, istmi, canali).
+- **Boschi a grumi**, non tappeto uniforme. Più **micro-grumi di varietà** (3–5 celle, forma
+  irregolare) per rompere ogni distesa: roccia e laghetti ghiacciati nella neve, ecc.
+- **Fiumi** dalle alture al mare, con meandri; in un minimo locale formano un lago.
+- **Carattere per seme**: più o meno mare, catene, boschi, deserto; mondi diversi tra loro.
+- **Luoghi ignoti agli estremi** (nord, sud, isola remota), di natura nascosta finché non raggiunti.
+- Vincoli di validità: abbastanza castelli e villaggi, almeno un porto se c'è costa, rovine e
+  dungeon, castelli collegati, varietà di biomi.
+
+Regole **nuove** per il 3D e per la varietà ravvicinata:
+- **Massicci isolati.** Una montagna alta (1500–3000 m) può sorgere anche in mezzo a una zona
+  collinare, non solo nelle catene. Ha neve in cima se supera il limite delle nevi.
+- **Limite delle nevi** calcolato da latitudine (temperatura) e stagione: d'inverno scende, d'estate
+  sale. Neve e ghiaccio dipendono da quota e temperatura, non da un bioma dipinto.
+- **Accostamenti vietati**: niente deserto caldo vicino a neve o ghiacciai, e niente palude in
+  quota. La temperatura di fondo varia solo su grande scala: nella fascia calda le cime restano
+  sotto il limite delle nevi con margine. Distanza minima deserto–neve [TBD, es. 80 km].
+- **Niente distese monotone.** In ogni finestra di ~40×40 km ci sono almeno 3 tipi di paesaggio
+  (fuori dalle zone estreme). Nessuna area uniforme supera ~15 km senza un elemento che la
+  interrompa: forra, lago, rupe, affioramento roccioso, bosco, palude, massiccio isolato
+  [valori TBD, da tarare giocando].
+- **Transizioni brevi** (1–3 km) e irregolari tra un paesaggio e l'altro, non lunghe sfumature.
+- **Quote in metri** (il 2D usava valori normalizzati): pianure 0–200 m, colline 200–700 m
+  (come il Montefeltro), catene 1500–3500 m, massicci isolati 1500–3000 m [TBD].
+- **Dentro le Scene** (blocchi di 2×2 km), dettaglio locale coerente col bioma della cella: rocce,
+  calanchi, fossi, stagni, radure, alberi isolati.
+- **I fiumi scendono davvero.** Nel 2D seguivano la distanza dal mare, non la quota. In 3D il loro
+  letto deve scendere sempre e scavare la valle nel rilievo.
+
+**Biomi.** Restano le categorie del 2D (pianura nei suoi tre tipi, foresta, collina, montagna,
+roccia, palude, sabbia/deserto, neve, ghiaccio, fiume, acqua): eventi e costi già scritti restano
+validi.
+
+**Culture e nomi** [proposta]. Nel 2D i nomi di castelli, torri, villaggi e regione si sceglievano a
+caso per seme da liste fisse, in tre registri (anglo-medievale, cavalleresco italiano,
+tolkieniano). Le fazioni invece **non** erano generate: in `js/knight.js` ce ne sono quattro scritte
+a mano (Casata Vorn, Ordine del Cervo, Mercanti Liberi, Banditi del Sud) e `docs/FACTIONS.md` è
+ancora uno schema. Proposta: **aree culturali legate al clima** (centro di registro italiano e
+medievale come lo stile attuale; nord di registro anglo-germanico; sud di registro
+mediterraneo-orientale). Ogni area dà nomi, fazioni generate per seme e, più avanti, il proprio
+stile di architettura.
+
+**Strutture:** castelli, villaggi, città, rovine, dungeon, porti, monasteri, accampamenti, torri,
+valichi, ponti, guadi
+**Elementi naturali:** fiumi, laghi, passi montani, foreste fitte, paludi, coste, deserti, massicci isolati
+
+#### Scoperta
+
+Il giocatore non sa cosa c'è oltre l'orizzonte: la forma del mondo è nuova a ogni partita.
+In più:
+1. **Conta ciò che sa il cavaliere.** La Carta mostra solo ciò che il cavaliere ha visto o sentito
+   dire (nebbia della conoscenza, erede della nebbia di guerra del 2D). Da lontano i luoghi sono
+   voci: nomi incerti, posizioni approssimate. Dalle alture si vede lontano: salire su un
+   massiccio rivela il paesaggio attorno.
+2. **Le condizioni cambiano**: un valico chiuso dalla neve d'inverno, presidiato da una fazione
+   ostile, infestato da briganti o gravato da un pedaggio. Le notizie arrivano in ritardo e
+   imprecise (§3 *Propagazione delle informazioni*).
+3. **Il fantastico**: creature, maledizioni e luoghi leggendari.
 
 Il mondo ha **stagioni** che influenzano il gameplay:
 - Primavera: viaggio facile, commercio attivo
@@ -121,7 +219,7 @@ Il mondo ha **stagioni** che influenzano il gameplay:
 - Autunno: raccolto, feste, diplomazia
 - Inverno: passi chiusi, fame, creature più aggressive
 
-[TBD] Dettaglio biomi e tabella costi di viaggio
+[TBD] Tabella costi di viaggio per cella (bioma, pendenza, strade)
 [TBD] Tabella strutture con frequenza di spawn e contenuto
 [TBD] Sistema stagionale dettagliato
 [TBD] Eventi del mondo autonomi (guerre tra fazioni, epidemie, migrazioni)
@@ -141,9 +239,10 @@ mitologico-cronachistica propria del mondo di gioco.
 Era → Luce → Stagione → Diario → Passo
 ```
 
-- **Passo** — turno minimo del gioco. Corrisponde a **1 tile di viaggio**
-  (~2-3 ore in-fiction). Ogni passo può generare eventi, consumare Forza,
-  avviare combattimenti. Velocità di scorrimento regolabile: 4–30 sec/passo.
+- **Passo** — turno minimo del gioco: **~3 ore in-fiction**. È un'unità di **tempo**, non di spazio.
+  Nel 2D valeva 1 tile; ora il viaggio converte la distanza in Passi (§3 *Viaggio*). Ogni Passo
+  può generare eventi, consumare Forza, avviare combattimenti. Velocità di scorrimento sulla
+  Carta regolabile (vedi sotto).
 - **Diario** — **200 Passi** (~25 giorni in-fiction, "un mese"). Unità di cronaca,
   cadenza per eventi di fazione, tributi, consigli. Numerato dentro la Stagione (1-3).
 - **Stagione** — **3 Diari = 600 Passi** (~2,5 mesi). Quattro per Luce, nell'ordine:
@@ -165,7 +264,8 @@ Era → Luce → Stagione → Diario → Passo
 
 #### Velocità di gioco e tempo reale
 
-Il giocatore può regolare la velocità da 3 a 60 secondi per Passo (preset
+Vale solo per il viaggio sulla Carta. [TBD] allineare i valori: `js/calendar.js` usa oggi
+4–30 s/Passo. Il giocatore può regolare la velocità da 3 a 60 secondi per Passo (preset
 `[60, 30, 15, 7.5, 3]`, default 15 s/passo). Il pulsante `+` accelera,
 `−` rallenta. A velocità massima una Luce dura ~2 ore reali, un'Era ~10
 ore. A velocità minima una Luce dura ~40 ore reali, un'Era ~200 ore.
@@ -174,14 +274,16 @@ senza far avanzare i Passi.
 
 #### Modello del tempo: cosa scorre e quando
 
-Il tempo reale regolabile (s/passo) governa **solo il viaggio libero
-sulla mappa**. Tutto il resto è discreto e atomico, scandito dalle
+Il tempo reale regolabile (s/passo) governa **solo il viaggio sulla
+Carta**. Tutto il resto è discreto e atomico, scandito dalle
 azioni del giocatore — non dal cronometro.
 
 | Contesto                          | Come scorre il tempo                              |
 |-----------------------------------|---------------------------------------------------|
-| Viaggio libero su mappa           | 1 Passo ogni *N* secondi reali (velocità scelta)  |
-| **Pausa (`II/▶`)**                | **Nulla scorre**: né Passi, né deadlines, né mondo |
+| Viaggio sulla Carta               | 1 Passo ogni *N* secondi reali (velocità scelta)  |
+| Scena 3D, di giorno (Prima–Vespri)| Tempo reale ×15: 1 Passo ogni 12 min reali, anche da fermi |
+| Scena 3D, di notte (Compieta–Lodi)| Tempo reale ×60: 1 Passo ogni 3 min reali; dormendo, salto a Prima |
+| **Pausa (`P`, scheda nascosta)**  | **Nulla scorre**: né Passi, né deadlines, né mondo |
 | Pausa modale (pre-recap, POI)     | Come la pausa: nulla scorre                       |
 | Lettura evento / scelta narrativa | Nulla scorre durante la lettura                   |
 | Azione atomica dentro luogo       | *N* Passi scattano d'un colpo a conferma azione   |
@@ -219,11 +321,51 @@ il proprio valore dichiarando `{type:'tempo', passi:N}` nei suoi effetti
 | Convalescenza (ferita grave)          | 20–40  | una settimana |
 | Forgiare / commissionare arma         | 12–24  | 3–5 giorni  |
 
+**Nelle Scene 3D (deciso a novembre 2026)** le azioni fatte di persona costano la loro **durata
+plausibile in minuti di gioco**, convertita in frazione di Passo (`Calendar.avanzaMinuti`). La tabella
+sopra era calibrata per il 2D, dove ogni azione doveva consumare un turno intero: parlare con 4 persone
+non può costare 12 ore. Gli eventi già scritti (`js/data/events_*.js`, costi in Passi interi) vanno
+rivisti quando si agganciano alle Scene.
+
+| Azione di persona                                  | Durata in-fiction | Frazione di Passo |
+|----------------------------------------------------|-------------------|-------------------|
+| Scambio breve (saluto, domanda, indicazione)       | ~10 min           | ~1/18             |
+| Conversazione vera (informazioni, racconto, trattativa) | 30–60 min    | 1/6–1/3           |
+| Contrattare al mercato (più acquisti)              | 1–2 ore           | 1/3–2/3           |
+| Curare una ferita lieve                            | 1–3 ore           | 1/3–1             |
+| Sosta di riposo di giorno (+10 Forza)              | ~3 ore            | 1                 |
+| Addestrarsi                                        | mezza giornata    | 2–4 Passi         |
+| Dormire (+30 Forza all'addiaccio, di più in locanda) | fino a Prima    | salto atomico     |
+
+Esempio: attraversare la piazza (5 minuti reali ≈ 75 minuti di gioco) e parlare con 4 persone
+(≈ 40–60 minuti) fa circa 2 ore: un giro al mercato.
+
+**Ritmo del tempo nelle Scene.** Di giorno un'ora canonica ogni 12 minuti reali: le ore di luce
+(Prima–Vespri, dalle 6 alle 21) durano circa un'ora reale; 10 minuti di esplorazione ≈ 2,5 ore di
+gioco. La notte di solito si salta dormendo; chi resta sveglio la vede passare in ~9 minuti reali, al
+buio e con incontri più rischiosi: vegliare è una scelta, non un'attesa. A ogni ora canonica il mondo
+«gira» (meteo, scadenze, possibile incontro casuale, notizie), come nel 2D; gli incontri di persona
+invece nascono dai luoghi e dalle persone, senza aspettare l'ora. La Forza nelle Scene segue la
+distanza, non il tempo.
+
 #### Corrispondenza con viaggio medievale
 
-Un tragitto tipico castello-castello (~40 tile) corrisponde a ~5 giorni
-a cavallo (40 Passi × 3 ore = 120 ore). Coerente con tempi di viaggio
-medievali per distanze medie.
+Ritmi indicativi (da tarare): **a piedi ~12 km per Passo di marcia** in piano (pendenza e terreno
+rallentano), circa 3 Passi di marcia al giorno, poi la Forza impone la sosta. A cavallo ~20 km per
+Passo. Per mare ~20–25 km per Passo, giorno e notte, secondo il meteo. Le **soste** (notte,
+accampamento) sono azioni atomiche: avanzano il calendario d'un colpo, senza tempo reale.
+
+| Distanza nel mondo generato | Esempio | Tempo in-fiction | Tempo reale (15 s / 3 s per Passo) |
+|---|---|---|---|
+| 30–60 km | il massiccio o la palude più vicini | 1–2 giorni | ~1 min / ~15 s |
+| 100–150 km | da una fascia climatica alla vicina | 4–5 giorni | 2–3 min / ~40 s |
+| 300 km | mezzo mondo | ~10 giorni (~25 Passi di marcia + soste) | ~6 min / ~1 min |
+| 450 km | da nord a sud | ~15 giorni | ~10 min / ~2 min |
+
+Il tempo reale esclude le soste per gli eventi, che sono il gioco vero. Il mondo 2D (240 tile) si
+attraversava in circa un'ora reale: se ~10 minuti risultano pochi, si allarga il mondo o si rallenta
+la Carta (da tarare giocando). Il calendario (Diario,
+Stagione, Luce) non si ritocca.
 
 #### Età della Veglia (prologo)
 
@@ -231,7 +373,8 @@ Prima della Prima Era esiste l'**Età della Veglia**: periodo di ambientamento e
 addestramento del cavaliere. Caratteristiche:
 
 - Il conteggio formale di passi/diari/stagioni **non è visibile** al giocatore.
-  L'HUD mostra solo *"Veglia · giorno N"* o equivalente.
+  L'HUD mostra solo *"Veglia · giorno N"* o equivalente. Il giorno si ricava dai Passi
+  (8 Passi = 1 giorno), non più un giorno per ogni Passo come nel codice attuale.
 - Eventi tutorial: imparare viaggio, combattimento, dialoghi, gestione equipaggiamento.
 - Termina con un **evento di soglia** narrativo (cerimonia, partenza, prima vera
   battaglia). Da quel turno parte il conteggio ufficiale:
@@ -258,11 +401,27 @@ Durante la Veglia:
 
 ### Viaggio
 
-- Click su destinazione nella mappa → A* calcola percorso → viaggio automatico tile-by-tile
-- Ogni tile ha un costo in turni (1-3) basato sul terreno
-- Durante il viaggio possono scattare eventi (incontri casuali, meteo, scoperte)
-- Il giocatore può interrompere il viaggio con un click
-- Al livello di zoom più basso, il viaggio mostra il cavaliere che si sposta sulla mappa
+**Sulla Carta.**
+- Si sceglie la destinazione (o una strada o direzione, se il luogo è noto solo per sentito dire) →
+  percorso sulle celle (A*), che preferisce strade, ponti, guadi e valichi → viaggio automatico.
+- Celle di ~1 km. Il costo di ogni cella in tempo, Forza e
+  vigore del cavallo dipende da bioma, pendenza e presenza di strade. La tabella per bioma del
+  2D (`TRAVEL_COST`) resta come base.
+- Mezzi: a piedi, a cavallo, per mare (dai porti; anche traghetti e guadi).
+- Durante il viaggio possono scattare eventi (incontri, meteo, scoperte). Il giocatore può fermarsi
+  quando vuole: fermarsi vuol dire entrare nella scena 3D di quel punto. Un evento (imboscata,
+  incontro) può fermare il viaggio e portare in 3D lì.
+
+**Nelle Scene 3D.**
+- A scala 1:1, a piedi (poi a cavallo). Il tempo scorre col tempo reale compresso (§3 *Tempo e
+  calendario*); la Forza segue la distanza: correre fa vedere più cose nello stesso tempo ma stanca
+  di più.
+- Muoversi nella Scena costa più tempo di gioco che sulla Carta (1 km di corsa ≈ 1h20 contro ~15 min):
+  **la Scena è il tempo della presenza** (guardarsi attorno, fermarsi, parlare), **la Carta quello della
+  marcia** con una meta. Per non incentivare scorciatoie: la Carta si usa solo per mete fuori dall'area
+  locale (oltre ~2 km); «Vai a» dentro l'area locale (300 m–1 km, con dissolvenza) costa il tempo che
+  servirebbe a piedi.
+- Dettagli in `docs/ESPLORAZIONE_3D.md`.
 
 ### Combattimento
 
@@ -469,6 +628,8 @@ news note a quel nodo, scegliendo la versione (vera/rumor) in base al raggio.
 
 ## 4. Interfaccia
 
+> Layout del 2D: da rivedere per Carta e Scene (nel 3D: HUD in overlay HTML sopra la scena).
+
 Layout: la mappa occupa la parte superiore (~70% schermo).
 L'HUD inferiore (~30%) è diviso in tre pannelli:
 
@@ -485,6 +646,10 @@ Dettagli in `docs/UI_GUIDE.md`.
 
 ## 5. Roadmap di sviluppo
 
+> Roadmap della versione 2D. Il binario Grafica è sostituito dal prototipo 3D
+> (`docs/ESPLORAZIONE_3D.md`, che ha l'ordine attuale delle milestone); la fase S2 diventa la
+> **generatore del mondo** (Carta e Scene). Le fasi S3–S9 restano valide.
+
 Due binari procedono in parallelo: **Grafica** (Fase G1…Gn, definita in
 `docs/GRAFICA.md`) e **Sistemi** (Fase S1…Sn, definita qui). I sistemi
 seguono dati-prima, UI-dopo: ogni fase deve essere testabile (anche solo
@@ -492,7 +657,7 @@ da console / log testuale) prima di aggiungere la sua UI.
 
 ### Binario Grafica
 
-#### Fase G1 — Grafica e rendering ⭐ CORRENTE
+#### Fase G1 — Grafica e rendering (2D, superata)
 - Palette e costanti
 - Tile procedurali per ogni bioma
 - Renderer con camera e zoom multi-livello
@@ -521,11 +686,11 @@ da console / log testuale) prima di aggiungere la sua UI.
 - Calendario specificato in §3 *Tempo e calendario* di questo GDD
 
 #### Fase S2 — Mondo dati e viaggio
-- Generazione mondo completa con vincoli
-- Nebbia di guerra
-- Pathfinding A* e viaggio automatico tile-by-tile
-- Costo passi per terreno
-- Dettaglio in `docs/WORLD_GEN.md`
+- Generatore del mondo (Carta a celle di 1 km e Scene coerenti con essa), dal seme
+- Nebbia della conoscenza (ciò che il cavaliere sa)
+- Pathfinding A* sulle celle e viaggio automatico; passaggio Carta ↔ Scena
+- Costo in Passi e Forza per cella (bioma, pendenza, strade)
+- Dettaglio in §2 *Il mondo* e in `docs/ESPLORAZIONE_3D.md`
 
 #### Fase S3 — Eventi e interazione luoghi
 - Sistema trigger eventi durante viaggio (incontri, meteo, scoperte)

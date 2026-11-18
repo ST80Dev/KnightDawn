@@ -74,6 +74,24 @@ const MAP_ZOOM_DEFAULT = 5; // indice → 10 px/tile
 // S(...) (vedi main.js) per restare proporzionate al canvas attuale.
 const PIXEL = 2;
 
+// Viaggio e fatica (docs/ESPLORAZIONE_3D.md, M5). Valori provvisori.
+// Il Passo è un'unità di tempo (~3 ore). Sulla Carta la distanza si converte in Passi; nelle Scene
+// la distanza consuma solo Forza, mentre il tempo segue il tempo reale (TEMPO_SCENA).
+const VIAGGIO = {
+  METRI_PER_PASSO:        12000,  // Carta, a piedi, in piano: ~12 km ogni Passo di marcia
+  METRI_PER_METRO_SALITA: 6.7,    // regola tipo Naismith: 600 m di salita ≈ 1 ora ≈ 4 km in piano
+  METRI_PER_FORZA_PIENA:  30000,  // 100 di Forza ≈ 30 km in piano camminando
+  FORZA_ANDATURA: { camminata: 1, corsetta: 1.5, scatto: 3 },  // moltiplicatori di Forza al metro
+  PASSI_SOSTA:            1,      // riposo di giorno (RECOVERY.sosta): ~3 ore
+};
+
+// Tempo nelle Scene 3D: scorre col tempo reale, compresso, anche da fermi (si ferma con la pausa).
+// Di notte (Compieta, Mattutino, Lodi) scorre più in fretta: di solito la notte si salta dormendo.
+const TEMPO_SCENA = {
+  RAPPORTO_GIORNO: 15,   // 1 s reale = 15 s di gioco: un'ora canonica (3 h) ogni 12 minuti reali
+  RAPPORTO_NOTTE:  60,   // un'ora canonica ogni 3 minuti reali
+};
+
 // Seed RNG semplice (mulberry32) per texture procedurali
 function mulberry32(seed) {
   let a = seed >>> 0;
