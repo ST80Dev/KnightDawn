@@ -262,3 +262,23 @@ html, body {
 #carta .cursore { flex: 1 1 340px; }
 #carta .fasce { flex: 0 1 auto; }
 #carta .istogramma { border-bottom: 1px solid #5a4020; }
+
+/* Schermata di caricamento: generazione del mondo nel Web Worker */
+#caricamento {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(26, 14, 4, 0.92);
+  color: #d8c8a0;
+}
+
+#caricamento[hidden] { display: none; }
+#caricamento .riquadro { width: min(420px, 80vw); text-align: center; }
+#caricamento .titolo { color: #c8a030; font-size: 22px; letter-spacing: 0.05em; margin-bottom: 10px; }
+#caricamento .fase { font-size: 14px; margin-bottom: 10px; }
+#caricamento .barra { height: 8px; border: 1px solid #8a6030; border-radius: 3px; overflow: hidden; }
+#caricamento .barra i { display: block; height: 100%; width: 0; background: #b08a3a; transition: width 0.2s; }
+#carta button:disabled { opacity: 0.5; cursor: wait; }

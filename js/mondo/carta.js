@@ -20,6 +20,11 @@ import { mulberry32, derivaSeme, hash2, fbm, ridged, smoothstep, codiceControllo
 
 export const CARTA_PREDEFINITA = { cols: 600, rows: 450, cella: 1000 };
 
+// Versione del generatore: entra nella chiave della cache delle Carte (IndexedDB, lavoratore.js).
+// VA CAMBIATA a ogni modifica che cambia le Carte generate, altrimenti il browser riusa Carte vecchie.
+// (In alternativa: ?rigenera nell'indirizzo ignora la cache.)
+export const VERSIONE_GENERATORE = 'm6-erosione-1';
+
 // Parametri della forma (km dove non indicato). Valori di partenza, da tarare guardando le Carte.
 const FORMA = {
   deformazione: { lunghezza: 200, ampiezza: 55, ottave: 3 },   // deformazione del dominio
@@ -280,6 +285,7 @@ export function generaCarta(seme, opzioni = {}) {
   // Tronchi curvi (km, punti x, y, bacino, letto) lungo cui sono scavate le valli: li usano la vista della
   // Carta e, al passo 6, le Scene (il letto scende sempre).
   carta.fiumi = dren.fiumi;
+  avanzamento?.('Verifiche', 0.92);
   carta.statistiche.ms = performance.now() - t0;
   return carta;
 }

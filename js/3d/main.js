@@ -18,7 +18,7 @@ import { createFollowCamera } from './camera.js';
 import { createCastle } from './castle3d.js';
 import { createCartaVista } from './cartaVista.js';
 import { creaOrizzonte } from './orizzonte.js';
-import { generaCarta } from '../mondo/carta.js';
+import { generaCartaAsincrona } from '../mondo/generatore.js';
 import { generaScena } from '../mondo/scena.js';
 import { semeDaTesto } from '../mondo/rumore.js';
 
@@ -161,6 +161,32 @@ function messaggio(testo, ms = 4500) {
   _messaggio.hidden = false;
   clearTimeout(_messaggioTimer);
   _messaggioTimer = setTimeout(() => { _messaggio.hidden = true; }, ms);
+}
+
+// ─── Schermata di caricamento (generazione del mondo nel Web Worker) ───
+const caricamento = document.createElement('div');
+caricamento.id = 'caricamento';
+caricamento.hidden = true;
+caricamento.innerHTML = '<div class="riquadro"><div class="titolo">Generazione del mondo</div>'
+  + '<div class="fase">…</div><div class="barra"><i></i></div></div>';
+document.body.appendChild(caricamento);
+const elFase = caricamento.querySelector('.fase'), elBarra = caricamento.querySelector('.barra i');
+function mostraCaricamento(testo, frazione) {
+  caricamento.hidden = false;
+  elFase.textContent = testo;
+  elBarra.style.width = `${Math.round(Math.min(1, Math.max(0, frazione)) * 100)}%`;
+}
+
+/** Carta del mondo per un seme, dal Worker (con cache; ?rigenera la ignora), con la schermata di caricamento. */
+async function cartaDelMondo(seme) {
+  mostraCaricamento('Generazione del mondo', 0);
+  try {
+    return await generaCartaAsincrona(seme, {
+      avanzamento: mostraCaricamento, cache: !PARAMETRI.has('rigenera'),
+    });
+  } finally {
+    caricamento.hidden = true;
+  }
 }
 
 // ─── Pannello di stato: data e ora, Forza, Salute, Volontà, Onore ──────
@@ -495,7 +521,7 @@ async function init() {
     const seme = testo ? semeDaTesto(testo)
       : (sc && sc.terreno === 'mondo' && Number.isFinite(sc.seme)) ? sc.seme
         : Math.floor(Math.random() * 1e6);
-    carta = generaCarta(seme);
+    carta = await cartaDelMondo(seme);
     if (sc && sc.terreno === 'mondo' && sc.seme === seme && finiti(sc.cx, sc.cz, sc.x, sc.z)) {
       await caricaScena({ tipo: 'mondo', cx: sc.cx, cz: sc.cz });
       posizionaCavaliere(sc.x, sc.z, Number.isFinite(sc.direzione) ? sc.direzione : Math.PI);
@@ -591,6 +617,7 @@ const tasti = new Set();
 const cartaVista = createCartaVista(document.body, {
   onCambio: () => tasti.clear(),
   cartaAttuale: () => carta,
+  generaCarta: (seme, avanzamento) => generaCartaAsincrona(seme, { avanzamento, cache: !PARAMETRI.has('rigenera') }),
   posizione: () => (scenaAttuale?.tipo === 'mondo' && knight
     ? { x: (scenaAttuale.cx + knight.stato.x) / carta.cella, y: (scenaAttuale.cz + knight.stato.z) / carta.cella }
     : null),

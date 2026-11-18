@@ -7,7 +7,7 @@
 //
 // La pittura dei pixel (disegnaRilievo) non usa il DOM: si può chiamare anche fuori dal browser.
 
-import { generaCarta, ACQUA } from '../mondo/carta.js';
+import { ACQUA } from '../mondo/carta.js';
 import { verificaFiumi, verificaPanorami } from '../mondo/verifica.js';
 import { semeDaTesto } from '../mondo/rumore.js';
 
@@ -94,6 +94,7 @@ const fmt = (n, d = 0) => n.toLocaleString('it-IT', { minimumFractionDigits: d, 
  *   posizione?: () => ({x:number, y:number}|null),  // cavaliere sulla Carta (km da ovest e da nord)
  *   onScegli?: (carta: object, x: number, y: number) => void,   // clic su una cella di terra
  *   onTavullia?: () => void,                        // pulsante «Tavullia (prova)»
+ *   generaCarta: (seme: number, avanzamento) => Promise<object>,   // dal Web Worker (generatore.js)
  * }} opzioni
  */
 export function createCartaVista(contenitore, opzioni = {}) {
@@ -160,8 +161,9 @@ export function createCartaVista(contenitore, opzioni = {}) {
     const img = c2.createImageData(carta.cols, carta.rows);
     disegnaRilievo(carta, img.data);
     c2.putImageData(img, 0, 0);
-    verifica = verificaFiumi(carta);
-    panorami = verificaPanorami(carta);
+    // Verifiche già fatte dal Worker; altrimenti qui (Carte di altra provenienza).
+    verifica = carta.verifiche?.fiumi ?? verificaFiumi(carta);
+    panorami = carta.verifiche?.panorami ?? verificaPanorami(carta);
     disegnaIstogramma();
     ridisegna();
     adatta();
@@ -264,14 +266,30 @@ export function createCartaVista(contenitore, opzioni = {}) {
     }
     const s = carta.statistiche;
     elInfo.textContent = `${diPartita() ? 'mondo della partita' : 'anteprima'} · ${carta.cols}×${carta.rows} km`
-      + ` · mare ${fmt(s.frazioneMare * 100, 1)} % · ${fmt(s.ms)} ms · controllo ${carta.controllo}`;
+      + ` · mare ${fmt(s.frazioneMare * 100, 1)} % · ${carta.daCache ? 'dalla cache' : `${fmt(s.ms)} ms`}`
+      + ` · controllo ${carta.controllo}`;
   }
 
-  /** Genera un'anteprima per un seme (testo libero; vuoto = a caso). */
-  function genera(testo) {
+  /** Genera un'anteprima per un seme (testo libero; vuoto = a caso), nel Web Worker. */
+  let inCorso = 0;
+  async function genera(testo) {
     const t = String(testo).trim() || String(Math.floor(Math.random() * 1e6));
+    const seme = semeDaTesto(t);
     const attuale = opzioni.cartaAttuale?.();
-    mostra(attuale && attuale.seme === semeDaTesto(t) ? attuale : generaCarta(semeDaTesto(t)));
+    if (attuale && attuale.seme === seme) { mostra(attuale); return; }
+    const mio = ++inCorso;
+    inSeme.value = t;
+    for (const b of el.querySelectorAll('.barra button')) b.disabled = true;
+    try {
+      const c = await opzioni.generaCarta(seme, (fase, f) => {
+        if (mio === inCorso) elInfo.textContent = `generazione del seme ${seme}: ${fase} · ${Math.round(f * 100)} %`;
+      });
+      if (mio === inCorso) mostra(c);
+    } catch (err) {
+      elInfo.textContent = `Errore nella generazione: ${err.message}`;
+    } finally {
+      if (mio === inCorso) for (const b of el.querySelectorAll('.barra button')) b.disabled = false;
+    }
   }
 
   // Istogramma delle quote della terra (passi di 100 m, altezza in radice quadrata per vedere le code)

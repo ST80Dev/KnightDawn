@@ -466,6 +466,29 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
    - Limiti: Carta ~1,2–1,5 s (oltre la soglia prevista per il Web Worker); in pianura i poggi piccoli sulla
      Carta sembrano puntini regolari (rischio «pluriball», da giudicare in 3D); le conche restano molte perché il
      rilievo collinare viene da rumore: il rimedio vero è l'erosione fluviale (stream power), proposta all'utente.
+   **Erosione fluviale, Web Worker e cache (approvati dall'utente).**
+   - `erosioneFluviale` (in `carta.js`): «stream power» con lo schema implicito di Braun e Willett (2013),
+     senza sollevamento: 24 passi, ogni cella si avvicina alla cella a valle con peso 0,004·√(bacino km²);
+     direzioni di flusso ricalcolate ogni 3 passi (riempimento e zone piatte del drenaggio). Poi
+     `mappaFasce` rimette le quote sulle fasce decise (trasformazione monotona: i fiumi scendono ancora).
+     Laghi 44–67 per seme (prima 75–99); scavo semplice più leggero (k = 5). Fasce misurate: pianura 34–38 %,
+     collina 46–49 % (si assegna il 5 % di collina in più perché lo scavo successivo ne abbassa una parte).
+   - Tracciati: confluenza anticipata (un corso entro 1,5 km da uno più grande lo raggiunge lì; sui
+     fondovalle larghi in pendenza uniforme i rigagnoli scendevano paralleli). Sinuosità mediana 1,49.
+     Restano coppie di fiumi grandi paralleli a qualche km in fondovalle larghi (come nelle pianure alluvionali).
+   - Poggi: raggio minimo 1,6 km (sotto erano quadratini di una cella); 12 % «belvedere» di 300–450 m.
+   - Punti panoramici: osservazione anche sui versanti (un punto ogni 3 km oltre alle cime locali 3×3 km;
+     contando solo le cime i fianchi delle catene risultavano scoperti), 16 direzioni. **Regola rispettata:
+     97–99 % della terra sotto i 1500 m** (montagna 44–62 %). Su una pianura piatta non passa (da 2 m
+     d'altezza l'orizzonte è a ~5 km).
+   - **Web Worker** (`js/mondo/lavoratore.js`, lato pagina `js/mondo/generatore.js`): generazione e
+     verifiche fuori dal filo della pagina, schermata «Generazione del mondo» con avanzamento per fasi;
+     anteprime dalla Carta con l'avanzamento nella barra. Se il Worker non parte, si genera nella pagina.
+     Misurato (Chromium headless): Carta ~3,4 s, prima apertura ~4,8 s.
+   - **Cache** in IndexedDB (database «knightdawn», archivio «carte»), chiave «VERSIONE_GENERATORE|seme»,
+     ultime 3 Carte: ricaricando con lo stesso seme ~1 s. `?rigenera` ignora la cache. Non è un
+     salvataggio (si salva solo il seme): `VERSIONE_GENERATORE` in `carta.js` va cambiata a ogni modifica
+     che cambia le Carte. Stesso codice di controllo nel Worker e in Node (seme 48213 → `39857c7c`).
 5. **Orizzonte** (inserito dopo il passo 4): oltre il blocco di 2×2 km non si vedeva nulla, nemmeno una
    catena a pochi km. Terreno lontano solo da guardare, dalla Carta già in memoria (`js/3d/orizzonte.js`).
    *Prova:* dal pedemonte si vedono le montagne lontane; nessuna fessura al raccordo col blocco; FPS.
