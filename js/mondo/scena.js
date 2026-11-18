@@ -60,15 +60,21 @@ const _n = [0, 0, 0];
  * fBm «eroso» (alla maniera di I. Quílez): ogni ottava è divisa per (1 + |gradiente accumulato|²),
  * così sui versanti ripidi il dettaglio fine si smorza e il rilievo prende valli lisce e creste nette.
  * Risultato circa in [−1, 1].
+ * `pesi` (facoltativo): peso di ogni ottava, 0…1. L'orizzonte spegne le ottave fini con la distanza; senza
+ * pesi il calcolo è identico a quello del blocco della Scena (le quote al bordo coincidono).
  */
-function fbmEroso(x, z, seed) {
+function fbmEroso(x, z, seed, pesi = null) {
   const D = DETTAGLIO;
   let px = x / D.lunghezza, pz = z / D.lunghezza;
   let somma = 0, amp = 1, norma = 0, dx = 0, dz = 0;
   for (let o = 0; o < D.ottave; o++) {
-    gradienteD(px, pz, (seed + Math.imul(o, 0x9e3779b9)) | 0, _n);
-    dx += _n[1] * amp; dz += _n[2] * amp;
-    somma += amp * _n[0] / (1 + D.erosione * (dx * dx + dz * dz));
+    const p = pesi ? pesi[o] : 1;
+    if (p > 0) {
+      gradienteD(px, pz, (seed + Math.imul(o, 0x9e3779b9)) | 0, _n);
+      dx += _n[1] * amp; dz += _n[2] * amp;
+      const c = amp * _n[0] / (1 + D.erosione * (dx * dx + dz * dz));
+      somma += pesi ? c * p : c;
+    }
     norma += amp;
     amp *= D.guadagno;
     const qx = (RC * px - RS * pz) * 2, qz = (RS * px + RC * pz) * 2;   // ruota e raddoppia
@@ -77,8 +83,14 @@ function fbmEroso(x, z, seed) {
   return (somma / norma) * 1.8;
 }
 
-/** Quota (m) del mondo generato nel punto (x, z), in metri del mondo. */
-export function quotaMondo(carta, x, z, seedDettaglio = derivaSeme(carta.seme, 101)) {
+/** Numero di ottave del dettaglio e loro lunghezze d'onda (m), per chi le spegne con la distanza. */
+export const OTTAVE_DETTAGLIO = Array.from({ length: DETTAGLIO.ottave }, (_, o) => DETTAGLIO.lunghezza / 2 ** o);
+
+/**
+ * Quota (m) del mondo generato nel punto (x, z), in metri del mondo.
+ * `pesi`: vedi fbmEroso (solo per l'orizzonte; il blocco della Scena non li passa).
+ */
+export function quotaMondo(carta, x, z, seedDettaglio = derivaSeme(carta.seme, 101), pesi = null) {
   const h = quotaCarta(carta, x, z);
   const A = DETTAGLIO.ampiezza;
   // Sulla costa il dettaglio resta pieno: su un pendio così dolce sposta la riva di ~100 m e la rende
@@ -86,7 +98,7 @@ export function quotaMondo(carta, x, z, seedDettaglio = derivaSeme(carta.seme, 1
   const ampiezza = h > 0
     ? Math.min(A.massimo, A.base + A.perMetro * h + A.collina * h * smoothstep(A.rampa[0], A.rampa[1], h))
     : A.fondale + (A.base - A.fondale) * smoothstep(-60, 0, h);
-  return h + ampiezza * fbmEroso(x, z, seedDettaglio);
+  return h + ampiezza * fbmEroso(x, z, seedDettaglio, pesi);
 }
 
 /**

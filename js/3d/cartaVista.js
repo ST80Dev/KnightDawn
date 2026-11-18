@@ -7,11 +7,12 @@
 //
 // La pittura dei pixel (disegnaRilievo) non usa il DOM: si può chiamare anche fuori dal browser.
 
-import { generaCarta } from '../mondo/carta.js';
+import { generaCarta, ACQUA } from '../mondo/carta.js';
+import { verificaFiumi } from '../mondo/verifica.js';
 import { semeDaTesto } from '../mondo/rumore.js';
 
 // Colori del rilievo: SOLO quota (metri), a un solo tono, più alto = più scuro. Niente verdi, ocra o
-// bianchi: si leggerebbero come biomi (prati, deserti, neve), che arrivano al passo 6 come livello a sé.
+// bianchi: si leggerebbero come biomi (prati, deserti, neve), che arrivano al passo 7 come livello a sé.
 // Una tappa per ogni limite di fascia: pianura 0–200, collina 200–700, pedemonte 700–1500, montagna.
 const TERRA = [
   [0, [236, 228, 204]],
@@ -22,6 +23,9 @@ const TERRA = [
 ];
 const FASCE = [['pianura', 0, 200], ['collina', 200, 700], ['pedemonte', 700, 1500], ['montagna', 1500, Infinity]];
 const MARE_BASSO = [122, 158, 168], MARE_FONDO = [40, 70, 92];
+const LAGO = [104, 150, 178];
+const COLORE_FIUME = '#2f6690';
+const SCALA = 2;                  // pixel del canvas per cella: fiumi e segni più nitidi
 const COSTA = [70, 52, 30];
 const ESAGERAZIONE = 6;           // quanto il rilievo pesa nell'ombreggiatura
 const COLORE_MASSICCI = 'rgba(150, 40, 30, 0.85)';
@@ -46,7 +50,7 @@ function tinta(scala, t) {
 
 /** Pixel RGBA (una cella = un pixel) della Carta: tinte per quota, rilievo ombreggiato, costa. */
 export function disegnaRilievo(carta, pixel = new Uint8ClampedArray(carta.cols * carta.rows * 4)) {
-  const { cols, rows, quota, mare } = carta;
+  const { cols, rows, quota, mare, acque } = carta;
   const q = (x, y) => {
     x = x < 0 ? 0 : x >= cols ? cols - 1 : x;
     y = y < 0 ? 0 : y >= rows ? rows - 1 : y;
@@ -58,7 +62,9 @@ export function disegnaRilievo(carta, pixel = new Uint8ClampedArray(carta.cols *
     for (let x = 0; x < cols; x++) {
       const i = y * cols + x;
       let c;
-      if (mare[i]) {
+      if (acque && (acque[i] === ACQUA.LAGO || acque[i] === ACQUA.LAGO_COSTIERO)) {
+        c = LAGO;
+      } else if (mare[i]) {
         c = tinta([[0, MARE_BASSO], [1, MARE_FONDO]], Math.sqrt(Math.min(1, -quota[i] / 2500)));
       } else {
         const dx = (q(x + 1, y) - q(x - 1, y)) * 0.5 / carta.cella * ESAGERAZIONE;
@@ -99,7 +105,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
       <label>Seme <input type="text" class="seme" spellcheck="false" autocomplete="off"></label>
       <button type="button" class="genera">Genera</button>
       <button type="button" class="casuale">Seme casuale</button>
-      <span class="legenda" title="Colore = quota, non biomi (biomi al passo 6)">quota 0 <i></i> 3500 m · non biomi · <b>○</b> massicci</span>
+      <span class="legenda" title="Colore = quota, non biomi (biomi al passo 7)">quota 0 <i></i> 3500 m · non biomi · <b>○</b> massicci</span>
       <span class="info"></span>
       <span class="tasto">clic sulla terra: vai lì · M: torna alla scena</span>
     </div>
@@ -123,7 +129,8 @@ export function createCartaVista(contenitore, opzioni = {}) {
   const canvas = el.querySelector('canvas');
   const ctx = canvas.getContext('2d');
   let carta = null;
-  let rilievo = null;                            // immagine del rilievo della Carta mostrata
+  let rilievo = null;                            // immagine del rilievo della Carta mostrata (1 px per cella)
+  let verifica = null;                           // esito di verificaFiumi
 
   function adatta() {
     if (!carta || el.hidden) return;
@@ -139,20 +146,52 @@ export function createCartaVista(contenitore, opzioni = {}) {
   function mostra(c) {
     carta = c;
     inSeme.value = String(carta.seme);
-    canvas.width = carta.cols;
-    canvas.height = carta.rows;
-    rilievo = ctx.createImageData(carta.cols, carta.rows);
-    disegnaRilievo(carta, rilievo.data);
+    canvas.width = carta.cols * SCALA;
+    canvas.height = carta.rows * SCALA;
+    rilievo = document.createElement('canvas');
+    rilievo.width = carta.cols;
+    rilievo.height = carta.rows;
+    const c2 = rilievo.getContext('2d');
+    const img = c2.createImageData(carta.cols, carta.rows);
+    disegnaRilievo(carta, img.data);
+    c2.putImageData(img, 0, 0);
+    verifica = verificaFiumi(carta);
     disegnaIstogramma();
     ridisegna();
     adatta();
   }
 
-  /** Rilievo, massicci e (se è la Carta della partita) il cavaliere. */
+  /** Fiumi: un tratto da ogni cella di fiume alla cella a valle, più largo con il bacino. */
+  function disegnaFiumi() {
+    const { cols, bacino, ricevente, acque, sogliaFiume } = carta;
+    if (!bacino) return;
+    ctx.strokeStyle = COLORE_FIUME;
+    ctx.lineCap = 'round';
+    const classi = [[1, 0.35], [4, 0.6], [16, 0.9], [64, 1.3], [256, 1.8]];   // multipli della soglia → larghezza
+    for (let k = 0; k < classi.length; k++) {
+      const da = classi[k][0] * sogliaFiume, a = k + 1 < classi.length ? classi[k + 1][0] * sogliaFiume : Infinity;
+      ctx.lineWidth = classi[k][1];
+      ctx.beginPath();
+      for (let i = 0; i < bacino.length; i++) {
+        const b = bacino[i], j = ricevente[i];
+        if (b < da || b >= a || j < 0 || acque[i] === ACQUA.LAGO) continue;
+        const x = i % cols, y = (i - x) / cols, xj = j % cols, yj = (j - xj) / cols;
+        ctx.moveTo(x + 0.5, y + 0.5);
+        ctx.lineTo(xj + 0.5, yj + 0.5);
+      }
+      ctx.stroke();
+    }
+  }
+
+  /** Rilievo, fiumi, massicci e (se è la Carta della partita) il cavaliere. */
   function ridisegna() {
-    ctx.putImageData(rilievo, 0, 0);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(rilievo, 0, 0, canvas.width, canvas.height);
+    ctx.setTransform(SCALA, 0, 0, SCALA, 0, 0);       // da qui in poi: coordinate in celle
+    disegnaFiumi();
     ctx.strokeStyle = COLORE_MASSICCI;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 0.8;
     for (const m of carta.massicci) {
       ctx.beginPath();
       ctx.arc(m.x + 0.5, m.y + 0.5, m.raggio * 1.3, 0, Math.PI * 2);
@@ -160,11 +199,11 @@ export function createCartaVista(contenitore, opzioni = {}) {
     }
     const p = diPartita() ? opzioni.posizione?.() : null;
     if (p) {
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 1;
       ctx.strokeStyle = '#fff6e0';
-      ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.stroke();
       ctx.fillStyle = COLORE_CAVALIERE;
-      ctx.beginPath(); ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x, p.y, 2.2, 0, Math.PI * 2); ctx.fill();
     }
     const s = carta.statistiche;
     elInfo.textContent = `${diPartita() ? 'mondo della partita' : 'anteprima'} · ${carta.cols}×${carta.rows} km`
@@ -201,7 +240,10 @@ export function createCartaVista(contenitore, opzioni = {}) {
     const f = carta.statistiche.fasce, pc = (x) => fmt(x * 100, 1) + ' %';
     elFasce.textContent = `pianura ${pc(f.pianura)} · collina ${pc(f.collina)} · pedemonte ${pc(f.pedemonte)}`
       + ` · montagna ${pc(f.montagna)} · cima ${fmt(carta.statistiche.cima)} m`
-      + ` · massicci ${carta.massicci.length} (${carta.massicci.map((m) => fmt(m.cima)).join(', ')} m)`;
+      + ` · massicci ${carta.massicci.length} (${carta.massicci.map((m) => fmt(m.cima)).join(', ')} m)`
+      + (verifica ? ` · laghi ${carta.statistiche.laghi} · fiumi: ${verifica.sorgenti} sorgenti, foci in mare`
+        + ` ${verifica.foci.mare}, in lago ${verifica.foci.lago}, oltre il confine ${verifica.foci.bordo}`
+        + ` · verifica ${verifica.ok ? 'superata' : `FALLITA (${verifica.errori.length}): ${verifica.errori[0]}`}` : '');
   }
 
   function apri() {
@@ -237,8 +279,11 @@ export function createCartaVista(contenitore, opzioni = {}) {
     const i = y * carta.cols + x;
     const q = carta.quota[i];
     elCursore.textContent = `cella ${x}, ${y} (km da ovest, da nord) · `
-      + (carta.mare[i] ? `mare, profondità ${fmt(-q)} m`
-        : `quota ${fmt(q)} m (${fasciaDi(q)}) · catena ${fmt(carta.catena[i], 2)}`);
+      + (carta.acque?.[i] === ACQUA.LAGO ? `lago, superficie a ${fmt(carta.livelloAcqua[i])} m, fondo a ${fmt(q)} m`
+        : carta.acque?.[i] === ACQUA.LAGO_COSTIERO ? `lago costiero, fondo a ${fmt(-q)} m sotto il livello del mare`
+          : carta.mare[i] ? `mare, profondità ${fmt(-q)} m`
+            : `quota ${fmt(q)} m (${fasciaDi(q)}) · catena ${fmt(carta.catena[i], 2)}`
+              + (carta.bacino?.[i] >= carta.sogliaFiume ? ` · fiume, bacino ${fmt(carta.bacino[i])} km²` : ''));
   });
   canvas.addEventListener('pointerleave', () => { elCursore.innerHTML = '&nbsp;'; });
   canvas.addEventListener('click', (e) => {
