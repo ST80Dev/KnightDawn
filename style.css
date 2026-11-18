@@ -66,3 +66,17 @@ html, body {
   font-size: 12px;
   border-radius: 3px;
 }
+
+/* Indicatore dell'andatura attiva (camminata) */
+#hud .andatura {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  padding: 3px 10px;
+  background: rgba(26, 14, 4, 0.6);
+  color: #d8c8a0;
+  font-size: 12px;
+  border-radius: 3px;
+}
+
+#hud .andatura[hidden] { display: none; }

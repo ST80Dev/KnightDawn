@@ -127,7 +127,7 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
   configurabile e con fondamenta che si adattano al terreno (base che scende fino al suolo).
 - Collisioni semplici (rettangoli/cerchi sul piano XZ) contro mura e torri; la porta resta attraversabile.
 - **Accettazione:** si gira attorno al castello senza attraversare i muri e si entra dalla porta.
-- **Stato:** implementata, in attesa del test dell'utente. Castello in mattoni, come le rocche
+- **Stato:** completata (test dell'utente superato). Castello in mattoni, come le rocche
   malatestiane della zona: cinta di 38 m con scarpa, 4 torri tonde, mastio addossato al lato di fondo,
   torre-porta con passaggio ad arco (saracinesca alzata, battenti aperti), merli a coda di rondine,
   beccatelli, feritoie; ~6 500 triangoli, ~60 mesh. Sta sul colle a est del punto di partenza
@@ -198,6 +198,14 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
     animazione e camera diventano nauseanti e non basterebbe comunque per i km.
   - Il tempo di gioco segue sempre la **distanza percorsa**, non i secondi reali: tutti i modi restano
     coerenti con il calendario.
+  - **Andature — fatto** (dopo il test di M4: a passo d'uomo, senza niente da fare nel terreno, anche
+    1 km di dintorni richiede troppo tempo reale): **corsetta 3,2 m/s** come andatura normale (`W` o
+    freccia su), **scatto 6 m/s** con `Shift`, **camminata 1,5 m/s** con l'interruttore `Ctrl` (indicatore
+    in basso a destra). Valori provvisori: si potrà tornare più bassi quando il terreno avrà contenuti
+    (velocità alte riducono la scala percepita). In M5 lo scatto costerà più Forza. L'animazione dipende
+    dalla velocità reale (riferimenti fissi 1,5 e 5 m/s), non dai parametri; in corsa il bacino scende
+    meno (fase di volo). Rischio noto: Ctrl+W chiude la scheda del browser e la pagina non può impedirlo
+    (con le frecce non succede).
   - **Pendenza e velocità — fatto** (`knight3d.js`, parametri in `kd.knight.cfg`): curva tipo Tobler
     sulla pendenza nella direzione di marcia (misurata 1 m avanti), ammorbidita per il gioco
     (`pendenzaK` 2 invece di 3,5): ×1,1 sulle discese dolci (~3°), più lento in salita e sulle discese
