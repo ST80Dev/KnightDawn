@@ -390,6 +390,28 @@ possono diventare stagni; troppe tradiscono il generatore).
    accumulato, fiumi e laghi (fase 5); valli scavate in proporzione al flusso (fase 4, versione semplice;
    se non basta, erosione fluviale *stream power*, da decidere guardando il risultato). *Prova:* verifica
    automatica che ogni fiume scenda sempre e finisca in mare o in un lago.
+   **Stato: fatto, da provare dall'utente.** In `carta.js` (fasi 4–5, su una quota qualunque):
+   - acque: mare (collegato al bordo o ≥ 1500 km²), lago costiero (specchio chiuso più piccolo, a quota 0),
+     lago in quota; foci = mare, laghi costieri e bordi di terra (il fiume esce oltre il confine);
+   - micro-rilievo delle pianure (±6 m su 12 km), poi primo drenaggio → valli: letto a quota − 8·√bacino
+     (al massimo il 45 % della quota), corretto perché scenda sempre; versanti abbassati verso il letto
+     con profilo a V entro 1,5–8 km, mai sotto il letto (lo scavo non crea conche);
+   - secondo drenaggio: conche profonde > 3 m e ampie ≥ 4 km² → laghi (40–90 per seme); le altre colmate;
+   - riempimento senza ε (priority-flood, Barnes et al. 2014); direzione verso una vicina più bassa, a caso
+     (hash) tra quelle entro il 90 % della più ripida (sennò righe parallele sui pendii uniformi); zone
+     piatte col gradiente combinato di Barnes, Lehman e Mulla (2014), laghi compresi; bacini in ordine
+     topologico. Niente cicli per costruzione. Fiume = bacino ≥ 150 km².
+   `js/mondo/verifica.js` → `verificaFiumi`: ogni cella di fiume seguita fino alla foce; il letto non sale
+   (fuori dai laghi), nessun ciclo, foce in mare, lago o oltre il confine. **8 semi: superata, risalita
+   massima 0,000 m.** La vista della Carta disegna fiumi (larghezza dal bacino) e laghi, e riporta sorgenti,
+   foci ed esito della verifica. Carta ~0,7–0,85 s (Web Worker non ancora necessario, ma vicino).
+   Tentativi scartati: scavo «quota − profondità» (creava 500 laghi); rugosità dopo lo scavo (non toglieva
+   le righe parallele, che venivano dalle zone piatte); zone piatte = sole celle colmate (cicli al confine
+   con i laghi). Misure: dislivello in 5 km, collina ~245 m (prima 180–250), montagna 570–760 m.
+   Limiti noti: sui fondovalle piatti il fiume può fare lunghe diagonali dritte; nelle Scene le valli della
+   Carta sono larghe chilometri (in 2 km se ne vede un fianco) e non c'è ancora acqua né alveo: passo 5;
+   i laghi in quota nelle Scene sono conche asciutte (passo 5); la pioggia è uniforme (con l'umidità del
+   passo 6 i bacini cambieranno).
 5. **Fiumi nella Scena**: tracciato liscio (non a celle), letto scavato sempre in discesa, superficie
    dell'acqua. *Prova:* il fiume sta in una valle, scende, prosegue senza stacchi nel blocco accanto.
 6. **Temperatura, umidità, biomi** (fasi 6–7) e limite delle nevi nello shader; colori della Scena per
