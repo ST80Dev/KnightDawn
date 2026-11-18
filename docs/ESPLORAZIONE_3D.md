@@ -250,12 +250,18 @@ Nel 2D 1 Passo era 1 tile; ora il **Passo è solo un'unità di tempo** (~3 ore, 
   numeri: niente Three.js, regola 9). Scala provvisoria: 100 di Forza ≈ 30 km in piano camminando;
   corsetta ×1,5, scatto ×3 al metro; un metro di salita vale ~6,7 m in piano. `TRAVEL_COST` per
   bioma resta per la Carta.
-- **Forza a 0:** niente corsa né scatto, solo camminata. Tasto `R` (riposa), azione atomica, solo
-  da fermi: da Vespri in poi si dorme all'addiaccio fino a Prima (`RECOVERY.accampamento`, +30 Forza);
-  di giorno una sosta di ~3 ore (`RECOVERY.sosta`, +10 Forza).
+- **Forza a 0:** niente corsa né scatto, solo camminata.
+- **Recupero da fermi** (deciso con l'utente): ~10 Forza per Passo di gioco trascorso da fermi
+  (`VIAGGIO.FORZA_RIPOSO_PER_PASSO`, ~3,3 l'ora), con lo **stesso ritmo** in tutti i modi in cui passa
+  il tempo: aspettando davvero, con `T` o con `R`. Nessuno conviene più degli altri. In movimento non
+  si recupera. Effetto noto: nelle Scene la Forza pesa poco (10 minuti di corsetta ≈ −10, 12 minuti
+  fermi ≈ +10); conterà soprattutto sulla Carta, nei giorni di viaggio.
 - **Avanza** con `T` (solo da fermi): salto atomico all'inizio della prossima ora canonica, di giorno
-  o di notte, senza recupero. Serve a non dover aspettare davvero (il tramonto, un incontro…): i
-  12 minuti reali per ora valgono per il tempo in cui si fa qualcosa. Il recupero resta a `R`.
+  o di notte. Serve a non dover aspettare davvero (il tramonto, un incontro…): i 12 minuti reali per
+  ora valgono per il tempo in cui si fa qualcosa.
+- **Riposa** con `R` (solo da fermi), scorciatoia per il riposo pieno: da Vespri in poi si dorme
+  all'addiaccio fino a Prima (da Compieta: 9 ore, +30 Forza); di giorno una sosta di un Passo
+  (~3 ore, +10 Forza). Con la Forza piena di giorno rimanda a `T`.
 - **Pausa** con `P`: nulla scorre. La scheda nascosta ferma il ciclo di disegno: pausa automatica.
 - **Ciclo giorno/notte:** sole che segue l'ora (alba alle 5, tramonto alle 20, massimo 55°), colore
   di luce, cielo e nebbia; crepuscolo caldo; di notte luna fredda e fissa, paesaggio scuro ma
@@ -271,7 +277,8 @@ Nel 2D 1 Passo era 1 tile; ora il **Passo è solo un'unità di tempo** (~3 ore, 
   Prima di sera; ricaricando la pagina si riparte dal punto salvato con data e attributi salvati.
 - **Stato:** implementata, da provare nel browser. Misurato in headless: 4 s da fermi di giorno =
   0,0056 Passi (atteso 0,0057), 3 s di notte = 0,0163 (atteso 0,0167); in pausa il tempo non cambia;
-  dormire da Compieta porta a Prima del giorno dopo; la sosta di giorno dà +10 Forza e 1 Passo; dopo
+  dormire da Compieta porta a Prima del giorno dopo; la sosta di giorno dà +10 Forza e 1 Passo; da fermi 4 s di giorno danno +0,053 Forza (atteso
+  0,053) e `T` da 0,3 del Passo +7; dopo
   il ricaricamento posizione, tempo e attributi sono identici; F8 ricomincia da zero.
   **Un Passo per ogni ora canonica** (Prima, Terza, Sesta, Nona, Vespri, Compieta, Mattutino, Lodi;
   il giorno comincia a Prima, ~6:00), nel pannello di stato in alto a destra; F3 mostra Passi,
