@@ -133,7 +133,13 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
   beccatelli, feritoie; ~6 500 triangoli, ~60 mesh. Sta sul colle a est del punto di partenza
   (`CASTLE_CFG` in `castle3d.js`: x 225, z 8, ~173 m), porta verso ovest; il cavaliere parte rivolto
   verso la porta. Mura e torri hanno ognuna la propria base sotto il punto più basso del terreno che
-  coprono; la cima di ogni lato è 9 m sopra il suo punto più alto. Collisioni: rettangoli a pezzi di 2 m
+  coprono; la cima di ogni lato è 9 m sopra il suo punto più alto. **Cortile in piano** (richiesta
+  dell'utente): terrapieno alla quota più alta del terreno interno (173,65 m; il terreno sotto scende
+  fino a 171 m), le mura fanno da muro di contenimento; fuori dalla porta una rampa di 5 m (14°) con
+  muretti raccorda il piano al pendio. Su siti più scoscesi andranno terrazzamenti con scalini: non
+  fatti finché non serve. **Suolo** (cambio architetturale approvato): `componiSuolo()` in
+  `terrain.js` unisce terreno e superfici costruite (`quotaSuolo()` del castello); cavaliere e camera
+  usano il suolo, non più il terreno nudo. Collisioni: rettangoli a pezzi di 2 m
   (la scarpa sporge di più dove il terreno è basso) e cerchi per le torri; il cavaliere viene spinto
   fuori lungo la normale e quindi scivola lungo i muri. Camera: se un muro si mette tra cavaliere e
   camera, la camera scatta davanti al muro e poi torna indietro con calma; con un muro a destra la
@@ -165,6 +171,16 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
     personaggi); preferire licenze CC0 (CC-BY → file dei crediti); ogni elemento si prova in scena
     accanto a quelli procedurali e si scarta se stona; materiali ricolorati sulla nostra palette, nessuna
     luce o effetto propri dei pacchetti. Richiede di cambiare la regola 6 di `CLAUDE.md`.
+
+- **Dopo la valutazione — rocca, borgo ed edifici (deciso con l'utente, fase a sé):**
+  - Edifici di `docs/EARLY_GAME.md` §3 (stalla, taverna, sala d'armi, armeria/mercato, cappella) e di
+    `docs/EVENTS.md` (fabbro, guaritore). Non stanno nel cortile attuale (36×36 m, mastio compreso).
+  - Proposta: **due cinte**, come i borghi fortificati della zona (Tavullia compresa): **rocca** con
+    mastio, sala d'armi, armeria, cappella; **borgo murato** addossato con stalla, taverna, mercato,
+    fabbro e una sua porta. Da confermare quando si fa (alternativa: una rocca più grande).
+  - Edifici generati da codice (regola 6). **Non si entra negli edifici**: avvicinandosi alla porta
+    si apre la Carta del cronista. Niente interni 3D.
+  - Gli edifici poggiano sul suolo composto (`componiSuolo`): ogni edificio porta la sua quota.
 
 ### M5 — Aggancio alla logica esistente (solo dopo la valutazione di M4)
 - La distanza percorsa si converte in **Passi** (valore in `config.js`), che fanno avanzare `Calendar`

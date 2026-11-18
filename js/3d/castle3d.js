@@ -2,6 +2,9 @@
 // Castello procedurale low-poly: cinta quadrata con scarpa, 4 torri angolari, mastio, torre-porta
 // con passaggio ad arco. Merli a coda di rondine (ghibellini), come nelle rocche malatestiane della zona.
 // Tutte le basi scendono sotto il punto più basso del terreno che coprono: niente fondamenta sospese.
+// Il cortile è un terrapieno in piano alla quota più alta del terreno interno (le mura fanno da muro
+// di contenimento); se fuori dalla porta il suolo è più basso, una rampa corta lo raccorda al pendio.
+// quotaSuolo() dà la quota di cortile e rampa: il terreno la usa tramite componiSuolo (terrain.js).
 //
 // Coordinate locali del castello: origine al centro della cinta, la porta sta sul lato -Z locale.
 // `rotazione` gira il castello attorno all'asse Y (π/2 = porta verso ovest).
@@ -28,6 +31,7 @@ export const CASTLE_CFG = {
     sopraMura: 3,
   },
   scarpa: 0.18,               // inclinazione della scarpa alla base (tangente: ~10°)
+  rampa: { pendenzaMax: 0.25, lunghezzaMin: 3, lunghezzaMax: 20, parapetto: 0.5 },
 };
 
 const COL = {
@@ -110,9 +114,9 @@ export function createCastle(terrain, opzioni = {}) {
   const mondoZ = (lx, lz) => cfg.z - lx * sin + lz * cos;
   const quota = (lx, lz) => terrain.getHeight(mondoX(lx, lz), mondoZ(lx, lz));
 
-  /** Quote minima e massima del terreno su un rettangolo locale (campionato ogni ~1,5 m). */
-  function quoteRett(x0, x1, z0, z1) {
-    const nx = Math.max(1, Math.ceil((x1 - x0) / 1.5)), nz = Math.max(1, Math.ceil((z1 - z0) / 1.5));
+  /** Quote minima e massima del terreno su un rettangolo locale (campionato ogni `passo` m). */
+  function quoteRett(x0, x1, z0, z1, passo = 1.5) {
+    const nx = Math.max(1, Math.ceil((x1 - x0) / passo)), nz = Math.max(1, Math.ceil((z1 - z0) / passo));
     let min = Infinity, max = -Infinity;
     for (let i = 0; i <= nx; i++) {
       for (let j = 0; j <= nz; j++) {
@@ -122,6 +126,31 @@ export function createCastle(terrain, opzioni = {}) {
       }
     }
     return { min, max };
+  }
+
+  // ─── Terrapieno del cortile e rampa della porta ───
+  const INT = H - SP / 2;                                  // filo interno delle mura
+  const gz0 = -H - P.torreSporgenza;                        // faccia esterna della torre-porta
+  const qCortile = quoteRett(-INT, INT, -INT, INT, 0.75);
+  const qPassaggio = quoteRett(-P.larghezza / 2, P.larghezza / 2, gz0, -INT, 0.5);
+  const piano = Math.max(qCortile.max, qPassaggio.max) + 0.15;   // il terreno resta tutto sotto
+
+  // Rampa: la più corta che resti entro la pendenza massima (se il pendio scende più in fretta,
+  // quella con la pendenza minore). Raccorda in linea retta il piano al terreno al suo piede.
+  const RA = cfg.rampa;
+  const larghezzaRampa = P.larghezza + 0.6;
+  let lunghezzaRampa = RA.lunghezzaMin;
+  {
+    let migliore = Infinity;
+    for (let l = RA.lunghezzaMin; l <= RA.lunghezzaMax; l += 0.5) {
+      const g = Math.abs(piano - quota(0, gz0 - l)) / l;
+      if (g < migliore) { migliore = g; lunghezzaRampa = l; }
+      if (g <= RA.pendenzaMax) break;
+    }
+  }
+  function quotaRampa(lx, lz) {
+    const t = clamp((gz0 - lz) / lunghezzaRampa, 0, 1);
+    return piano + (quota(lx, gz0 - lunghezzaRampa) - piano) * t;
   }
 
   const mat = {};
@@ -182,7 +211,7 @@ export function createCastle(terrain, opzioni = {}) {
     const r = rettLocale(lato, -H, H, -SP / 2 - 1.5, SP / 2 + 2);
     const q = quoteRett(r.x0, r.x1, r.z0, r.z1);
     lato.base = q.min - 1;
-    lato.cima = q.max + cfg.altezzaMura;
+    lato.cima = Math.max(q.max, piano) + cfg.altezzaMura;
     lato.scarpa = q.max + 2.5;          // fin dove arriva la scarpa
   }
 
@@ -259,8 +288,8 @@ export function createCastle(terrain, opzioni = {}) {
     const x0 = -k / 2, x1 = k / 2, z1 = H - SP / 2, z0 = z1 - k;
     const q = quoteRett(x0 - 1, x1 + 1, z0 - 1, z1);
     const base = q.min - 1;
-    const yScarpa = q.max + 1.5;
-    const cima = q.max + cfg.mastio.altezza;
+    const yScarpa = piano + 1.5;                       // il mastio poggia sul terrapieno
+    const cima = piano + cfg.mastio.altezza;
     const parapetto = 1.4;
     const off = (yScarpa - base) * TAN;
 
@@ -294,7 +323,7 @@ export function createCastle(terrain, opzioni = {}) {
         metti(feritoie, x, cima - parapetto - 4, z, ang);
       }
     }
-    const offSuolo = Math.max(0, yScarpa - q.min) * TAN;
+    const offSuolo = (yScarpa - piano) * TAN;
     rettangoli.push({ x0: x0 - offSuolo, x1: x1 + offSuolo, z0: z0 - offSuolo, z1 });
   }
 
@@ -303,12 +332,11 @@ export function createCastle(terrain, opzioni = {}) {
   {
     const gw = P.torreLarghezza, pw = P.larghezza;
     const z0 = -H - P.torreSporgenza, z1 = z0 + P.torreProfondita;
-    const qPassaggio = quoteRett(-pw / 2, pw / 2, z0, z1);
     const q = quoteRett(-gw / 2 - 1, gw / 2 + 1, z0 - 1, z1);
-    const base = q.min - 1.5;
+    const base = Math.min(q.min, piano) - 1.5;
     const cima = lati.fronte.cima + P.sopraMura;
-    const imposta = qPassaggio.max + P.imposta;
-    sogliaPorta = qPassaggio.min;
+    const imposta = piano + P.imposta;
+    sogliaPorta = piano;
 
     const s = new THREE.Shape();
     s.moveTo(-gw / 2, base);
@@ -317,11 +345,11 @@ export function createCastle(terrain, opzioni = {}) {
     s.lineTo(-gw / 2, cima);
     s.closePath();
     const foro = new THREE.Path();
-    foro.moveTo(-pw / 2, qPassaggio.min - 0.4);
-    foro.lineTo(pw / 2, qPassaggio.min - 0.4);
+    foro.moveTo(-pw / 2, piano - 0.4);
+    foro.lineTo(pw / 2, piano - 0.4);
     foro.lineTo(pw / 2, imposta);
     foro.absarc(0, imposta, pw / 2, 0, Math.PI, false);
-    foro.lineTo(-pw / 2, qPassaggio.min - 0.4);
+    foro.lineTo(-pw / 2, piano - 0.4);
     s.holes.push(foro);
     const geo = new THREE.ExtrudeGeometry(s, { depth: P.torreProfondita, bevelEnabled: false, curveSegments: 10 });
     geo.translate(0, 0, z0);
@@ -348,14 +376,14 @@ export function createCastle(terrain, opzioni = {}) {
     object.add(traversa);
 
     // Battenti aperti, appoggiati alla faccia interna della torre-porta
-    const hBatt = imposta - qPassaggio.min + 0.6;
+    const hBatt = imposta - piano + 0.6;
     for (const lato of [-1, 1]) {
       const b = new THREE.Mesh(new THREE.BoxGeometry(pw / 2, hBatt, 0.12), mat.legno);
-      b.position.set(lato * (pw / 2 + pw / 4), qPassaggio.min - 0.2 + hBatt / 2, z1 + 0.07);
+      b.position.set(lato * (pw / 2 + pw / 4), piano - 0.2 + hBatt / 2, z1 + 0.07);
       object.add(b);
       for (const y of [0.25, 0.75]) {                     // bandelle di ferro
         const f = new THREE.Mesh(new THREE.BoxGeometry(pw / 2 - 0.1, 0.1, 0.04), mat.ferro);
-        f.position.set(lato * (pw / 2 + pw / 4), qPassaggio.min - 0.2 + hBatt * y, z1 + 0.15);
+        f.position.set(lato * (pw / 2 + pw / 4), piano - 0.2 + hBatt * y, z1 + 0.15);
         object.add(f);
       }
     }
@@ -376,8 +404,49 @@ export function createCastle(terrain, opzioni = {}) {
     rettangoli.push({ x0: pw / 2, x1: gw / 2, z0, z1: z1 + 0.15 });
   }
 
-  // ─── Terra battuta: cortile e viottolo davanti alla porta ───
-  function chiazza(x0, x1, z0, z1, passo = 1.5) {
+  // ─── Terrapieno, pavimento del passaggio, rampa ───
+  {
+    const pianoCortile = new THREE.Mesh(new THREE.PlaneGeometry(2 * INT, 2 * INT), mat.terra);
+    pianoCortile.rotation.x = -Math.PI / 2;
+    pianoCortile.position.y = piano;
+    object.add(pianoCortile);
+    const lastrico = new THREE.Mesh(new THREE.PlaneGeometry(P.larghezza, -INT - gz0), mat.pietra);
+    lastrico.rotation.x = -Math.PI / 2;
+    lastrico.position.set(0, piano + 0.01, (gz0 - INT) / 2);
+    object.add(lastrico);
+
+    // Rampa: striscia che segue quotaRampa, con due muretti ai lati fino sotto il terreno
+    const n = Math.max(2, Math.ceil(lunghezzaRampa / 0.75));
+    const w = larghezzaRampa / 2, sp = 0.45;
+    const pos = [], idx = [];
+    for (let i = 0; i <= n; i++) {
+      const lz = gz0 - (lunghezzaRampa * i) / n;
+      for (const lx of [-w, w]) pos.push(lx, quotaRampa(lx, lz) + 0.02, lz);
+    }
+    for (let i = 0; i < n; i++) {
+      const a = 2 * i;
+      idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    aggiungi(geo, mat.pietra, false);
+    for (const sx of [-1, 1]) {
+      const x0 = sx * w, x1 = sx * (w + sp);
+      for (let i = 0; i < n; i++) {
+        const za = gz0 - (lunghezzaRampa * i) / n, zb = gz0 - (lunghezzaRampa * (i + 1)) / n;
+        const yTop = Math.max(quotaRampa(x0, za), quotaRampa(x0, zb)) + RA.parapetto;
+        const yBase = Math.min(quota(x1, za), quota(x1, zb), quota(x0, za), quota(x0, zb)) - 0.5;
+        aggiungi(prisma(rett4(Math.min(x0, x1), Math.max(x0, x1), zb, za),
+          rett4(Math.min(x0, x1), Math.max(x0, x1), zb, za), yBase, yTop), mat.mattoneScuro, false);
+      }
+      rettangoli.push({ x0: Math.min(x0, x1), x1: Math.max(x0, x1), z0: gz0 - lunghezzaRampa, z1: gz0 });
+    }
+  }
+
+  /** Viottolo di terra battuta che prosegue dal piede della rampa, sul terreno. */
+  function chiazza(x0, x1, z0, z1, passo = 1.0) {
     const nx = Math.ceil((x1 - x0) / passo), nz = Math.ceil((z1 - z0) / passo);
     const pos = [], idx = [];
     for (let j = 0; j <= nz; j++) {
@@ -398,8 +467,7 @@ export function createCastle(terrain, opzioni = {}) {
     geo.computeVertexNormals();
     aggiungi(geo, mat.terra, false);
   }
-  chiazza(-H + SP / 2, H - SP / 2, -H + SP / 2, H - SP / 2);
-  chiazza(-P.larghezza / 2 - 0.3, P.larghezza / 2 + 0.3, -H - P.torreSporgenza - 14, -H + SP / 2, 1.0);
+  chiazza(-P.larghezza / 2, P.larghezza / 2, gz0 - lunghezzaRampa - 12, gz0 - lunghezzaRampa + 0.5);
 
   // ─── Instancing ───
   function istanze(geo, m, lista) {
@@ -467,6 +535,18 @@ export function createCastle(terrain, opzioni = {}) {
     return { x: mondoX(lx, lz), z: mondoZ(lx, lz) };
   }
 
+  /**
+   * Quota del suolo costruito nel punto (mondo): terrapieno del cortile, passaggio della porta, rampa.
+   * null fuori da queste aree (vale il terreno naturale).
+   */
+  function quotaSuolo(x, z) {
+    const [lx, lz] = inLocale(x, z);
+    if (Math.abs(lx) <= INT && Math.abs(lz) <= INT) return piano;
+    if (Math.abs(lx) <= P.torreLarghezza / 2 && lz >= gz0 && lz <= -INT) return piano;
+    if (Math.abs(lx) <= larghezzaRampa / 2 && lz < gz0 && lz >= gz0 - lunghezzaRampa) return quotaRampa(lx, lz);
+    return null;
+  }
+
   /** true se il punto (mondo) è dentro la cinta. */
   function dentro(x, z) {
     const [lx, lz] = inLocale(x, z);
@@ -475,12 +555,12 @@ export function createCastle(terrain, opzioni = {}) {
 
   /** Punto davanti alla porta, all'esterno (mondo): utile per i test e per i segnaposto. */
   function davantiPorta(distanza = 8) {
-    const lz = -H - P.torreSporgenza - distanza;
+    const lz = gz0 - lunghezzaRampa - distanza;
     return { x: mondoX(0, lz), z: mondoZ(0, lz) };
   }
 
   return {
-    object, cfg, solidi, rettangoli, cerchi, sogliaPorta,
-    spingiFuori, dentro, davantiPorta, inLocale,
+    object, cfg, solidi, rettangoli, cerchi, sogliaPorta, piano, lunghezzaRampa,
+    spingiFuori, dentro, davantiPorta, inLocale, quotaSuolo,
   };
 }

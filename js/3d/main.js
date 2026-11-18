@@ -5,7 +5,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { loadTerrain } from './terrain.js';
+import { loadTerrain, componiSuolo } from './terrain.js';
 import { createKnight } from './knight3d.js';
 import { createFollowCamera } from './camera.js';
 import { createCastle } from './castle3d.js';
@@ -49,6 +49,7 @@ function avvisoHud(testo, classe = 'avviso') {
 let terrain = null;
 let knight = null;
 let castle = null;
+let suolo = null;                         // terreno + superfici costruite (cortile, rampa)
 let cam = null;                           // camera alle spalle del cavaliere
 let controls = null;                      // camera libera di debug (tasto C)
 let modoCamera = 'segui';                 // 'segui' | 'libera'
@@ -66,10 +67,11 @@ async function init() {
 
   // Il cavaliere parte al centro dell'area, rivolto verso la porta del castello
   const porta = castle.davantiPorta();
-  knight = createKnight(terrain, { x: 0, z: 0, direzione: Math.atan2(porta.x, porta.z) }, [castle]);
+  suolo = componiSuolo(terrain, [castle]);
+  knight = createKnight(suolo, { x: 0, z: 0, direzione: Math.atan2(porta.x, porta.z) }, [castle]);
   scene.add(knight.object);
 
-  cam = createFollowCamera(camera, terrain, knight, renderer.domElement, castle.solidi);
+  cam = createFollowCamera(camera, suolo, knight, renderer.domElement, castle.solidi);
 
   controls = new OrbitControls(camera, renderer.domElement);
   controls.enabled = false;
@@ -80,7 +82,7 @@ async function init() {
   controls.maxDistance = 1800;
   controls.maxPolarAngle = THREE.MathUtils.degToRad(88);
 
-  window.kd = { scene, camera, cam, controls, terrain, knight, castle };   // per ispezione dalla console del browser
+  window.kd = { scene, camera, cam, controls, terrain, suolo, knight, castle };   // per ispezione dalla console del browser
 
   avvisoHud('W/S: avanti/indietro · A/D o trascina col mouse: gira · Shift: corri · rotella: distanza'
     + ' · C: camera libera · F3: info', 'aiuto');
@@ -221,7 +223,7 @@ function aggiornaPannello(now) {
   if (knight) {
     const k = knight.stato;
     testo += `\ncavaliere: x ${fmt(k.x)} · z ${fmt(k.z)} · quota ${fmt(k.y, 1)} m`
-      + ` · pendenza ${fmt(terrain.getSlope(k.x, k.z))}° · ${fmt(k.velEffettiva, 1)} m/s`
+      + ` · pendenza ${fmt(suolo.getSlope(k.x, k.z))}° · ${fmt(k.velEffettiva, 1)} m/s`
       + (k.bloccato ? ' · bloccato' : '');
     testo += `\ncamera: ${modoCamera === 'segui' ? 'alle spalle' : 'libera (C per tornare)'}`;
     if (castle) {
