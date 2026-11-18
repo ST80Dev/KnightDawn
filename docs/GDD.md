@@ -178,6 +178,9 @@ Regole già definite nel 2D (`WORLD_GEN.md` e `world.js`, commit `2c869fa`), che
   irregolare) per rompere ogni distesa: roccia e laghetti ghiacciati nella neve, ecc.
 - **Fiumi** dalle alture al mare, con meandri; in un minimo locale formano un lago.
 - **Carattere per seme**: più o meno mare, catene, boschi, deserto; mondi diversi tra loro.
+- **Bordi liberi**: il mondo non è per forza un'isola; ai bordi c'è terra o mare secondo il rumore
+  (anche una catena che arriva all'orlo). Un bordo di terra è un **confine invalicabile** (terre
+  selvagge oltre le quali non si va) [deciso a novembre 2026].
 - **Luoghi ignoti agli estremi** (nord, sud, isola remota), di natura nascosta finché non raggiunti.
 - Vincoli di validità: abbastanza castelli e villaggi, almeno un porto se c'è costa, rovine e
   dungeon, castelli collegati, varietà di biomi.

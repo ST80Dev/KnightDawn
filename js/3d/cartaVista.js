@@ -8,15 +8,14 @@
 import { generaCarta } from '../mondo/carta.js';
 import { semeDaTesto } from '../mondo/rumore.js';
 
-// Colori del rilievo (tinte ipsometriche sulla quota grezza 0…1) e del mare (−1…0).
+// Colori del rilievo: SOLO quota (grezza 0…1), a un solo tono, più alto = più scuro. Niente verdi, ocra
+// o bianchi: si leggerebbero come biomi (prati, deserti, neve), che arrivano al passo 6 come livello a sé.
 const TERRA = [
-  [0.00, [143, 174, 106]],   // pianura costiera
-  [0.12, [170, 182, 112]],
-  [0.30, [196, 180, 120]],   // colline
-  [0.50, [176, 146, 100]],
-  [0.70, [140, 112, 86]],    // montagna
-  [0.86, [128, 120, 114]],   // roccia
-  [1.00, [236, 232, 224]],   // cime
+  [0.00, [232, 222, 196]],
+  [0.25, [204, 186, 152]],
+  [0.50, [168, 146, 114]],
+  [0.75, [128, 108, 86]],
+  [1.00, [84, 70, 58]],
 ];
 const MARE_BASSO = [122, 158, 168], MARE_FONDO = [40, 70, 92];
 const COSTA = [70, 52, 30];
@@ -88,12 +87,15 @@ export function createCartaVista(contenitore, opzioni = {}) {
       <label>Seme <input type="text" class="seme" spellcheck="false" autocomplete="off"></label>
       <button type="button" class="genera">Genera</button>
       <button type="button" class="casuale">Seme casuale</button>
+      <span class="legenda" title="Colore = quota, non biomi (biomi al passo 6)">quota <i></i> bassa → alta · non biomi</span>
       <span class="info"></span>
       <span class="tasto">M: torna alla scena</span>
     </div>
     <div class="area"><canvas></canvas></div>
     <div class="cursore">&nbsp;</div>`;
   contenitore.appendChild(el);
+  el.querySelector('.legenda i').style.background = 'linear-gradient(to right, '
+    + TERRA.map(([t, c]) => `rgb(${c.join(',')}) ${t * 100}%`).join(', ') + ')';
 
   const inSeme = el.querySelector('.seme');
   const elInfo = el.querySelector('.info');

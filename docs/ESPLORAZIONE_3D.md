@@ -337,7 +337,9 @@ possono diventare stagni; troppe tradiscono il generatore).
    con contrafforti *ridged*, in tratti scelti da una maschera la cui soglia si cerca perché le catene
    coprano il 4,5–10 % della terra. Limiti noti: i mari chiusi sono ancora «mare» (laghi e mari si
    distinguono al passo 4); l'interno è piatto finché il passo 2 non aggiunge colline e quote in metri;
-   isole al largo rare. [TBD] Cosa succede quando il cavaliere arriva a un bordo di terra.
+   isole al largo rare. Un bordo di terra è un **confine invalicabile** (deciso con l'utente).
+   La vista colora **solo la quota**, a un tono (più alto = più scuro), con legenda: la prima scala
+   verde-ocra-bianco si leggeva come biomi (prati, deserti, neve), che arrivano al passo 6.
 2. **Quote in metri e massicci isolati** (fasi 2–3); al passaggio del mouse quota e coordinate della
    cella. *Prova:* pianure 0–200 m, colline 200–700 m, catene 1500–3500 m; istogramma delle quote.
 3. **Scena dalla Carta con il dettaglio**: clic sulla Carta → blocco 257×257 (interpolazione liscia +
