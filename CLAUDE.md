@@ -16,6 +16,8 @@ instabile durante lo sviluppo. In alternativa in locale con `python -m http.serv
 ## Struttura
 - `index.html` + `style.css` — canvas WebGL + overlay HUD in HTML/CSS + importmap
 - `js/3d/` — moduli ES del motore 3D: `main.js` (renderer, luci, loop, input, F3), `terrain.js`, `knight3d.js`, `camera.js`, `castle3d.js`
+- `js/mondo/` — generatore del mondo, moduli ES senza grafica né DOM (`rumore.js`, `carta.js`, poi
+  `verifica.js`, `scena.js`); la vista di sviluppo della Carta è `js/3d/cartaVista.js`
 - `js/` — logica di gioco ereditata, script classici senza grafica (`config` `calendar` `knight`
   `combat` `events` `news` `save` + `data/`). I moduli 3D li leggono come globali.
 - `assets/terrain/` — heightmap reali (`.bin` + `.json`)
@@ -39,7 +41,9 @@ instabile durante lo sviluppo. In alternativa in locale con `python -m http.serv
 2. Mai toccare la struttura dei file senza conferma esplicita
 3. Conferma prima di cambiamenti architetturali
 4. Una milestone alla volta — non iniziare la successiva prima di completare e far testare quella corrente
-5. Unica dipendenza ammessa: Three.js in `lib/three/`. Niente CDN, niente altre librerie senza conferma
+5. Unica dipendenza ammessa: Three.js in `lib/three/`. Niente CDN, niente altre librerie senza conferma.
+   Unica eccezione (solo **modalità reale**, dopo M6): scaricare dati di terreno da fonti che lo
+   permettono dal browser, con cache e avviso se non rispondono. Il mondo generato non scarica nulla
 6. Grafica procedurale: mesh costruite via codice con primitive Three.js, niente modelli `.glb` esterni
    (per ora). Unici asset ammessi: dati di terreno
 7. Test incrementale: ogni milestone deve essere provata nel browser (anche su Pages) prima di passare avanti
@@ -59,6 +63,5 @@ architettura: quelle stanno in `docs/`. Aggiornare la fase corrente a ogni cambi
 
 ## Fase corrente
 
-**Carta e Scene su mondo inventato** (`docs/GDD.md` §2 *Il mondo*). M0–M5 completate (M5: due verifiche
-dell'utente in sospeso, vedi `docs/ESPLORAZIONE_3D.md`). **Ora: M6, prototipo del generatore del mondo**:
-prima del codice, piano a piccoli passi da approvare. La versione 2D resta nella cronologia git (`2c869fa`).
+**M6, prototipo del generatore del mondo** (Carta e Scene, `docs/GDD.md` §2 *Il mondo*): piano in 7 passi
+in `docs/ESPLORAZIONE_3D.md`. M0–M5 completate. La versione 2D resta nella cronologia git (`2c869fa`).

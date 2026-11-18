@@ -140,6 +140,20 @@ paragone per la credibilità del terreno generato.
 **Dimensioni** [TBD, proposta]: circa **600×450 km**, Carta a celle di 1 km. Attraversarlo da nord
 a sud a piedi richiede ~15 giorni di gioco e ~10 minuti reali (vedi §3 *Viaggio*).
 
+**Modalità reale** [dopo M6, decisa con l'utente a novembre 2026]. Seconda modalità, accanto al mondo
+generato, da giocare sapendo che rispecchia una regione vera: **rilievo reale** (coste, valli, montagne),
+mentre copertura (boschi, rocce, paludi), clima, luoghi, nomi e fazioni sono **generati con le stesse
+regole** del mondo inventato. Non riproduce città, paesi e borghi veri. I fiumi principali coincidono
+con quelli veri (il drenaggio li ritrova nelle valli che hanno scavato); si sceglie quanti mostrarne.
+Il mondo può essere grande quanto quello generato (es. 600×450 km): i dati del terreno si scaricano
+quando servono (tecnica e rischi in `docs/ESPLORAZIONE_3D.md`, «Modalità reale»).
+- **Rinuncia accettata:** si perde parte della scoperta (si sa già dove sono montagne e valichi).
+- **Varietà:** una regione vera ha meno tipi di paesaggio (in Italia niente deserto). Regge se la
+  regione va dal mare alle montagne; le regole di varietà valgono per la copertura, non per il rilievo.
+  Il contenuto legato ai biomi assenti (es. eventi del deserto) in questa modalità non compare.
+- [TBD] Clima reale oppure «compresso» per latitudine come nel mondo generato (varietà ravvicinata su
+  rilievo vero); regione fissa o scelta dal giocatore.
+
 #### Regole di generazione: varietà ravvicinata, coerenza di massima
 
 Il mondo **non è verosimile in scala**: i paesaggi diversi stanno molto più vicini che nella

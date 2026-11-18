@@ -313,8 +313,57 @@ Design di gioco e regole di generazione in `docs/GDD.md` §2 *Il mondo* e §3 *V
 generata, con passaggio Carta ↔ Scena) → rocca e borgo → vegetazione e oggetti sparsi → luoghi, fazioni e nomi
 generati.
 
-**Prima del codice:** proporre all'utente un piano a piccoli passi, ciascuno da provare nel browser
-(il rischio maggiore è la credibilità del rilievo: valli e fiumi).
+**Il rischio maggiore è la credibilità del rilievo nelle Scene.** Una Scena di 2×2 km copre circa
+2×2 celle della Carta: dalla Carta riceve solo l'andamento d'insieme. Valli e crinali alla scala di
+Tavullia (300–800 m) nascono dal **dettaglio della Scena**, che deve dipendere solo dalle coordinate
+del mondo (niente erosione idraulica per blocco: lascerebbe giunture). L'erosione della Carta serve per
+le grandi valli fluviali e per le catene. Rischio tipico del rumore: conche chiuse sparse (alcune
+possono diventare stagni; troppe tradiscono il generatore).
+
+### Piano approvato (novembre 2026): 7 passi, ciascuno provato nel browser
+
+1. **Seme e rumore deterministici; vista di sviluppo della Carta** (tasto `M`, oppure `?carta`
+   nell'indirizzo): seme, rilievo ombreggiato del continente (fase 1), livello del mare per quantile,
+   tempo di generazione e codice di controllo. *Prova:* semi diversi → mondi diversi; stesso seme →
+   stesso codice di controllo, anche su un altro browser.
+2. **Quote in metri e massicci isolati** (fasi 2–3); al passaggio del mouse quota e coordinate della
+   cella. *Prova:* pianure 0–200 m, colline 200–700 m, catene 1500–3500 m; istogramma delle quote.
+3. **Scena dalla Carta con il dettaglio**: clic sulla Carta → blocco 257×257 (interpolazione liscia +
+   dettaglio su più scale in coordinate del mondo) passato a `terrain.js` nello stesso formato;
+   coordinate locali; `M` riporta alla Carta. Il mondo generato diventa l'avvio predefinito, Tavullia
+   si carica con `?terreno=tavullia`; il salvataggio tiene seme e posizione nel mondo. *Prova:*
+   confronto con Tavullia, a occhio e con i percentili della pendenza in F3; due blocchi vicini combaciano.
+4. **Drenaggio sulla Carta**: riempimento delle conche (*priority-flood*), direzioni di flusso, flusso
+   accumulato, fiumi e laghi (fase 5); valli scavate in proporzione al flusso (fase 4, versione semplice;
+   se non basta, erosione fluviale *stream power*, da decidere guardando il risultato). *Prova:* verifica
+   automatica che ogni fiume scenda sempre e finisca in mare o in un lago.
+5. **Fiumi nella Scena**: tracciato liscio (non a celle), letto scavato sempre in discesa, superficie
+   dell'acqua. *Prova:* il fiume sta in una valle, scende, prosegue senza stacchi nel blocco accanto.
+6. **Temperatura, umidità, biomi** (fasi 6–7) e limite delle nevi nello shader; colori della Scena per
+   bioma. *Prova:* livelli della Carta; neve sulle cime.
+7. **Regole di varietà e verifica automatica** (fase 8) su N semi, con esito per regola. Con i passi 3 e
+   5 chiude l'accettazione.
+
+### Decisioni prese con il piano
+- **File:** `js/mondo/` con moduli ES **senza Three.js né DOM** (regola 9, e pronti per un Web Worker):
+  `rumore.js` (generatore pseudo-casuale e rumori), `carta.js` (generatore), poi `verifica.js` e
+  `scena.js` (blocco di quote per una Scena). La vista di sviluppo della Carta è `js/3d/cartaVista.js`.
+  `terrain.js` esporterà la costruzione del terreno da una griglia in memoria.
+- **Fuori da M6:** luoghi (castelli, villaggi, porti, rovine), strade e porti: vanno con la milestone
+  «luoghi, fazioni e nomi generati». La fase 9 qui sotto resta come traccia. Della costa sì.
+- **Castello** solo nella scena di prova di Tavullia fino a «rocca e borgo» (oggi verrebbe piazzato alla
+  cieca, anche su un pendio o in un fiume).
+- **Le fasi dal drenaggio ai luoghi (5–9) lavorano su una quota qualunque**, senza dipendere da come è
+  stata creata: generatore oppure dati reali (modalità reale, sotto). La Scena si costruisce da un oggetto
+  «Carta» (griglia di quote a 1 km + metadati), non dal generatore. Le correzioni di varietà devono poter
+  agire solo sulla copertura (boschi, rocce, paludi), senza toccare il rilievo.
+- **Determinismo anche tra browser:** hash su interi (`Math.imul`) e, nelle parti che decidono la forma
+  del mondo, solo operazioni dal risultato esatto (`+ − × ÷`, `Math.sqrt`, `Math.floor`). [Probabile]
+  `Math.sin`, `Math.exp`, `Math.pow` possono differire tra i motori JS, e l'erosione amplifica lo scarto.
+- **Web Worker** solo se la generazione blocca la pagina per più di ~1–2 s (da confermare: è un
+  cambio architetturale).
+- Il passaggio Carta ↔ Scena di M6 è uno strumento di sviluppo: non costa tempo e non usa A*
+  (viaggio, fase S2). La vista della Carta non è ancora la Carta del cronista (fase G3).
 
 **Accettazione di M6:** camminando in una Scena generata, il terreno è
 credibile quanto quello reale di Tavullia. Sulla Carta le regole di varietà del GDD sono rispettate,
@@ -326,7 +375,7 @@ estensione massima delle aree uniformi.
 - **Determinismo.** Stesso seme, stesso mondo. Ogni Scena si rigenera identica dal seme e dalla
   posizione: non si salva il terreno, solo il seme.
 - **Carta:** ~600×450 celle da 1 km (~270 000 celle). Per ogni cella: quota in metri, bioma,
-  temperatura, umidità, segni di fiume, strada, costa e porto. [Probabile] La generazione richiede
+  temperatura, umidità, segni di fiume e costa (strade e porti dopo M6, con i luoghi). [Probabile] La generazione richiede
   pochi secondi in JS; se blocca la pagina, si sposta in un Web Worker.
 - **Fasi del generatore** (punto di partenza: `world.js` del 2D, commit `2c869fa`):
   1. rumore fBm, forma del continente e rumore *ridged* per le catene;
@@ -339,7 +388,7 @@ estensione massima delle aree uniformi.
   6. temperatura (latitudine, quota, rumore) e umidità;
   7. biomi;
   8. correzioni per le regole di varietà e per gli accostamenti vietati;
-  9. luoghi (castelli, villaggi, porti, rovine) con i vincoli di validità.
+  9. luoghi (castelli, villaggi, porti, rovine) con i vincoli di validità (**dopo M6**).
 - **Scene:** blocco di 2×2 km ricavato dalla Carta per interpolazione liscia, più dettaglio
   procedurale su più scale coerente col bioma (rocce in montagna, calanchi in collina, fossi,
   stagni). I fiumi della Carta sono scavati nel blocco. Il dettaglio dipende dalle coordinate del
@@ -351,11 +400,35 @@ estensione massima delle aree uniformi.
   farebbero tremare la scena.
 - **Neve:** limite delle nevi da temperatura e stagione, applicato al colore del terreno nello
   shader.
-- **Tavullia** resta in `assets/terrain/` come scena di prova, caricabile a parte ([TBD] come, per
-  esempio con un parametro nell'indirizzo). `tools/dem` resta per rigenerarla e per tarare il
+- **Tavullia** resta in `assets/terrain/` come scena di prova, caricabile a parte con `?terreno=tavullia`
+  nell'indirizzo (dal passo 3). `tools/dem` resta per rigenerarla e per tarare il
   generatore (es. confronto delle pendenze generate con quelle reali).
 - **Architettura per area culturale:** la prima è quella attuale (mattoni, rocca); le altre si
   aggiungono con le aree culturali.
+
+### Modalità reale (dopo M6, milestone a sé)
+
+Seconda modalità di gioco (design in `docs/GDD.md` §2 *Il mondo*): **rilievo reale** di una regione,
+con copertura, fiumi mostrati, clima, luoghi, nomi e fazioni generati dalle stesse fasi 5–9.
+- **Dati scaricati quando servono** (eccezione alla regola 5 di `CLAUDE.md`, solo per questa modalità):
+  tile **Terrarium** su AWS (`elevation-tiles-prod`, PNG decodificati dal browser senza librerie).
+  Verificato (novembre 2026): leggibili da qualsiasi sito (`Access-Control-Allow-Origin: *`); in Italia
+  la fonte è EU-DEM (~25 m), file fermi dal 2017; una tile a zoom 13 (~3,5×3,5 km) pesa ~100 KB, quindi
+  100–400 KB per Scena; la Carta di 600×450 km a ~1 km richiede una decina di tile a zoom basso (~1 MB).
+  Copernicus invece non è leggibile dal browser (niente intestazione CORS): resta per `tools/dem`.
+- **Rischi:** servizio gratuito senza garanzie di durata (Mapzen ha chiuso nel 2018, le tile sono
+  ospitate dal programma Open Data di AWS) → cache nel browser delle zone visitate e messaggio chiaro
+  se il servizio non risponde; funziona solo online; attribuzione delle fonti nei crediti.
+- **Proiezione:** nelle tile la scala varia con la latitudine (~10 % su 600 km nord-sud): riproiettare
+  su un piano locale in metri, come fa `make_heightmap.py`.
+- **Decodifica:** [Probabile] le correzioni di colore del browser alterano le quote; decodificare senza
+  conversione di spazio colore e verificarlo.
+- **Primo passo:** prova di fattibilità: scaricare Tavullia nel browser e confrontare quote e pendenze
+  con `tavullia.bin` (Copernicus; Terrarium usa EU-DEM: dati diversi, qualità simile).
+- I fiumi principali coincideranno con quelli veri: il drenaggio sulla quota reale li ritrova nelle
+  valli che hanno scavato. Si sceglie quanti mostrarne, non dove.
+- Copernicus e Terrarium includono edifici e alberi (modelli di superficie): i paesi veri lasciano
+  piccoli rilievi dove nel gioco non ci sono.
 
 ## Fuori dal prototipo (non farlo ora)
 
