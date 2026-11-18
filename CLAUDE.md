@@ -14,7 +14,7 @@ instabile durante lo sviluppo. In alternativa in locale con `python -m http.serv
 
 ## Struttura
 - `index.html` + `style.css` — canvas WebGL + overlay HUD in HTML/CSS + importmap
-- `js/3d/` — moduli ES del motore 3D: `main.js` (renderer, luci, loop, F3), `terrain.js`; poi cavaliere, camera, castello
+- `js/3d/` — moduli ES del motore 3D: `main.js` (renderer, luci, loop, input, F3), `terrain.js`, `knight3d.js`; poi camera, castello
 - `js/` — logica di gioco ereditata, script classici senza grafica (`config` `calendar` `knight`
   `combat` `events` `news` `save` + `data/`). I moduli 3D li leggono come globali.
 - `assets/terrain/` — heightmap reali (`.bin` + `.json`)
@@ -60,4 +60,4 @@ architettura: quelle stanno in `docs/`. Aggiornare la fase corrente a ogni cambi
 
 **Passaggio al 3D — prototipo minimo (M0→M5).** Dettagli e criteri di accettazione in
 `docs/ESPLORAZIONE_3D.md`. La versione 2D resta nella cronologia git (commit `2c869fa`).
-M0 completata; **M1 (terreno) in test**.
+M0 e M1 completate; **M2 (cavaliere) in test**.
