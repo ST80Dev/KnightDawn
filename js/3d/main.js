@@ -47,13 +47,16 @@ scene.add(luna);
 // massimo a 55° verso le 12:30. Di notte la "quota" del sole scende sotto l'orizzonte fino a −35°.
 const CICLO = {
   alba: 5, tramonto: 20, altezzaMax: 55, profonditaNotte: 35,
-  soleMax: 3.4, lunaMax: 1.1,
-  emisferaGiorno: 0.45, emisferaNotte: 0.4,
+  soleMax: 3.4, lunaMax: 0.45,
+  emisferaGiorno: 0.45, emisferaNotte: 0.16,
+  // Di notte si vede bene solo vicino: la nebbia (color notte) si stringe attorno a ciò che si guarda.
+  // Metri oltre la distanza camera–bersaglio: nitido fino a vicinoNotte, buio pieno a lontanoNotte.
+  vicinoNotte: 15, lontanoNotte: 110,
   colori: {
-    cieloGiorno: new THREE.Color('#c4d4d6'), cieloNotte: new THREE.Color('#1b2536'),
+    cieloGiorno: new THREE.Color('#c4d4d6'), cieloNotte: new THREE.Color('#0b1019'),
     cieloCrepuscolo: new THREE.Color('#d9a882'),
     soleGiorno: new THREE.Color('#fff0d4'), soleBasso: new THREE.Color('#ffb070'),
-    emisferaCieloGiorno: new THREE.Color('#dce8ec'), emisferaCieloNotte: new THREE.Color('#6a7ca4'),
+    emisferaCieloGiorno: new THREE.Color('#dce8ec'), emisferaCieloNotte: new THREE.Color('#5a6c94'),
     emisferaTerraGiorno: new THREE.Color('#8a7550'), emisferaTerraNotte: new THREE.Color('#2c2a2a'),
   },
 };
@@ -85,6 +88,7 @@ function raccogliEmissivi(radice) {
 
 const _col = new THREE.Color();
 let _oraCielo = -1;
+let _luceGiorno = 1;                       // 0 notte → 1 giorno: la usa anche la nebbia
 function aggiornaCielo() {
   const ora = Calendar.oraDelGiorno();
   if (Math.abs(ora - _oraCielo) < 0.002) return;          // ~7 s di gioco: niente da ridisegnare
@@ -92,6 +96,7 @@ function aggiornaCielo() {
   const { altezza, azimut } = posizioneSole(ora);
   const C = CICLO.colori;
   const giorno = smoothstep(-5, 8, altezza);               // 0 notte → 1 pieno giorno
+  _luceGiorno = giorno;
   const crepuscolo = Math.max(0, 1 - Math.abs(altezza - 1) / 9) * smoothstep(-8, -2, altezza);
 
   const a = altezza * _gradi, z = azimut * _gradi;
@@ -362,10 +367,15 @@ function vincolaCameraLibera() {
 }
 
 // Nebbia: da vicino nasconde il bordo del mondo; allontanandosi si ritira per la vista d'insieme.
+// Di notte la nebbia, del colore del cielo notturno, si stringe: si vede bene solo attorno al punto
+// osservato. Le luci di case, castello e fuochi (future) dovranno ignorarla per restare visibili da lontano.
 function aggiornaNebbia(puntoOsservato) {
   const dist = camera.position.distanceTo(puntoOsservato);
-  scene.fog.near = Math.max(NEBBIA[0], dist * 0.9);
-  scene.fog.far = Math.max(NEBBIA[1], scene.fog.near + 3000);
+  const nearGiorno = Math.max(NEBBIA[0], dist * 0.9);
+  const farGiorno = Math.max(NEBBIA[1], nearGiorno + 3000);
+  const g = _luceGiorno * _luceGiorno;     // la vista si allunga solo quando la luce è davvero tornata
+  scene.fog.near = THREE.MathUtils.lerp(dist + CICLO.vicinoNotte, nearGiorno, g);
+  scene.fog.far = THREE.MathUtils.lerp(dist + CICLO.lontanoNotte, farGiorno, g);
 }
 
 // ─── Tastiera ───────────────────────────────────────────────────────────

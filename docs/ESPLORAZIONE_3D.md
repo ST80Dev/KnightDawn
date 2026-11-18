@@ -188,6 +188,11 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
   - Edifici generati da codice (regola 6). **Non si entra negli edifici**: avvicinandosi alla porta
     si apre la Carta del cronista. Niente interni 3D.
   - Gli edifici poggiano sul suolo composto (`componiSuolo`): ogni edificio porta la sua quota.
+  - **Luci notturne** (richiesta dell'utente): finestre di case, torce di castello e porte, fuochi
+    di bivacco. Di notte devono essere gli unici punti visibili da lontano: fiamme e finestre con
+    materiali luminosi che ignorano la nebbia (`fog: false`); luce vera sull'intorno (`PointLight`)
+    solo per poche sorgenti vicine al cavaliere, per restare nei 60 FPS. [Probabile] serve un limite
+    di luci attive, scelte per distanza.
   - **Persone con cui parlare (deciso con l'utente):** niente aloni permanenti su tutti. Tre livelli:
     da lontano nessun segno (al più indizi naturali: chi ti guarda, chi fa un cenno, chi sta in
     disparte); entro ~8–10 m chi ha qualcosa da dire mostra un **piccolo simbolo sopra la testa** in
@@ -264,8 +269,11 @@ Nel 2D 1 Passo era 1 tile; ora il **Passo è solo un'unità di tempo** (~3 ore, 
   (~3 ore, +10 Forza). Con la Forza piena di giorno rimanda a `T`.
 - **Pausa** con `P`: nulla scorre. La scheda nascosta ferma il ciclo di disegno: pausa automatica.
 - **Ciclo giorno/notte:** sole che segue l'ora (alba alle 5, tramonto alle 20, massimo 55°), colore
-  di luce, cielo e nebbia; crepuscolo caldo; di notte luna fredda e fissa, paesaggio scuro ma
-  leggibile; la luce propria delle mura e l'ombra del cavaliere si abbassano. Niente stagioni per ora.
+  di luce, cielo e nebbia; crepuscolo caldo; la luce propria delle mura e l'ombra del cavaliere si
+  abbassano. Niente stagioni per ora. **Notte (ritoccata dopo la prova dell'utente):** buia, luna
+  debole; la nebbia, del colore del cielo notturno, si stringe attorno al punto osservato (nitido
+  fino a ~15 m, buio pieno a ~110 m oltre la camera): si vede bene solo vicino, il castello a 225 m
+  sparisce. Parametri in `CICLO` (`main.js`).
 - **HUD in HTML:** data (o «Veglia · giorno N») con l'ora, Forza, Salute, Volontà, Onore.
 - **Salvataggio locale** (localStorage, come da `CLAUDE.md`): posizione e direzione del cavaliere,
   terreno corrente, stato di `Knight` e `Calendar`, autosalvataggio. Supabase abbandonato (deciso
