@@ -22,9 +22,13 @@ import { generaCarta } from '../mondo/carta.js';
 import { generaScena } from '../mondo/scena.js';
 import { semeDaTesto } from '../mondo/rumore.js';
 
+// Nebbia sulla distanza vera dalla camera, non sulla profondità lungo l'asse di vista (come fa Three.js):
+// con la profondità, un monte al bordo dello schermo riceveva meno nebbia e spariva girandosi verso di lui.
+THREE.ShaderChunk.fog_vertex = '#ifdef USE_FOG\n\tvFogDepth = length( mvPosition.xyz );\n#endif';
+
 const COLORE_CIELO = '#c4d4d6';           // azzurro-pergamena, uguale alla nebbia
 const NEBBIA = [900, 4000];               // m: inizio e fine della nebbia lineare (foschia leggera)
-const NEBBIA_ORIZZONTE = [1500, 46000];   // m: con l'orizzonte (mondo generato) si vede fino a ~45 km
+const NEBBIA_ORIZZONTE = [3000, 50000];   // m: con l'orizzonte (mondo generato) si vede fino a ~45 km
 const LONTANO = 60000;                    // m: distanza massima disegnata dalla camera
 const PARAMETRI = new URL(window.location.href).searchParams;
 const TAVULLIA = PARAMETRI.get('terreno') === 'tavullia';   // scena di prova (terreno reale, castello)

@@ -362,6 +362,11 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
    400–550 m: troppo dolci. Le valli fluviali (passo 4) e il dettaglio delle Scene (passo 3) aggiungono
    rilievo. Limiti noti: a 1 km per cella le colline restano «a macchie» finché il drenaggio non scava
    le valli; dove due linee di catena si incrociano può nascere un nodo montuoso a macchia.
+   **Ritocco (richiesta dell'utente): massicci meno identici e meno piramidali.** Ognuno ha un tipo (cupola,
+   cono a fianchi concavi, cresta allungata 1,8–2,8 volte, gruppo di 2–4 cime), un profilo misto
+   cono/conca/cupola con pesi propri, un versante più ripido dell'altro, contorno a lobi, spalle e
+   terrazzi a quote diverse secondo la direzione, creste ridged sui fianchi; almeno 30 km dal bordo della
+   Carta. Posizione, raggio e cima restano quelli di prima (stesso generatore).
 3. **Scena dalla Carta con il dettaglio**: clic sulla Carta → blocco 257×257 (interpolazione liscia +
    dettaglio su più scale in coordinate del mondo) passato a `terrain.js` nello stesso formato;
    coordinate locali; `M` riporta alla Carta. Il mondo generato diventa l'avvio predefinito, Tavullia
@@ -415,6 +420,18 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
    Carta sono larghe chilometri (in 2 km se ne vede un fianco) e non c'è ancora acqua né alveo: passo 5;
    i laghi in quota nelle Scene sono conche asciutte (passo 5); la pioggia è uniforme (con l'umidità del
    passo 6 i bacini cambieranno).
+   **Ritocchi (richiesta dell'utente: fiumi troppo rettilinei, angoli a 90°, laghi «a pettine»).**
+   - Tracciati curvi (`tracciaFiumi` in `carta.js`, `carta.fiumi`): rete in tronchi (a ogni confluenza
+     prosegue il ramo più lungo a monte), punti delle celle spostati da un campo dolce (fino a 0,42 km in
+     pianura, 0,12 in montagna; stesso punto per tutti i tronchi di una cella, quindi si agganciano),
+     angoli arrotondati (Chaikin), anse laterali con lunghezza d'onda 2–9 km e ampiezza fino a 0,65 km,
+     grandi in pianura e collina, piccole in montagna, nulle agli estremi. Sono questi i tracciati da
+     scavare nelle Scene al passo 6. La vista della Carta li disegna al posto delle catene di celle.
+   - Laghi: lago = l'intera conca colmata (fino allo sfioro) se profonda oltre 3 m in qualche punto e
+     ampia ≥ 4 km² (contando solo le celle profonde, i canaletti davano laghi a strisce); nelle zone
+     piatte i corsi minori scavano solo il proprio canale (che apre il varco e svuota la conca; senza, i
+     laghi diventavano ~500, con i versanti a V i solchi vicini si abbassavano a vicenda); le dita larghe
+     una cella si tolgono (una passata). 25–53 laghi per seme; verifica dei fiumi superata su 5 semi.
 5. **Orizzonte** (inserito dopo il passo 4): oltre il blocco di 2×2 km non si vedeva nulla, nemmeno una
    catena a pochi km. Terreno lontano solo da guardare, dalla Carta già in memoria (`js/3d/orizzonte.js`).
    *Prova:* dal pedemonte si vedono le montagne lontane; nessuna fessura al raccordo col blocco; FPS.
@@ -431,6 +448,10 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
    generato: Tavullia resta com'era. F3: triangoli e tempo dell'orizzonte. Limiti noti: FPS su GPU vera da
    misurare (in headless il rendering è software e non fa testo); colori come il blocco (biomi al passo 7);
    oltre il confine della Carta l'orizzonte prolunga piatto l'ultimo bordo.
+   **Correzione (segnalata dall'utente): nebbia sulla distanza vera.** Three.js calcola la nebbia sulla
+   profondità lungo l'asse della camera: i monti ai lati dello schermo ricevevano meno nebbia e sparivano
+   girandosi verso di loro. Ora `fog_vertex` usa la distanza dalla camera (sostituzione del pezzo di
+   shader da `main.js`, senza toccare `lib/three/`). Foschia di giorno da 3 a 50 km.
 6. **Fiumi nella Scena**: tracciato liscio (non a celle), letto scavato sempre in discesa, superficie
    dell'acqua. *Prova:* il fiume sta in una valle, scende, prosegue senza stacchi nel blocco accanto.
 7. **Temperatura, umidità, biomi** (fasi 6–7) e limite delle nevi nello shader; colori della Scena per

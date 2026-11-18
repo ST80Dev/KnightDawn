@@ -161,23 +161,26 @@ export function createCartaVista(contenitore, opzioni = {}) {
     adatta();
   }
 
-  /** Fiumi: un tratto da ogni cella di fiume alla cella a valle, più largo con il bacino. */
+  /** Fiumi: i tracciati curvi della Carta (tracciaFiumi), più larghi con il bacino. */
   function disegnaFiumi() {
-    const { cols, bacino, ricevente, acque, sogliaFiume } = carta;
-    if (!bacino) return;
+    const { fiumi, sogliaFiume } = carta;
+    if (!fiumi) return;
     ctx.strokeStyle = COLORE_FIUME;
     ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     const classi = [[1, 0.35], [4, 0.6], [16, 0.9], [64, 1.3], [256, 1.8]];   // multipli della soglia → larghezza
     for (let k = 0; k < classi.length; k++) {
       const da = classi[k][0] * sogliaFiume, a = k + 1 < classi.length ? classi[k + 1][0] * sogliaFiume : Infinity;
       ctx.lineWidth = classi[k][1];
       ctx.beginPath();
-      for (let i = 0; i < bacino.length; i++) {
-        const b = bacino[i], j = ricevente[i];
-        if (b < da || b >= a || j < 0 || acque[i] === ACQUA.LAGO) continue;
-        const x = i % cols, y = (i - x) / cols, xj = j % cols, yj = (j - xj) / cols;
-        ctx.moveTo(x + 0.5, y + 0.5);
-        ctx.lineTo(xj + 0.5, yj + 0.5);
+      for (const f of fiumi) {
+        let aperto = false;
+        for (let i = 3; i < f.length; i += 3) {
+          const b = f[i + 2];
+          if (b < da || b >= a) { aperto = false; continue; }
+          if (!aperto) { ctx.moveTo(f[i - 3], f[i - 2]); aperto = true; }
+          ctx.lineTo(f[i], f[i + 1]);
+        }
       }
       ctx.stroke();
     }
