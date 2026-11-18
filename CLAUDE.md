@@ -60,6 +60,6 @@ architettura: quelle stanno in `docs/`. Aggiornare la fase corrente a ogni cambi
 
 **Passaggio al 3D — prototipo minimo (M0→M5).** Dettagli e criteri di accettazione in
 `docs/ESPLORAZIONE_3D.md`. La versione 2D resta nella cronologia git (commit `2c869fa`).
-M0–M3 completate; **M4 (castello) in test**: dopo il test si valuta il prototipo.
+M0–M4 completate; **ora: valutazione del prototipo** (velocità di movimento in discussione).
 Dopo M4: stile simil-realistico spinto al massimo col solo codice; apporti esterni da decidere poi
 (vedi `docs/ESPLORAZIONE_3D.md`, M4).

@@ -127,7 +127,7 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
   configurabile e con fondamenta che si adattano al terreno (base che scende fino al suolo).
 - Collisioni semplici (rettangoli/cerchi sul piano XZ) contro mura e torri; la porta resta attraversabile.
 - **Accettazione:** si gira attorno al castello senza attraversare i muri e si entra dalla porta.
-- **Stato:** implementata, in attesa del test dell'utente. Castello in mattoni, come le rocche
+- **Stato:** completata (test dell'utente superato). Castello in mattoni, come le rocche
   malatestiane della zona: cinta di 38 m con scarpa, 4 torri tonde, mastio addossato al lato di fondo,
   torre-porta con passaggio ad arco (saracinesca alzata, battenti aperti), merli a coda di rondine,
   beccatelli, feritoie; ~6 500 triangoli, ~60 mesh. Sta sul colle a est del punto di partenza
