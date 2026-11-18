@@ -9,7 +9,8 @@ Il movimento di esplorazione è in tempo reale; il combattimento **resta a turni
 Vanilla JS (ES modules) / HTML / CSS + **Three.js r187 copiato in `lib/three/`**.
 Nessun bundler, nessun npm in produzione, nessun CDN: Three.js si carica via `importmap` da file locali.
 Deploy GitHub Pages. Single-player, localStorage. UI in italiano. Target: desktop, mouse + tastiera.
-Test in locale con `python -m http.server` (aprire l'HTML con doppio clic NON funziona).
+Test: su GitHub Pages dopo il merge in `main` (ricaricare con Ctrl+F5, cache ~10 min); `main` può essere
+instabile durante lo sviluppo. In alternativa in locale con `python -m http.server` (no doppio clic sull'HTML).
 
 ## Struttura
 - `index.html` + `style.css` — canvas WebGL + overlay HUD in HTML/CSS + importmap
@@ -39,7 +40,7 @@ Test in locale con `python -m http.server` (aprire l'HTML con doppio clic NON fu
 5. Unica dipendenza ammessa: Three.js in `lib/three/`. Niente CDN, niente altre librerie senza conferma
 6. Grafica procedurale: mesh costruite via codice con primitive Three.js, niente modelli `.glb` esterni
    (per ora). Unici asset ammessi: dati di terreno
-7. Test incrementale: ogni milestone deve essere visibile e provabile nel browser prima di passare avanti
+7. Test incrementale: ogni milestone deve essere provata nel browser (anche su Pages) prima di passare avanti
 8. Prestazioni: obiettivo 60 FPS su PC medio; contatore FPS sempre attivabile con il tasto `F3`
 9. La logica di gioco (`js/*.js` senza grafica) non deve dipendere da Three.js
 10. **Branch — REGOLA OBBLIGATORIA:** eseguire prima di ogni modifica:
