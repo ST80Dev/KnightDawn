@@ -86,8 +86,9 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
 - **Accettazione:** il rilievo è riconoscibile (con dati reali), almeno 60 FPS, nessuna cucitura visibile.
 - **Stato:** implementata con dati Copernicus GLO-30 (quote 36–230 m). Camera di debug = OrbitControls
   (`lib/three/addons/`), attiva di default finché non esiste il cavaliere. `F3` mostra anche fonte dei
-  dati, quota e pendenza sotto il cursore. In attesa del test dell'utente.
-- Nota per M2: con questi dati la pendenza massima è ~26°, quindi il limite di 35° non scatta mai.
+  dati, quota e pendenza sotto il cursore. **Completata** (test dell'utente superato).
+- Nota per M2: con questi dati la pendenza massima è ~31° (punto più ripido, a nord del centro),
+  quindi il limite di 35° in pratica non scatta: per provarlo, `kd.knight.cfg.pendenzaMax = 10` in console.
 
 ### M2 — Cavaliere
 - `js/3d/knight3d.js`: cavaliere costruito con primitive (busto, testa con elmo, braccia, gambe,
@@ -96,6 +97,17 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
 - Movimento: `WASD` o frecce, `Shift` per correre (camminata ~1,5 m/s, corsa ~5 m/s), rotazione fluida.
 - Segue il terreno con `getHeight`; non sale su pendenze oltre ~35°; non esce dai bordi dell'area.
 - **Accettazione:** camminata su e giù per le colline senza compenetrazioni né scatti.
+- **Stato:** implementata, in attesa del test dell'utente. Spada nel fodero al fianco sinistro (non in
+  mano: si esplora, non si combatte). Gambe con IK a due ossa: ogni piede cerca il terreno reale sotto
+  di sé, il bacino scende quanto serve (con un limite, per non accovacciarsi) e in pendenza il passo
+  si accorcia; risultato misurato: piedi entro ~1,5 cm dal suolo anche sul punto più ripido. Ombra
+  finta a disco adagiata sul terreno. La fase del passo avanza con la distanza percorsa, quindi
+  i piedi non scivolano e, se una pendenza blocca il cavaliere, le gambe si fermano. Contro un pendio
+  troppo ripido il cavaliere prova a costeggiarlo lungo un asse.
+- **Camera provvisoria:** è ancora OrbitControls, che ora segue il cavaliere (`C` la rende libera, come
+  in M1). WASD è già relativo alla direzione della camera: costava poche righe e senza questo M2 non
+  si poteva provare. Il resto di M3 (inseguimento morbido alle spalle, camera che non entra nel terreno
+  vicino al cavaliere, limiti di zoom definitivi) resta da fare.
 
 ### M3 — Camera in terza persona
 - `js/3d/camera.js`: camera alle spalle con inseguimento morbido (lerp).
