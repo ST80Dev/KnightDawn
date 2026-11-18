@@ -175,9 +175,11 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
 - **Dopo la valutazione — rocca, borgo ed edifici (deciso con l'utente, fase a sé):**
   - Edifici di `docs/EARLY_GAME.md` §3 (stalla, taverna, sala d'armi, armeria/mercato, cappella) e di
     `docs/EVENTS.md` (fabbro, guaritore). Non stanno nel cortile attuale (36×36 m, mastio compreso).
-  - Proposta: **due cinte**, come i borghi fortificati della zona (Tavullia compresa): **rocca** con
+  - **Confermato: due cinte**, come i borghi fortificati della zona (Tavullia compresa): **rocca** con
     mastio, sala d'armi, armeria, cappella; **borgo murato** addossato con stalla, taverna, mercato,
-    fabbro e una sua porta. Da confermare quando si fa (alternativa: una rocca più grande).
+    fabbro e una sua porta.
+  - Da decidere più avanti: come trattare i castelli e i borghi di paesi o città molto grandi o
+    importanti nel gioco (scala, numero di edifici, prestazioni).
   - Edifici generati da codice (regola 6). **Non si entra negli edifici**: avvicinandosi alla porta
     si apre la Carta del cronista. Niente interni 3D.
   - Gli edifici poggiano sul suolo composto (`componiSuolo`): ogni edificio porta la sua quota.
