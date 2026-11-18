@@ -3,25 +3,39 @@ html, body {
   padding: 0;
   width: 100%;
   height: 100%;
-  background: #1a0e04;
   overflow: hidden;
+  background: #1a0e04;
   font-family: Georgia, 'Times New Roman', serif;
   color: #c8a030;
-  /* Niente evidenziazione blu/grigia al tocco su mobile */
-  -webkit-tap-highlight-color: transparent;
-  /* Disabilita la selezione del testo durante i tap di gioco */
-  -webkit-user-select: none;
-  user-select: none;
 }
 
-#game {
+/* Canvas WebGL a schermo intero */
+#scena {
+  position: fixed;
+  inset: 0;
   display: block;
   width: 100vw;
   height: 100vh;
-  image-rendering: pixelated;
-  image-rendering: crisp-edges;
-  cursor: default;
-  /* Il canvas gestisce da sé i pointer event: niente scroll/zoom/gesture
-     di sistema sopra di esso (lo zoom è già disabilitato dal viewport). */
-  touch-action: none;
 }
+
+/* Overlay HUD: sopra il canvas, non intercetta il mouse (i singoli pannelli lo riattiveranno) */
+#hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Contatore FPS (F3) */
+#fps {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  padding: 2px 8px;
+  background: rgba(26, 14, 4, 0.7);
+  color: #d8c8a0;
+  font: 12px/1.6 ui-monospace, Consolas, monospace;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+#fps[hidden] { display: none; }

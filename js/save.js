@@ -29,12 +29,14 @@ const Save = {
       calendar: Calendar.toJSON(),
       events: (typeof Events !== 'undefined' && Events.toJSON) ? Events.toJSON() : null,
       news: (typeof News !== 'undefined' && News.toJSON) ? News.toJSON() : null,
-      world: {
+      // World e GameScreen appartenevano alla versione 2D (rimossi in M0):
+      // le sezioni relative si salvano solo se esistono.
+      world: (typeof World === 'undefined') ? null : {
         seed: World.seed,
         width: World.width,
         height: World.height,
       },
-      game: {
+      game: (typeof GameScreen === 'undefined' || typeof World === 'undefined') ? null : {
         knightPos: GameScreen.knightPos,
         cam: { cx: GameScreen.cam.cx, cy: GameScreen.cam.cy, step: GameScreen.cam.step },
         log: GameScreen.log,
@@ -95,6 +97,10 @@ const Save = {
     Calendar.fromJSON(blob.calendar);
     if (typeof Events !== 'undefined' && Events.fromJSON) Events.fromJSON(blob.events);
     if (typeof News   !== 'undefined' && News.fromJSON)   News.fromJSON(blob.news);
+
+    // Mondo e stato della scena 2D: ripristinati solo se esistono (rimossi in M0).
+    if (typeof World === 'undefined' || typeof GameScreen === 'undefined'
+        || !blob.world || !blob.game) return true;
 
     World.generate(blob.world.seed);
 
