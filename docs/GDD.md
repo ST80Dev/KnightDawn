@@ -1,9 +1,9 @@
 # Knight Dawn — Game Design Document
 
 > Documento vivo. Le sezioni marcate [TBD] sono da definire.
-> Ultimo aggiornamento: novembre 2026 — il gioco diventa **Carta e Scene su geografia reale**
-> (§2 *Il mondo*, §3 *Tempo e calendario*, §3 *Viaggio*). Le parti sulla mappa a tile del 2D
-> sono superate dove lo dicono queste sezioni.
+> Ultimo aggiornamento: novembre 2026 — il gioco diventa **Carta e Scene su un mondo inventato,
+> generato a ogni partita** (§2 *Il mondo*, §3 *Tempo e calendario*, §3 *Viaggio*). Le parti sulla
+> mappa a tile del 2D sono superate dove lo dicono queste sezioni.
 
 ---
 
@@ -14,9 +14,9 @@ ci navighi dentro. Non costruisci castelli: attraversi quelli degli altri.
 Il mondo ha fazioni, segreti, stagioni, tensioni politiche che si muovono
 indipendentemente da te. Tu sei un viandante con una spada e una storia da scrivere.
 
-Il mondo è la **geografia reale di Europa, Nord Africa e Terrasanta** (rilievo, coste, fiumi,
-valichi, posizione di città, borghi e castelli). Sono inventati la storia, le fazioni, i
-personaggi, il contenuto dei luoghi e le presenze fantastiche. Dettagli in §2 *Il mondo*.
+Il mondo è **inventato e generato a ogni partita** (seme condivisibile): forma, rilievo, mari,
+fiumi, climi, luoghi, fazioni. Non si sa cosa c'è oltre l'orizzonte finché non ci si va.
+Lo stile resta medievale, come il castello attuale. Dettagli in §2 *Il mondo*.
 
 ### Tono e ispirazioni
 
@@ -116,19 +116,19 @@ Dettagli (paga, fedeltà, eventi) → `### Compagnia e covi` in §3.
 
 ### Il mondo
 
-> Deciso a novembre 2026, dopo la valutazione del prototipo 3D: sostituisce la mappa procedurale
-> del 2D. Dati e architettura tecnica in `docs/ESPLORAZIONE_3D.md`, «Carta e Scene».
+> Deciso a novembre 2026, dopo la valutazione del prototipo 3D. Per un giorno si è scelta la
+> geografia reale; scartata perché toglie la scoperta: si saprebbe già dove sono montagne, mari e
+> valichi. Tecnica in `docs/ESPLORAZIONE_3D.md`, «Carta e Scene».
 
-**Geografia reale, mondo inventato.** È reale la geografia di **Europa, Nord Africa e Terrasanta**:
-rilievo, coste, fiumi, laghi, valichi, posizione di città, borghi e castelli. Sono inventati, o generati
-a ogni partita: chi governa, fazioni, personaggi, cosa contengono i luoghi, rovine, covi, dungeon,
-presenze fantastiche. Il tono resta medievale-fantasy oscuro (§1). Dove si può, il fantastico si
-appoggia sulle leggende vere dei luoghi (es. la Grotta della Sibilla e il Lago di Pilato sui Sibillini).
+**Mondo inventato, generato a ogni partita.** Forma del continente, rilievo, mari, fiumi, climi,
+luoghi, fazioni e nomi nascono dal seme. Il seme si può condividere per giocare lo stesso mondo.
+Stile **medievale**, come il castello attuale; tono medievale-fantasy oscuro (§1).
+Il terreno reale di **Tavullia** resta solo come **scena di prova** per lo sviluppo e come metro di
+paragone per la credibilità del terreno generato.
 
 **Due livelli: Carta e Scene.**
 - **Carta del cronista** (livello strategico): viaggio con tempo compresso, eventi a ogni Passo,
-  fazioni, notizie, scadenze. Qui vive quasi intera la logica del 2D. Centinaia di km si
-  percorrono in pochi minuti reali (vedi §3 *Viaggio*).
+  fazioni, notizie, scadenze. Qui vive quasi intera la logica del 2D.
 - **Scene 3D** (livello di persona): arrivando in un luogo, fermandosi, o quando un evento
   ferma il viaggio, si è lì in 3D a scala 1:1 e ci si muove liberamente nei dintorni. In scena il tempo
   segue la distanza percorsa (minuti, non Passi interi); le azioni costano Passi alla conferma.
@@ -137,46 +137,81 @@ appoggia sulle leggende vere dei luoghi (es. la Grotta della Sibilla e il Lago d
   «grosso» lo consumano viaggi e azioni. Il gioco di persona si ottiene con scene **dense**
   (castello, borgo, dintorni di 1–2 km con cose da fare), non con distanze lunghe a piedi.
 
-**Estensione e contenuti.** La Carta copre Europa e Mediterraneo, con Nord Africa e Terrasanta
-(pellegrinaggi, crociate, Outremer: lì sono anche i deserti veri). **Regione di partenza: Montefeltro
-e Romagna** (~100×100 km attorno a Tavullia), con contenuti curati qui per primi. Altrove i luoghi si
-generano dai dati reali (posizione vera di paesi e castelli) e da **generatori di architettura per area
-culturale** (mediterraneo/malatestiano, alpino, nordico, mediorientale…), aggiunti uno alla volta.
-L'architettura del gioco prevede partenze in altre regioni e nazioni, che però si realizzano più avanti.
-Il collo di bottiglia sono i contenuti, non i km.
+**Dimensioni** [TBD, proposta]: circa **600×450 km**, Carta a celle di 1 km. Attraversarlo da nord
+a sud a piedi richiede ~15 giorni di gioco e ~10 minuti reali (vedi §3 *Viaggio*).
 
-**Terreni (biomi).** Le categorie restano quelle del 2D (pianura, foresta, collina, montagna,
-palude, sabbia/deserto, neve, ghiaccio, fiume, roccia, acqua): eventi e costi già scritti restano
-validi. Ogni cella della Carta si classifica dai dati reali (quota, pendenza, copertura del suolo,
-fiumi; neve e ghiaccio secondo quota e stagione). Il paesaggio dei dati è quello di oggi, non quello
-medievale: città moderne → campi o borghi, più bosco, paludi bonificate ripristinate dove note. Le
-coste cambiate (es. Ravenna, allora sul mare) si ritoccano a mano solo dove contano.
+#### Regole di generazione: varietà ravvicinata, coerenza di massima
+
+Il mondo **non è verosimile in scala**: i paesaggi diversi stanno molto più vicini che nella
+realtà, perché viaggiare offra sempre qualcosa. Resta però **coerente**: nessun accostamento
+assurdo.
+
+Regole già definite nel 2D (`WORLD_GEN.md` e `world.js`, commit `2c869fa`), che **restano**:
+- **Clima per latitudine**: nord freddo (neve, tundra, mare ghiacciato), sud caldo (deserti,
+  pianure aride), centro temperato. La temperatura cala con la quota. I confini tra le fasce sono
+  frastagliati da un rumore, quindi niente bande nette.
+- **Catene montuose come creste** (rumore *ridged*), non altopiani a blob, con roccia ai piedi e
+  colline ai fianchi.
+- **Quote per quantile**: mare (10–22 %), colline (~20 %) e montagne (4,5–10 %) sono quote fisse
+  della superficie. Ogni mondo ha abbastanza mare e montagna, ma con forma sempre diversa
+  (coste, isole, istmi, canali).
+- **Boschi a grumi**, non tappeto uniforme. Più **micro-grumi di varietà** (3–5 celle, forma
+  irregolare) per rompere ogni distesa: roccia e laghetti ghiacciati nella neve, ecc.
+- **Fiumi** dalle alture al mare, con meandri; in un minimo locale formano un lago.
+- **Carattere per seme**: più o meno mare, catene, boschi, deserto; mondi diversi tra loro.
+- **Luoghi ignoti agli estremi** (nord, sud, isola remota), di natura nascosta finché non raggiunti.
+- Vincoli di validità: abbastanza castelli e villaggi, almeno un porto se c'è costa, rovine e
+  dungeon, castelli collegati, varietà di biomi.
+
+Regole **nuove** per il 3D e per la varietà ravvicinata:
+- **Massicci isolati.** Una montagna alta (1500–3000 m) può sorgere anche in mezzo a una zona
+  collinare, non solo nelle catene. Ha neve in cima se supera il limite delle nevi.
+- **Limite delle nevi** calcolato da latitudine (temperatura) e stagione: d'inverno scende, d'estate
+  sale. Neve e ghiaccio dipendono da quota e temperatura, non da un bioma dipinto.
+- **Accostamenti vietati**: niente deserto caldo vicino a neve o ghiacciai, e niente palude in
+  quota. La temperatura di fondo varia solo su grande scala: nella fascia calda le cime restano
+  sotto il limite delle nevi con margine. Distanza minima deserto–neve [TBD, es. 80 km].
+- **Niente distese monotone.** In ogni finestra di ~40×40 km ci sono almeno 3 tipi di paesaggio
+  (fuori dalle zone estreme). Nessuna area uniforme supera ~15 km senza un elemento che la
+  interrompa: forra, lago, rupe, affioramento roccioso, bosco, palude, massiccio isolato
+  [valori TBD, da tarare giocando].
+- **Transizioni brevi** (1–3 km) e irregolari tra un paesaggio e l'altro, non lunghe sfumature.
+- **Quote in metri** (il 2D usava valori normalizzati): pianure 0–200 m, colline 200–700 m
+  (come il Montefeltro), catene 1500–3500 m, massicci isolati 1500–3000 m [TBD].
+- **Dentro le Scene** (blocchi di 2×2 km), dettaglio locale coerente col bioma della cella: rocce,
+  calanchi, fossi, stagni, radure, alberi isolati.
+- **I fiumi scendono davvero.** Nel 2D seguivano la distanza dal mare, non la quota. In 3D il loro
+  letto deve scendere sempre e scavare la valle nel rilievo.
+
+**Biomi.** Restano le categorie del 2D (pianura nei suoi tre tipi, foresta, collina, montagna,
+roccia, palude, sabbia/deserto, neve, ghiaccio, fiume, acqua): eventi e costi già scritti restano
+validi.
+
+**Culture e nomi** [proposta]. Nel 2D i nomi di castelli, torri, villaggi e regione si sceglievano a
+caso per seme da liste fisse, in tre registri (anglo-medievale, cavalleresco italiano,
+tolkieniano). Le fazioni invece **non** erano generate: in `js/knight.js` ce ne sono quattro scritte
+a mano (Casata Vorn, Ordine del Cervo, Mercanti Liberi, Banditi del Sud) e `docs/FACTIONS.md` è
+ancora uno schema. Proposta: **aree culturali legate al clima** (centro di registro italiano e
+medievale come lo stile attuale; nord di registro anglo-germanico; sud di registro
+mediterraneo-orientale). Ogni area dà nomi, fazioni generate per seme e, più avanti, il proprio
+stile di architettura.
 
 **Strutture:** castelli, villaggi, città, rovine, dungeon, porti, monasteri, accampamenti, torri,
 valichi, ponti, guadi
-**Elementi naturali:** fiumi, laghi, passi montani, foreste fitte, paludi, coste, deserti
+**Elementi naturali:** fiumi, laghi, passi montani, foreste fitte, paludi, coste, deserti, massicci isolati
 
-#### Scoperta su geografia nota (proposta, da confermare)
+#### Scoperta
 
-Il giocatore conosce la geografia, non il mondo. Le fonti di incertezza e di scelta sono cinque:
-
-1. **Conta ciò che sa il cavaliere, non il giocatore.** La Carta mostra solo ciò che il cavaliere ha
-   visto o sentito dire (nebbia della conoscenza, al posto della nebbia di guerra del 2D). Da lontano
-   i luoghi sono voci: nomi incerti, posizioni approssimate, come nelle carte medievali. Verso un
-   luogo mai visto si va per indicazioni (strada, direzione), non con un clic preciso.
-2. **Le condizioni cambiano.** Sapere dov'è un valico non dice se quest'inverno è chiuso dalla neve,
-   presidiato da una fazione ostile, infestato da briganti, gravato da un pedaggio o colpito da
-   un'epidemia. Le notizie arrivano in ritardo e imprecise (§3 *Propagazione delle informazioni*):
-   scegliere il percorso resta una scommessa che si può perdere.
-3. **Lo strato umano si genera a ogni partita** (seme): signori e fazioni, alleanze, chi controlla
-   strade e ponti, rovine, covi, dungeon, eremi e luoghi minori.
-4. **Strade e vegetazione medievali** sono incerte anche nella realtà: si possono generare a ogni
-   partita sul rilievo vero (sentieri, guadi, ponti, boschi, paludi). Il rilievo non cambia, il modo
-   di attraversarlo sì.
-5. **Il fantastico** (creature, maledizioni, luoghi leggendari) non sta su nessuna carta reale.
-
-Limite accettato: le grandi linee (dove sono le Alpi e i passi principali, dove è il mare) il
-giocatore le conosce già.
+Il giocatore non sa cosa c'è oltre l'orizzonte: la forma del mondo è nuova a ogni partita.
+In più:
+1. **Conta ciò che sa il cavaliere.** La Carta mostra solo ciò che il cavaliere ha visto o sentito
+   dire (nebbia della conoscenza, erede della nebbia di guerra del 2D). Da lontano i luoghi sono
+   voci: nomi incerti, posizioni approssimate. Dalle alture si vede lontano: salire su un
+   massiccio rivela il paesaggio attorno.
+2. **Le condizioni cambiano**: un valico chiuso dalla neve d'inverno, presidiato da una fazione
+   ostile, infestato da briganti o gravato da un pedaggio. Le notizie arrivano in ritardo e
+   imprecise (§3 *Propagazione delle informazioni*).
+3. **Il fantastico**: creature, maledizioni e luoghi leggendari.
 
 Il mondo ha **stagioni** che influenzano il gameplay:
 - Primavera: viaggio facile, commercio attivo
@@ -184,7 +219,7 @@ Il mondo ha **stagioni** che influenzano il gameplay:
 - Autunno: raccolto, feste, diplomazia
 - Inverno: passi chiusi, fame, creature più aggressive
 
-[TBD] Classificazione dei biomi dai dati reali e tabella costi di viaggio per cella
+[TBD] Tabella costi di viaggio per cella (bioma, pendenza, strade)
 [TBD] Tabella strutture con frequenza di spawn e contenuto
 [TBD] Sistema stagionale dettagliato
 [TBD] Eventi del mondo autonomi (guerre tra fazioni, epidemie, migrazioni)
@@ -293,16 +328,17 @@ rallentano), circa 3 Passi di marcia al giorno, poi la Forza impone la sosta. A 
 Passo. Per mare ~20–25 km per Passo, giorno e notte, secondo il meteo. Le **soste** (notte,
 accampamento) sono azioni atomiche: avanzano il calendario d'un colpo, senza tempo reale.
 
-| Da Tavullia a… | Distanza | Tempo in-fiction | Tempo reale (15 s / 3 s per Passo) |
+| Distanza nel mondo generato | Esempio | Tempo in-fiction | Tempo reale (15 s / 3 s per Passo) |
 |---|---|---|---|
-| Appennino (Carpegna, Nerone, Fumaiolo) | 30–60 km | 1–2 giorni | ~1 min / ~15 s |
-| Paludi (Ravenna, Comacchio, delta del Po) | 80–150 km | 3–5 giorni | 2–3 min / ~40 s |
-| Alpi | 250–300 km | ~10 giorni (~25 Passi di marcia + soste) | ~6 min / ~1 min |
-| Nord Africa, Terrasanta (per mare) | 2000–3000 km | 3–4 settimane | ~30 min / ~6 min |
+| 30–60 km | il massiccio o la palude più vicini | 1–2 giorni | ~1 min / ~15 s |
+| 100–150 km | da una fascia climatica alla vicina | 4–5 giorni | 2–3 min / ~40 s |
+| 300 km | mezzo mondo | ~10 giorni (~25 Passi di marcia + soste) | ~6 min / ~1 min |
+| 450 km | da nord a sud | ~15 giorni | ~10 min / ~2 min |
 
-Il tempo reale esclude le soste per gli eventi, che sono il gioco vero. Attraversare la mappa del 2D
-(240 tile) costava circa un'ora reale: l'ordine di grandezza è lo stesso. Il calendario (Diario,
-Stagione, Luce) non si ritocca: regge già queste distanze con tempi medievali credibili.
+Il tempo reale esclude le soste per gli eventi, che sono il gioco vero. Il mondo 2D (240 tile) si
+attraversava in circa un'ora reale: se ~10 minuti risultano pochi, si allarga il mondo o si rallenta
+la Carta (da tarare giocando). Il calendario (Diario,
+Stagione, Luce) non si ritocca.
 
 #### Età della Veglia (prologo)
 
@@ -341,7 +377,7 @@ Durante la Veglia:
 **Sulla Carta.**
 - Si sceglie la destinazione (o una strada o direzione, se il luogo è noto solo per sentito dire) →
   percorso sulle celle (A*), che preferisce strade, ponti, guadi e valichi → viaggio automatico.
-- Celle di ~1 km ([TBD] più grandi nelle aree lontane). Il costo di ogni cella in tempo, Forza e
+- Celle di ~1 km. Il costo di ogni cella in tempo, Forza e
   vigore del cavallo dipende da bioma, pendenza e presenza di strade. La tabella per bioma del
   2D (`TRAVEL_COST`) resta come base.
 - Mezzi: a piedi, a cavallo, per mare (dai porti; anche traghetti e guadi).
@@ -580,7 +616,7 @@ Dettagli in `docs/UI_GUIDE.md`.
 
 > Roadmap della versione 2D. Il binario Grafica è sostituito dal prototipo 3D
 > (`docs/ESPLORAZIONE_3D.md`, che ha l'ordine attuale delle milestone); la fase S2 diventa la
-> **Carta su dati reali**. Le fasi S3–S9 restano valide.
+> **generatore del mondo** (Carta e Scene). Le fasi S3–S9 restano valide.
 
 Due binari procedono in parallelo: **Grafica** (Fase G1…Gn, definita in
 `docs/GRAFICA.md`) e **Sistemi** (Fase S1…Sn, definita qui). I sistemi
@@ -618,7 +654,7 @@ da console / log testuale) prima di aggiungere la sua UI.
 - Calendario specificato in §3 *Tempo e calendario* di questo GDD
 
 #### Fase S2 — Mondo dati e viaggio
-- Carta su dati reali (celle classificate in biomi), regione di partenza prima, poi estensione
+- Generatore del mondo (Carta a celle di 1 km e Scene coerenti con essa), dal seme
 - Nebbia della conoscenza (ciò che il cavaliere sa)
 - Pathfinding A* sulle celle e viaggio automatico; passaggio Carta ↔ Scena
 - Costo in Passi e Forza per cella (bioma, pendenza, strade)

@@ -6,9 +6,9 @@
 > La versione 2D resta nella cronologia git (commit `2c869fa`).
 >
 > **Esito della valutazione (novembre 2026): il prototipo prosegue.** Il gioco diventa **Carta e
-> Scene** su geografia reale di Europa, Nord Africa e Terrasanta (`docs/GDD.md` §2 *Il mondo*).
-> Questo documento copre le Scene 3D, i dati di terreno e l'architettura della Carta
-> (sezione «Carta e Scene»).
+> Scene** su un **mondo inventato, generato a ogni partita** (`docs/GDD.md` §2 *Il mondo*).
+> Il terreno reale di Tavullia resta come scena di prova. Questo documento copre le Scene 3D,
+> il terreno e il generatore del mondo (sezione «Carta e Scene»).
 
 ## Il minimo da raggiungere
 
@@ -258,51 +258,57 @@ consumeranno la Carta e le azioni.
   soltanto e «Accampati» la ricarica facendo passare il tempo; ricaricando la pagina si riparte dal
   punto salvato con data e attributi salvati.
 
-## Carta e Scene — dati e architettura (deciso, da realizzare dopo M5)
+## Carta e Scene — generatore del mondo (deciso, da realizzare dopo M5)
 
-Design di gioco in `docs/GDD.md` §2 *Il mondo* e §3 *Viaggio*. Qui la parte tecnica.
+Design di gioco e regole di generazione in `docs/GDD.md` §2 *Il mondo* e §3 *Viaggio*. Qui la tecnica.
 
-**Ordine proposto:** M5 ridotta → prototipo della Carta su un'area piccola, con passaggio
-Carta ↔ Scena → rocca e borgo → vegetazione e oggetti sparsi → estensione dei dati.
+**Ordine proposto:** M5 ridotta → **prototipo del generatore** (Carta più una Scena generata, con
+passaggio Carta ↔ Scena) → rocca e borgo → vegetazione e oggetti sparsi → luoghi, fazioni e nomi
+generati.
 
-- **Estensione:** la Carta copre Europa, Nord Africa e Terrasanta. Regione di partenza curata:
-  Montefeltro e Romagna (~100×100 km attorno a Tavullia). Si progetta per l'intera estensione
-  (coordinate, blocchi, caricamento su richiesta), si costruisce una regione alla volta.
-- **Carta:** celle di ~1 km ([TBD] 2 km nelle aree lontane). Per ogni cella: quota, pendenza,
-  bioma, segni di fiume, strada, costa e porto (~4 byte). Divisa in blocchi regionali caricati su
-  richiesta. Peso stimato: ~40 KB per 100×100 km, ~1,2 MB per l'Italia, qualche decina di MB per
-  tutta l'estensione [Ipotesi: il mare si comprime quasi a zero].
-- **Coordinate:** la Carta usa una proiezione unica. Candidata: EPSG:3035 (proiezione europea
-  equivalente, la stessa della griglia ufficiale europea a 1 km). [Da verificare] quanto deforma
-  ai margini (Nord Africa, Levante). L'UTM 33N di oggi non basta: non copre nemmeno tutta l'Italia.
-  Ogni Scena ha **coordinate locali centrate sul suo blocco**: a centinaia di km dall'origine i
-  numeri a 32 bit della scheda video farebbero tremare la scena.
-- **Risoluzione dei blocchi 3D:** il terreno di Tavullia viene da Copernicus a 30 m ricampionato a
-  7,8 m. I punti in più sono interpolati e non aggiungono informazione, ma occupano ~15 volte lo
-  spazio. Si salva il dato alla risoluzione vera (25–30 m) e lo si raffina nel browser, insieme al
-  dettaglio procedurale già previsto per il realismo del terreno (M4, «Dopo la valutazione»).
-  Stime a 30 m (16 bit per punto, non compressi): ~22 MB per 100×100 km, ~670 MB per l'Italia, ~22 GB
-  per l'Europa. GitHub Pages regge circa 1 GB per sito e 100 MB per file [Probabile]: ci sta la
-  regione di partenza, non tutto il resto.
-- **Provenienza dei blocchi 3D:**
-  1. **Regione di partenza inclusa nel gioco**, a 30 m. [Probabile] File compressi gzip e decompressi
-     con `DecompressionStream`, già presente nel browser (nessuna libreria).
-  2. **Altrove: download quando serve** dalle tile pubbliche di quota su AWS («Terrarium», le stesse
-     che `tools/dem/fetch_terrarium.py` sa leggere). Verificato a novembre 2026: accessibili dal
-     browser (CORS aperto a tutti); copertura mondiale; in Europa la fonte è EU-DEM (~25 m); ~120 KB
-     per tile al livello 12 (~7×7 km). Servizio gratuito e senza garanzie.
-  3. **Ripiego senza rete:** quota della Carta più dettaglio procedurale (rilievo plausibile, non vero).
-  - **Richiede di cambiare la regola 5 di `CLAUDE.md`** (dati esterni scaricati a runtime): si fa
-    quando si implementa, con conferma esplicita.
-- **Copertura del suolo, luoghi, strade:** candidati ESA WorldCover o CORINE (suolo), OpenStreetMap
-  (paesi, castelli `historic=castle`, fiumi, strade). [Da verificare] licenze e qualità prima di
-  sceglierli: OSM chiede attribuzione e ha clausole di condivisione del database. Licenze con
-  attribuzione → file dei crediti. Correzione verso il paesaggio medievale come in GDD §2.
-- **Generatori di architettura per area culturale:** il primo è quello attuale (mattoni,
-  malatestiano); gli altri si aggiungono quando servono le relative regioni.
+**Accettazione del prototipo del generatore:** camminando in una Scena generata, il terreno è
+credibile quanto quello reale di Tavullia. Sulla Carta le regole di varietà del GDD sono rispettate,
+con una verifica automatica: tipi di paesaggio per finestra, distanza tra deserto e neve,
+estensione massima delle aree uniformi.
+
+- **Tutto nel browser, dal seme.** Niente dati scaricati e niente dipendenze esterne: la regola 5
+  resta com'è e il peso del gioco non cambia.
+- **Determinismo.** Stesso seme, stesso mondo. Ogni Scena si rigenera identica dal seme e dalla
+  posizione: non si salva il terreno, solo il seme.
+- **Carta:** ~600×450 celle da 1 km (~270 000 celle). Per ogni cella: quota in metri, bioma,
+  temperatura, umidità, segni di fiume, strada, costa e porto. [Probabile] La generazione richiede
+  pochi secondi in JS; se blocca la pagina, si sposta in un Web Worker.
+- **Fasi del generatore** (punto di partenza: `world.js` del 2D, commit `2c869fa`):
+  1. rumore fBm, forma del continente e rumore *ridged* per le catene;
+  2. quote in metri con una curva di distribuzione delle altezze;
+  3. massicci isolati: pochi e sparsi, a cono irregolare;
+  4. erosione semplificata a scala di Carta, per valli credibili [Ipotesi: da provare, è la parte
+     più incerta];
+  5. fiumi dal drenaggio sulla quota (flusso accumulato), con letto sempre in discesa; laghi nei
+     minimi;
+  6. temperatura (latitudine, quota, rumore) e umidità;
+  7. biomi;
+  8. correzioni per le regole di varietà e per gli accostamenti vietati;
+  9. luoghi (castelli, villaggi, porti, rovine) con i vincoli di validità.
+- **Scene:** blocco di 2×2 km ricavato dalla Carta per interpolazione liscia, più dettaglio
+  procedurale su più scale coerente col bioma (rocce in montagna, calanchi in collina, fossi,
+  stagni). I fiumi della Carta sono scavati nel blocco. Il dettaglio dipende dalle coordinate del
+  mondo, non da quelle del blocco: tra un blocco e l'altro non ci sono giunture.
+- **Stesso formato del terreno di oggi** (griglia di quote più metadati), costruito in memoria:
+  `terrain.js` lo usa senza sapere se viene da un file o dal generatore.
+- **Coordinate:** piano in metri, nessuna proiezione geografica. Ogni Scena usa coordinate locali
+  centrate sul suo blocco: a centinaia di km dall'origine i numeri a 32 bit della scheda video
+  farebbero tremare la scena.
+- **Neve:** limite delle nevi da temperatura e stagione, applicato al colore del terreno nello
+  shader.
+- **Tavullia** resta in `assets/terrain/` come scena di prova, caricabile a parte ([TBD] come, per
+  esempio con un parametro nell'indirizzo). `tools/dem` resta per rigenerarla e per tarare il
+  generatore (es. confronto delle pendenze generate con quelle reali).
+- **Architettura per area culturale:** la prima è quella attuale (mattoni, rocca); le altre si
+  aggiungono con le aree culturali.
 
 ## Fuori dal prototipo (non farlo ora)
 
 Multiplayer, server/VPS, NPC con IA, mobile/touch, modelli esterni, combattimento in 3D, ombre di
-alta qualità. Il mondo a blocchi più grande di 2×2 km non è più escluso: è pianificato dopo M5
+alta qualità. Il mondo più grande di 2×2 km non è più escluso: è pianificato dopo M5
 («Carta e Scene»).

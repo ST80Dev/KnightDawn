@@ -1,8 +1,8 @@
 # Knight Dawn — Claude Code Briefing
 
-Gioco di avventura medievale-fantasy in 3D, terza persona, su **geografia reale** di Europa, Nord Africa
-e Terrasanta (partenza: Montefeltro, attorno a Tavullia). Due livelli: **Carta** (viaggio a tempo
-compresso) e **Scene 3D** (di persona, 1:1). Cavaliere errante, fazioni, combattimento a turni.
+Gioco di avventura medievale-fantasy in 3D, terza persona, su un **mondo inventato generato a ogni
+partita** (il terreno reale di Tavullia resta come scena di prova). Due livelli: **Carta** (viaggio a
+tempo compresso) e **Scene 3D** (di persona, 1:1). Cavaliere errante, fazioni, combattimento a turni.
 Il movimento di esplorazione è in tempo reale; il combattimento **resta a turni**.
 **NON** è costruzione/civiltà, **NON** è un action game, **NON** è realismo fotografico.
 
@@ -27,8 +27,8 @@ instabile durante lo sviluppo. In alternativa in locale con `python -m http.serv
 
 | Sistema | Documento |
 |---|---|
-| Scene 3D, terreno, dati della Carta, milestone attuali | `docs/ESPLORAZIONE_3D.md` ⭐ |
-| Visione, mondo (Carta e Scene), tempo, meccaniche | `docs/GDD.md` |
+| Scene 3D, terreno, generatore del mondo, milestone attuali | `docs/ESPLORAZIONE_3D.md` ⭐ |
+| Visione, mondo e regole di generazione, tempo, meccaniche | `docs/GDD.md` |
 | Combattimento | `docs/COMBAT.md` |
 | Eventi | `docs/EVENTS.md` |
 | Inizio gioco, ranghi, mercato | `docs/EARLY_GAME.md` |
