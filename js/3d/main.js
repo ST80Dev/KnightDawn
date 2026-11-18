@@ -551,6 +551,7 @@ function frame(now) {
       cam.prendiGiroMouse();               // in pausa il mouse non gira il cavaliere
     }
     aggiornaCielo();
+    castle.aggiornaLuci(now / 1000, 1 - _luceGiorno);
     aggiornaStato();
     aggiornaIndicatoreAndatura();
     if (modoCamera === 'segui') {
