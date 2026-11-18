@@ -253,6 +253,9 @@ Nel 2D 1 Passo era 1 tile; ora il **Passo è solo un'unità di tempo** (~3 ore, 
 - **Forza a 0:** niente corsa né scatto, solo camminata. Tasto `R` (riposa), azione atomica, solo
   da fermi: da Vespri in poi si dorme all'addiaccio fino a Prima (`RECOVERY.accampamento`, +30 Forza);
   di giorno una sosta di ~3 ore (`RECOVERY.sosta`, +10 Forza).
+- **Avanza** con `T` (solo da fermi): salto atomico all'inizio della prossima ora canonica, di giorno
+  o di notte, senza recupero. Serve a non dover aspettare davvero (il tramonto, un incontro…): i
+  12 minuti reali per ora valgono per il tempo in cui si fa qualcosa. Il recupero resta a `R`.
 - **Pausa** con `P`: nulla scorre. La scheda nascosta ferma il ciclo di disegno: pausa automatica.
 - **Ciclo giorno/notte:** sole che segue l'ora (alba alle 5, tramonto alle 20, massimo 55°), colore
   di luce, cielo e nebbia; crepuscolo caldo; di notte luna fredda e fissa, paesaggio scuro ma
