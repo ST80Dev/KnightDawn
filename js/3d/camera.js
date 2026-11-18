@@ -3,7 +3,8 @@
 // in cui guarda lui: l'idea è quella di una "quasi prima persona", non di girargli attorno.
 //
 // Mouse: trascinamento orizzontale = gira il cavaliere (la camera lo segue); verticale = alza o
-// abbassa lo sguardo; rotella = distanza. La camera non scende mai sotto il terreno.
+// abbassa lo sguardo; rotella = distanza. La camera non scende mai sotto il terreno e non entra
+// nei muri (M4): se un edificio si mette tra il cavaliere e la camera, la camera si avvicina.
 
 import * as THREE from 'three';
 
@@ -22,6 +23,8 @@ export const CAMERA_CFG = {
   rapiditaGiro: 12,       // 1/s: quanto in fretta la camera si riallinea alle spalle
   rapiditaQuota: 8,       // 1/s: smorza i piccoli scalini di quota del terreno
   margineTerreno: 0.45,   // m minimi tra camera (e linea di vista) e terreno
+  margineMuri: 0.35,      // m minimi tra camera e muri degli edifici
+  rapiditaRitorno: 3,     // 1/s: quanto in fretta la camera torna indietro dopo un muro
 };
 
 const avvicina = (rate, dt) => 1 - Math.exp(-rate * dt);
@@ -38,8 +41,9 @@ function angoloTra(a, b) {
  * @param {object} terrain  getHeight(x, z)
  * @param {object} knight   createKnight(): stato.{x, y, z, direzione}
  * @param {HTMLElement} dom elemento che riceve mouse e rotella (il canvas)
+ * @param {THREE.Object3D[]} [occlusori] mesh solide (mura, torri…) in cui la camera non deve entrare
  */
-export function createFollowCamera(camera, terrain, knight, dom) {
+export function createFollowCamera(camera, terrain, knight, dom, occlusori = []) {
   const cfg = { ...CAMERA_CFG };
   const k = knight.stato;
   const stato = {
@@ -48,6 +52,8 @@ export function createFollowCamera(camera, terrain, knight, dom) {
     perY: k.y + cfg.altezzaPerno,
     giroMouse: 0,          // rad accumulati dal trascinamento, consumati dal cavaliere a ogni frame
     trascina: false,
+    distanzaLibera: cfg.distanza,   // distanza effettiva, accorciata quando un muro è alle spalle
+    spallaLibera: cfg.spalla,       // spostamento a destra effettivo, ridotto con un muro a destra
   };
 
   // ─── Mouse ───
@@ -93,6 +99,24 @@ export function createFollowCamera(camera, terrain, knight, dom) {
   const perno = new THREE.Vector3();
   const pos = new THREE.Vector3();
   const mira = new THREE.Vector3();
+  const raycaster = new THREE.Raycaster();
+  const _o = new THREE.Vector3(), _d = new THREE.Vector3(), _t = new THREE.Vector3(), _c = new THREE.Vector3();
+  const DISTANZA_MIN = 0.15;   // m: a ridosso di un muro la camera arriva quasi alla spalla
+
+  /** Valore che scatta subito verso il basso (muro) e risale con calma (niente avanti e indietro). */
+  function frena(attuale, limite, dt, immediato) {
+    if (immediato || limite < attuale) return limite;
+    return attuale + (limite - attuale) * avvicina(cfg.rapiditaRitorno, dt);
+  }
+
+  /** Distanza del primo muro lungo il raggio (origine, direzione unitaria), entro `max`; altrimenti Infinity. */
+  function primoMuro(origine, direzione, max) {
+    if (!occlusori.length) return Infinity;
+    raycaster.set(origine, direzione);
+    raycaster.far = max;
+    const hit = raycaster.intersectObjects(occlusori, false);
+    return hit.length ? hit[0].distance : Infinity;
+  }
 
   function update(dt, immediato = false) {
     const a = immediato ? 1 : avvicina(cfg.rapiditaGiro, dt);
@@ -102,11 +126,27 @@ export function createFollowCamera(camera, terrain, knight, dom) {
     // avanti = (sin yaw, cos yaw); destra = avanti × su = (-avanti.z, avanti.x)
     const fx = Math.sin(stato.yaw), fz = Math.cos(stato.yaw);
     const rx = -fz, rz = fx;
-    perno.set(k.x + rx * cfg.spalla, stato.perY, k.z + rz * cfg.spalla);
+    // Spalla: se il cavaliere ha un muro subito a destra, il perno si accosta al centro
+    _c.set(k.x, stato.perY, k.z);                       // centro del cavaliere all'altezza del perno
+    const muroDestra = primoMuro(_c, _d.set(rx, 0, rz), cfg.spalla + cfg.margineMuri);
+    stato.spallaLibera = frena(stato.spallaLibera,
+      Math.min(cfg.spalla, Math.max(0, muroDestra - cfg.margineMuri)), dt, immediato);
+    perno.set(k.x + rx * stato.spallaLibera, stato.perY, k.z + rz * stato.spallaLibera);
 
+    // Distanza: se un muro sta tra il cavaliere e la camera, la camera si porta subito davanti
+    // al muro, poi torna indietro con calma quando il muro non c'è più. Si controllano due raggi,
+    // dal perno e dal centro del cavaliere, così uno spigolo non si infila tra camera e cavaliere.
     const inc = cfg.inclinazione;
-    const orizz = cfg.distanza * Math.cos(inc);
-    pos.set(perno.x - fx * orizz, perno.y + cfg.distanza * Math.sin(inc), perno.z - fz * orizz);
+    _d.set(-fx * Math.cos(inc), Math.sin(inc), -fz * Math.cos(inc));
+    let limite = Math.min(cfg.distanza, primoMuro(perno, _d, cfg.distanza + cfg.margineMuri) - cfg.margineMuri);
+    if (occlusori.length) {
+      _t.copy(perno).addScaledVector(_d, cfg.distanza).sub(_c);      // centro → camera a piena distanza
+      const lt = _t.length();
+      const muro = primoMuro(_c, _t.normalize(), lt + cfg.margineMuri);
+      if (muro < Infinity) limite = Math.min(limite, cfg.distanza * (muro - cfg.margineMuri) / lt);
+    }
+    stato.distanzaLibera = frena(stato.distanzaLibera, Math.max(DISTANZA_MIN, limite), dt, immediato);
+    pos.copy(perno).addScaledVector(_d, stato.distanzaLibera);
 
     // Linea di vista perno → camera sopra il terreno: se un punto intermedio è sotto,
     // alza la camera quanto basta (scavalca il dosso alle spalle invece di entrarci).

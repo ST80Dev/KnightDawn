@@ -1,5 +1,5 @@
 // Knight Dawn — motore 3D: renderer, scena, luci, render loop, contatore FPS (F3).
-// Milestone M3: cavaliere sul terreno reale con camera alle spalle (camera.js).
+// Milestone M4: cavaliere sul terreno reale con camera alle spalle (camera.js) e castello (castle3d.js).
 // Il tasto C passa alla camera libera di debug (OrbitControls) per ispezionare il terreno.
 // Unità: 1 unità Three.js = 1 metro, asse Y verso l'alto, nord verso -Z.
 
@@ -8,6 +8,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { loadTerrain } from './terrain.js';
 import { createKnight } from './knight3d.js';
 import { createFollowCamera } from './camera.js';
+import { createCastle } from './castle3d.js';
 
 const COLORE_CIELO = '#c4d4d6';           // azzurro-pergamena, uguale alla nebbia
 const NEBBIA = [900, 4000];               // m: inizio e fine della nebbia lineare (foschia leggera)
@@ -26,7 +27,9 @@ const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerH
 
 // ─── Luci: sole del pomeriggio (da sud-ovest) + luce emisferica cielo/terra ───
 // Sole abbastanza basso e luce ambiente contenuta: il rilievo collinare si legge dal chiaroscuro.
-const cielo = new THREE.HemisphereLight('#dce8ec', '#4a3c26', 0.45);
+// Il colore "da terra" è la luce riflessa dal suolo: schiarisce le pareti verticali in ombra (mura,
+// cavaliere) e quasi non tocca il terreno, le cui facce guardano in alto.
+const cielo = new THREE.HemisphereLight('#dce8ec', '#8a7550', 0.45);
 scene.add(cielo);
 const sole = new THREE.DirectionalLight('#fff0d4', 3.4);
 sole.position.set(-700, 420, 500);
@@ -45,6 +48,7 @@ function avvisoHud(testo, classe = 'avviso') {
 // ─── Terreno, cavaliere, camera ─────────────────────────────────────────
 let terrain = null;
 let knight = null;
+let castle = null;
 let cam = null;                           // camera alle spalle del cavaliere
 let controls = null;                      // camera libera di debug (tasto C)
 let modoCamera = 'segui';                 // 'segui' | 'libera'
@@ -57,11 +61,15 @@ async function init() {
     avvisoHud('Dati del terreno reale non trovati: terreno procedurale di prova.');
   }
 
-  // Il cavaliere parte al centro dell'area, rivolto a nord (-Z)
-  knight = createKnight(terrain, { x: 0, z: 0, direzione: Math.PI });
+  castle = createCastle(terrain);
+  scene.add(castle.object);
+
+  // Il cavaliere parte al centro dell'area, rivolto verso la porta del castello
+  const porta = castle.davantiPorta();
+  knight = createKnight(terrain, { x: 0, z: 0, direzione: Math.atan2(porta.x, porta.z) }, [castle]);
   scene.add(knight.object);
 
-  cam = createFollowCamera(camera, terrain, knight, renderer.domElement);
+  cam = createFollowCamera(camera, terrain, knight, renderer.domElement, castle.solidi);
 
   controls = new OrbitControls(camera, renderer.domElement);
   controls.enabled = false;
@@ -72,7 +80,7 @@ async function init() {
   controls.maxDistance = 1800;
   controls.maxPolarAngle = THREE.MathUtils.degToRad(88);
 
-  window.kd = { scene, camera, cam, controls, terrain, knight };   // per ispezione dalla console del browser
+  window.kd = { scene, camera, cam, controls, terrain, knight, castle };   // per ispezione dalla console del browser
 
   avvisoHud('W/S: avanti/indietro · A/D o trascina col mouse: gira · Shift: corri · rotella: distanza'
     + ' · C: camera libera · F3: info', 'aiuto');
@@ -216,6 +224,10 @@ function aggiornaPannello(now) {
       + ` · pendenza ${fmt(terrain.getSlope(k.x, k.z))}° · ${fmt(k.velEffettiva, 1)} m/s`
       + (k.bloccato ? ' · bloccato' : '');
     testo += `\ncamera: ${modoCamera === 'segui' ? 'alle spalle' : 'libera (C per tornare)'}`;
+    if (castle) {
+      testo += castle.dentro(k.x, k.z) ? '\ncastello: nel cortile'
+        : `\ncastello: a ${fmt(Math.hypot(k.x - castle.cfg.x, k.z - castle.cfg.z))} m dal centro`;
+    }
   }
   if (terrain) {
     testo += `\nterreno: ${terrain.meta.source} · ${fmt(terrain.minElev)}–${fmt(terrain.maxElev)} m`;

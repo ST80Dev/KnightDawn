@@ -116,7 +116,7 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
   Rotella per la distanza (limiti min/max).
 - La camera non entra mai sotto il terreno; la direzione di movimento coincide con quella della camera.
 - **Accettazione:** nessuna vista dentro le colline, nessun movimento nauseante.
-- **Stato:** implementata, in attesa del test dell'utente. Camera sopra la spalla destra (il cavaliere
+- **Stato:** completata (test dell'utente superato). Camera sopra la spalla destra (il cavaliere
   sta in basso, la vista resta libera davanti); se un dosso alle spalle copre la linea di vista, la camera
   si alza per scavalcarlo. Girando da fermo il cavaliere fa piccoli passi sul posto. Il tasto `C` passa
   ancora alla camera libera di debug (OrbitControls). Parametri provabili da console: `kd.cam.cfg`.
@@ -127,6 +127,20 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
   configurabile e con fondamenta che si adattano al terreno (base che scende fino al suolo).
 - Collisioni semplici (rettangoli/cerchi sul piano XZ) contro mura e torri; la porta resta attraversabile.
 - **Accettazione:** si gira attorno al castello senza attraversare i muri e si entra dalla porta.
+- **Stato:** implementata, in attesa del test dell'utente. Castello in mattoni, come le rocche
+  malatestiane della zona: cinta di 38 m con scarpa, 4 torri tonde, mastio addossato al lato di fondo,
+  torre-porta con passaggio ad arco (saracinesca alzata, battenti aperti), merli a coda di rondine,
+  beccatelli, feritoie; ~6 500 triangoli, ~60 mesh. Sta sul colle a est del punto di partenza
+  (`CASTLE_CFG` in `castle3d.js`: x 225, z 8, ~173 m), porta verso ovest; il cavaliere parte rivolto
+  verso la porta. Mura e torri hanno ognuna la propria base sotto il punto più basso del terreno che
+  coprono; la cima di ogni lato è 9 m sopra il suo punto più alto. Collisioni: rettangoli a pezzi di 2 m
+  (la scarpa sporge di più dove il terreno è basso) e cerchi per le torri; il cavaliere viene spinto
+  fuori lungo la normale e quindi scivola lungo i muri. Camera: se un muro si mette tra cavaliere e
+  camera, la camera scatta davanti al muro e poi torna indietro con calma; con un muro a destra la
+  spalla rientra. Le pareti hanno una piccola luce propria (luce riflessa), altrimenti i lati in ombra
+  escono quasi neri; il colore "da terra" della luce emisferica è stato schiarito per lo stesso motivo
+  (sul terreno quasi non si vede). Misurato in headless: nessuna compenetrazione in 72 assalti alle
+  mura, ingresso solo dalla porta, camera mai coperta da un muro (49 000 fotogrammi di prova).
 - **Qui si valuta il prototipo** con l'utente: se e come proseguire.
 - **Dopo la valutazione — realismo del terreno (deciso con l'utente, da fare se il prototipo prosegue):**
   il terreno a facce piatte dà l'idea di "generato al computer" (stacchi netti tra triangoli da 7,8 m).
