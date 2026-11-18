@@ -14,12 +14,13 @@ instabile durante lo sviluppo. In alternativa in locale con `python -m http.serv
 
 ## Struttura
 - `index.html` + `style.css` — canvas WebGL + overlay HUD in HTML/CSS + importmap
-- `js/3d/` — moduli ES del motore 3D: `main.js` (renderer, loop, FPS); poi terreno, cavaliere, camera, castello
+- `js/3d/` — moduli ES del motore 3D: `main.js` (renderer, luci, loop, F3), `terrain.js`; poi cavaliere, camera, castello
 - `js/` — logica di gioco ereditata, script classici senza grafica (`config` `calendar` `knight`
   `combat` `events` `news` `save` + `data/`). I moduli 3D li leggono come globali.
-- `assets/terrain/` — heightmap reali (`.bin` + `.json`) — da M1
-- `tools/dem/` — da M1: script Python (eseguiti sul PC dell'utente) per generare le heightmap
-- `lib/three/` — Three.js r187 vendorizzato (`three.module.js` + `three.core.js` + `LICENSE`): NON modificare
+- `assets/terrain/` — heightmap reali (`.bin` + `.json`)
+- `tools/dem/` — script Python per generare le heightmap (istruzioni nel suo `README.md`)
+- `lib/three/` — Three.js r187 vendorizzato (`three.module.js` + `three.core.js` + `LICENSE`, addon usati
+  in `addons/`, importati come `three/addons/...`): NON modificare
 
 ## Documenti di design — leggi SEMPRE quello rilevante prima di lavorare su un sistema
 
@@ -59,3 +60,4 @@ architettura: quelle stanno in `docs/`. Aggiornare la fase corrente a ogni cambi
 
 **Passaggio al 3D — prototipo minimo (M0→M5).** Dettagli e criteri di accettazione in
 `docs/ESPLORAZIONE_3D.md`. La versione 2D resta nella cronologia git (commit `2c869fa`).
+M0 completata; **M1 (terreno) in test**.

@@ -35,7 +35,34 @@ html, body {
   color: #d8c8a0;
   font: 12px/1.6 ui-monospace, Consolas, monospace;
   border-radius: 3px;
+  white-space: pre;
   pointer-events: none;
 }
 
 #fps[hidden] { display: none; }
+
+/* Avvisi nel HUD (es. terreno procedurale di riserva) */
+#hud .avviso {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  background: rgba(30, 16, 8, 0.85);
+  border: 1px solid #8a6030;
+  color: #c87020;
+  font-size: 14px;
+  border-radius: 3px;
+}
+
+/* Riga di aiuto dei comandi */
+#hud .aiuto {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  padding: 3px 10px;
+  background: rgba(26, 14, 4, 0.6);
+  color: #d8c8a0;
+  font-size: 12px;
+  border-radius: 3px;
+}

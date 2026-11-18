@@ -1,0 +1,19 @@
+{
+  "name": "tavullia",
+  "cols": 257,
+  "rows": 257,
+  "cellSize": 7.8125,
+  "sizeMeters": 2000.0,
+  "center": {
+    "lat": 43.8985,
+    "lon": 12.7517
+  },
+  "centerUTM": {
+    "x": 319435.68,
+    "y": 4863056.65
+  },
+  "crs": "EPSG:32633",
+  "minElev": 36.0,
+  "maxElev": 230.0,
+  "source": "Copernicus GLO-30"
+}

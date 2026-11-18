@@ -8,7 +8,8 @@
   <script type="importmap">
     {
       "imports": {
-        "three": "./lib/three/three.module.js"
+        "three": "./lib/three/three.module.js",
+        "three/addons/": "./lib/three/addons/"
       }
     }
   </script>
@@ -16,7 +17,7 @@
 <body>
   <canvas id="scena"></canvas>
 
-  <!-- Overlay HUD in HTML/CSS sopra il canvas (vuoto per ora) -->
+  <!-- Overlay HUD in HTML/CSS sopra il canvas -->
   <div id="hud"></div>
 
   <!-- Contatore FPS: si mostra/nasconde con F3 -->
