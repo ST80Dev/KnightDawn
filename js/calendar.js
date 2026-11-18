@@ -21,6 +21,8 @@ const CALENDAR = {
   PASSI_PER_LUCE:      2400,  // 600 × 4
   PASSI_PER_ERA:       12000, // 2400 × 5
   PASSI_PER_GIORNO:    8,
+  SECONDI_PER_PASSO:   10800,  // 3 ore
+  INDICE_NOTTE:        5,      // da Compieta (indice 5) a Lodi (7) è notte
 
   // Un Passo per ogni ora canonica; il giorno di gioco comincia a Prima (~6:00).
   ORE_CANONICHE: ['Prima', 'Terza', 'Sesta', 'Nona', 'Vespri', 'Compieta', 'Mattutino', 'Lodi'],
@@ -71,7 +73,31 @@ const Calendar = {
     }
   },
 
-  // Tempo per distanza nelle Scene 3D: metri orizzontali + sovrappiù per la salita.
+  // Tempo nelle Scene 3D: secondi reali compressi (TEMPO_SCENA), più in fretta di notte.
+  avanzaTempoReale(secondi) {
+    const r = this.eNotte() ? TEMPO_SCENA.RAPPORTO_NOTTE : TEMPO_SCENA.RAPPORTO_GIORNO;
+    this.avanzaFrazione(secondi * r / CALENDAR.SECONDI_PER_PASSO);
+  },
+
+  // Azioni con una durata plausibile in minuti di gioco (parlare ~10, contrattare 60–120…).
+  avanzaMinuti(minuti) {
+    this.avanzaFrazione(minuti * 60 / CALENDAR.SECONDI_PER_PASSO);
+  },
+
+  // Salto atomico fino all'inizio dell'ora canonica indicata (0 = Prima: dormire).
+  // Ritorna i Passi interi trascorsi. Almeno uno: da Prima si arriva alla Prima seguente.
+  avanzaFinoA(indice) {
+    this.frazione = 0;
+    let n = 0;
+    do { this._tick(); n++; } while (this.indiceNelGiorno() !== indice);
+    return n;
+  },
+
+  eNotte() {
+    return this.indiceNelGiorno() >= CALENDAR.INDICE_NOTTE;
+  },
+
+  // Tempo per distanza (viaggio sulla Carta): metri orizzontali + sovrappiù per la salita.
   // L'andatura non conta: correndo si copre la stessa distanza prima, non si "spende" più tempo.
   avanzaMetri(metri, salita) {
     const equivalenti = metri + Math.max(0, salita || 0) * VIAGGIO.METRI_PER_METRO_SALITA;

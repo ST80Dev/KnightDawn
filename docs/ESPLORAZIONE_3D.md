@@ -188,6 +188,13 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
   - Edifici generati da codice (regola 6). **Non si entra negli edifici**: avvicinandosi alla porta
     si apre la Carta del cronista. Niente interni 3D.
   - Gli edifici poggiano sul suolo composto (`componiSuolo`): ogni edificio porta la sua quota.
+  - **Persone con cui parlare (deciso con l'utente):** niente aloni permanenti su tutti. Tre livelli:
+    da lontano nessun segno (al più indizi naturali: chi ti guarda, chi fa un cenno, chi sta in
+    disparte); entro ~8–10 m chi ha qualcosa da dire mostra un **piccolo simbolo sopra la testa** in
+    stile manoscritto (sigillo o pergamena, diverso per incarico, informazione, commercio); vicinissimo
+    compare «E: parla» col nome, se noto. Simbolo come sprite (costo trascurabile); un contorno luminoso
+    vero richiede post-elaborazione: semmai solo sul personaggio inquadrato. Le azioni costano la loro
+    durata plausibile (`docs/GDD.md` §3).
 
 - **Dopo la valutazione — movimento e viaggio (deciso con l'utente):** a scala reale anche 200 m di
   corsa sono lunghi; il terreno **non** si miniaturizza. Due scale, ognuna coerente:
@@ -199,10 +206,10 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
     quando si vuole**: si carica il blocco di terreno in quel punto e si esplora in 3D; poi si riparte
     dalla mappa. Anche gli eventi (imboscate, incontri) possono fermare il viaggio e portare in 3D lì.
   - **"Vai a"** dentro l'area locale (300 m–1 km): destinazione indicata, dissolvenza, il tempo avanza
-    in base alla distanza. Un moltiplicatore di velocità al massimo 2x, solo come comodità: a 4x e oltre
+    quanto servirebbe a piedi. Un moltiplicatore di velocità al massimo 2x, solo come comodità: a 4x e oltre
     animazione e camera diventano nauseanti e non basterebbe comunque per i km.
-  - Il tempo di gioco segue sempre la **distanza percorsa**, non i secondi reali: tutti i modi restano
-    coerenti con il calendario.
+  - Tempo: sulla Carta segue la **distanza**; nelle Scene il **tempo reale compresso** (×15 di giorno,
+    ×60 di notte; deciso in M5, `docs/GDD.md` §3). Le due scale non coincidono, ed è voluto.
   - **Andature — fatto** (dopo il test di M4: a passo d'uomo, senza niente da fare nel terreno, anche
     1 km di dintorni richiede troppo tempo reale): **corsetta 3,2 m/s** come andatura normale (`W` o
     freccia su), **scatto 6 m/s** con `Shift`, **camminata 1,5 m/s** con l'interruttore `Ctrl` (indicatore
@@ -217,9 +224,8 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
     ripide, **mai sotto ×0,5** (sul punto più ripido, ~30°: cammino 0,75 m/s, corsa 2,5 m/s). Di traverso
     si rallenta poco. Anche il blocco a 35° ora conta la pendenza del passo, non quella del versante:
     un pendio ripido si può tagliare di traverso. F3 mostra pendenza di marcia e fattore.
-  - **Pendenza e fatica**: in M5 il consumo di Forza cresce con pendenza e andatura, il tempo (Passi)
-    con la pendenza, non solo con la distanza; altrimenti una salita costa tempo reale ma non tempo di
-    gioco. La corsa **non** aggiunge tempo: copre la stessa distanza prima, quindi costa solo più Forza.
+  - **Pendenza e fatica — fatto in M5**: il consumo di Forza cresce con la distanza, la salita e
+    l'andatura. Sulla Carta la salita costerà anche tempo; nelle Scene il tempo è quello reale compresso.
   - **Cadute** (dopo M5): oltre ~30–35° in discesa o di traverso, probabilità di scivolare per metro che
     cresce con pendenza e velocità (correndo molto di più); scivolata di qualche metro, danno alla Salute,
     costo di Forza; avviso "terreno ripido" nell'HUD. È un rischio scelto, risolto come un evento:
@@ -233,38 +239,41 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
 
 ### M5 — Aggancio alla logica esistente (ridotta, dopo la valutazione di M4)
 Nel 2D 1 Passo era 1 tile; ora il **Passo è solo un'unità di tempo** (~3 ore, `docs/GDD.md` §3).
-A scala reale l'intera area di 2×2 km vale meno di un Passo: è voluto, il tempo «grosso» lo
-consumeranno la Carta e le azioni.
-- **Tempo per distanza:** `METRI_PER_PASSO` in `config.js` (provvisorio: 12 000 m in piano, a piedi).
-  La salita aggiunge tempo (regola tipo Naismith: ~1 ora ogni 600 m di dislivello positivo, cioè ogni
-  metro di salita vale ~6,7 m in piano). L'andatura non cambia il tempo per metro.
-- **`Calendar` accumula frazioni di Passo.** L'HUD mostra anche l'ora approssimativa del giorno
-  (8 Passi = 1 giorno), altrimenti per molto tempo non si vede nulla muoversi. Veglia: il giorno si
-  ricava dai Passi (8 Passi = 1 giorno), non più un giorno per Passo.
+- **Tempo reale compresso (ricalibrato con l'utente dopo la prima prova):** il primo modello (tempo
+  per distanza, 12 km per Passo) dava ~30 minuti di gioco ogni 10 minuti reali e un'ora canonica ogni
+  ~ora reale: nelle Scene il tempo era quasi fermo. Ora `TEMPO_SCENA` in `config.js`: **×15 di giorno**
+  (Prima–Vespri: un'ora canonica ogni 12 minuti reali) e **×60 di notte** (Compieta–Lodi: ogni
+  3 minuti), anche da fermi. `METRI_PER_PASSO` e la regola della salita restano per la Carta.
+- **`Calendar` accumula frazioni di Passo** (`avanzaTempoReale`, `avanzaMinuti`, `avanzaFinoA`).
+  Veglia: il giorno si ricava dai Passi (8 Passi = 1 giorno), non più un giorno per Passo.
 - **Forza per distanza:** nuova funzione in `Knight` che riceve metri, dislivello e andatura (solo
   numeri: niente Three.js, regola 9). Scala provvisoria: 100 di Forza ≈ 30 km in piano camminando;
-  corsetta ×1,5, scatto ×3 al metro; la salita pesa come per il tempo. `TRAVEL_COST` per bioma
-  resta per la Carta.
-- **Forza a 0:** niente corsa né scatto, solo camminata. Tasto provvisorio «Accampati»: azione
-  atomica con `RECOVERY.accampamento` (+30 Forza), che fa avanzare il calendario di qualche Passo.
+  corsetta ×1,5, scatto ×3 al metro; un metro di salita vale ~6,7 m in piano. `TRAVEL_COST` per
+  bioma resta per la Carta.
+- **Forza a 0:** niente corsa né scatto, solo camminata. Tasto `R` (riposa), azione atomica, solo
+  da fermi: da Vespri in poi si dorme all'addiaccio fino a Prima (`RECOVERY.accampamento`, +30 Forza);
+  di giorno una sosta di ~3 ore (`RECOVERY.sosta`, +10 Forza).
+- **Pausa** con `P`: nulla scorre. La scheda nascosta ferma il ciclo di disegno: pausa automatica.
+- **Ciclo giorno/notte:** sole che segue l'ora (alba alle 5, tramonto alle 20, massimo 55°), colore
+  di luce, cielo e nebbia; crepuscolo caldo; di notte luna fredda e fissa, paesaggio scuro ma
+  leggibile; la luce propria delle mura e l'ombra del cavaliere si abbassano. Niente stagioni per ora.
 - **HUD in HTML:** data (o «Veglia · giorno N») con l'ora, Forza, Salute, Volontà, Onore.
 - **Salvataggio locale** (localStorage, come da `CLAUDE.md`): posizione e direzione del cavaliere,
   terreno corrente, stato di `Knight` e `Calendar`, autosalvataggio. Supabase abbandonato (deciso
   con l'utente: lo spazio gratuito è esaurito); tolte da `save.js` anche le sezioni 2D.
 - `Calendar.velocita` (secondi reali per Passo) non serve nelle Scene: resterà per la Carta.
-- **Accettazione:** camminando, l'ora avanza in proporzione alla distanza (circa 1 Passo ogni 12 km
-  in piano, di più in salita); la Forza cala, di più correndo e in salita; a Forza 0 si cammina
-  soltanto e «Accampati» la ricarica facendo passare il tempo; ricaricando la pagina si riparte dal
-  punto salvato con data e attributi salvati.
-- **Stato:** implementata, da provare nel browser. Misurato in headless: 5 s di corsetta (~18 m
-  equivalenti) = 0,0015 Passi e −0,09 Forza; a Forza 0 l'andatura passa a camminata anche con
-  Shift; il bivacco dà +30 Forza e fa passare 3 Passi; dopo il ricaricamento posizione, tempo e
-  attributi sono identici; F8 ricomincia da zero.
-  Scelte fatte: **un Passo per ogni ora canonica** (Prima, Terza, Sesta, Nona, Vespri, Compieta,
-  Mattutino, Lodi; il giorno comincia a Prima, ~6:00), mostrata nel pannello di stato in alto a
-  destra; F3 mostra Passi, frazione, ora e Forza esatte. Tasti: `R` accampati (solo da fermi),
-  `F8` nuova partita (con conferma). Salvataggio automatico ogni minuto, quando si lascia la
-  pagina e dopo il bivacco. La luce della scena non segue ancora l'ora del giorno.
+- **Accettazione:** il tempo scorre anche da fermi, un'ora canonica ogni ~12 minuti reali di giorno
+  e ~3 di notte, e si ferma con `P`; sole, cielo e luce seguono l'ora; la Forza cala con la distanza,
+  di più correndo e in salita; a Forza 0 si cammina soltanto; `R` riposa di giorno e fa dormire fino a
+  Prima di sera; ricaricando la pagina si riparte dal punto salvato con data e attributi salvati.
+- **Stato:** implementata, da provare nel browser. Misurato in headless: 4 s da fermi di giorno =
+  0,0056 Passi (atteso 0,0057), 3 s di notte = 0,0163 (atteso 0,0167); in pausa il tempo non cambia;
+  dormire da Compieta porta a Prima del giorno dopo; la sosta di giorno dà +10 Forza e 1 Passo; dopo
+  il ricaricamento posizione, tempo e attributi sono identici; F8 ricomincia da zero.
+  **Un Passo per ogni ora canonica** (Prima, Terza, Sesta, Nona, Vespri, Compieta, Mattutino, Lodi;
+  il giorno comincia a Prima, ~6:00), nel pannello di stato in alto a destra; F3 mostra Passi,
+  frazione, ora, rapporto giorno/notte, altezza del sole e Forza esatte. `F8` nuova partita (con
+  conferma). Salvataggio automatico ogni minuto, quando si lascia la pagina e dopo ogni riposo.
 
 ## Carta e Scene — generatore del mondo (deciso, da realizzare dopo M5)
 

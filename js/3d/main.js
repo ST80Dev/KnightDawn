@@ -1,7 +1,8 @@
 // Knight Dawn — motore 3D: renderer, scena, luci, render loop, contatore FPS (F3).
 // M4: cavaliere sul terreno reale con camera alle spalle (camera.js) e castello (castle3d.js).
-// M5: la distanza percorsa fa avanzare Calendar e consuma la Forza di Knight; HUD di stato;
-// salvataggio in localStorage (Save, slot 0). La logica sta negli script classici in js/.
+// M5: il tempo di gioco scorre col tempo reale compresso (TEMPO_SCENA), la distanza consuma la
+// Forza di Knight; ciclo giorno/notte; pausa (P); HUD di stato; salvataggio in localStorage
+// (Save, slot 0). La logica sta negli script classici in js/.
 // Il tasto C passa alla camera libera di debug (OrbitControls) per ispezionare il terreno.
 // Unità: 1 unità Three.js = 1 metro, asse Y verso l'alto, nord verso -Z.
 
@@ -28,15 +29,91 @@ scene.fog = new THREE.Fog(COLORE_CIELO, NEBBIA[0], NEBBIA[1]);
 
 const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.2, 5000);
 
-// ─── Luci: sole del pomeriggio (da sud-ovest) + luce emisferica cielo/terra ───
-// Sole abbastanza basso e luce ambiente contenuta: il rilievo collinare si legge dal chiaroscuro.
+// ─── Luci: sole che segue l'ora del giorno, luna, luce emisferica cielo/terra ───
+// Di giorno sole forte e luce ambiente contenuta: il rilievo collinare si legge dal chiaroscuro.
 // Il colore "da terra" è la luce riflessa dal suolo: schiarisce le pareti verticali in ombra (mura,
 // cavaliere) e quasi non tocca il terreno, le cui facce guardano in alto.
+// Di notte una luna fredda e fissa (alta a sud-est) lascia il paesaggio scuro ma leggibile.
 const cielo = new THREE.HemisphereLight('#dce8ec', '#8a7550', 0.45);
 scene.add(cielo);
 const sole = new THREE.DirectionalLight('#fff0d4', 3.4);
 sole.position.set(-700, 420, 500);
 scene.add(sole);
+const luna = new THREE.DirectionalLight('#9fb4dc', 0);
+luna.position.set(600, 700, 750);
+scene.add(luna);
+
+// Ciclo del giorno (valori provvisori, senza stagioni): alba alle 5, tramonto alle 20, sole al
+// massimo a 55° verso le 12:30. Di notte la "quota" del sole scende sotto l'orizzonte fino a −35°.
+const CICLO = {
+  alba: 5, tramonto: 20, altezzaMax: 55, profonditaNotte: 35,
+  soleMax: 3.4, lunaMax: 1.1,
+  emisferaGiorno: 0.45, emisferaNotte: 0.4,
+  colori: {
+    cieloGiorno: new THREE.Color('#c4d4d6'), cieloNotte: new THREE.Color('#1b2536'),
+    cieloCrepuscolo: new THREE.Color('#d9a882'),
+    soleGiorno: new THREE.Color('#fff0d4'), soleBasso: new THREE.Color('#ffb070'),
+    emisferaCieloGiorno: new THREE.Color('#dce8ec'), emisferaCieloNotte: new THREE.Color('#6a7ca4'),
+    emisferaTerraGiorno: new THREE.Color('#8a7550'), emisferaTerraNotte: new THREE.Color('#2c2a2a'),
+  },
+};
+const _gradi = Math.PI / 180;
+const smoothstep = (a, b, x) => THREE.MathUtils.smoothstep(x, a, b);
+
+/** Posizione del sole (gradi) per un'ora del giorno 0–24: { altezza, azimut } (azimut da nord, orario). */
+function posizioneSole(ora) {
+  const { alba, tramonto, altezzaMax, profonditaNotte } = CICLO;
+  if (ora >= alba && ora <= tramonto) {
+    const t = (ora - alba) / (tramonto - alba);
+    return { altezza: altezzaMax * Math.sin(Math.PI * t), azimut: 70 + 220 * t };
+  }
+  const t = ((ora - tramonto + 24) % 24) / (24 - (tramonto - alba));
+  return { altezza: -profonditaNotte * Math.sin(Math.PI * t), azimut: 290 + 140 * t };
+}
+
+// Le pareti del castello hanno una piccola luce propria (luce riflessa): di notte va abbassata,
+// altrimenti brillano. Si raccolgono una volta i materiali con emissive e la loro intensità di base.
+let emissivi = [];
+function raccogliEmissivi(radice) {
+  radice.traverse((o) => {
+    const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+    for (const m of mats) {
+      if (m.emissive && !emissivi.some((e) => e.m === m)) emissivi.push({ m, base: m.emissive.clone() });
+    }
+  });
+}
+
+const _col = new THREE.Color();
+let _oraCielo = -1;
+function aggiornaCielo() {
+  const ora = Calendar.oraDelGiorno();
+  if (Math.abs(ora - _oraCielo) < 0.002) return;          // ~7 s di gioco: niente da ridisegnare
+  _oraCielo = ora;
+  const { altezza, azimut } = posizioneSole(ora);
+  const C = CICLO.colori;
+  const giorno = smoothstep(-5, 8, altezza);               // 0 notte → 1 pieno giorno
+  const crepuscolo = Math.max(0, 1 - Math.abs(altezza - 1) / 9) * smoothstep(-8, -2, altezza);
+
+  const a = altezza * _gradi, z = azimut * _gradi;
+  sole.position.set(Math.sin(z) * Math.cos(a), Math.max(Math.sin(a), 0.02), -Math.cos(z) * Math.cos(a))
+    .multiplyScalar(1000);
+  sole.intensity = CICLO.soleMax * smoothstep(-2, 10, altezza);
+  sole.color.copy(C.soleGiorno).lerp(C.soleBasso, 1 - smoothstep(4, 20, altezza));
+  luna.intensity = CICLO.lunaMax * (1 - giorno);
+
+  cielo.intensity = THREE.MathUtils.lerp(CICLO.emisferaNotte, CICLO.emisferaGiorno, giorno);
+  cielo.color.copy(C.emisferaCieloNotte).lerp(C.emisferaCieloGiorno, giorno);
+  cielo.groundColor.copy(C.emisferaTerraNotte).lerp(C.emisferaTerraGiorno, giorno);
+
+  _col.copy(C.cieloNotte).lerp(C.cieloGiorno, giorno).lerp(C.cieloCrepuscolo, crepuscolo * 0.75);
+  scene.background.copy(_col);
+  scene.fog.color.copy(_col);
+
+  const luceRiflessa = 0.2 + 0.8 * giorno;
+  for (const e of emissivi) e.m.emissive.copy(e.base).multiplyScalar(luceRiflessa);
+  const ombra = knight && knight.object.getObjectByName('ombra-cavaliere');
+  if (ombra) ombra.material.opacity = 0.35 + 0.65 * giorno;
+}
 
 // ─── HUD ────────────────────────────────────────────────────────────────
 const hud = document.getElementById('hud');
@@ -128,21 +205,43 @@ function nuovaPartita() {
   window.location.reload();
 }
 
-// Bivacco: azione atomica. Recupera Forza e fa passare il tempo d'un colpo (docs/GDD.md §3).
-function accampati() {
-  if (!knight) return;
-  if (knight.stato.velEffettiva > 0.1) { messaggio('Fermati prima di accamparti.'); return; }
-  if (Knight.forza.cur >= Knight.forza.max) { messaggio('Sei riposato: non serve accamparsi.'); return; }
+// Riposo: azione atomica (docs/GDD.md §3). Da Vespri in poi si dorme all'aperto fino a Prima
+// (+30 Forza, la notte passa d'un colpo); di giorno una sosta di ~3 ore (+10 Forza).
+function riposa() {
+  if (!knight || inPausa) return;
+  if (knight.stato.velEffettiva > 0.1) { messaggio('Fermati prima di riposare.'); return; }
   const prima = Knight.forza.cur;
-  Knight.recupera('accampamento');
-  Calendar.avanza(VIAGGIO.PASSI_ACCAMPAMENTO);
-  const ore = VIAGGIO.PASSI_ACCAMPAMENTO * 24 / CALENDAR.PASSI_PER_GIORNO;
-  messaggio(`Ti accampi: Forza +${Math.round(Knight.forza.cur - prima)}. `
-    + `Passano ${VIAGGIO.PASSI_ACCAMPAMENTO} Passi (circa ${ore} ore).`);
+  const sera = Calendar.eNotte() || Calendar.indiceNelGiorno() === CALENDAR.INDICE_NOTTE - 1;
+  if (sera) {
+    Knight.recupera('accampamento');
+    const n = Calendar.avanzaFinoA(0);
+    const guadagno = Math.round(Knight.forza.cur - prima);
+    messaggio(`Dormi all'addiaccio fino a Prima (${n} ${n === 1 ? 'Passo' : 'Passi'})`
+      + (guadagno > 0 ? `: Forza +${guadagno}.` : '.'));
+  } else {
+    if (Knight.forza.cur >= Knight.forza.max) { messaggio('Sei riposato: non serve fermarsi.'); return; }
+    Knight.recupera('sosta');
+    Calendar.avanza(VIAGGIO.PASSI_SOSTA);
+    messaggio(`Ti fermi a riposare per circa ${VIAGGIO.PASSI_SOSTA * 3} ore: `
+      + `Forza +${Math.round(Knight.forza.cur - prima)}.`);
+  }
   salvaOra();
 }
 
-// Tempo e fatica per distanza: ogni fotogramma la strada fatta dal cavaliere va a Calendar e Knight.
+// Pausa (P): nulla scorre, né il tempo di gioco né il cavaliere. La scheda nascosta ferma comunque
+// il ciclo di disegno, quindi è già una pausa automatica.
+let inPausa = false;
+let _avvisoPausa = null;
+function cambiaPausa() {
+  if (!knight) return;
+  inPausa = !inPausa;
+  if (!_avvisoPausa) _avvisoPausa = avvisoHud('In pausa · P per riprendere', 'pausa');
+  _avvisoPausa.hidden = !inPausa;
+  tasti.clear();
+}
+
+// Fatica per distanza: ogni fotogramma la strada fatta dal cavaliere consuma Forza (il tempo invece
+// segue il tempo reale, vedi frame()).
 const _prec = { x: 0, y: 0, z: 0 };
 function contaPercorso() {
   const k = knight.stato;
@@ -151,7 +250,6 @@ function contaPercorso() {
   _prec.x = k.x; _prec.y = k.y; _prec.z = k.z;
   if (d < 1e-6) return;
   const andatura = k.velocita < 0 ? 'camminata' : k.andatura;   // all'indietro si va al passo
-  Calendar.avanzaMetri(d, salita);
   Knight.consumaForzaMetri(d, salita, andatura);
 }
 
@@ -164,6 +262,7 @@ async function init() {
 
   castle = createCastle(terrain);
   scene.add(castle.object);
+  raccogliEmissivi(castle.object);
 
   // Partita ripresa dal salvataggio automatico, se c'è; altrimenti nuova.
   const ripresa = await Save.load(Save.AUTOSAVE_SLOT);
@@ -207,7 +306,8 @@ async function init() {
   window.kd = { scene, camera, cam, controls, terrain, suolo, knight, castle, Knight, Calendar, Save };
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no'
-    + ' · R: accampati · rotella: distanza · C: camera libera · F3: info · F8: nuova partita', 'aiuto');
+    + ' · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · F3: info · F8: nuova partita',
+  'aiuto');
 }
 
 function cambiaModoCamera() {
@@ -279,7 +379,8 @@ window.addEventListener('keydown', (e) => {
   tasti.add(e.code);
   if (e.code === 'KeyC' && !e.repeat && knight) cambiaModoCamera();
   if (TASTI_CAMMINATA.includes(e.code) && !e.repeat) camminata = !camminata;
-  if (e.code === 'KeyR' && !e.repeat) accampati();
+  if (e.code === 'KeyR' && !e.repeat) riposa();
+  if (e.code === 'KeyP' && !e.repeat) cambiaPausa();
   if (e.code === 'F8' && !e.repeat) {
     e.preventDefault();
     nuovaPartita();
@@ -378,7 +479,9 @@ function aggiornaPannello(now) {
     const ora = Calendar.oraDelGiorno();
     testo += `\ntempo: Passi ${Calendar.passiTotali} + ${fmt(Calendar.frazione, 3)}`
       + ` · ore ${String(Math.floor(ora)).padStart(2, '0')}:${String(Math.floor((ora % 1) * 60)).padStart(2, '0')}`
-      + ` · Forza ${fmt(Knight.forza.cur, 2)}`;
+      + ` · ${Calendar.eNotte() ? 'notte 1:' + TEMPO_SCENA.RAPPORTO_NOTTE : 'giorno 1:' + TEMPO_SCENA.RAPPORTO_GIORNO}`
+      + (inPausa ? ' · in pausa' : '')
+      + ` · sole ${fmt(posizioneSole(ora).altezza)}° · Forza ${fmt(Knight.forza.cur, 2)}`;
     testo += `\ncamera: ${modoCamera === 'segui' ? 'alle spalle' : 'libera (C per tornare)'}`;
     if (castle) {
       testo += castle.dentro(k.x, k.z) ? '\ncastello: nel cortile'
@@ -404,8 +507,14 @@ function frame(now) {
   const dt = THREE.MathUtils.clamp((now - tPrec) / 1000, 0, DT_MAX);
   tPrec = now;
   if (knight) {
-    knight.update(dt, leggiInput());
-    contaPercorso();
+    if (!inPausa) {
+      knight.update(dt, leggiInput());
+      contaPercorso();
+      Calendar.avanzaTempoReale(dt);
+    } else {
+      cam.prendiGiroMouse();               // in pausa il mouse non gira il cavaliere
+    }
+    aggiornaCielo();
     aggiornaStato();
     aggiornaIndicatoreAndatura();
     if (modoCamera === 'segui') {

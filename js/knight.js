@@ -41,6 +41,7 @@ const RANGHI = [
 
 // Recupero Forza e Salute per tipo di sosta.
 const RECOVERY = {
+  sosta:        { forza: 10 },              // riposo di giorno, ~3 ore (Scene 3D)
   accampamento: { forza: 30 },
   villaggio:    { forza: 50, salute: 10 },
   locanda:      { forza: 100, salute: 25 },  // forza = piena

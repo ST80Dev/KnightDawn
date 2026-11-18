@@ -157,3 +157,20 @@ html, body {
   margin-top: 5px;
   color: #c8b890;
 }
+
+/* Avviso di pausa */
+#hud .pausa {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 10px 22px;
+  background: rgba(26, 14, 4, 0.85);
+  border: 1px solid #8a6030;
+  color: #c8a030;
+  font-size: 18px;
+  letter-spacing: 0.05em;
+  border-radius: 3px;
+}
+
+#hud .pausa[hidden] { display: none; }

@@ -131,10 +131,10 @@ paragone per la credibilità del terreno generato.
   fazioni, notizie, scadenze. Qui vive quasi intera la logica del 2D.
 - **Scene 3D** (livello di persona): arrivando in un luogo, fermandosi, o quando un evento
   ferma il viaggio, si è lì in 3D a scala 1:1 e ci si muove liberamente nei dintorni. In scena il tempo
-  segue la distanza percorsa (minuti, non Passi interi); le azioni costano Passi alla conferma.
-  Il combattimento resta a turni.
-- Camminare in 3D non deve far avanzare molto la data: è il momento in cui si è presenti. Il tempo
-  «grosso» lo consumano viaggi e azioni. Il gioco di persona si ottiene con scene **dense**
+  scorre col tempo reale, compresso (§3 *Tempo e calendario*); le azioni costano la loro durata
+  plausibile, alla conferma. Il combattimento resta a turni.
+- Nelle Scene il tempo scorre al ritmo della presenza (di giorno un'ora canonica ogni ~12 minuti
+  reali); i giorni di viaggio si consumano sulla Carta. Il gioco di persona si ottiene con scene **dense**
   (castello, borgo, dintorni di 1–2 km con cose da fare), non con distanze lunghe a piedi.
 
 **Dimensioni** [TBD, proposta]: circa **600×450 km**, Carta a celle di 1 km. Attraversarlo da nord
@@ -281,9 +281,9 @@ azioni del giocatore — non dal cronometro.
 | Contesto                          | Come scorre il tempo                              |
 |-----------------------------------|---------------------------------------------------|
 | Viaggio sulla Carta               | 1 Passo ogni *N* secondi reali (velocità scelta)  |
-| Scena 3D, in movimento            | Segue la distanza percorsa (frazioni di Passo)    |
-| Scena 3D, fermi                   | Nulla scorre                                      |
-| **Pausa (`II/▶`)**                | **Nulla scorre**: né Passi, né deadlines, né mondo |
+| Scena 3D, di giorno (Prima–Vespri)| Tempo reale ×15: 1 Passo ogni 12 min reali, anche da fermi |
+| Scena 3D, di notte (Compieta–Lodi)| Tempo reale ×60: 1 Passo ogni 3 min reali; dormendo, salto a Prima |
+| **Pausa (`P`, scheda nascosta)**  | **Nulla scorre**: né Passi, né deadlines, né mondo |
 | Pausa modale (pre-recap, POI)     | Come la pausa: nulla scorre                       |
 | Lettura evento / scelta narrativa | Nulla scorre durante la lettura                   |
 | Azione atomica dentro luogo       | *N* Passi scattano d'un colpo a conferma azione   |
@@ -320,6 +320,33 @@ il proprio valore dichiarando `{type:'tempo', passi:N}` nei suoi effetti
 | Riposare alla locanda (notte)         |  8–12  | un giorno+notte |
 | Convalescenza (ferita grave)          | 20–40  | una settimana |
 | Forgiare / commissionare arma         | 12–24  | 3–5 giorni  |
+
+**Nelle Scene 3D (deciso a novembre 2026)** le azioni fatte di persona costano la loro **durata
+plausibile in minuti di gioco**, convertita in frazione di Passo (`Calendar.avanzaMinuti`). La tabella
+sopra era calibrata per il 2D, dove ogni azione doveva consumare un turno intero: parlare con 4 persone
+non può costare 12 ore. Gli eventi già scritti (`js/data/events_*.js`, costi in Passi interi) vanno
+rivisti quando si agganciano alle Scene.
+
+| Azione di persona                                  | Durata in-fiction | Frazione di Passo |
+|----------------------------------------------------|-------------------|-------------------|
+| Scambio breve (saluto, domanda, indicazione)       | ~10 min           | ~1/18             |
+| Conversazione vera (informazioni, racconto, trattativa) | 30–60 min    | 1/6–1/3           |
+| Contrattare al mercato (più acquisti)              | 1–2 ore           | 1/3–2/3           |
+| Curare una ferita lieve                            | 1–3 ore           | 1/3–1             |
+| Sosta di riposo di giorno (+10 Forza)              | ~3 ore            | 1                 |
+| Addestrarsi                                        | mezza giornata    | 2–4 Passi         |
+| Dormire (+30 Forza all'addiaccio, di più in locanda) | fino a Prima    | salto atomico     |
+
+Esempio: attraversare la piazza (5 minuti reali ≈ 75 minuti di gioco) e parlare con 4 persone
+(≈ 40–60 minuti) fa circa 2 ore: un giro al mercato.
+
+**Ritmo del tempo nelle Scene.** Di giorno un'ora canonica ogni 12 minuti reali: le ore di luce
+(Prima–Vespri, dalle 6 alle 21) durano circa un'ora reale; 10 minuti di esplorazione ≈ 2,5 ore di
+gioco. La notte di solito si salta dormendo; chi resta sveglio la vede passare in ~9 minuti reali, al
+buio e con incontri più rischiosi: vegliare è una scelta, non un'attesa. A ogni ora canonica il mondo
+«gira» (meteo, scadenze, possibile incontro casuale, notizie), come nel 2D; gli incontri di persona
+invece nascono dai luoghi e dalle persone, senza aspettare l'ora. La Forza nelle Scene segue la
+distanza, non il tempo.
 
 #### Corrispondenza con viaggio medievale
 
@@ -386,9 +413,14 @@ Durante la Veglia:
   incontro) può fermare il viaggio e portare in 3D lì.
 
 **Nelle Scene 3D.**
-- A scala 1:1, a piedi (poi a cavallo). Il tempo segue la distanza: ~1 Passo ogni 12 km in piano,
-  di più in salita. Correre non fa passare più tempo ma costa più Forza.
-- «Vai a» dentro l'area locale (300 m–1 km), con dissolvenza.
+- A scala 1:1, a piedi (poi a cavallo). Il tempo scorre col tempo reale compresso (§3 *Tempo e
+  calendario*); la Forza segue la distanza: correre fa vedere più cose nello stesso tempo ma stanca
+  di più.
+- Muoversi nella Scena costa più tempo di gioco che sulla Carta (1 km di corsa ≈ 1h20 contro ~15 min):
+  **la Scena è il tempo della presenza** (guardarsi attorno, fermarsi, parlare), **la Carta quello della
+  marcia** con una meta. Per non incentivare scorciatoie: la Carta si usa solo per mete fuori dall'area
+  locale (oltre ~2 km); «Vai a» dentro l'area locale (300 m–1 km, con dissolvenza) costa il tempo che
+  servirebbe a piedi.
 - Dettagli in `docs/ESPLORAZIONE_3D.md`.
 
 ### Combattimento
