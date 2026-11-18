@@ -84,8 +84,8 @@ async function init() {
 
   window.kd = { scene, camera, cam, controls, terrain, suolo, knight, castle };   // per ispezione dalla console del browser
 
-  avvisoHud('W/S: avanti/indietro · A/D o trascina col mouse: gira · Shift: corri · rotella: distanza'
-    + ' · C: camera libera · F3: info', 'aiuto');
+  avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no'
+    + ' · rotella: distanza · C: camera libera · F3: info', 'aiuto');
 }
 
 function cambiaModoCamera() {
@@ -131,22 +131,36 @@ const TASTI_MOVIMENTO = {
   destra:   ['KeyD', 'ArrowRight'],
   corsa:    ['ShiftLeft', 'ShiftRight'],
 };
+// Interruttore della camminata: Ctrl (premi e rilascia). Attenzione: Ctrl+W chiude la scheda del browser
+// e la pagina non può impedirlo; chi usa WASD deve premere Ctrl da solo.
+const TASTI_CAMMINATA = ['ControlLeft', 'ControlRight'];
+let camminata = false;
+const indicatoreCamminata = document.createElement('div');
+indicatoreCamminata.className = 'andatura';
+indicatoreCamminata.textContent = 'Camminata (Ctrl per la corsetta)';
+indicatoreCamminata.hidden = true;
+document.getElementById('hud').appendChild(indicatoreCamminata);
 const premuto = (azione) => TASTI_MOVIMENTO[azione].some((k) => tasti.has(k));
 
 window.addEventListener('keydown', (e) => {
   if (e.code.startsWith('Arrow')) e.preventDefault();
   tasti.add(e.code);
   if (e.code === 'KeyC' && !e.repeat && knight) cambiaModoCamera();
+  if (TASTI_CAMMINATA.includes(e.code) && !e.repeat) {
+    camminata = !camminata;
+    indicatoreCamminata.hidden = !camminata;
+  }
 });
 window.addEventListener('keyup', (e) => tasti.delete(e.code));
 window.addEventListener('blur', () => tasti.clear());   // niente tasti "incollati" cambiando finestra
 
-const _input = { avanti: 0, gira: 0, giroMouse: 0, corsa: false };
+const _input = { avanti: 0, gira: 0, giroMouse: 0, corsa: false, camminata: false };
 function leggiInput() {
   _input.avanti = (premuto('avanti') ? 1 : 0) - (premuto('indietro') ? 1 : 0);
   _input.gira = (premuto('destra') ? 1 : 0) - (premuto('sinistra') ? 1 : 0);
   _input.giroMouse = cam.prendiGiroMouse();
   _input.corsa = premuto('corsa');
+  _input.camminata = camminata;
   return _input;
 }
 
@@ -226,7 +240,7 @@ function aggiornaPannello(now) {
       + ` · pendenza ${fmt(suolo.getSlope(k.x, k.z))}° · ${fmt(k.velEffettiva, 1)} m/s`
       + (k.bloccato ? ' · bloccato' : '')
       + `\nmarcia: ${k.pendenzaMarcia >= 0 ? 'salita' : 'discesa'} ${fmt(Math.abs(Math.atan(k.pendenzaMarcia)) * 180 / Math.PI)}°`
-      + ` · velocità ×${fmt(k.fattorePendenza, 2)}`;
+      + ` · velocità ×${fmt(k.fattorePendenza, 2)} · andatura: ${k.andatura}`;
     testo += `\ncamera: ${modoCamera === 'segui' ? 'alle spalle' : 'libera (C per tornare)'}`;
     if (castle) {
       testo += castle.dentro(k.x, k.z) ? '\ncastello: nel cortile'

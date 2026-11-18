@@ -11,8 +11,11 @@ const PAL = (typeof PALETTE !== 'undefined') ? PALETTE : {};
 
 /** Parametri del movimento: modificabili dalla console (kd.knight.cfg) per i test. */
 export const KNIGHT_CFG = {
-  velCammino: 1.5,      // m/s
-  velCorsa: 5.0,        // m/s (Shift)
+  // Tre andature: la corsetta è quella normale (con W da sola), la camminata si attiva con un interruttore.
+  // Il tempo di gioco seguirà la distanza (M5), non la velocità: queste cambiano solo l'attesa reale.
+  velCammino: 1.5,      // m/s, camminata (interruttore)
+  velCorsetta: 3.2,     // m/s, andatura normale
+  velScatto: 6.0,       // m/s, scatto (Shift)
   velIndietro: 0.9,     // m/s, passo all'indietro (senza corsa)
   velRotazione: 2.0,    // rad/s con A/D (circa 115°/s); in corsa un po' meno
   pendenzaMax: 35,      // gradi: oltre questa pendenza, nella direzione di marcia, il cavaliere non sale
@@ -32,6 +35,11 @@ const PASSO_PER_RADIANTE = 0.3;
 
 // Lunghezza di un ciclo completo del passo (due passi), in metri: cammino → corsa
 const CICLO_PASSO = [1.6, 2.6];
+// Velocità di riferimento dell'animazione (indipendenti dai parametri di gioco): a 1,5 m/s passo
+// di camminata pieno, a 5 m/s corsa piena; oltre, la falcata si allunga ancora un po'.
+const VEL_ANIM_CAMMINO = 1.5;
+const VEL_ANIM_CORSA = 5.0;
+const ALLUNGA_OLTRE_CORSA = 0.3;   // m di ciclo in più per ogni m/s oltre la corsa piena
 const PASSO_MAX = 0.6;          // m: massimo avanzamento del piede davanti/dietro l'anca
 const SOLLEVAMENTO = [0.08, 0.2]; // m: quanto si alza il piede in volo, cammino → corsa
 
@@ -42,6 +50,7 @@ const PIEDE = 0.08;
 const ALTEZZA_ANCA = COSCIA + STINCO + PIEDE;
 const ANCA_X = 0.10;            // distanza laterale delle anche dal centro
 const BACINO_MIN = -0.14;       // m: di quanto può abbassarsi al massimo il bacino (no accovacciate)
+const BACINO_MIN_CORSA = -0.05; // m: idem in corsa piena (fase di volo)
 
 const COL = {
   acciaio:     '#8d949b',
@@ -278,6 +287,7 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     fase: 0,               // fase del ciclo del passo (radianti)
     tempo: 0,
     bloccato: false,       // true se l'ultimo passo è stato fermato da una pendenza
+    andatura: 'corsetta',  // 'camminata' | 'corsetta' | 'scatto'
     pendenzaMarcia: 0,     // tangente della pendenza nella direzione di marcia (+ = salita)
     fattorePendenza: 1,    // moltiplicatore di velocità dovuto alla pendenza
   };
@@ -342,8 +352,9 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
    * Aggiorna movimento e animazione. Comandi "classici": avanti/indietro lungo la direzione
    * in cui il cavaliere guarda, rotazione con i tasti o col mouse.
    * @param {number} dt  secondi dall'ultimo frame
-   * @param {{avanti:number, gira:number, giroMouse:number, corsa:boolean}} input
+   * @param {{avanti:number, gira:number, giroMouse:number, corsa:boolean, camminata?:boolean}} input
    *   avanti: 1 / 0 / -1 · gira: 1 = destra, -1 = sinistra · giroMouse: rad già decisi dal mouse (+ = destra)
+   *   corsa: scatto (Shift) · camminata: interruttore attivo (vale solo senza scatto)
    */
   function update(dt, input) {
     stato.tempo += dt;
@@ -361,7 +372,9 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     stato.pendenzaMarcia = verso === 0 ? 0
       : pendenzaLungo(Math.sin(stato.direzione) * verso, Math.cos(stato.direzione) * verso);
     stato.fattorePendenza = fattorePendenza(stato.pendenzaMarcia);
-    const velVoluta = stato.fattorePendenza * (input.avanti > 0 ? (input.corsa ? cfg.velCorsa : cfg.velCammino)
+    stato.andatura = input.corsa ? 'scatto' : input.camminata ? 'camminata' : 'corsetta';
+    const velAvanti = { scatto: cfg.velScatto, camminata: cfg.velCammino, corsetta: cfg.velCorsetta }[stato.andatura];
+    const velVoluta = stato.fattorePendenza * (input.avanti > 0 ? velAvanti
       : input.avanti < 0 ? -cfg.velIndietro : 0);
     stato.velocita += (velVoluta - stato.velocita) * avvicina(cfg.accelerazione, dt);
     if (Math.abs(stato.velocita) < 0.01 && input.avanti === 0) stato.velocita = 0;
@@ -410,12 +423,12 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     const passoGiro = giro * PASSO_PER_RADIANTE;
     if (dt > 0) stato.velPassoGiro += (passoGiro / dt - stato.velPassoGiro) * avvicina(10, dt);
     const v = Math.max(stato.velEffettiva, stato.velPassoGiro);
-    const passoF = clamp(v / cfg.velCammino, 0, 1);                                  // 0 fermo → 1 cammino
-    const corsaF = clamp((v - cfg.velCammino) / (cfg.velCorsa - cfg.velCammino), 0, 1); // 0 cammino → 1 corsa
+    const passoF = clamp(v / VEL_ANIM_CAMMINO, 0, 1);                                          // 0 fermo → 1 cammino
+    const corsaF = clamp((v - VEL_ANIM_CAMMINO) / (VEL_ANIM_CORSA - VEL_ANIM_CAMMINO), 0, 1);   // 0 cammino → 1 corsa
     const riposo = 1 - passoF;
 
     // La fase avanza con la distanza percorsa: i piedi non scivolano e, se bloccato, si fermano.
-    const ciclo = lerp(CICLO_PASSO[0], CICLO_PASSO[1], corsaF);
+    const ciclo = lerp(CICLO_PASSO[0], CICLO_PASSO[1], corsaF) + Math.max(0, v - VEL_ANIM_CORSA) * ALLUNGA_OLTRE_CORSA;
     stato.fase += (percorso + (Math.abs(percorso) < passoGiro ? passoGiro : 0)) * Math.PI * 2 / ciclo;
     const s = Math.sin(stato.fase);
 
@@ -441,7 +454,9 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     }
     // Limite all'abbassamento: su un pendio molto ripido il piede a valle resta un filo sollevato
     // piuttosto che far accovacciare il cavaliere con le ginocchia dentro il versante.
-    bacino = Math.max(bacino, BACINO_MIN) - corsaF * 0.05;   // in corsa leggermente accovacciato
+    // Correndo c'è una fase di volo: il bacino scende meno e i piedi agli estremi del passo restano
+    // un filo sollevati, invece di un affondo con entrambi i piedi a terra.
+    bacino = Math.max(bacino, lerp(BACINO_MIN, BACINO_MIN_CORSA, corsaF)) - corsaF * 0.03;
     mod.corpo.position.y = bacino;
 
     // IK a due ossa nel piano sagittale di ogni gamba
