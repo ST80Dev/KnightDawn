@@ -74,9 +74,12 @@ const Calendar = {
   },
 
   // Tempo nelle Scene 3D: secondi reali compressi (TEMPO_SCENA), più in fretta di notte.
+  // Ritorna la frazione di Passo trascorsa.
   avanzaTempoReale(secondi) {
     const r = this.eNotte() ? TEMPO_SCENA.RAPPORTO_NOTTE : TEMPO_SCENA.RAPPORTO_GIORNO;
-    this.avanzaFrazione(secondi * r / CALENDAR.SECONDI_PER_PASSO);
+    const f = secondi * r / CALENDAR.SECONDI_PER_PASSO;
+    this.avanzaFrazione(f);
+    return f;
   },
 
   // Azioni con una durata plausibile in minuti di gioco (parlare ~10, contrattare 60–120…).
@@ -85,12 +88,14 @@ const Calendar = {
   },
 
   // Salto atomico fino all'inizio dell'ora canonica indicata (0 = Prima: dormire).
-  // Ritorna i Passi interi trascorsi. Almeno uno: da Prima si arriva alla Prima seguente.
+  // Ritorna il tempo trascorso in Passi (con la frazione). Almeno un'ora: da Prima si arriva alla
+  // Prima seguente.
   avanzaFinoA(indice) {
+    const prima = this.frazione;
     this.frazione = 0;
     let n = 0;
     do { this._tick(); n++; } while (this.indiceNelGiorno() !== indice);
-    return n;
+    return n - prima;
   },
 
   // Salto atomico all'inizio della prossima ora canonica (Avanza): passa solo ciò che manca del Passo

@@ -41,7 +41,6 @@ const RANGHI = [
 
 // Recupero Forza e Salute per tipo di sosta.
 const RECOVERY = {
-  sosta:        { forza: 10 },              // riposo di giorno, ~3 ore (Scene 3D)
   accampamento: { forza: 30 },
   villaggio:    { forza: 50, salute: 10 },
   locanda:      { forza: 100, salute: 25 },  // forza = piena
@@ -172,6 +171,13 @@ const Knight = {
     const cavallo = this.isMounted() ? 0.7 : 1;
     const costo = equivalenti * molt * cavallo * this.forza.max / VIAGGIO.METRI_PER_FORZA_PIENA;
     this.forza.cur = Math.max(0, this.forza.cur - costo);
+  },
+
+  // Recupero da fermi nelle Scene 3D, proporzionale al tempo di gioco trascorso (frazione di Passo):
+  // stesso ritmo che si aspetti davvero, si usi Avanza o si riposi (docs/ESPLORAZIONE_3D.md, M5).
+  riposaPassi(passi) {
+    if (!(passi > 0)) return;
+    this.forza.cur = Math.min(this.forza.max, this.forza.cur + VIAGGIO.FORZA_RIPOSO_PER_PASSO * passi);
   },
 
   // Applica recupero da sosta.  tipo: chiave di RECOVERY.

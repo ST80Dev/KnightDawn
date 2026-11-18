@@ -82,7 +82,8 @@ const VIAGGIO = {
   METRI_PER_METRO_SALITA: 6.7,    // regola tipo Naismith: 600 m di salita ≈ 1 ora ≈ 4 km in piano
   METRI_PER_FORZA_PIENA:  30000,  // 100 di Forza ≈ 30 km in piano camminando
   FORZA_ANDATURA: { camminata: 1, corsetta: 1.5, scatto: 3 },  // moltiplicatori di Forza al metro
-  PASSI_SOSTA:            1,      // riposo di giorno (RECOVERY.sosta): ~3 ore
+  PASSI_SOSTA:            1,      // riposo di giorno con R: ~3 ore
+  FORZA_RIPOSO_PER_PASSO: 10,     // Forza recuperata da fermi ogni Passo (3 ore) di gioco: ~3,3 l'ora
 };
 
 // Tempo nelle Scene 3D: scorre col tempo reale, compresso, anche da fermi (si ferma con la pausa).

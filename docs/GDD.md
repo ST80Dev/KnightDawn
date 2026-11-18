@@ -334,9 +334,9 @@ rivisti quando si agganciano alle Scene.
 | Contrattare al mercato (più acquisti)              | 1–2 ore           | 1/3–2/3           |
 | Curare una ferita lieve                            | 1–3 ore           | 1/3–1             |
 | Sosta di riposo di giorno (+10 Forza)              | ~3 ore            | 1                 |
-| Avanza: lasciar passare il tempo (nessun recupero) | fino alla prossima ora canonica | il resto del Passo |
+| Avanza: lasciar passare il tempo (recupero da fermi) | fino alla prossima ora canonica | il resto del Passo |
 | Addestrarsi                                        | mezza giornata    | 2–4 Passi         |
-| Dormire (+30 Forza all'addiaccio, di più in locanda) | fino a Prima    | salto atomico     |
+| Dormire (all'addiaccio ~+30 Forza da Compieta; di più in locanda) | fino a Prima | salto atomico |
 
 Esempio: attraversare la piazza (5 minuti reali ≈ 75 minuti di gioco) e parlare con 4 persone
 (≈ 40–60 minuti) fa circa 2 ore: un giro al mercato.
@@ -348,8 +348,9 @@ giorno o di notte). La notte di solito si salta dormendo; chi resta sveglio la v
 reali, oppure ora per ora con Avanza, al
 buio e con incontri più rischiosi: vegliare è una scelta, non un'attesa. A ogni ora canonica il mondo
 «gira» (meteo, scadenze, possibile incontro casuale, notizie), come nel 2D; gli incontri di persona
-invece nascono dai luoghi e dalle persone, senza aspettare l'ora. La Forza nelle Scene segue la
-distanza, non il tempo.
+invece nascono dai luoghi e dalle persone, senza aspettare l'ora. Nelle Scene la Forza cala con la
+distanza (di più correndo e in salita) e **si recupera da fermi**, ~10 per Passo di gioco, allo stesso
+ritmo che si aspetti davvero, si usi Avanza o si riposi.
 
 #### Corrispondenza con viaggio medievale
 

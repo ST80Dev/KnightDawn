@@ -205,40 +205,49 @@ function nuovaPartita() {
   window.location.reload();
 }
 
-// Avanza (T): salto atomico all'inizio della prossima ora canonica, di giorno o di notte. Passa solo
-// il tempo, senza recupero: serve per non dover aspettare davvero (il tramonto, un'apertura…).
+// Recupero da fermi: ~10 Forza per Passo di gioco (VIAGGIO.FORZA_RIPOSO_PER_PASSO), con lo stesso
+// ritmo in tutti i modi in cui passa il tempo (aspettando davvero, con T o con R): nessuno conviene.
+const FERMO = 0.05;                        // m/s: sotto questa velocità il cavaliere è fermo
+const _ore = (passi) => {
+  const minuti = Math.round(passi * CALENDAR.SECONDI_PER_PASSO / 60);
+  return minuti >= 60 ? `circa ${String(Math.round(minuti / 6) / 10).replace('.', ',')} ore` : `${minuti} minuti`;
+};
+const _guadagno = (prima) => {
+  const g = Math.round(Knight.forza.cur - prima);
+  return g > 0 ? `: Forza +${g}.` : '.';
+};
+
+// Avanza (T): salto atomico all'inizio della prossima ora canonica, di giorno o di notte: serve per
+// non dover aspettare davvero (il tramonto, un'apertura…). Da fermi si recupera come aspettando.
 function avanza() {
   if (!knight || inPausa) return;
   if (knight.stato.velEffettiva > 0.1) { messaggio('Fermati prima di far passare il tempo.'); return; }
-  const f = Calendar.avanzaAllaProssimaOra();
-  const minuti = Math.round(f * CALENDAR.SECONDI_PER_PASSO / 60);
-  const durata = minuti >= 60 ? `circa ${Math.round(minuti / 6) / 10} ore`.replace('.', ',') : `${minuti} minuti`;
-  messaggio(`Lasci passare il tempo fino a ${Calendar.oraCanonica()} (${durata}).`);
+  const prima = Knight.forza.cur;
+  const passi = Calendar.avanzaAllaProssimaOra();
+  Knight.riposaPassi(passi);
+  messaggio(`Lasci passare il tempo fino a ${Calendar.oraCanonica()} (${_ore(passi)})${_guadagno(prima)}`);
   salvaOra();
 }
 
-// Riposo (R): azione atomica con recupero (docs/GDD.md §3). Da Vespri in poi si dorme all'aperto fino
-// a Prima (+30 Forza, la notte passa d'un colpo); di giorno una sosta di ~3 ore (+10 Forza).
+// Riposo (R): scorciatoia per il riposo pieno (docs/GDD.md §3). Da Vespri in poi si dorme all'aperto
+// fino a Prima (la notte passa d'un colpo); di giorno una sosta di un Passo (~3 ore).
 function riposa() {
   if (!knight || inPausa) return;
   if (knight.stato.velEffettiva > 0.1) { messaggio('Fermati prima di riposare.'); return; }
   const prima = Knight.forza.cur;
   const sera = Calendar.eNotte() || Calendar.indiceNelGiorno() === CALENDAR.INDICE_NOTTE - 1;
   if (sera) {
-    Knight.recupera('accampamento');
-    const n = Calendar.avanzaFinoA(0);
-    const guadagno = Math.round(Knight.forza.cur - prima);
-    messaggio(`Dormi all'addiaccio fino a Prima (${n} ${n === 1 ? 'Passo' : 'Passi'})`
-      + (guadagno > 0 ? `: Forza +${guadagno}.` : '.'));
+    const passi = Calendar.avanzaFinoA(0);
+    Knight.riposaPassi(passi);
+    messaggio(`Dormi all'addiaccio fino a Prima (${_ore(passi)})${_guadagno(prima)}`);
   } else {
     if (Knight.forza.cur >= Knight.forza.max) {
       messaggio('Sei riposato. Per far passare il tempo: T (Avanza).');
       return;
     }
-    Knight.recupera('sosta');
     Calendar.avanza(VIAGGIO.PASSI_SOSTA);
-    messaggio(`Ti fermi a riposare per circa ${VIAGGIO.PASSI_SOSTA * 3} ore: `
-      + `Forza +${Math.round(Knight.forza.cur - prima)}.`);
+    Knight.riposaPassi(VIAGGIO.PASSI_SOSTA);
+    messaggio(`Ti fermi a riposare (${_ore(VIAGGIO.PASSI_SOSTA)})${_guadagno(prima)}`);
   }
   salvaOra();
 }
@@ -526,7 +535,8 @@ function frame(now) {
     if (!inPausa) {
       knight.update(dt, leggiInput());
       contaPercorso();
-      Calendar.avanzaTempoReale(dt);
+      const passi = Calendar.avanzaTempoReale(dt);
+      if (knight.stato.velEffettiva < FERMO) Knight.riposaPassi(passi);
     } else {
       cam.prendiGiroMouse();               // in pausa il mouse non gira il cavaliere
     }
