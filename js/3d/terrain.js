@@ -16,10 +16,10 @@ const PAL = (typeof PALETTE !== 'undefined') ? PALETTE : {};
 
 // Colori del terreno (adattati alla luce 3D, ispirati alla PALETTE di config.js)
 const COL = {
-  fondovalle: new THREE.Color('#86ad4c'),          // campi di fondovalle, più verdi
-  prato:      new THREE.Color(PAL.verdePrato || '#9ec060').lerp(new THREE.Color(PAL.pianuraSud || '#d4bc84'), 0.3),
-  pratoAlto:  new THREE.Color('#bfae62'),          // crinali, stoppie e grano: più ocra
-  bosco:      new THREE.Color('#4a7130'),
+  fondovalle: new THREE.Color('#76a043'),          // campi di fondovalle, più verdi
+  prato:      new THREE.Color(PAL.verdePrato || '#9ec060').lerp(new THREE.Color(PAL.pianuraSud || '#d4bc84'), 0.3).multiplyScalar(0.87),
+  pratoAlto:  new THREE.Color('#ab9c55'),          // crinali, stoppie e grano: più ocra
+  bosco:      new THREE.Color('#3f6428'),
   roccia:     new THREE.Color(PAL.grigioPietra || '#8a7a5a').lerp(new THREE.Color('#b0a080'), 0.3),
   bordo:      new THREE.Color(PAL.inkLeggero || '#7a5a2a'),
 };

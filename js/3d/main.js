@@ -7,7 +7,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { loadTerrain } from './terrain.js';
 
 const COLORE_CIELO = '#c4d4d6';           // azzurro-pergamena, uguale alla nebbia
-const NEBBIA = [600, 2000];               // m: inizio e fine della nebbia lineare
+const NEBBIA = [900, 4000];               // m: inizio e fine della nebbia lineare (foschia leggera)
 
 // ─── Renderer, scena, camera ────────────────────────────────────────────
 const canvas = document.getElementById('scena');
@@ -23,10 +23,10 @@ const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerH
 
 // ─── Luci: sole del pomeriggio (da sud-ovest) + luce emisferica cielo/terra ───
 // Sole abbastanza basso e luce ambiente contenuta: il rilievo collinare si legge dal chiaroscuro.
-const cielo = new THREE.HemisphereLight('#dce8ec', '#5a4a30', 0.7);
+const cielo = new THREE.HemisphereLight('#dce8ec', '#4a3c26', 0.45);
 scene.add(cielo);
-const sole = new THREE.DirectionalLight('#fff0d4', 3.0);
-sole.position.set(-700, 500, 500);
+const sole = new THREE.DirectionalLight('#fff0d4', 3.4);
+sole.position.set(-700, 420, 500);
 scene.add(sole);
 
 // ─── HUD ────────────────────────────────────────────────────────────────
@@ -86,7 +86,7 @@ function vincolaCamera() {
   // Nebbia: da vicino nasconde il bordo del mondo; allontanandosi si ritira per la vista d'insieme.
   const dist = camera.position.distanceTo(t);
   scene.fog.near = Math.max(NEBBIA[0], dist * 0.9);
-  scene.fog.far = Math.max(NEBBIA[1], scene.fog.near + 1600);
+  scene.fog.far = Math.max(NEBBIA[1], scene.fog.near + 3000);
 }
 
 // ─── Resize ─────────────────────────────────────────────────────────────
