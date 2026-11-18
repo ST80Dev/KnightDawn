@@ -68,6 +68,9 @@ export async function loadTerrain(name = 'tavullia', basePath = 'assets/terrain/
 // ─── Terreno ────────────────────────────────────────────────────────────
 
 /**
+ * Costruisce il terreno da una griglia di quote in memoria (riga per riga da nord, metri), con gli
+ * stessi metadati del formato su file (cols, rows, cellSize, …): così lo usano sia la heightmap reale
+ * sia il generatore del mondo (js/mondo/scena.js).
  * @returns {{
  *   mesh: THREE.Group, meta: object, isFallback: boolean,
  *   size: number, half: number, minElev: number, maxElev: number,
@@ -76,7 +79,7 @@ export async function loadTerrain(name = 'tavullia', basePath = 'assets/terrain/
  *   contains:  (x:number, z:number) => boolean,
  * }}
  */
-function createTerrain(meta, heights, isFallback) {
+export function createTerrain(meta, heights, isFallback = false) {
   const { cols, rows } = meta;
   const cell = meta.cellSize;
   const size = cell * (cols - 1);

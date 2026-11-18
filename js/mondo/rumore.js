@@ -117,3 +117,27 @@ export function codiceControllo(array) {
   for (let i = 0; i < u.length; i++) h = Math.imul(h ^ u[i], 0x01000193);
   return (h >>> 0).toString(16).padStart(8, '0');
 }
+
+/**
+ * Rumore a gradiente con le derivate esatte: scrive in out[0] il valore, in out[1], out[2] le derivate
+ * rispetto a x e y. Stesso valore di gradiente(). Serve al fBm «eroso» delle Scene.
+ */
+export function gradienteD(x, y, seed, out) {
+  const ix = Math.floor(x), iy = Math.floor(y);
+  const fx = x - ix, fy = y - iy;
+  const g00 = hash2(ix, iy, seed) & 15, g10 = hash2(ix + 1, iy, seed) & 15;
+  const g01 = hash2(ix, iy + 1, seed) & 15, g11 = hash2(ix + 1, iy + 1, seed) & 15;
+  const ax = GX[g00], ay = GY[g00], bx = GX[g10], by = GY[g10];
+  const cx = GX[g01], cy = GY[g01], dx = GX[g11], dy = GY[g11];
+  const n00 = ax * fx + ay * fy;
+  const n10 = bx * (fx - 1) + by * fy;
+  const n01 = cx * fx + cy * (fy - 1);
+  const n11 = dx * (fx - 1) + dy * (fy - 1);
+  const u = fade(fx), v = fade(fy);
+  const du = 30 * fx * fx * (fx - 1) * (fx - 1), dv = 30 * fy * fy * (fy - 1) * (fy - 1);
+  const k = n00 - n10 - n01 + n11;
+  out[0] = n00 + u * (n10 - n00) + v * (n01 - n00) + u * v * k;
+  out[1] = ax + du * (n10 - n00) + u * (bx - ax) + v * (cx - ax) + du * v * k + u * v * (ax - bx - cx + dx);
+  out[2] = ay + dv * (n01 - n00) + u * (by - ay) + v * (cy - ay) + dv * u * k + u * v * (ay - by - cy + dy);
+  return out;
+}

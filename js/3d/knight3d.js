@@ -265,7 +265,8 @@ const avvicina = (rate, dt) => 1 - Math.exp(-rate * dt);   // fattore di lerp in
 
 /**
  * Crea il cavaliere sul terreno.
- * @param {object} terrain  oggetto restituito da loadTerrain (getHeight, getSlope, half)
+ * @param {object} terrain  oggetto restituito da loadTerrain (getHeight, getSlope, half; facoltativo
+ *   percorribile(x, z) → false dove l'acqua è troppo alta)
  * @param {{x:number, z:number, direzione?:number}} start  posizione iniziale; direzione in radianti (0 = +Z, π = nord)
  * @param {Array<{spingiFuori:(x:number, z:number, r:number) => ({x:number, z:number}|null)}>} [ostacoli]
  *   oggetti solidi (es. il castello): spingono il cavaliere fuori dal loro ingombro
@@ -299,6 +300,8 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
   function puoAndare(x, z) {
     const d = Math.hypot(x - stato.x, z - stato.z);
     if (d < 1e-5) return true;
+    // Acqua alta (se il terreno la segnala): non ci si entra; chi ci si trova già può uscirne.
+    if (terrain.percorribile && !terrain.percorribile(x, z) && terrain.percorribile(stato.x, stato.z)) return false;
     const salita = terrain.getHeight(x, z) - terrain.getHeight(stato.x, stato.z);
     return !(salita > 0 && Math.atan(salita / d) > cfg.pendenzaMax * Math.PI / 180);
   }

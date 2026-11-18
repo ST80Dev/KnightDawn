@@ -51,7 +51,9 @@ const QUOTE = {
   // dalla pianura in modo graduale); dentro, rilievo ondulato (fBm) più qualche dorsale lunga (ridged).
   colline: { lunghezza: 110, soglia: -0.15, rampa: 0.75, fianchi: 0.9, peso: 0.6, ondulato: 16, dorsali: 40 },
   catene: { peso: 3.2 },
-  fondale: { costa: 5, massimo: 2500 },  // m sotto il livello del mare
+  // m sotto il livello del mare. Già 40 m nella prima cella di mare: con meno, l'interpolazione liscia
+  // delle Scene (passo 3) spostava la costa verso il largo e il mare quasi spariva.
+  fondale: { costa: 40, massimo: 2500 },
 };
 
 // Fase 3: massicci isolati.

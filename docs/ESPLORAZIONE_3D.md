@@ -364,6 +364,28 @@ possono diventare stagni; troppe tradiscono il generatore).
    coordinate locali; `M` riporta alla Carta. Il mondo generato diventa l'avvio predefinito, Tavullia
    si carica con `?terreno=tavullia`; il salvataggio tiene seme e posizione nel mondo. *Prova:*
    confronto con Tavullia, a occhio e con i percentili della pendenza in F3; due blocchi vicini combaciano.
+   **Stato: fatto, da provare dall'utente.** `js/mondo/scena.js`: quota del mondo = Carta interpolata
+   con una B-spline cubica (liscia, senza pieghe a griglia) + fBm «eroso» (alla Quílez: le ottave fini si
+   smorzano dove la pendenza accumulata è forte), 6 ottave da 1400 m a ~44 m (più fini davano solo
+   tremolio sotto la griglia da 7,8 m). Ampiezza dalla quota della Carta: ~8 m in pianura, cresce forte
+   dalla collina (rampa 120–420 m), tetto 480 m in montagna; piena anche sulla costa. Generazione di una
+   Scena 20–30 ms; giuntura tra blocchi vicini 0 m (la quota è funzione pura delle coordinate del mondo).
+   `terrain.js` esporta `createTerrain` (griglia in memoria). In `main.js` un «suolo» intermedio rimanda al
+   terreno attivo: si cambia Scena senza ricaricare la pagina; il castello resta solo a Tavullia
+   (`?terreno=tavullia`). Mare: superficie a quota 0 se la Scena scende sotto; il cavaliere non entra
+   oltre 0,6 m d'acqua; la camera non va sotto il pelo dell'acqua. Carta (tasto M): mostra il mondo della
+   partita con il cavaliere; clic sulla terra = Scena centrata lì (anche da un'anteprima di un altro seme,
+   che diventa il mondo della partita). Salvataggio: seme, centro della Scena e posizione. Nuova partita
+   (F8) = nuovo mondo a caso; si parte in collina (250–600 m) vicino al centro della Carta. F3: pendenze
+   della Scena (p50, p90, p99) e posizione nel mondo. Sulla Carta il fondale vicino alla costa è passato
+   a −40 m: a −5 m l'interpolazione spostava la costa al largo e il mare quasi spariva dalle Scene.
+   **Misure** (seme 48213; pendenza p50 / p90 / p99): Tavullia 8,5° / 13,1° / 19,9° (36–230 m); collina
+   bassa 8,2° / 13,3° / 19,2° (173–507 m); collina 10,4° / 18,5° / 26° (331–664 m); pedemonte 16° / 29° /
+   38°; montagna 21° / 37° / 48° (le prime versioni: 28° / 47° / 58°, quasi impraticabile con il limite di
+   35° del cavaliere); pianura 0,6° / 1,1° / 1,7°. Limiti noti: le montagne sono «a panettone», senza
+   creste nette né valli a V (attese dal drenaggio, passo 4); i colori del terreno sono quelli di Tavullia
+   (relativi alla quota del blocco, a quadretti dove la pendenza passa le soglie del bosco): si rifanno con
+   i biomi (passo 6); dentro una Scena la costa è un arco dolce; si esce da una Scena solo dalla Carta.
 4. **Drenaggio sulla Carta**: riempimento delle conche (*priority-flood*), direzioni di flusso, flusso
    accumulato, fiumi e laghi (fase 5); valli scavate in proporzione al flusso (fase 4, versione semplice;
    se non basta, erosione fluviale *stream power*, da decidere guardando il risultato). *Prova:* verifica

@@ -1,7 +1,9 @@
 // Knight Dawn — vista di sviluppo della Carta (M6). Non è la Carta del cronista (fase G3): serve a
 // guardare il mondo generato mentre si tara il generatore.
-// Si apre con M (o con ?carta nell'indirizzo); ?seme=… sceglie il seme. Mentre è aperta il gioco è
-// fermo e la scena 3D non si disegna.
+// Si apre con M (o con ?carta nell'indirizzo). Mostra la Carta del mondo della partita con la posizione
+// del cavaliere; si possono generare anteprime di altri semi. Un clic su una cella di terra porta nella
+// Scena centrata lì (anche in un mondo d'anteprima, che diventa quello della partita).
+// Mentre è aperta il gioco è fermo e la scena 3D non si disegna.
 //
 // La pittura dei pixel (disegnaRilievo) non usa il DOM: si può chiamare anche fuori dal browser.
 
@@ -23,6 +25,7 @@ const MARE_BASSO = [122, 158, 168], MARE_FONDO = [40, 70, 92];
 const COSTA = [70, 52, 30];
 const ESAGERAZIONE = 6;           // quanto il rilievo pesa nell'ombreggiatura
 const COLORE_MASSICCI = 'rgba(150, 40, 30, 0.85)';
+const COLORE_CAVALIERE = '#e8402a';
 const fasciaDi = (m) => FASCE.find(([, a, b]) => m >= a && m < b)?.[0] ?? 'montagna';
 const LUCE = (() => {             // luce da nord-ovest, alta 45°
   const x = -1, y = -1, z = 1.4142135623730951;
@@ -79,7 +82,12 @@ const fmt = (n, d = 0) => n.toLocaleString('it-IT', { minimumFractionDigits: d, 
 
 /**
  * Crea la vista (nascosta) e la aggiunge a `contenitore`.
- * @param {{ onCambio?: (aperta: boolean) => void }} opzioni
+ * @param {{
+ *   onCambio?: (aperta: boolean) => void,
+ *   cartaAttuale?: () => (object|null),             // Carta del mondo della partita
+ *   posizione?: () => ({x:number, y:number}|null),  // cavaliere sulla Carta (km da ovest e da nord)
+ *   onScegli?: (carta: object, x: number, y: number) => void,   // clic su una cella di terra
+ * }} opzioni
  */
 export function createCartaVista(contenitore, opzioni = {}) {
   const el = document.createElement('div');
@@ -93,7 +101,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
       <button type="button" class="casuale">Seme casuale</button>
       <span class="legenda" title="Colore = quota, non biomi (biomi al passo 6)">quota 0 <i></i> 3500 m · non biomi · <b>○</b> massicci</span>
       <span class="info"></span>
-      <span class="tasto">M: torna alla scena</span>
+      <span class="tasto">clic sulla terra: vai lì · M: torna alla scena</span>
     </div>
     <div class="area"><canvas></canvas></div>
     <div class="piede">
@@ -115,6 +123,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
   const canvas = el.querySelector('canvas');
   const ctx = canvas.getContext('2d');
   let carta = null;
+  let rilievo = null;                            // immagine del rilievo della Carta mostrata
 
   function adatta() {
     if (!carta || el.hidden) return;
@@ -124,15 +133,24 @@ export function createCartaVista(contenitore, opzioni = {}) {
     canvas.style.height = Math.floor(carta.rows * scala) + 'px';
   }
 
-  function genera(testo) {
-    const t = String(testo).trim() || String(Math.floor(Math.random() * 1e6));
-    inSeme.value = t;
-    carta = generaCarta(semeDaTesto(t));
+  const diPartita = () => carta !== null && carta === opzioni.cartaAttuale?.();
+
+  /** Mostra una Carta (quella della partita o un'anteprima). */
+  function mostra(c) {
+    carta = c;
+    inSeme.value = String(carta.seme);
     canvas.width = carta.cols;
     canvas.height = carta.rows;
-    const img = ctx.createImageData(carta.cols, carta.rows);
-    disegnaRilievo(carta, img.data);
-    ctx.putImageData(img, 0, 0);
+    rilievo = ctx.createImageData(carta.cols, carta.rows);
+    disegnaRilievo(carta, rilievo.data);
+    disegnaIstogramma();
+    ridisegna();
+    adatta();
+  }
+
+  /** Rilievo, massicci e (se è la Carta della partita) il cavaliere. */
+  function ridisegna() {
+    ctx.putImageData(rilievo, 0, 0);
     ctx.strokeStyle = COLORE_MASSICCI;
     ctx.lineWidth = 1.5;
     for (const m of carta.massicci) {
@@ -140,15 +158,24 @@ export function createCartaVista(contenitore, opzioni = {}) {
       ctx.arc(m.x + 0.5, m.y + 0.5, m.raggio * 1.3, 0, Math.PI * 2);
       ctx.stroke();
     }
-    disegnaIstogramma();
+    const p = diPartita() ? opzioni.posizione?.() : null;
+    if (p) {
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#fff6e0';
+      ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = COLORE_CAVALIERE;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2); ctx.fill();
+    }
     const s = carta.statistiche;
-    elInfo.textContent = `${carta.cols}×${carta.rows} km · mare ${fmt(s.frazioneMare * 100, 1)} %`
-      + ` · ${fmt(s.ms)} ms · controllo ${carta.controllo}`;
-    // Il seme va nell'indirizzo: ricaricando o condividendo il link si ritrova lo stesso mondo.
-    const url = new URL(window.location.href);
-    url.searchParams.set('seme', t);
-    window.history.replaceState(null, '', url);
-    adatta();
+    elInfo.textContent = `${diPartita() ? 'mondo della partita' : 'anteprima'} · ${carta.cols}×${carta.rows} km`
+      + ` · mare ${fmt(s.frazioneMare * 100, 1)} % · ${fmt(s.ms)} ms · controllo ${carta.controllo}`;
+  }
+
+  /** Genera un'anteprima per un seme (testo libero; vuoto = a caso). */
+  function genera(testo) {
+    const t = String(testo).trim() || String(Math.floor(Math.random() * 1e6));
+    const attuale = opzioni.cartaAttuale?.();
+    mostra(attuale && attuale.seme === semeDaTesto(t) ? attuale : generaCarta(semeDaTesto(t)));
   }
 
   // Istogramma delle quote della terra (passi di 100 m, altezza in radice quadrata per vedere le code)
@@ -180,7 +207,9 @@ export function createCartaVista(contenitore, opzioni = {}) {
   function apri() {
     if (!el.hidden) return;
     el.hidden = false;
-    if (!carta) genera(new URL(window.location.href).searchParams.get('seme') || '');
+    const attuale = opzioni.cartaAttuale?.();
+    if (attuale) mostra(attuale);                // ogni volta: la posizione del cavaliere cambia
+    else if (!carta) genera(new URL(window.location.href).searchParams.get('seme') || '');
     adatta();
     opzioni.onCambio?.(true);
   }
@@ -212,6 +241,15 @@ export function createCartaVista(contenitore, opzioni = {}) {
         : `quota ${fmt(q)} m (${fasciaDi(q)}) · catena ${fmt(carta.catena[i], 2)}`);
   });
   canvas.addEventListener('pointerleave', () => { elCursore.innerHTML = '&nbsp;'; });
+  canvas.addEventListener('click', (e) => {
+    if (!carta || !opzioni.onScegli) return;
+    const r = canvas.getBoundingClientRect();
+    const x = Math.floor((e.clientX - r.left) / r.width * carta.cols);
+    const y = Math.floor((e.clientY - r.top) / r.height * carta.rows);
+    if (x < 0 || y < 0 || x >= carta.cols || y >= carta.rows) return;
+    if (carta.mare[y * carta.cols + x]) { elCursore.textContent = 'È mare: scegli una cella di terra.'; return; }
+    opzioni.onScegli(carta, x, y);
+  });
 
   return {
     get aperta() { return !el.hidden; },

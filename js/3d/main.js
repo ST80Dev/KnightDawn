@@ -5,19 +5,28 @@
 // (Save, slot 0). La logica sta negli script classici in js/.
 // Il tasto C passa alla camera libera di debug (OrbitControls) per ispezionare il terreno.
 // M6: il tasto M (o ?carta nell'indirizzo) apre la vista di sviluppo della Carta (cartaVista.js).
+// Il mondo generato è l'avvio predefinito (?seme=… lo sceglie): la Scena è un blocco di 2×2 km ricavato
+// dalla Carta (js/mondo/scena.js); un clic sulla Carta porta in un'altra Scena. Tavullia, scena di
+// prova con il castello, si carica con ?terreno=tavullia.
 // Unità: 1 unità Three.js = 1 metro, asse Y verso l'alto, nord verso -Z.
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { loadTerrain, componiSuolo } from './terrain.js';
+import { loadTerrain, componiSuolo, createTerrain } from './terrain.js';
 import { createKnight } from './knight3d.js';
 import { createFollowCamera } from './camera.js';
 import { createCastle } from './castle3d.js';
 import { createCartaVista } from './cartaVista.js';
+import { generaCarta } from '../mondo/carta.js';
+import { generaScena } from '../mondo/scena.js';
+import { semeDaTesto } from '../mondo/rumore.js';
 
 const COLORE_CIELO = '#c4d4d6';           // azzurro-pergamena, uguale alla nebbia
 const NEBBIA = [900, 4000];               // m: inizio e fine della nebbia lineare (foschia leggera)
-const NOME_TERRENO = 'tavullia';          // scena di prova (terreno reale)
+const PARAMETRI = new URL(window.location.href).searchParams;
+const TAVULLIA = PARAMETRI.get('terreno') === 'tavullia';   // scena di prova (terreno reale, castello)
+const COLORE_ACQUA = '#4d7282';
+const PROFONDITA_GUADO = 0.6;             // m d'acqua oltre i quali il cavaliere non entra
 
 // ─── Renderer, scena, camera ────────────────────────────────────────────
 const canvas = document.getElementById('scena');
@@ -181,10 +190,37 @@ function aggiornaStato() {
 }
 
 // ─── Terreno, cavaliere, camera ─────────────────────────────────────────
-let terrain = null;
+let terrain = null;                       // terreno della Scena attuale
 let knight = null;
-let castle = null;
-let suolo = null;                         // terreno + superfici costruite (cortile, rampa)
+let castle = null;                        // solo a Tavullia (fino a «rocca e borgo»)
+let acqua = null;                         // superficie del mare a quota 0, se la Scena ne ha
+let carta = null;                         // Carta del mondo generato (null a Tavullia)
+let scenaAttuale = null;                  // { tipo: 'tavullia' } | { tipo: 'mondo', cx, cz } (centro, m del mondo)
+let statPendenze = '';                    // percentili della pendenza della Scena (F3)
+
+// Suolo calpestabile della Scena attuale: terreno + superfici costruite (cortile, rampa). Cavaliere e
+// camera ricevono questi oggetti una volta sola; cambiando Scena cambia solo ciò a cui rimandano.
+let _suolo = null;
+const suolo = {
+  getHeight: (x, z) => _suolo.getHeight(x, z),
+  getSlope: (x, z) => _suolo.getSlope(x, z),
+  contains: (x, z) => _suolo.contains(x, z),
+  percorribile: (x, z) => _suolo.getHeight(x, z) > -PROFONDITA_GUADO,
+  get half() { return _suolo.half; },
+  get size() { return _suolo.size; },
+  get minElev() { return _suolo.minElev; },
+  get maxElev() { return _suolo.maxElev; },
+  get meta() { return _suolo.meta; },
+};
+// La camera non scende sotto il pelo dell'acqua.
+const suoloCamera = {
+  getHeight: (x, z) => (acqua ? Math.max(_suolo.getHeight(x, z), 0) : _suolo.getHeight(x, z)),
+  getSlope: (x, z) => _suolo.getSlope(x, z),
+  contains: (x, z) => _suolo.contains(x, z),
+  get half() { return _suolo.half; },
+};
+const ostacoli = [];                      // spingono fuori il cavaliere (mura del castello)
+const occlusori = [];                     // bloccano la vista della camera
 let cam = null;                           // camera alle spalle del cavaliere
 let controls = null;                      // camera libera di debug (tasto C)
 let modoCamera = 'segui';                 // 'segui' | 'libera'
@@ -209,7 +245,10 @@ function nuovaPartita() {
   nonSalvare = true;
   Save.stopAutosave();
   Save.delete(Save.AUTOSAVE_SLOT);
-  window.location.reload();
+  // Nuova partita = nuovo mondo: senza seme nell'indirizzo se ne sceglie uno a caso.
+  const url = new URL(window.location.href);
+  url.searchParams.delete('seme');
+  window.location.replace(url);
 }
 
 // Recupero da fermi: ~10 Forza per Passo di gioco (VIAGGIO.FORZA_RIPOSO_PER_PASSO), con lo stesso
@@ -284,36 +323,161 @@ function contaPercorso() {
   Knight.consumaForzaMetri(d, salita, andatura);
 }
 
-async function init() {
-  terrain = await loadTerrain(NOME_TERRENO);
-  scene.add(terrain.mesh);
-  if (terrain.isFallback) {
-    avvisoHud('Dati del terreno reale non trovati: terreno procedurale di prova.');
+// ─── Scene: Tavullia o un blocco del mondo generato ────────────────────
+
+function libera(oggetto) {
+  oggetto.traverse((o) => {
+    o.geometry?.dispose();
+    for (const m of Array.isArray(o.material) ? o.material : o.material ? [o.material] : []) m.dispose();
+  });
+}
+
+/** Percentili della pendenza della Scena (gradi), per il confronto con Tavullia (F3). */
+function misuraPendenze(t) {
+  const n = 128, passo = t.size / n, v = [];
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) v.push(t.getSlope(-t.half + (c + 0.5) * passo, -t.half + (r + 0.5) * passo));
   }
+  v.sort((a, b) => a - b);
+  const p = (f) => fmt(v[Math.floor(f * (v.length - 1))]);
+  return `pendenza p50 ${p(0.5)}° · p90 ${p(0.9)}° · p99 ${p(0.99)}°`;
+}
 
-  castle = createCastle(terrain);
-  scene.add(castle.object);
-  raccogliEmissivi(castle.object);
+/**
+ * Carica una Scena al posto di quella attuale.
+ * @param {{tipo:'tavullia'} | {tipo:'mondo', cx:number, cz:number}} desc
+ */
+async function caricaScena(desc) {
+  for (const o of [terrain?.mesh, acqua, castle?.object]) {
+    if (o) { scene.remove(o); libera(o); }
+  }
+  castle = null;
+  acqua = null;
+  emissivi = [];
+  ostacoli.length = 0;
+  occlusori.length = 0;
 
+  if (desc.tipo === 'tavullia') {
+    terrain = await loadTerrain('tavullia');
+    if (terrain.isFallback) avvisoHud('Dati del terreno reale non trovati: terreno procedurale di prova.');
+    castle = createCastle(terrain);
+    scene.add(castle.object);
+    raccogliEmissivi(castle.object);
+    ostacoli.push(castle);
+    occlusori.push(...castle.solidi);
+  } else {
+    const { meta, heights } = generaScena(carta, desc.cx, desc.cz);
+    terrain = createTerrain(meta, heights);
+  }
+  scene.add(terrain.mesh);
+
+  if (terrain.minElev < 0) {
+    acqua = new THREE.Mesh(
+      new THREE.PlaneGeometry(terrain.size, terrain.size).rotateX(-Math.PI / 2),
+      new THREE.MeshLambertMaterial({ color: COLORE_ACQUA, transparent: true, opacity: 0.88 }));
+    acqua.name = 'acqua';
+    scene.add(acqua);
+  }
+  _suolo = componiSuolo(terrain, castle ? [castle] : []);
+  scenaAttuale = desc;
+  statPendenze = misuraPendenze(terrain);
+  _oraCielo = -1;                          // ricalcola le luci (anche quelle proprie del castello)
+}
+
+/** Mette il cavaliere in (x, z) locali della Scena attuale; lo crea la prima volta. */
+function posizionaCavaliere(x, z, direzione) {
+  if (!knight) {
+    knight = createKnight(suolo, { x, z, direzione }, ostacoli);
+    scene.add(knight.object);
+  } else {
+    Object.assign(knight.stato, { x, z, direzione, velocita: 0, velAngolare: 0, velEffettiva: 0 });
+    knight.update(0, { avanti: 0, gira: 0, giroMouse: 0, corsa: false, camminata: false });
+  }
+  _prec.x = knight.stato.x; _prec.y = knight.stato.y; _prec.z = knight.stato.z;   // niente fatica per il salto
+  if (cam) {
+    if (modoCamera === 'libera') cambiaModoCamera();
+    cam.riattiva();
+  }
+}
+
+/** Centro della prima Scena di una nuova partita: collina (250–600 m) la più vicina al centro della Carta. */
+function puntoPartenza(c) {
+  for (const [a, b] of [[250, 600], [100, Infinity], [1, Infinity]]) {
+    let best = null, bd = Infinity;
+    for (let r = 0; r < c.rows; r++) {
+      for (let x = 0; x < c.cols; x++) {
+        const i = r * c.cols + x, q = c.quota[i];
+        if (c.mare[i] || q < a || q > b) continue;
+        const d = (x - c.cols / 2) ** 2 + (r - c.rows / 2) ** 2;
+        if (d < bd) { bd = d; best = { cx: (x + 0.5) * c.cella, cz: (r + 0.5) * c.cella }; }
+      }
+    }
+    if (best) return best;
+  }
+  return { cx: c.cols * c.cella / 2, cz: c.rows * c.cella / 2 };
+}
+
+/** Il seme del mondo va nell'indirizzo: ricaricando o condividendo il link si ritrova lo stesso mondo. */
+function scriviIndirizzo() {
+  const url = new URL(window.location.href);
+  if (carta) {
+    const testo = url.searchParams.get('seme');
+    if (testo === null || semeDaTesto(testo) !== carta.seme) url.searchParams.set('seme', String(carta.seme));
+    url.searchParams.delete('terreno');
+  }
+  window.history.replaceState(null, '', url);
+}
+
+/** Dalla Carta: entra nella Scena centrata sulla cella (x, y) della Carta indicata. */
+async function entraDallaCarta(cartaScelta, x, y) {
+  carta = cartaScelta;
+  await caricaScena({ tipo: 'mondo', cx: (x + 0.5) * carta.cella, cz: (y + 0.5) * carta.cella });
+  posizionaCavaliere(0, 0, Math.PI);
+  scriviIndirizzo();
+  cartaVista.chiudi();
+  messaggio(`Scena a ${x}, ${y} km dall'angolo nord-ovest (seme ${carta.seme}).`);
+  salvaOra();
+}
+
+async function init() {
   // Partita ripresa dal salvataggio automatico, se c'è; altrimenti nuova.
   const ripresa = await Save.load(Save.AUTOSAVE_SLOT);
   if (!ripresa) nuovaPartitaDati();
+  const sc = ripresa ? Save.scenaSalvata : null;
+  const finiti = (...v) => v.every(Number.isFinite);
 
-  // Nuova partita: il cavaliere parte al centro dell'area, rivolto verso la porta del castello.
-  // Partita ripresa: dal punto salvato, se riguarda questa stessa scena.
-  const porta = castle.davantiPorta();
-  const sc = Save.scenaSalvata;
-  const start = (ripresa && sc && sc.terreno === NOME_TERRENO && Number.isFinite(sc.x) && Number.isFinite(sc.z))
-    ? { x: sc.x, z: sc.z, direzione: Number.isFinite(sc.direzione) ? sc.direzione : 0 }
-    : { x: 0, z: 0, direzione: Math.atan2(porta.x, porta.z) };
-  suolo = componiSuolo(terrain, [castle]);
-  knight = createKnight(suolo, start, [castle]);
-  scene.add(knight.object);
-  _prec.x = knight.stato.x; _prec.y = knight.stato.y; _prec.z = knight.stato.z;
+  if (TAVULLIA) {
+    // Tavullia: dal punto salvato se riguarda questa scena, altrimenti al centro rivolti alla porta.
+    await caricaScena({ tipo: 'tavullia' });
+    const porta = castle.davantiPorta();
+    if (sc && sc.terreno === 'tavullia' && finiti(sc.x, sc.z)) {
+      posizionaCavaliere(sc.x, sc.z, Number.isFinite(sc.direzione) ? sc.direzione : 0);
+    } else {
+      posizionaCavaliere(0, 0, Math.atan2(porta.x, porta.z));
+    }
+  } else {
+    // Mondo generato: il seme viene dall'indirizzo, poi dal salvataggio, altrimenti a caso.
+    const testo = PARAMETRI.get('seme');
+    const seme = testo ? semeDaTesto(testo)
+      : (sc && sc.terreno === 'mondo' && Number.isFinite(sc.seme)) ? sc.seme
+        : Math.floor(Math.random() * 1e6);
+    carta = generaCarta(seme);
+    if (sc && sc.terreno === 'mondo' && sc.seme === seme && finiti(sc.cx, sc.cz, sc.x, sc.z)) {
+      await caricaScena({ tipo: 'mondo', cx: sc.cx, cz: sc.cz });
+      posizionaCavaliere(sc.x, sc.z, Number.isFinite(sc.direzione) ? sc.direzione : Math.PI);
+    } else {
+      await caricaScena({ tipo: 'mondo', ...puntoPartenza(carta) });
+      posizionaCavaliere(0, 0, Math.PI);
+    }
+    scriviIndirizzo();
+  }
 
-  Save.statoScena = () => ({
-    terreno: NOME_TERRENO, x: knight.stato.x, z: knight.stato.z, direzione: knight.stato.direzione,
-  });
+  Save.statoScena = () => {
+    const k = knight.stato;
+    return scenaAttuale.tipo === 'tavullia'
+      ? { terreno: 'tavullia', x: k.x, z: k.z, direzione: k.direzione }
+      : { terreno: 'mondo', seme: carta.seme, cx: scenaAttuale.cx, cz: scenaAttuale.cz, x: k.x, z: k.z, direzione: k.direzione };
+  };
   Save.startAutosave();
   window.addEventListener('pagehide', salvaOra);
   document.addEventListener('visibilitychange', () => {
@@ -322,7 +486,7 @@ async function init() {
   pannelloStato.hidden = false;
   if (ripresa) messaggio('Partita ripresa dall\'ultimo salvataggio.');
 
-  cam = createFollowCamera(camera, suolo, knight, renderer.domElement, castle.solidi);
+  cam = createFollowCamera(camera, suoloCamera, knight, renderer.domElement, occlusori);
 
   controls = new OrbitControls(camera, renderer.domElement);
   controls.enabled = false;
@@ -334,10 +498,14 @@ async function init() {
   controls.maxPolarAngle = THREE.MathUtils.degToRad(88);
 
   // Per ispezione dalla console del browser (Knight, Calendar, Save sono comunque globali)
-  window.kd = { scene, camera, cam, controls, terrain, suolo, knight, castle, Knight, Calendar, Save };
+  window.kd = {
+    scene, camera, cam, controls, suolo, Knight, Calendar, Save,
+    get terrain() { return terrain; }, get knight() { return knight; }, get castle() { return castle; },
+    get carta() { return carta; }, get scena() { return scenaAttuale; }, caricaScena, posizionaCavaliere,
+  };
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no'
-    + ' · T: avanza all\'ora dopo · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: Carta (sviluppo)'
+    + ' · T: avanza all\'ora dopo · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: Carta (clic: vai lì)'
     + ' · F3: info · F8: nuova partita',
   'aiuto');
 }
@@ -385,7 +553,16 @@ function aggiornaNebbia(puntoOsservato) {
 const tasti = new Set();
 
 // Vista di sviluppo della Carta (M): mentre è aperta il gioco è fermo e la scena 3D non si disegna.
-const cartaVista = createCartaVista(document.body, { onCambio: () => tasti.clear() });
+const cartaVista = createCartaVista(document.body, {
+  onCambio: () => tasti.clear(),
+  cartaAttuale: () => carta,
+  posizione: () => (scenaAttuale?.tipo === 'mondo' && knight
+    ? { x: (scenaAttuale.cx + knight.stato.x) / carta.cella, y: (scenaAttuale.cz + knight.stato.z) / carta.cella }
+    : null),
+  onScegli: (c, x, y) => {
+    entraDallaCarta(c, x, y).catch((err) => { console.error('[scena]', err); messaggio(`Errore: ${err.message}`); });
+  },
+});
 const TASTI_MOVIMENTO = {
   avanti:   ['KeyW', 'ArrowUp'],
   indietro: ['KeyS', 'ArrowDown'],
@@ -533,7 +710,11 @@ function aggiornaPannello(now) {
     }
   }
   if (terrain) {
-    testo += `\nterreno: ${terrain.meta.source} · ${fmt(terrain.minElev)}–${fmt(terrain.maxElev)} m`;
+    testo += `\nterreno: ${terrain.meta.source} · ${fmt(terrain.minElev)}–${fmt(terrain.maxElev)} m · ${statPendenze}`;
+    if (scenaAttuale?.tipo === 'mondo' && knight) {
+      testo += `\nmondo: cavaliere a ${fmt((scenaAttuale.cx + knight.stato.x) / 1000, 2)},`
+        + ` ${fmt((scenaAttuale.cz + knight.stato.z) / 1000, 2)} km`;
+    }
     const p = mouseDentro ? puntoSottoCursore() : null;
     testo += p
       ? `\ncursore: x ${fmt(p.x)} · z ${fmt(p.z)} · quota ${fmt(terrain.getHeight(p.x, p.z), 1)} m`
@@ -561,7 +742,7 @@ function frame(now) {
       cam.prendiGiroMouse();               // in pausa il mouse non gira il cavaliere
     }
     aggiornaCielo();
-    castle.aggiornaLuci(now / 1000, 1 - _luceGiorno);
+    castle?.aggiornaLuci(now / 1000, 1 - _luceGiorno);
     aggiornaStato();
     aggiornaIndicatoreAndatura();
     if (modoCamera === 'segui') {
@@ -578,8 +759,9 @@ function frame(now) {
 }
 
 camera.position.set(0, 300, 900);          // vista provvisoria mentre il terreno si carica
-if (new URL(window.location.href).searchParams.has('carta')) cartaVista.apri();
-init().catch((err) => {
+init().then(() => {
+  if (PARAMETRI.has('carta')) cartaVista.apri();
+}).catch((err) => {
   console.error('[init]', err);
   avvisoHud(`Errore di avvio: ${err.message}`);
 });
