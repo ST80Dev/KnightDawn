@@ -13,8 +13,8 @@ persona che ci cammina sopra seguendo il terreno, e un castello low-poly in cui 
 ## Stile visivo
 
 - Low-poly, *flat shading*, colori pieni: niente texture fotografiche.
-  **Tendenza decisa per il terreno** (da applicare dopo M4): più realistico, sfumato e con
-  imperfezioni; cavaliere e castello restano low-poly. Dettagli in M4, «Dopo la valutazione».
+  **Direzione decisa per dopo M4: simil-realistico, non iper-realistico**, per terreno, cavaliere e
+  castello, spinto **al massimo con il solo codice**. Dettagli in M4, «Dopo la valutazione».
 - Palette ispirata alla pergamena di `js/config.js` (`PALETTE`), adattata alla luce 3D.
 - Colore del terreno per vertice, in base ad altitudine e pendenza (prato → bosco → roccia).
 - Luce direzionale (sole) + luce emisferica + nebbia leggera per nascondere il bordo del mondo.
@@ -138,6 +138,19 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
   2. **Oggetti sparsi** con primitive e *instancing*: ciuffi d'erba, sassi, cespugli, alberi.
   Cambia lo stile scritto sopra: aggiornarlo quando si fa. Ombre nette su versanti: già regolabili con
   il rapporto sole/luce emisferica; ombre proiettate solo per cavaliere/castello.
+- **Dopo la valutazione — stile simil-realistico da codice (deciso con l'utente):**
+  - Obiettivo: proporzioni vere, materiali credibili, buona luce. **Non** fotorealismo.
+  - Tutto generato via codice: materiali fisici (`MeshStandardMaterial`: metallo, ruvidità), texture
+    generate a runtime (canvas o shader: pietra, intonaco, legno, metallo, stoffa), superfici sfumate,
+    ombre proiettate, luce d'ambiente. Le texture generate dal codice non sono asset esterni.
+  - Cavaliere: più segmenti e forme arrotondate, armatura metallica, mantello che si muove.
+    Limite noto: con le sole primitive una figura umana resta un fantoccio dettagliato.
+  - Castello: mura, merli, torri e mastio con pietra procedurale; è la parte che rende di più.
+  - **Apporti esterni rinviati:** si decide solo dopo aver raggiunto il massimo con il codice.
+    Regole già concordate per quel momento: una sola fonte per categoria (texture, vegetazione,
+    personaggi); preferire licenze CC0 (CC-BY → file dei crediti); ogni elemento si prova in scena
+    accanto a quelli procedurali e si scarta se stona; materiali ricolorati sulla nostra palette, nessuna
+    luce o effetto propri dei pacchetti. Richiede di cambiare la regola 6 di `CLAUDE.md`.
 
 ### M5 — Aggancio alla logica esistente (solo dopo la valutazione di M4)
 - La distanza percorsa si converte in **Passi** (valore in `config.js`), che fanno avanzare `Calendar`
