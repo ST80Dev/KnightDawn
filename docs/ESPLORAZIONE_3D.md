@@ -326,6 +326,17 @@ possono diventare stagni; troppe tradiscono il generatore).
    nell'indirizzo): seme, rilievo ombreggiato del continente (fase 1), livello del mare per quantile,
    tempo di generazione e codice di controllo. *Prova:* semi diversi → mondi diversi; stesso seme →
    stesso codice di controllo, anche su un altro browser.
+   **Stato: fatto, da provare dall'utente.** Generazione ~250–400 ms per Carta (niente Web Worker per
+   ora). Stesso codice di controllo in Node e in Chromium (stesso motore V8: la prova su Firefox resta
+   all'utente). Forma: fBm con dominio deformato più una scala molto grande (golfi, mari interni,
+   penisole), abbassamento verso i bordi, inclinazione per seme; catene lungo le linee di zero di un
+   rumore liscio su grande scala (linee lunghe e sinuose), con contrafforti *ridged*, in tratti scelti da
+   una maschera la cui soglia si cerca perché le catene coprano il 4,5–10 % della terra.
+   **[Da confermare] Mare al 25–38 %, non 10–22 % come nel GDD:** la sola fascia di mare lungo i bordi di
+   600×450 km vale ~15 %, e con 10–22 % il continente riempiva il rettangolo, senza golfi né mari
+   interni. Limiti noti: in qualche seme un tratto di costa corre quasi parallelo al bordo; i mari
+   interni sono ancora «mare» (laghi e mari si distinguono al passo 4); l'interno è piatto finché il
+   passo 2 non aggiunge colline e quote in metri.
 2. **Quote in metri e massicci isolati** (fasi 2–3); al passaggio del mouse quota e coordinate della
    cella. *Prova:* pianure 0–200 m, colline 200–700 m, catene 1500–3500 m; istogramma delle quote.
 3. **Scena dalla Carta con il dettaglio**: clic sulla Carta → blocco 257×257 (interpolazione liscia +

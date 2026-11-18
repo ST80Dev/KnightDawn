@@ -4,6 +4,7 @@
 // Forza di Knight; ciclo giorno/notte; pausa (P); HUD di stato; salvataggio in localStorage
 // (Save, slot 0). La logica sta negli script classici in js/.
 // Il tasto C passa alla camera libera di debug (OrbitControls) per ispezionare il terreno.
+// M6: il tasto M (o ?carta nell'indirizzo) apre la vista di sviluppo della Carta (cartaVista.js).
 // Unità: 1 unità Three.js = 1 metro, asse Y verso l'alto, nord verso -Z.
 
 import * as THREE from 'three';
@@ -12,6 +13,7 @@ import { loadTerrain, componiSuolo } from './terrain.js';
 import { createKnight } from './knight3d.js';
 import { createFollowCamera } from './camera.js';
 import { createCastle } from './castle3d.js';
+import { createCartaVista } from './cartaVista.js';
 
 const COLORE_CIELO = '#c4d4d6';           // azzurro-pergamena, uguale alla nebbia
 const NEBBIA = [900, 4000];               // m: inizio e fine della nebbia lineare (foschia leggera)
@@ -335,7 +337,8 @@ async function init() {
   window.kd = { scene, camera, cam, controls, terrain, suolo, knight, castle, Knight, Calendar, Save };
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no'
-    + ' · T: avanza all\'ora dopo · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · F3: info · F8: nuova partita',
+    + ' · T: avanza all\'ora dopo · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: Carta (sviluppo)'
+    + ' · F3: info · F8: nuova partita',
   'aiuto');
 }
 
@@ -380,6 +383,9 @@ function aggiornaNebbia(puntoOsservato) {
 
 // ─── Tastiera ───────────────────────────────────────────────────────────
 const tasti = new Set();
+
+// Vista di sviluppo della Carta (M): mentre è aperta il gioco è fermo e la scena 3D non si disegna.
+const cartaVista = createCartaVista(document.body, { onCambio: () => tasti.clear() });
 const TASTI_MOVIMENTO = {
   avanti:   ['KeyW', 'ArrowUp'],
   indietro: ['KeyS', 'ArrowDown'],
@@ -409,6 +415,9 @@ function aggiornaIndicatoreAndatura() {
 const premuto = (azione) => TASTI_MOVIMENTO[azione].some((k) => tasti.has(k));
 
 window.addEventListener('keydown', (e) => {
+  if (e.target instanceof HTMLInputElement) return;      // si sta scrivendo (es. il seme della Carta)
+  if (e.code === 'KeyM' && !e.repeat) { cartaVista.alterna(); return; }
+  if (cartaVista.aperta) return;
   if (e.code.startsWith('Arrow')) e.preventDefault();
   tasti.add(e.code);
   if (e.code === 'KeyC' && !e.repeat && knight) cambiaModoCamera();
@@ -541,6 +550,7 @@ function frame(now) {
   requestAnimationFrame(frame);
   const dt = THREE.MathUtils.clamp((now - tPrec) / 1000, 0, DT_MAX);
   tPrec = now;
+  if (cartaVista.aperta) return;           // la Carta copre tutto: niente tempo di gioco, niente disegno
   if (knight) {
     if (!inPausa) {
       knight.update(dt, leggiInput());
@@ -568,6 +578,7 @@ function frame(now) {
 }
 
 camera.position.set(0, 300, 900);          // vista provvisoria mentre il terreno si carica
+if (new URL(window.location.href).searchParams.has('carta')) cartaVista.apri();
 init().catch((err) => {
   console.error('[init]', err);
   avvisoHud(`Errore di avvio: ${err.message}`);
