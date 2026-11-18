@@ -193,6 +193,10 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
     materiali luminosi che ignorano la nebbia (`fog: false`); luce vera sull'intorno (`PointLight`)
     solo per poche sorgenti vicine al cavaliere, per restare nei 60 FPS. [Probabile] serve un limite
     di luci attive, scelte per distanza.
+    **Prova fatta:** due torce ai lati della porta del castello (`castle3d.js`, `TORCIA`): staffa,
+    manico, fiamma e alone (sprite additivo) che ignorano la nebbia, una sola `PointLight` tra le due
+    (intensità 18, raggio 16 m), tremolio; si accendono al crepuscolo (`aggiornaLuci(t, buio)`). Di
+    notte dal punto di partenza (225 m) si vedono come due punti luminosi.
   - **Persone con cui parlare (deciso con l'utente):** niente aloni permanenti su tutti. Tre livelli:
     da lontano nessun segno (al più indizi naturali: chi ti guarda, chi fa un cenno, chi sta in
     disparte); entro ~8–10 m chi ha qualcosa da dire mostra un **piccolo simbolo sopra la testa** in

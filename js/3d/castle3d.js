@@ -51,6 +51,52 @@ const LUCE_RIFLESSA = 0.2;
 
 const clamp = THREE.MathUtils.clamp;
 
+// ─── Torce ai lati della porta ──────────────────────────────────────────
+// Accese da sera a mattina. Fiamma e alone ignorano la nebbia: di notte sono gli unici punti visibili
+// da lontano. Una sola luce vera (PointLight) tra le due torce illumina porta e rampa: costa poco.
+const TORCIA = {
+  altezza: 2.7,            // m sopra la soglia
+  scostamento: 1.15,       // m dal bordo del passaggio verso l'esterno della torre-porta
+  luce: { colore: '#ff9a40', intensita: 18, distanza: 16, decadimento: 1.7 },
+  alone: 2.4,              // m: diametro dell'alone luminoso (sprite)
+};
+
+/** Texture radiale per l'alone delle fiamme (canvas, nessun asset esterno). */
+function texturaAlone() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, 'rgba(255,220,150,1)');
+  grad.addColorStop(0.25, 'rgba(255,150,60,0.55)');
+  grad.addColorStop(1, 'rgba(255,120,40,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/** Torcia a muro: staffa di ferro, manico di legno inclinato, fiamma e alone. Ritorna le parti accese. */
+function costruisciTorcia(mat, matFiamma, matAlone) {
+  const g = new THREE.Group();
+  const staffa = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.35), mat.ferro);
+  staffa.position.set(0, 0, -0.17);
+  const manico = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, 0.7, 6), mat.legno);
+  manico.rotation.x = -0.35;                       // inclinato in fuori
+  manico.position.set(0, 0.2, -0.33);
+  const testa = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.05, 0.16, 6), mat.ferro);
+  testa.rotation.x = -0.35;
+  testa.position.set(0, 0.54, -0.45);
+  const fiamma = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.38, 6), matFiamma);
+  fiamma.position.set(0, 0.8, -0.5);
+  const alone = new THREE.Sprite(matAlone);
+  alone.scale.setScalar(TORCIA.alone);
+  alone.position.set(0, 0.78, -0.5);
+  g.add(staffa, manico, testa, fiamma, alone);
+  return { g, fiamma, alone };
+}
+
 // ─── Geometrie di base ──────────────────────────────────────────────────
 
 /**
@@ -329,6 +375,8 @@ export function createCastle(terrain, opzioni = {}) {
 
   // ─── Torre-porta con passaggio ad arco ───
   let sogliaPorta;
+  const torce = [];           // { g, fiamma, alone }
+  let luceTorce = null;
   {
     const gw = P.torreLarghezza, pw = P.larghezza;
     const z0 = -H - P.torreSporgenza, z1 = z0 + P.torreProfondita;
@@ -387,6 +435,21 @@ export function createCastle(terrain, opzioni = {}) {
         object.add(f);
       }
     }
+
+    // Torce ai lati dell'arco, sulla faccia esterna (fra il passaggio e lo spigolo della torre-porta)
+    const matFiamma = new THREE.MeshBasicMaterial({ color: '#ffcf70', fog: false });
+    const matAlone = new THREE.SpriteMaterial({
+      map: texturaAlone(), blending: THREE.AdditiveBlending, depthWrite: false, fog: false, transparent: true,
+    });
+    for (const lato of [-1, 1]) {
+      const t = costruisciTorcia(mat, matFiamma, matAlone);
+      t.g.position.set(lato * (pw / 2 + TORCIA.scostamento), piano + TORCIA.altezza, z0);
+      object.add(t.g);
+      torce.push(t);
+    }
+    luceTorce = new THREE.PointLight(TORCIA.luce.colore, 0, TORCIA.luce.distanza, TORCIA.luce.decadimento);
+    luceTorce.position.set(0, piano + TORCIA.altezza + 0.6, z0 - 1.2);
+    object.add(luceTorce);
 
     // Merli sulla torre-porta
     for (let x = -gw / 2 + 0.6; x <= gw / 2 - 0.6 + 1e-6; x += (gw - 1.2) / 3) {
@@ -553,6 +616,26 @@ export function createCastle(terrain, opzioni = {}) {
     return Math.abs(lx) < H - SP / 2 && Math.abs(lz) < H - SP / 2;
   }
 
+  /**
+   * Torce: accese col buio (0 = giorno, 1 = notte piena), con un tremolio. Da chiamare a ogni fotogramma.
+   * @param {number} t     tempo in secondi (per il tremolio)
+   * @param {number} buio  0–1
+   */
+  function aggiornaLuci(t, buio) {
+    const accese = buio > 0.15;
+    const f = clamp((buio - 0.15) / 0.5, 0, 1);              // si accendono al crepuscolo
+    const tremolio = 0.82 + 0.1 * Math.sin(t * 13.1) + 0.06 * Math.sin(t * 23.7 + 1.3) + 0.04 * Math.sin(t * 7.3);
+    luceTorce.intensity = accese ? TORCIA.luce.intensita * f * tremolio : 0;
+    torce.forEach((tc, i) => {
+      tc.fiamma.visible = tc.alone.visible = accese;
+      if (!accese) return;
+      const k = tremolio + 0.05 * Math.sin(t * 17 + i * 2.1);
+      tc.fiamma.scale.set(1, k, 1);
+      tc.alone.material.opacity = f;
+      tc.alone.scale.setScalar(TORCIA.alone * (0.9 + 0.15 * k));
+    });
+  }
+
   /** Punto davanti alla porta, all'esterno (mondo): utile per i test e per i segnaposto. */
   function davantiPorta(distanza = 8) {
     const lz = gz0 - lunghezzaRampa - distanza;
@@ -561,6 +644,6 @@ export function createCastle(terrain, opzioni = {}) {
 
   return {
     object, cfg, solidi, rettangoli, cerchi, sogliaPorta, piano, lunghezzaRampa,
-    spingiFuori, dentro, davantiPorta, inLocale, quotaSuolo,
+    spingiFuori, dentro, davantiPorta, inLocale, quotaSuolo, aggiornaLuci,
   };
 }
