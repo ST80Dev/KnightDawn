@@ -15,7 +15,7 @@ instabile durante lo sviluppo. In alternativa in locale con `python -m http.serv
 
 ## Struttura
 - `index.html` + `style.css` — canvas WebGL + overlay HUD in HTML/CSS + importmap
-- `js/3d/` — moduli ES del motore 3D: `main.js` (renderer, luci, loop, input, F3), `terrain.js`, `knight3d.js`, `camera.js`, `castle3d.js`
+- `js/3d/` — moduli ES del motore 3D: `main.js` (renderer, luci, loop, input, F3), `terrain.js`, `orizzonte.js`, `knight3d.js`, `camera.js`, `castle3d.js`
 - `js/mondo/` — generatore del mondo, moduli ES senza grafica né DOM (`rumore.js`, `carta.js`, poi
   `verifica.js`, `scena.js`); la vista di sviluppo della Carta è `js/3d/cartaVista.js`
 - `js/` — logica di gioco ereditata, script classici senza grafica (`config` `calendar` `knight`
@@ -63,5 +63,5 @@ architettura: quelle stanno in `docs/`. Aggiornare la fase corrente a ogni cambi
 
 ## Fase corrente
 
-**M6, prototipo del generatore del mondo** (Carta e Scene, `docs/GDD.md` §2 *Il mondo*): piano in 7 passi
+**M6, prototipo del generatore del mondo** (Carta e Scene, `docs/GDD.md` §2 *Il mondo*): piano in 8 passi
 in `docs/ESPLORAZIONE_3D.md`. M0–M5 completate. La versione 2D resta nella cronologia git (`2c869fa`).

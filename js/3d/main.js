@@ -17,12 +17,15 @@ import { createKnight } from './knight3d.js';
 import { createFollowCamera } from './camera.js';
 import { createCastle } from './castle3d.js';
 import { createCartaVista } from './cartaVista.js';
+import { creaOrizzonte } from './orizzonte.js';
 import { generaCarta } from '../mondo/carta.js';
 import { generaScena } from '../mondo/scena.js';
 import { semeDaTesto } from '../mondo/rumore.js';
 
 const COLORE_CIELO = '#c4d4d6';           // azzurro-pergamena, uguale alla nebbia
 const NEBBIA = [900, 4000];               // m: inizio e fine della nebbia lineare (foschia leggera)
+const NEBBIA_ORIZZONTE = [1500, 46000];   // m: con l'orizzonte (mondo generato) si vede fino a ~45 km
+const LONTANO = 60000;                    // m: distanza massima disegnata dalla camera
 const PARAMETRI = new URL(window.location.href).searchParams;
 const TAVULLIA = PARAMETRI.get('terreno') === 'tavullia';   // scena di prova (terreno reale, castello)
 const COLORE_ACQUA = '#4d7282';
@@ -30,7 +33,9 @@ const PROFONDITA_GUADO = 0.6;             // m d'acqua oltre i quali il cavalier
 
 // ─── Renderer, scena, camera ────────────────────────────────────────────
 const canvas = document.getElementById('scena');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+// Buffer di profondità logaritmico: dal cavaliere a pochi metri fino all'orizzonte a ~50 km senza che le
+// superfici lontane (costa e mare, versanti vicini) si contendano i pixel.
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 
@@ -38,7 +43,7 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(COLORE_CIELO);
 scene.fog = new THREE.Fog(COLORE_CIELO, NEBBIA[0], NEBBIA[1]);
 
-const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.2, 5000);
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.2, LONTANO);
 
 // ─── Luci: sole che segue l'ora del giorno, luna, luce emisferica cielo/terra ───
 // Di giorno sole forte e luce ambiente contenuta: il rilievo collinare si legge dal chiaroscuro.
@@ -194,6 +199,7 @@ let terrain = null;                       // terreno della Scena attuale
 let knight = null;
 let castle = null;                        // solo a Tavullia (fino a «rocca e borgo»)
 let acqua = null;                         // superficie del mare a quota 0, se la Scena ne ha
+let orizzonte = null;                     // terreno lontano attorno alla Scena (solo mondo generato)
 let carta = null;                         // Carta del mondo generato (null a Tavullia)
 let scenaAttuale = null;                  // { tipo: 'tavullia' } | { tipo: 'mondo', cx, cz } (centro, m del mondo)
 let statPendenze = '';                    // percentili della pendenza della Scena (F3)
@@ -348,11 +354,12 @@ function misuraPendenze(t) {
  * @param {{tipo:'tavullia'} | {tipo:'mondo', cx:number, cz:number}} desc
  */
 async function caricaScena(desc) {
-  for (const o of [terrain?.mesh, acqua, castle?.object]) {
+  for (const o of [terrain?.mesh, acqua, castle?.object, orizzonte?.oggetto]) {
     if (o) { scene.remove(o); libera(o); }
   }
   castle = null;
   acqua = null;
+  orizzonte = null;
   emissivi = [];
   ostacoli.length = 0;
   occlusori.length = 0;
@@ -371,7 +378,15 @@ async function caricaScena(desc) {
   }
   scene.add(terrain.mesh);
 
-  if (terrain.minElev < 0) {
+  if (desc.tipo === 'mondo') {
+    // Orizzonte: terreno lontano fino a ~50 km. Le pareti laterali del blocco si vedrebbero dall'esterno.
+    orizzonte = creaOrizzonte(carta, desc.cx, desc.cz, terrain, COLORE_ACQUA);
+    scene.add(orizzonte.oggetto);
+    const pareti = terrain.mesh.getObjectByName('terreno-bordo');
+    if (pareti) pareti.visible = false;
+    acqua = orizzonte.acqua;
+    if (acqua) scene.add(acqua);
+  } else if (terrain.minElev < 0) {
     acqua = new THREE.Mesh(
       new THREE.PlaneGeometry(terrain.size, terrain.size).rotateX(-Math.PI / 2),
       new THREE.MeshLambertMaterial({ color: COLORE_ACQUA, transparent: true, opacity: 0.88 }));
@@ -494,7 +509,7 @@ async function init() {
   controls.dampingFactor = 0.08;
   controls.screenSpacePanning = false;    // il trascinamento col tasto destro scorre sul piano orizzontale
   controls.minDistance = 5;
-  controls.maxDistance = 1800;
+  controls.maxDistance = 8000;
   controls.maxPolarAngle = THREE.MathUtils.degToRad(88);
 
   // Per ispezione dalla console del browser (Knight, Calendar, Save sono comunque globali)
@@ -542,8 +557,9 @@ function vincolaCameraLibera() {
 // osservato. Le luci di case, castello e fuochi (future) dovranno ignorarla per restare visibili da lontano.
 function aggiornaNebbia(puntoOsservato) {
   const dist = camera.position.distanceTo(puntoOsservato);
-  const nearGiorno = Math.max(NEBBIA[0], dist * 0.9);
-  const farGiorno = Math.max(NEBBIA[1], nearGiorno + 3000);
+  const nebbia = orizzonte ? NEBBIA_ORIZZONTE : NEBBIA;
+  const nearGiorno = Math.max(nebbia[0], dist * 0.9);
+  const farGiorno = Math.max(nebbia[1], nearGiorno + 3000);
   const g = _luceGiorno * _luceGiorno;     // la vista si allunga solo quando la luce è davvero tornata
   scene.fog.near = THREE.MathUtils.lerp(dist + CICLO.vicinoNotte, nearGiorno, g);
   scene.fog.far = THREE.MathUtils.lerp(dist + CICLO.lontanoNotte, farGiorno, g);
@@ -711,6 +727,7 @@ function aggiornaPannello(now) {
   }
   if (terrain) {
     testo += `\nterreno: ${terrain.meta.source} · ${fmt(terrain.minElev)}–${fmt(terrain.maxElev)} m · ${statPendenze}`;
+    if (orizzonte) testo += `\norizzonte: fino a ${fmt(48)} km · ${fmt(orizzonte.triangoli)} triangoli · ${fmt(orizzonte.ms)} ms`;
     if (scenaAttuale?.tipo === 'mondo' && knight) {
       testo += `\nmondo: cavaliere a ${fmt((scenaAttuale.cx + knight.stato.x) / 1000, 2)},`
         + ` ${fmt((scenaAttuale.cz + knight.stato.z) / 1000, 2)} km`;

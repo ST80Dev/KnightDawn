@@ -216,6 +216,16 @@ function faceColor(out, t, slope, rnd) {
   out.multiplyScalar(1 + (rnd * 2 - 1) * VARIAZIONE_FACCIA);
 }
 
+/**
+ * Colore di una faccia di terreno anche fuori dal blocco (es. l'orizzonte, orizzonte.js), con la stessa
+ * scala del blocco: quota relativa al suo minimo e massimo (limitata a 0…1) e pendenza in gradi.
+ */
+export function coloreTerreno(out, quota, pendenza, rnd, minElev, maxElev) {
+  const t = Math.min(Math.max((quota - minElev) / Math.max(maxElev - minElev, 1), 0), 1);
+  faceColor(out, t, pendenza, rnd);
+  return out;
+}
+
 // ─── Lati del blocco di terreno ─────────────────────────────────────────
 // Pareti verticali dal bordo della superficie fino a una base comune: viste da lontano,
 // l'area sembra un plastico invece di un foglio sottile sospeso.

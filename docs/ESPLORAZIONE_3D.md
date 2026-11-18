@@ -320,7 +320,10 @@ del mondo (niente erosione idraulica per blocco: lascerebbe giunture). L'erosion
 le grandi valli fluviali e per le catene. Rischio tipico del rumore: conche chiuse sparse (alcune
 possono diventare stagni; troppe tradiscono il generatore).
 
-### Piano approvato (novembre 2026): 7 passi, ciascuno provato nel browser
+### Piano approvato (novembre 2026): 8 passi, ciascuno provato nel browser
+
+(Il passo 5, orizzonte, è stato inserito dopo il passo 4 su richiesta dell'utente: i passi successivi
+sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti come 6/7/8.)
 
 1. **Seme e rumore deterministici; vista di sviluppo della Carta** (tasto `M`, oppure `?carta`
    nell'indirizzo): seme, rilievo ombreggiato del continente (fase 1), livello del mare per quantile,
@@ -412,12 +415,28 @@ possono diventare stagni; troppe tradiscono il generatore).
    Carta sono larghe chilometri (in 2 km se ne vede un fianco) e non c'è ancora acqua né alveo: passo 5;
    i laghi in quota nelle Scene sono conche asciutte (passo 5); la pioggia è uniforme (con l'umidità del
    passo 6 i bacini cambieranno).
-5. **Fiumi nella Scena**: tracciato liscio (non a celle), letto scavato sempre in discesa, superficie
+5. **Orizzonte** (inserito dopo il passo 4): oltre il blocco di 2×2 km non si vedeva nulla, nemmeno una
+   catena a pochi km. Terreno lontano solo da guardare, dalla Carta già in memoria (`js/3d/orizzonte.js`).
+   *Prova:* dal pedemonte si vedono le montagne lontane; nessuna fessura al raccordo col blocco; FPS.
+   **Stato: fatto, da provare dall'utente.** Tre anelli quadrati attorno al blocco: 1–6 km a passo 62,5 m,
+   6–18 km a 187,5 m, 18–48 km a 750 m (~167 000 triangoli, costruiti in 150–270 ms al cambio di Scena).
+   Una sola funzione di quota: la quota del mondo in cui ogni ottava del dettaglio si spegne alla distanza
+   in cui la griglia non la rappresenta più (piene al bordo del blocco, a 18 km resta la sola Carta); una
+   prima versione a due anelli, con la sola Carta oltre 6 km, mostrava montagne lontane a cupola liscia.
+   Cuciture a ventaglio sui vertici più fitti dentro, con le stesse quote: niente fessure né pareti (le
+   pareti laterali del blocco si nascondono). Curvatura della Terra oltre 1,5 km (raggio efficace 7/6 per
+   la rifrazione: −125 m circa a 40 km); mare come griglia larga che scende con la curvatura. Camera fino a
+   60 km, buffer di profondità logaritmico (niente sfarfallio tra costa e mare lontani), nebbia di giorno
+   da 1,5 a 46 km (foschia azzurrina sulle cose lontane); di notte come prima, solo vicino. Solo nel mondo
+   generato: Tavullia resta com'era. F3: triangoli e tempo dell'orizzonte. Limiti noti: FPS su GPU vera da
+   misurare (in headless il rendering è software e non fa testo); colori come il blocco (biomi al passo 7);
+   oltre il confine della Carta l'orizzonte prolunga piatto l'ultimo bordo.
+6. **Fiumi nella Scena**: tracciato liscio (non a celle), letto scavato sempre in discesa, superficie
    dell'acqua. *Prova:* il fiume sta in una valle, scende, prosegue senza stacchi nel blocco accanto.
-6. **Temperatura, umidità, biomi** (fasi 6–7) e limite delle nevi nello shader; colori della Scena per
+7. **Temperatura, umidità, biomi** (fasi 6–7) e limite delle nevi nello shader; colori della Scena per
    bioma. *Prova:* livelli della Carta; neve sulle cime.
-7. **Regole di varietà e verifica automatica** (fase 8) su N semi, con esito per regola. Con i passi 3 e
-   5 chiude l'accettazione.
+8. **Regole di varietà e verifica automatica** (fase 8) su N semi, con esito per regola. Con i passi 3 e
+   6 chiude l'accettazione.
 
 ### Decisioni prese con il piano
 - **File:** `js/mondo/` con moduli ES **senza Three.js né DOM** (regola 9, e pronti per un Web Worker):

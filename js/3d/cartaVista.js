@@ -12,7 +12,7 @@ import { verificaFiumi } from '../mondo/verifica.js';
 import { semeDaTesto } from '../mondo/rumore.js';
 
 // Colori del rilievo: SOLO quota (metri), a un solo tono, più alto = più scuro. Niente verdi, ocra o
-// bianchi: si leggerebbero come biomi (prati, deserti, neve), che arrivano al passo 6 come livello a sé.
+// bianchi: si leggerebbero come biomi (prati, deserti, neve), che arrivano al passo 7 come livello a sé.
 // Una tappa per ogni limite di fascia: pianura 0–200, collina 200–700, pedemonte 700–1500, montagna.
 const TERRA = [
   [0, [236, 228, 204]],
@@ -105,7 +105,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
       <label>Seme <input type="text" class="seme" spellcheck="false" autocomplete="off"></label>
       <button type="button" class="genera">Genera</button>
       <button type="button" class="casuale">Seme casuale</button>
-      <span class="legenda" title="Colore = quota, non biomi (biomi al passo 6)">quota 0 <i></i> 3500 m · non biomi · <b>○</b> massicci</span>
+      <span class="legenda" title="Colore = quota, non biomi (biomi al passo 7)">quota 0 <i></i> 3500 m · non biomi · <b>○</b> massicci</span>
       <span class="info"></span>
       <span class="tasto">clic sulla terra: vai lì · M: torna alla scena</span>
     </div>
