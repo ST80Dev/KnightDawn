@@ -43,7 +43,9 @@ const FORMA = {
 // Fase 2: fasce di quota (m) e parte della terra in ciascuna, per seme. La montagna usa frazioneMontagna.
 const QUOTE = {
   limiti: [0, 200, 700, 1500],          // pianura | collina | pedemonte | montagna
-  frazioneColline: [0.45, 0.55],        // GDD (rivisto con l'utente): più collina che pianura
+  // GDD (rivisto con l'utente): collina 45–55 %. Si assegna il 5 % in più perché lo scavo delle valli dopo
+  // l'erosione riporta in basso una parte della collina (misurato: −5…−6 %).
+  frazioneColline: [0.5, 0.6],
   frazionePedemonte: [0.08, 0.12],
   cima: [2800, 3500],                   // quota massima delle catene
   // Campo composto (unità arbitrarie, ~km): pesi delle parti.
@@ -63,8 +65,9 @@ const QUOTE = {
 const POGGI = {
   densita: { lunghezza: 90, soglia: [-0.35, 0.45] },  // campo su grande scala: dove sono fitti e dove radi
   distanza: [4, 14],          // km: distanza minima tra poggi, da fitti a radi
-  raggio: [1.0, 2.6],         // km: semiasse corto (molti piccoli, pochi grandi)
+  raggio: [1.6, 3.0],         // km: semiasse corto (molti piccoli, pochi grandi); sotto 1,6 km erano quadratini
   altezza: [80, 300],         // m sopra il terreno
+  belvedere: { parte: 0.12, altezza: [300, 450] },   // alcuni dominano le colline attorno (punti panoramici)
   allungamento: [1, 2.6],     // dorsali: allungati lungo un campo di direzioni dolce (vicini allineati)
   quotaMassima: 900,          // non in montagna
   corso: 60, liberoCorsi: [1, 3],   // km²: corsi da cui stare lontani; km: niente rialzo / rialzo pieno
@@ -86,6 +89,8 @@ const POGGI = {
  */
 export function generaCarta(seme, opzioni = {}) {
   const t0 = performance.now();
+  const avanzamento = opzioni.avanzamento;           // (testo, frazione 0…1): per la schermata di caricamento
+  avanzamento?.('Forma del continente', 0);
   const cols = opzioni.cols ?? CARTA_PREDEFINITA.cols;
   const rows = opzioni.rows ?? CARTA_PREDEFINITA.rows;
   const n = cols * rows;
@@ -198,8 +203,6 @@ export function generaCarta(seme, opzioni = {}) {
   // ─── Fase 2a: campo composto sulla terra (pianure + colline + catene) ───
   const QP = QUOTE.pianura;
   const composto = new Float32Array(n);
-  const valoriTerra = new Float32Array(n - celleMare);
-  let k = 0;
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
       const i = y * cols + x;
@@ -219,43 +222,25 @@ export function generaCarta(seme, opzioni = {}) {
       const c = catena[i];
       const v = pianura + colline + QUOTE.catene.peso * carattere.forzaCatene * c * Math.sqrt(c);
       composto[i] = v;
-      valoriTerra[k++] = v;
     }
   }
 
   // ─── Fase 2b: curva delle quote a fasce fissate per quantile ───
-  valoriTerra.sort();
-  const fM = carattere.frazioneMontagna, fP = carattere.frazionePedemonte, fH = carattere.frazioneColline;
-  const v = [valoriTerra[0], quantile(valoriTerra, 1 - fH - fP - fM), quantile(valoriTerra, 1 - fP - fM),
-    quantile(valoriTerra, 1 - fM), valoriTerra[valoriTerra.length - 1]];
-  const metri = [...QUOTE.limiti, carattere.cima];
   const quota = new Float32Array(n);
   const QF = QUOTE.fondale;
   const spanFondale = (livello - minBase) || 1;
   for (let i = 0; i < n; i++) {
-    if (mare[i]) {
-      const g = (livello - base[i]) / spanFondale;          // 0 sulla costa, 1 nel punto più profondo
-      quota[i] = -(QF.costa + (QF.massimo - QF.costa) * g * g);
-      continue;
-    }
-    const c = composto[i];
-    let f = 3;
-    while (f > 0 && c < v[f]) f--;
-    const t = (c - v[f]) / ((v[f + 1] - v[f]) || 1);
-    const m = metri[f] + (metri[f + 1] - metri[f]) * (t > 1 ? 1 : t);
-    quota[i] = m < 1 ? 1 : m;                                // la terra sta sopra il mare
+    if (!mare[i]) continue;
+    const g = (livello - base[i]) / spanFondale;          // 0 sulla costa, 1 nel punto più profondo
+    quota[i] = -(QF.costa + (QF.massimo - QF.costa) * g * g);
   }
+  mappaFasce(composto, mare, carattere, quota);
+  avanzamento?.('Erosione dei fiumi', 0.25);
 
-  // Fascia di montagna per rango, non lineare: pochi picchi estremi schiaccerebbero quasi tutte le celle
-  // poco sopra i 1500 m (catene senza dislivelli). Con il rango (curva r^1,25) le quote si distribuiscono
-  // tra 1500 m e la cima, e celle vicine con valore diverso hanno quote ben diverse.
-  const alte = [];
-  for (let i = 0; i < n; i++) if (!mare[i] && composto[i] >= v[3]) alte.push(i);
-  alte.sort((a, b) => (composto[a] - composto[b]) || (a - b));
-  for (let r = 0; r < alte.length; r++) {
-    const t = alte.length > 1 ? r / (alte.length - 1) : 1;
-    quota[alte[r]] = metri[3] + (metri[4] - metri[3]) * t * Math.sqrt(Math.sqrt(t));   // t^1,25
-  }
+  // ─── Fase 4a: erosione fluviale, poi di nuovo le fasce (trasformazione monotona: i fiumi scendono ancora) ───
+  erosioneFluviale(cols, rows, quota, mare, seme, (f) => avanzamento?.('Erosione dei fiumi', 0.25 + 0.5 * f));
+  mappaFasce(quota, mare, carattere, quota);
+  avanzamento?.('Fiumi, laghi e poggi', 0.78);
 
   // ─── Fasi 4–5: drenaggio, valli, fiumi e laghi ───
   const dren = drenaggio(cols, rows, quota, mare, seme);
@@ -297,6 +282,71 @@ export function generaCarta(seme, opzioni = {}) {
   carta.fiumi = dren.fiumi;
   carta.statistiche.ms = performance.now() - t0;
   return carta;
+}
+
+// ─── Fasi 2b e 4a: fasce di quota, erosione fluviale ─────────────────────
+
+/**
+ * Quote della terra in metri da un campo di valori qualunque (ordine conservato): curva a fasce fissate per
+ * quantile (pianura, collina, pedemonte; montagna per rango, curva r^1,25). Scrive in `quota` (anche lo
+ * stesso array dei valori); il mare resta com'è.
+ */
+function mappaFasce(valori, mare, carattere, quota) {
+  const n = valori.length;
+  let nt = 0;
+  for (let i = 0; i < n; i++) if (!mare[i]) nt++;
+  const terra = new Float32Array(nt);
+  let k = 0;
+  for (let i = 0; i < n; i++) if (!mare[i]) terra[k++] = valori[i];
+  terra.sort();
+  const q = (f) => terra[Math.min(nt - 1, Math.max(0, Math.floor(f * nt)))];
+  const fM = carattere.frazioneMontagna, fP = carattere.frazionePedemonte, fH = carattere.frazioneColline;
+  const v = [terra[0], q(1 - fH - fP - fM), q(1 - fP - fM), q(1 - fM), terra[nt - 1]];
+  const metri = [...QUOTE.limiti, carattere.cima];
+  // Montagna per rango: pochi picchi estremi schiaccerebbero quasi tutte le celle poco sopra i 1500 m.
+  const alte = [];
+  for (let i = 0; i < n; i++) if (!mare[i] && valori[i] >= v[3]) alte.push(i);
+  alte.sort((a, b) => (valori[a] - valori[b]) || (a - b));
+  for (let i = 0; i < n; i++) {
+    if (mare[i] || valori[i] >= v[3]) continue;
+    const c = valori[i];
+    let f = 2;
+    while (f > 0 && c < v[f]) f--;
+    const t = (c - v[f]) / ((v[f + 1] - v[f]) || 1);
+    const m = metri[f] + (metri[f + 1] - metri[f]) * (t > 1 ? 1 : t < 0 ? 0 : t);
+    quota[i] = m < 1 ? 1 : m;                                // la terra sta sopra il mare
+  }
+  for (let r = 0; r < alte.length; r++) {
+    const t = alte.length > 1 ? r / (alte.length - 1) : 1;
+    quota[alte[r]] = metri[3] + (metri[4] - metri[3]) * t * Math.sqrt(Math.sqrt(t));   // t^1,25
+  }
+}
+
+// Erosione fluviale («stream power», schema implicito di Braun e Willett, 2013), senza sollevamento:
+// a ogni passo ogni cella si avvicina alla cella a valle con peso forza·√(bacino km²). I fiumi grandi
+// incidono e si regolarizzano, i versanti cambiano poco, le conche attraversate dall'acqua si colmano dal
+// basso. Le direzioni di flusso si ricalcolano ogni `ogni` passi (riempimento e zone piatte come nel drenaggio).
+const EROSIONE = { iterazioni: 24, ogni: 3, forza: 0.004 };
+
+function erosioneFluviale(cols, rows, quota, mare, seme, avanzamento) {
+  const E = EROSIONE, n = cols * rows;
+  const acque = classificaAcque(cols, rows, mare);
+  const foce = foci(cols, rows, acque);
+  const h = Float64Array.from(quota);
+  const sF = derivaSeme(seme, 44);
+  let f = null;
+  for (let it = 0; it < E.iterazioni; it++) {
+    if (it % E.ogni === 0) f = flusso(cols, rows, riempi(cols, rows, h, foce), foce, acque, sF);
+    const { ricevente, bacino, ordine } = f;
+    for (let t = ordine.length - 1; t >= 0; t--) {            // dalla foce verso monte: la cella a valle è fatta
+      const i = ordine[t], j = ricevente[i];
+      if (foce[i] || j < 0) continue;
+      const F = E.forza * Math.sqrt(bacino[i] > 1 ? bacino[i] : 1);
+      h[i] = (h[i] + F * h[j]) / (1 + F);
+    }
+    avanzamento?.((it + 1) / E.iterazioni);
+  }
+  for (let i = 0; i < n; i++) if (!mare[i]) quota[i] = h[i];
 }
 
 // ─── Fase 3: massicci isolati ───────────────────────────────────────────
@@ -344,7 +394,7 @@ function piazzaPoggi(seme, cols, rows, quota, mare, catena, dren) {
   const accettati = [];
   for (let t = 0; t < P.tentativi; t++) {
     const x = rng() * cols, y = rng() * rows;
-    const u1 = rng(), u2 = rng(), u3 = rng(), u4 = rng();
+    const u1 = rng(), u2 = rng(), u3 = rng(), u4 = rng(), u5 = rng();
     const c = Math.floor(x), r = Math.floor(y), i = r * cols + c;
     if (mare[i] || dren.acque[i] || base[i] > P.quotaMassima || distCosta[i] < P.distanzaCosta
       || distCatene[i] < P.distanzaCatene || distCorsi[i] < P.liberoCorsi[1]) continue;
@@ -369,7 +419,9 @@ function piazzaPoggi(seme, cols, rows, quota, mare, catena, dren) {
     const p = {
       x, y, dmin, ax, ay,
       raggio: P.raggio[0] + (P.raggio[1] - P.raggio[0]) * u1 * u1,
-      altezza: P.altezza[0] + (P.altezza[1] - P.altezza[0]) * u2 * u2,
+      altezza: u5 < P.belvedere.parte
+        ? P.belvedere.altezza[0] + (P.belvedere.altezza[1] - P.belvedere.altezza[0]) * u2
+        : P.altezza[0] + (P.altezza[1] - P.altezza[0]) * u2 * u2,
       allungamento: P.allungamento[0] + (P.allungamento[1] - P.allungamento[0]) * u3,
       piatto: u4 < 0.15,                         // alcuni a sommità larga (pianoro)
     };
@@ -413,7 +465,7 @@ const DRENAGGIO = {
   // il letto entro raggioBase + raggioPer·√bacino km. Si scava solo dove il bacino supera areaMinima.
   // breccia: di quanto (m) il letto può scendere oltre lo scavo normale per tagliare il bordo di una conca e
   // svuotarla (come fa un fiume vero); le conche più profonde restano laghi.
-  valli: { k: 8, frazione: 0.45, areaMinima: 15, raggioBase: 1.5, raggioPer: 0.12, raggioMax: 8, breccia: 60 },
+  valli: { k: 5, frazione: 0.45, areaMinima: 15, raggioBase: 1.5, raggioPer: 0.12, raggioMax: 8, breccia: 60 },
   fiume: 150,              // km² di bacino: da qui una cella porta un fiume
   // Conche più profonde (m) e più ampie (km²) diventano laghi; le altre si colmano. Con la collina al
   // 45–55 % il rilievo a rumore ha molte conche: soglie basse davano 100–200 laghi.
@@ -885,6 +937,9 @@ const TRACCIATI = {
   // Le valli si scavano lungo le anse: possono essere ampie anche in collina (solo la montagna le stringe).
   anse: { lunghezzaBase: 3, lunghezzaPer: 0.3, lunghezzaMax: 12, ampiezza: 0.4, tetto: [0.3, 1.8], forma: 1 },
   passo: 0.2,                   // km tra i punti del tracciato
+  // Confluenza anticipata: un corso che arriva entro questa distanza (km) da uno più grande già tracciato lo
+  // raggiunge lì. Sui fondovalle larghi e in pendenza uniforme i rigagnoli scendevano paralleli per decine di km.
+  confluenza: 1.5,
 };
 const PASSO_PUNTO = 4;          // valori per punto: x, y (km), bacino (km²), letto (m; NaN se non noto)
 
@@ -1015,7 +1070,7 @@ export function tracciaFiumi(dati, opzioni = {}) {
   }
 
   // 2–4. Angoli arrotondati, anse, ancora un arrotondamento.
-  return tronchi.map((p0, k) => {
+  const curve = tronchi.map((p0, k) => {
     const p = ricampiona(chaikin(p0, 3), T.passo);
     const m = p.length / S;
     let L = 0;
@@ -1043,4 +1098,49 @@ export function tracciaFiumi(dati, opzioni = {}) {
     }
     return Float32Array.from(chaikin(q, 2));
   });
+  return confluenzeAnticipate(curve);
+}
+
+/**
+ * Confluenza anticipata: dal corso più grande al più piccolo, ogni corso viene percorso dalla sorgente e, al
+ * primo punto entro TRACCIATI.confluenza km da un corso più grande già accettato, finisce lì (sul punto di
+ * quel corso). Così i rigagnoli non corrono paralleli a un fiume per decine di km.
+ */
+function confluenzeAnticipate(curve) {
+  const S = PASSO_PUNTO, D = TRACCIATI.confluenza, D2 = D * D;
+  const ordine = curve.map((f, k) => [f[f.length - S + 2], k]).sort((a, b) => (b[0] - a[0]) || (a[1] - b[1]));
+  const griglia = new Map();                       // celle di D km → punti accettati [x, y]
+  const chiave = (x, y) => Math.floor(x / D) * 100003 + Math.floor(y / D);
+  const risultato = [];
+  for (const [, k] of ordine) {
+    const f = curve[k];
+    let fine = f.length, aggancio = null;
+    for (let i = 0; i < f.length - S && !aggancio; i += S) {
+      const x = f[i], y = f[i + 1];
+      const gx = Math.floor(x / D), gy = Math.floor(y / D);
+      for (let dy = -1; dy <= 1 && !aggancio; dy++) {
+        for (let dx = -1; dx <= 1 && !aggancio; dx++) {
+          const lista = griglia.get((gx + dx) * 100003 + gy + dy);
+          if (!lista) continue;
+          for (const p of lista) {
+            if ((p[0] - x) * (p[0] - x) + (p[1] - y) * (p[1] - y) < D2) { aggancio = p; fine = i + S; break; }
+          }
+        }
+      }
+    }
+    let g = f;
+    if (aggancio) {
+      if (fine < 2 * S) continue;                    // nato accanto a un fiume più grande: è già quel fiume
+      g = f.slice(0, fine);
+      g[fine - S] = aggancio[0]; g[fine - S + 1] = aggancio[1];
+    }
+    risultato.push(g);
+    for (let i = 0; i < g.length; i += S) {
+      const c = chiave(g[i], g[i + 1]);
+      let lista = griglia.get(c);
+      if (!lista) griglia.set(c, (lista = []));
+      lista.push([g[i], g[i + 1]]);
+    }
+  }
+  return risultato;
 }

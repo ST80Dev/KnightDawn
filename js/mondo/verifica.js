@@ -82,7 +82,10 @@ export function verificaFiumi(carta) {
 // direzioni (un settore di 90°).
 export const PANORAMI = {
   raggio: 10, vista: 20, oltre: 10, direzioni: 0.25, soglia: 0.9, quotaMassima: 1500,
-  occhio: 2, finestra: 2, passo: 0.5, raggi: 32,
+  // Punti di osservazione: le cime locali (finestra 3×3 km) e un punto ogni `griglia` km anche sui versanti
+  // (da un costone a metà versante si guarda a valle lontano; contando solo le cime, i fianchi delle catene
+  // risultavano scoperti).
+  occhio: 2, finestra: 1, griglia: 3, passo: 0.5, raggi: 16,
 };
 
 /**
@@ -106,13 +109,13 @@ export function verificaPanorami(carta) {
     for (let x = 0; x < cols; x++) {
       const i = y * cols + x;
       if (acque[i]) continue;
-      // Candidati: cime locali (la cella più alta nella finestra attorno).
-      let cima = true;
+      // Candidati: cime locali (la cella più alta nella finestra attorno) e punti della griglia.
+      let cima = x % P.griglia === 0 && y % P.griglia === 0 ? 'griglia' : true;
       for (let dy = -P.finestra; dy <= P.finestra && cima; dy++) {
         for (let dx = -P.finestra; dx <= P.finestra; dx++) {
           const xx = x + dx, yy = y + dy;
           if (xx < 0 || yy < 0 || xx >= cols || yy >= rows || (dx === 0 && dy === 0)) continue;
-          if (quota[yy * cols + xx] > quota[i]) { cima = false; break; }
+          if (cima === true && quota[yy * cols + xx] > quota[i]) { cima = false; break; }
         }
       }
       if (!cima) continue;
