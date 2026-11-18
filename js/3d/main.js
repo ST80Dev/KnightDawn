@@ -28,7 +28,9 @@ THREE.ShaderChunk.fog_vertex = '#ifdef USE_FOG\n\tvFogDepth = length( mvPosition
 
 const COLORE_CIELO = '#c4d4d6';           // azzurro-pergamena, uguale alla nebbia
 const NEBBIA = [900, 4000];               // m: inizio e fine della nebbia lineare (foschia leggera)
-const NEBBIA_ORIZZONTE = [3000, 50000];   // m: con l'orizzonte (mondo generato) si vede fino a ~45 km
+// m: con l'orizzonte (mondo generato). Più trasparente da quando salire per guardare lontano è un'azione
+// di gioco: a 15 km si perde ~8 % del contrasto, a 25 km ~35 %. Più avanti dipenderà dal tempo atmosferico.
+const NEBBIA_ORIZZONTE = [8000, 50000];
 const LONTANO = 60000;                    // m: distanza massima disegnata dalla camera
 const PARAMETRI = new URL(window.location.href).searchParams;
 const TAVULLIA = PARAMETRI.get('terreno') === 'tavullia';   // scena di prova (terreno reale, castello)

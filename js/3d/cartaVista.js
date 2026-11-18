@@ -8,7 +8,7 @@
 // La pittura dei pixel (disegnaRilievo) non usa il DOM: si può chiamare anche fuori dal browser.
 
 import { generaCarta, ACQUA } from '../mondo/carta.js';
-import { verificaFiumi } from '../mondo/verifica.js';
+import { verificaFiumi, verificaPanorami } from '../mondo/verifica.js';
 import { semeDaTesto } from '../mondo/rumore.js';
 
 // Colori del rilievo: SOLO quota (metri), a un solo tono, più alto = più scuro. Niente verdi, ocra o
@@ -28,7 +28,7 @@ const COLORE_FIUME = '#2f6690';
 const SCALA = 2;                  // pixel del canvas per cella: fiumi e segni più nitidi
 const COSTA = [70, 52, 30];
 const ESAGERAZIONE = 6;           // quanto il rilievo pesa nell'ombreggiatura
-const COLORE_MASSICCI = 'rgba(150, 40, 30, 0.85)';
+const COLORE_PANORAMA = 'rgba(150, 40, 30, 0.9)';
 const COLORE_CAVALIERE = '#e8402a';
 const fasciaDi = (m) => FASCE.find(([, a, b]) => m >= a && m < b)?.[0] ?? 'montagna';
 const LUCE = (() => {             // luce da nord-ovest, alta 45°
@@ -106,8 +106,9 @@ export function createCartaVista(contenitore, opzioni = {}) {
       <label>Seme <input type="text" class="seme" spellcheck="false" autocomplete="off"></label>
       <button type="button" class="genera">Genera</button>
       <button type="button" class="casuale">Seme casuale</button>
+      <button type="button" class="panorami" title="Mostra le alture da cui si vede lontano (regola dei punti panoramici)">Punti panoramici</button>
       <button type="button" class="tavullia" title="Terreno reale di Tavullia con il castello (scena di prova)">Tavullia (prova)</button>
-      <span class="legenda" title="Colore = quota, non biomi (biomi al passo 7)">quota 0 <i></i> 3500 m · non biomi · <b>○</b> massicci</span>
+      <span class="legenda" title="Colore = quota, non biomi (biomi al passo 7)">quota 0 <i></i> 3500 m · non biomi · <b>▴</b> punti panoramici</span>
       <span class="info"></span>
       <span class="tasto">clic sulla terra: vai lì · M: torna alla scena</span>
     </div>
@@ -120,7 +121,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
   contenitore.appendChild(el);
   el.querySelector('.legenda i').style.background = 'linear-gradient(to right, '
     + TERRA.map(([, c], k) => `rgb(${c.join(',')}) ${k / (TERRA.length - 1) * 100}%`).join(', ') + ')';
-  el.querySelector('.legenda b').style.color = COLORE_MASSICCI;
+  el.querySelector('.legenda b').style.color = COLORE_PANORAMA;
   const elFasce = el.querySelector('.fasce');
   const isto = el.querySelector('.istogramma');
 
@@ -133,6 +134,8 @@ export function createCartaVista(contenitore, opzioni = {}) {
   let carta = null;
   let rilievo = null;                            // immagine del rilievo della Carta mostrata (1 px per cella)
   let verifica = null;                           // esito di verificaFiumi
+  let panorami = null;                           // esito di verificaPanorami
+  let mostraPanorami = false;                    // i triangoli sono tanti: si mostrano a richiesta
 
   function adatta() {
     if (!carta || el.hidden) return;
@@ -158,6 +161,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
     disegnaRilievo(carta, img.data);
     c2.putImageData(img, 0, 0);
     verifica = verificaFiumi(carta);
+    panorami = verificaPanorami(carta);
     disegnaIstogramma();
     ridisegna();
     adatta();
@@ -234,7 +238,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
     ctx.fill();
   }
 
-  /** Rilievo, laghi, fiumi, massicci e (se è la Carta della partita) il cavaliere. */
+  /** Rilievo, laghi, fiumi, punti panoramici e (se è la Carta della partita) il cavaliere. */
   function ridisegna() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.imageSmoothingEnabled = false;
@@ -242,12 +246,13 @@ export function createCartaVista(contenitore, opzioni = {}) {
     ctx.setTransform(SCALA, 0, 0, SCALA, 0, 0);       // da qui in poi: coordinate in celle
     disegnaLaghi();
     disegnaFiumi();
-    ctx.strokeStyle = COLORE_MASSICCI;
-    ctx.lineWidth = 0.8;
-    for (const m of carta.massicci) {
+    if (panorami && mostraPanorami) {
+      ctx.fillStyle = COLORE_PANORAMA;
       ctx.beginPath();
-      ctx.arc(m.x + 0.5, m.y + 0.5, m.raggio * 1.3, 0, Math.PI * 2);
-      ctx.stroke();
+      for (const [x, y] of panorami.punti) {
+        ctx.moveTo(x + 0.5, y - 0.6); ctx.lineTo(x + 1.2, y + 0.8); ctx.lineTo(x - 0.2, y + 0.8); ctx.closePath();
+      }
+      ctx.fill();
     }
     const p = diPartita() ? opzioni.posizione?.() : null;
     if (p) {
@@ -292,10 +297,12 @@ export function createCartaVista(contenitore, opzioni = {}) {
     const f = carta.statistiche.fasce, pc = (x) => fmt(x * 100, 1) + ' %';
     elFasce.textContent = `pianura ${pc(f.pianura)} · collina ${pc(f.collina)} · pedemonte ${pc(f.pedemonte)}`
       + ` · montagna ${pc(f.montagna)} · cima ${fmt(carta.statistiche.cima)} m`
-      + ` · massicci ${carta.massicci.length} (${carta.massicci.map((m) => fmt(m.cima)).join(', ')} m)`
+      + ` · poggi ${fmt(carta.poggi)}`
       + (verifica ? ` · laghi ${carta.statistiche.laghi} · fiumi: ${verifica.sorgenti} sorgenti, foci in mare`
         + ` ${verifica.foci.mare}, in lago ${verifica.foci.lago}, oltre il confine ${verifica.foci.bordo}`
-        + ` · verifica ${verifica.ok ? 'superata' : `FALLITA (${verifica.errori.length}): ${verifica.errori[0]}`}` : '');
+        + ` · verifica ${verifica.ok ? 'superata' : `FALLITA (${verifica.errori.length}): ${verifica.errori[0]}`}` : '')
+      + (panorami ? ` · punti panoramici ${fmt(panorami.punti.length)}: ${fmt(panorami.copertura * 100, 1)} % della terra`
+        + ` entro ${panorami.raggio} km da uno (regola ≥ ${fmt(panorami.soglia * 100)} %: ${panorami.ok ? 'rispettata' : 'NON rispettata'})` : '');
   }
 
   function apri() {
@@ -316,6 +323,11 @@ export function createCartaVista(contenitore, opzioni = {}) {
 
   el.querySelector('.genera').addEventListener('click', () => genera(inSeme.value));
   el.querySelector('.casuale').addEventListener('click', () => genera(''));
+  el.querySelector('.panorami').addEventListener('click', (e) => {
+    mostraPanorami = !mostraPanorami;
+    e.currentTarget.classList.toggle('attivo', mostraPanorami);
+    if (carta) ridisegna();
+  });
   const btnTavullia = el.querySelector('.tavullia');
   if (opzioni.onTavullia) btnTavullia.addEventListener('click', () => opzioni.onTavullia());
   else btnTavullia.hidden = true;

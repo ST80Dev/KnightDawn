@@ -10,8 +10,9 @@
 //   una curva a fasce fissate per quantile: pianure 0–200 m, colline 200–700 m (~20 % della terra),
 //   pedemonte 700–1500 m, montagna 1500–3500 m (4,5–10 % della terra). Dentro ogni fascia la curva è
 //   lineare sul valore composto: l'ordine delle quote e la forma del rilievo non cambiano.
-// Fase 3 (passo 2): massicci isolati (1500–3000 m), pochi e sparsi, a cono irregolare, lontani da coste
-//   e catene; possono sorgere in mezzo alle colline.
+// Fase 3: poggi (decisi con l'utente al posto dei massicci isolati): molti rialzi arrotondati di 60–240 m,
+//   larghi 2–5 km, fitti o radi secondo un campo su grande scala (niente mosaico ripetuto), per salire e
+//   guardare lontano.
 //
 // Coordinate: colonna 0 = ovest, riga 0 = nord; una cella = 1 km. Le lunghezze d'onda sono in km.
 
@@ -42,24 +43,33 @@ const FORMA = {
 // Fase 2: fasce di quota (m) e parte della terra in ciascuna, per seme. La montagna usa frazioneMontagna.
 const QUOTE = {
   limiti: [0, 200, 700, 1500],          // pianura | collina | pedemonte | montagna
-  frazioneColline: [0.17, 0.25],        // GDD: ~20 %
-  frazionePedemonte: [0.05, 0.09],
+  frazioneColline: [0.45, 0.55],        // GDD (rivisto con l'utente): più collina che pianura
+  frazionePedemonte: [0.08, 0.12],
   cima: [2800, 3500],                   // quota massima delle catene
   // Campo composto (unità arbitrarie, ~km): pesi delle parti.
   pianura: { peso: 0.18, saturazione: 0.35, ondulazione: 0.04 },
   // Colline: zone dal campo su grande scala e dai fianchi delle catene, con una rampa larga (salgono
   // dalla pianura in modo graduale); dentro, rilievo ondulato (fBm) più qualche dorsale lunga (ridged).
-  colline: { lunghezza: 110, soglia: -0.15, rampa: 0.75, fianchi: 0.9, peso: 0.6, ondulato: 16, dorsali: 40 },
+  // Soglia bassa: le zone collinari coprono buona parte della terra (con la collina al 45–55 %, una soglia
+  // alta lasciava altopiani lisci promossi a «collina» solo dalla curva delle quote).
+  colline: { lunghezza: 110, soglia: -0.5, rampa: 0.8, fianchi: 0.9, peso: 0.6, ondulato: 16, dorsali: 40 },
   catene: { peso: 3.2 },
   // m sotto il livello del mare. Già 40 m nella prima cella di mare: con meno, l'interpolazione liscia
   // delle Scene (passo 3) spostava la costa verso il largo e il mare quasi spariva.
   fondale: { costa: 40, massimo: 2500 },
 };
 
-// Fase 3: massicci isolati.
-const MASSICCI = {
-  numero: [3, 7], raggio: [9, 19], cima: [1500, 3000],
-  distanzaCosta: 25, distanzaCatene: 50, distanzaTraLoro: 100, distanzaBordo: 30, tentativi: 600,
+// Fase 3: poggi.
+const POGGI = {
+  densita: { lunghezza: 90, soglia: [-0.35, 0.45] },  // campo su grande scala: dove sono fitti e dove radi
+  distanza: [4, 14],          // km: distanza minima tra poggi, da fitti a radi
+  raggio: [1.0, 2.6],         // km: semiasse corto (molti piccoli, pochi grandi)
+  altezza: [80, 300],         // m sopra il terreno
+  allungamento: [1, 2.6],     // dorsali: allungati lungo un campo di direzioni dolce (vicini allineati)
+  quotaMassima: 900,          // non in montagna
+  corso: 60, liberoCorsi: [1, 3],   // km²: corsi da cui stare lontani; km: niente rialzo / rialzo pieno
+  distanzaCosta: 3, distanzaCatene: 6,
+  tentativi: 60000,
 };
 
 /**
@@ -70,7 +80,7 @@ const MASSICCI = {
  *   quota: Float32Array,      // metri s.l.m. (mare negativo), riga per riga da nord
  *   mare: Uint8Array,         // 1 = mare
  *   catena: Float32Array,     // contributo delle catene 0…1
- *   massicci: {x:number, y:number, cima:number, raggio:number}[],
+ *   poggi: number,             // quanti rialzi arrotondati
  *   carattere: object, statistiche: object, controllo: string,
  * }}
  */
@@ -247,13 +257,15 @@ export function generaCarta(seme, opzioni = {}) {
     quota[alte[r]] = metri[3] + (metri[4] - metri[3]) * t * Math.sqrt(Math.sqrt(t));   // t^1,25
   }
 
-  // ─── Fase 3: massicci isolati ───
-  const massicci = piazzaMassicci(seme, cols, rows, quota, mare, catena);
-
   // ─── Fasi 4–5: drenaggio, valli, fiumi e laghi ───
   const dren = drenaggio(cols, rows, quota, mare, seme);
 
-  // Statistiche: parte della terra per fascia di quota (dopo massicci e valli).
+  // ─── Fase 3 (dopo il drenaggio): poggi ───
+  // Dopo, non prima: messi prima, i gruppi di poggi chiudevano conche nelle pianure (~150 laghetti in più).
+  // Lontani dai corsi d'acqua, che restano più bassi: l'acqua dei poggi scende verso di loro.
+  const poggi = piazzaPoggi(seme, cols, rows, quota, mare, catena, dren);
+
+  // Statistiche: parte della terra per fascia di quota (dopo poggi e valli).
   const fasce = [0, 0, 0, 0];
   let cima = 0;
   for (let i = 0; i < n; i++) {
@@ -267,7 +279,7 @@ export function generaCarta(seme, opzioni = {}) {
   const ms = performance.now() - t0;
   const carta = {
     seme, cols, rows, cella: opzioni.cella ?? CARTA_PREDEFINITA.cella,
-    quota, mare, catena, massicci, carattere,
+    quota, mare, catena, poggi, carattere,
     acque: dren.acque,             // ACQUA.TERRA | MARE | LAGO_COSTIERO | LAGO
     livelloAcqua: dren.livello,    // m: superficie dei laghi in quota (0 altrove)
     ricevente: dren.ricevente,     // cella a valle (-1 = foce: mare, lago costiero, bordo)
@@ -307,127 +319,83 @@ function distanze(cols, rows, sorgente) {
 }
 
 /**
- * Pochi massicci sparsi, ognuno diverso dagli altri (richiesta dell'utente: meno identici, meno piramidali,
- * sviluppo verticale difforme). Posizione, raggio e cima vengono dal generatore di sempre; la forma da uno a
- * parte. Ogni massiccio ha:
- *   - un tipo: cupola (arrotondata), cono (fianchi concavi, cima aguzza), cresta (allungata 1,8–2,8 volte in
- *     una direzione), gruppo (2–4 cime secondarie attorno alla principale);
- *   - un profilo misto tra cono, conca e cupola, con pesi diversi per tipo e per massiccio;
- *   - asimmetria: un versante più ripido dell'altro;
- *   - contorno a lobi (il raggio varia con la direzione: rumore sulla direzione unitaria, niente
- *     trigonometria) e spalle e terrazzi a quote diverse secondo la direzione;
- *   - creste ridged di qualche km sui fianchi.
- * Modifica `quota` (solo sulla terra, solo in alto) e restituisce l'elenco.
+ * Poggi: molti rialzi arrotondati sparsi nelle zone basse, per salire e guardare lontano. Per evitare il
+ * mosaico ripetuto «pianura/colle»:
+ *   - un campo su grande scala decide dove sono fitti (zone di colli) e dove radi (pianure aperte);
+ *   - la distanza minima tra due poggi segue quel campo (niente griglia regolare);
+ *   - misure sbilanciate (molti piccoli, pochi grandi), altezze varie;
+ *   - forma allungata lungo un campo di direzioni dolce: i vicini si allineano in dorsali e gruppi.
+ * Profilo arrotondato (1 − t²)², con piccole irregolarità. Si sommano al terreno, prima del drenaggio
+ * (i fiumi ci girano attorno). Restituisce quanti ne ha messi.
  */
-function piazzaMassicci(seme, cols, rows, quota, mare, catena) {
-  const M = MASSICCI;
-  const rng = mulberry32(derivaSeme(seme, 3));
-  const rngForma = mulberry32(derivaSeme(seme, 4));
-  const sF = derivaSeme(seme, 31), sR = derivaSeme(seme, 32), sV = derivaSeme(seme, 33);
+function piazzaPoggi(seme, cols, rows, quota, mare, catena, dren) {
+  const P = POGGI;
+  // Distanza (km) dai corsi d'acqua e dai laghi: niente rialzo sopra di loro, rampa fino a P.liberoCorsi[1].
+  const distCorsi = distanze(cols, rows, (i) => dren.acque[i] === ACQUA.LAGO
+    || (dren.acque[i] === ACQUA.TERRA && dren.bacino[i] >= P.corso));
+  const rng = mulberry32(derivaSeme(seme, 5));
+  const sD = derivaSeme(seme, 61), sX = derivaSeme(seme, 62), sY = derivaSeme(seme, 63), sF = derivaSeme(seme, 64);
   const distCosta = distanze(cols, rows, (i) => mare[i] === 1);
   const distCatene = distanze(cols, rows, (i) => catena[i] > 0.15);
-  const quanti = M.numero[0] + Math.floor(rng() * (M.numero[1] - M.numero[0] + 1));
-  const elenco = [];
-  for (let t = 0; t < M.tentativi && elenco.length < quanti; t++) {
-    const x = Math.floor(rng() * cols), y = Math.floor(rng() * rows), i = y * cols + x;
-    if (mare[i] || distCosta[i] < M.distanzaCosta || distCatene[i] < M.distanzaCatene) continue;
-    if (Math.min(x, y, cols - 1 - x, rows - 1 - y) < M.distanzaBordo) continue;   // non tagliato dal bordo
-    if (elenco.some((m) => (m.x - x) * (m.x - x) + (m.y - y) * (m.y - y) < M.distanzaTraLoro * M.distanzaTraLoro)) continue;
-    elenco.push({
-      x, y,
-      raggio: M.raggio[0] + rng() * (M.raggio[1] - M.raggio[0]),
-      cima: M.cima[0] + rng() * (M.cima[1] - M.cima[0]),
-      ox: rng() * 100, oy: rng() * 100,
-    });
-  }
-
-  const direzione = () => {                       // vettore unitario a caso, senza trigonometria
-    for (;;) {
-      const x = rngForma() * 2 - 1, y = rngForma() * 2 - 1, l = Math.sqrt(x * x + y * y);
-      if (l > 0.1 && l <= 1) return [x / l, y / l];
-    }
-  };
-  const tra = (a, b) => a + rngForma() * (b - a);
-  // Profilo per tipo: pesi di cono (lineare), conca (fianchi concavi) e cupola (cima arrotondata).
-  const PROFILI = {
-    cupola: [0.15, 0.0, 0.85], cono: [0.35, 0.65, 0.0], cresta: [0.5, 0.15, 0.35], gruppo: [0.4, 0.3, 0.3],
-  };
-  const TIPI = Object.keys(PROFILI);
-
-  /** Forma di una cima (0…1) nel punto (dx, dy) relativo al suo centro. */
-  function forma(c, dx, dy) {
-    const along = dx * c.ax + dy * c.ay, across = -dx * c.ay + dy * c.ax;
-    const r0 = Math.sqrt(dx * dx + dy * dy);
-    let r = Math.sqrt((along / c.allungamento) * (along / c.allungamento) + across * across);
-    let rLocale = c.raggio, ux = 0, uy = 0;
-    if (r0 > 0) {
-      ux = dx / r0; uy = dy / r0;
-      r *= 1 + c.asimmetria * (ux * c.sx + uy * c.sy);                       // versante più ripido
-      rLocale *= 1 + 0.3 * fbm(ux * 1.6 + c.ox, uy * 1.6 + c.oy, sF, 1, 2);  // contorno a lobi
-    }
-    const t = r / rLocale;
-    if (t >= 1) return 0;
-    const s = 1 - t;
-    let p = c.pesi[0] * s + c.pesi[1] * s * s + c.pesi[2] * (1 - t * t);
-    // Spalle e terrazzi: il profilo si gonfia o si incava a quote diverse secondo la direzione.
-    p *= 1 + c.spalle * fbm(t * 2.5 + ux * 0.8 + c.ox, uy * 0.8 + c.oy, sV, 1, 2) * 4 * t * s;
-    return p;
-  }
-
-  for (const m of elenco) {
-    const tipo = TIPI[Math.floor(rngForma() * TIPI.length)];
-    const pesi = PROFILI[tipo].map((w) => w + tra(0, 0.25));
-    const somma = pesi[0] + pesi[1] + pesi[2];
-    const [ax, ay] = direzione(), [sx, sy] = direzione();
-    const principale = {
-      dx: 0, dy: 0, altezza: 1, raggio: m.raggio, ox: m.ox, oy: m.oy,
-      pesi: pesi.map((w) => w / somma), ax, ay, sx, sy,
-      allungamento: tipo === 'cresta' ? tra(1.8, 2.8) : tra(1, 1.35),
-      asimmetria: tra(0.1, 0.4), spalle: tra(0.15, 0.4),
-    };
-    const cime = [principale];
-    if (tipo === 'gruppo') {
-      const quante = 2 + Math.floor(rngForma() * 3);
-      for (let k = 0; k < quante; k++) {
-        const [vx, vy] = direzione(), d = m.raggio * tra(0.35, 0.6);
-        cime.push({ ...principale, dx: vx * d, dy: vy * d, altezza: tra(0.6, 0.92),
-          raggio: m.raggio * tra(0.4, 0.65), ox: tra(0, 100), oy: tra(0, 100), spalle: tra(0.15, 0.4) });
-      }
-    }
-    const base = quota[m.y * cols + m.x];
-    const salita = m.cima - base;
-    const creste = (x, y) => 0.8 + 0.3 * ridged(x, y, sR, 6, 3);
-    const normaCentro = creste(m.x, m.y);                 // la cima principale arriva esattamente a m.cima
-    let estensione = 0;
-    for (const c of cime) {
-      const e = Math.sqrt(c.dx * c.dx + c.dy * c.dy) + c.raggio * c.allungamento * 1.7;
-      if (e > estensione) estensione = e;
-    }
-    const rMax = Math.ceil(estensione);
-    let massima = base;
-    for (let dy = -rMax; dy <= rMax; dy++) {
-      for (let dx = -rMax; dx <= rMax; dx++) {
-        const x = m.x + dx, y = m.y + dy;
-        if (x < 0 || y < 0 || x >= cols || y >= rows) continue;
-        const i = y * cols + x;
-        if (mare[i]) continue;
-        let p = 0;
-        for (const c of cime) {
-          const f = c.altezza * forma(c, dx - c.dx, dy - c.dy);
-          if (f > p) p = f;
+  const base = Float32Array.from(quota);          // le quote prima dei poggi (per i vincoli)
+  const lato = P.distanza[1];                     // griglia di appoggio per cercare i vicini
+  const gc = Math.ceil(cols / lato), gr = Math.ceil(rows / lato);
+  const griglia = Array.from({ length: gc * gr }, () => []);
+  const accettati = [];
+  for (let t = 0; t < P.tentativi; t++) {
+    const x = rng() * cols, y = rng() * rows;
+    const u1 = rng(), u2 = rng(), u3 = rng(), u4 = rng();
+    const c = Math.floor(x), r = Math.floor(y), i = r * cols + c;
+    if (mare[i] || dren.acque[i] || base[i] > P.quotaMassima || distCosta[i] < P.distanzaCosta
+      || distCatene[i] < P.distanzaCatene || distCorsi[i] < P.liberoCorsi[1]) continue;
+    const densita = smoothstep(P.densita.soglia[0], P.densita.soglia[1], fbm(x, y, sD, P.densita.lunghezza, 3));
+    const dmin = P.distanza[1] + (P.distanza[0] - P.distanza[1]) * densita;
+    const gx = Math.floor(x / lato), gy = Math.floor(y / lato);
+    let libero = true;
+    for (let yy = gy - 1; yy <= gy + 1 && libero; yy++) {
+      for (let xx = gx - 1; xx <= gx + 1 && libero; xx++) {
+        if (xx < 0 || yy < 0 || xx >= gc || yy >= gr) continue;
+        for (const q of griglia[yy * gc + xx]) {
+          const d = Math.max(dmin, q.dmin) * 0.5 + Math.min(dmin, q.dmin) * 0.5;
+          if ((q.x - x) * (q.x - x) + (q.y - y) * (q.y - y) < d * d) { libero = false; break; }
         }
-        if (p <= 0) continue;
-        const q = Math.min(m.cima, base + salita * p * creste(x, y) / normaCentro);
-        if (q > quota[i]) quota[i] = q;
-        if (quota[i] > massima) massima = quota[i];
       }
     }
-    m.cima = Math.round(massima);
-    m.tipo = tipo;
-    m.raggio = Math.round(m.raggio * principale.allungamento * 10) / 10;   // per la vista: ingombro massimo
-    delete m.ox; delete m.oy;
+    if (!libero) continue;
+    // Direzione dal campo dolce (vicini allineati), senza trigonometria.
+    let ax = fbm(x, y, sX, 60, 2), ay = fbm(x, y, sY, 60, 2);
+    const al = Math.sqrt(ax * ax + ay * ay) || 1;
+    ax /= al; ay /= al;
+    const p = {
+      x, y, dmin, ax, ay,
+      raggio: P.raggio[0] + (P.raggio[1] - P.raggio[0]) * u1 * u1,
+      altezza: P.altezza[0] + (P.altezza[1] - P.altezza[0]) * u2 * u2,
+      allungamento: P.allungamento[0] + (P.allungamento[1] - P.allungamento[0]) * u3,
+      piatto: u4 < 0.15,                         // alcuni a sommità larga (pianoro)
+    };
+    accettati.push(p);
+    griglia[gy * gc + gx].push(p);
   }
-  return elenco;
+  for (const p of accettati) {
+    const estensione = p.raggio * p.allungamento;
+    const x0 = Math.max(0, Math.floor(p.x - estensione)), x1 = Math.min(cols - 1, Math.ceil(p.x + estensione));
+    const y0 = Math.max(0, Math.floor(p.y - estensione)), y1 = Math.min(rows - 1, Math.ceil(p.y + estensione));
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const i = y * cols + x;
+        if (mare[i] || dren.acque[i]) continue;
+        const dx = x + 0.5 - p.x, dy = y + 0.5 - p.y;
+        const lungo = (dx * p.ax + dy * p.ay) / p.allungamento, largo = -dx * p.ay + dy * p.ax;
+        const t2 = (lungo * lungo + largo * largo) / (p.raggio * p.raggio);
+        if (t2 >= 1) continue;
+        let f = (1 - t2) * (1 - t2);
+        if (p.piatto) f = Math.min(1, f * 1.8);
+        const libero = smoothstep(P.liberoCorsi[0], P.liberoCorsi[1], distCorsi[i]);
+        quota[i] += p.altezza * f * libero * (0.9 + 0.2 * fbm(x, y, sF, 4, 2));
+      }
+    }
+  }
+  return accettati.length;
 }
 
 // ─── Fasi 4–5: drenaggio, valli, fiumi e laghi ─────────────────────────
@@ -443,9 +411,13 @@ const DRENAGGIO = {
   mareMinimo: 1500,        // km²: uno specchio d'acqua chiuso più piccolo è un lago (a quota 0)
   // Valli: letto a quota − k·√(bacino km²) (al massimo una frazione della quota); versanti abbassati verso
   // il letto entro raggioBase + raggioPer·√bacino km. Si scava solo dove il bacino supera areaMinima.
-  valli: { k: 8, frazione: 0.45, areaMinima: 15, raggioBase: 1.5, raggioPer: 0.12, raggioMax: 8 },
+  // breccia: di quanto (m) il letto può scendere oltre lo scavo normale per tagliare il bordo di una conca e
+  // svuotarla (come fa un fiume vero); le conche più profonde restano laghi.
+  valli: { k: 8, frazione: 0.45, areaMinima: 15, raggioBase: 1.5, raggioPer: 0.12, raggioMax: 8, breccia: 60 },
   fiume: 150,              // km² di bacino: da qui una cella porta un fiume
-  lago: { profondita: 3, area: 4 },   // conche più profonde (m) e più ampie (km²) diventano laghi
+  // Conche più profonde (m) e più ampie (km²) diventano laghi; le altre si colmano. Con la collina al
+  // 45–55 % il rilievo a rumore ha molte conche: soglie basse davano 100–200 laghi.
+  lago: { profondita: 20, area: 10 },
   passoLetto: 0.01,        // m: dislivello minimo del letto scavato tra una cella e quella a valle
   // Direzione di flusso: tra le vicine che scendono almeno quanto questa frazione della più ripida se ne
   // sceglie una con un hash deterministico. Su un pendio uniforme la sola più ripida darebbe righe
@@ -703,27 +675,30 @@ function flusso(cols, rows, riempita, foce, acque, seme) {
 function scavaValli(cols, rows, quota, acque, bacino, ricevente, ordine, piatta, seme) {
   const V = DRENAGGIO.valli;
   const n = cols * rows;
+  // Letto: dalle sorgenti verso la foce, mai più alto a valle che a monte. Dove il percorso attraversa il
+  // bordo di una conca, il letto lo taglia (breccia) e la conca si svuota; oltre V.breccia m di taglio in
+  // più ci si ferma e la conca resta un lago. (Dalla foce verso monte, come prima, il letto risaliva fino
+  // al bordo e le conche restavano tutte chiuse: con la collina al 45–55 % erano un centinaio di laghi.)
   const letto = new Float32Array(n).fill(NaN);
-  for (let t = ordine.length - 1; t >= 0; t--) {       // dalla foce verso monte: la cella a valle è già fatta
+  const monteMin = new Float32Array(n).fill(Infinity);   // letto più basso tra le celle a monte
+  for (let t = 0; t < ordine.length; t++) {               // dalle sorgenti verso la foce
     const i = ordine[t];
     if (acque[i] || bacino[i] < V.areaMinima) continue;
-    let b = quota[i] - Math.min(V.k * Math.sqrt(bacino[i]), V.frazione * quota[i]);
-    const j = ricevente[i];
-    if (j >= 0 && !Number.isNaN(letto[j]) && b < letto[j] + DRENAGGIO.passoLetto) b = letto[j] + DRENAGGIO.passoLetto;
-    if (b > quota[i]) b = quota[i];
+    const b0 = quota[i] - Math.min(V.k * Math.sqrt(bacino[i]), V.frazione * quota[i]);
+    let b = b0;
+    if (monteMin[i] < Infinity) b = Math.min(b0, Math.max(monteMin[i] - DRENAGGIO.passoLetto, b0 - V.breccia));
     letto[i] = b;
+    const j = ricevente[i];
+    if (j >= 0 && b < monteMin[j]) monteMin[j] = b;
   }
   const nuova = Float32Array.from(quota);
   for (let i = 0; i < n; i++) {
     const b = letto[i];
     if (Number.isNaN(b)) continue;
-    // Sulle zone piatte (conche colmate nel calcolo) il flusso corre in rigagnoli paralleli: con i versanti
-    // a V i solchi vicini si abbassavano a vicenda e il secondo drenaggio li riempiva come «laghi a
-    // pettine». Lì i corsi minori scavano solo il proprio canale (che apre il varco e svuota la conca).
-    if (piatta[i] && bacino[i] < DRENAGGIO.fiume) {
-      if (b < nuova[i]) nuova[i] = b;
-      continue;
-    }
+    // Sulle zone piatte (conche colmate nel calcolo) il flusso corre in rigagnoli paralleli: scavati, davano
+    // solchi paralleli («laghi a pettine», poi striature). Lì i corsi minori non scavano: la conca si svuota
+    // dalla breccia nel bordo, dove il letto (calcolato anche per loro) scende sotto il fondo.
+    if (piatta[i] && bacino[i] < DRENAGGIO.fiume) continue;   // niente solchi sui fondi piatti (la breccia è sul bordo)
     if (bacino[i] >= DRENAGGIO.fiume) continue;          // i fiumi scavano lungo i tracciati curvi (sotto)
     const raggio = Math.min(V.raggioMax, V.raggioBase + V.raggioPer * Math.sqrt(bacino[i]));
     const r = Math.ceil(raggio), x0 = i % cols, y0 = (i - x0) / cols;

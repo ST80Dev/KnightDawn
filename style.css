@@ -213,6 +213,7 @@ html, body {
 #carta input { width: 12ch; }
 #carta button { cursor: pointer; }
 #carta button:hover { background: #3a2410; }
+#carta button.attivo { background: #5a3a18; border-color: #c8a030; }
 
 #carta .info {
   font: 12px/1.6 ui-monospace, Consolas, monospace;

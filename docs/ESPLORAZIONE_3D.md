@@ -446,6 +446,26 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
    - Laghi 64–109 per seme (le valli curve lasciano qualche conca in più). Carta ~0,85–0,95 s.
    - Pulsante «Tavullia (prova)» nella vista della Carta: carica la scena di prova senza ricaricare la
      pagina; un clic sulla Carta riporta al mondo generato.
+   **Revisione del rilievo (decisa con l'utente): più collina, poggi al posto dei massicci, punti panoramici.**
+   - Fasce: pianura 25–35 %, collina 45–55 %, pedemonte 8–12 %, montagna 4,5–10 % (misurate dopo lo scavo:
+     pianura ~35–40 %, collina ~43–48 %: lo scavo riporta in basso una parte della collina). Zone collinari
+     più estese (soglia del campo più bassa).
+   - Massicci isolati tolti. **Poggi**: 1400–1800 per seme, 80–300 m, larghi 2–5 km, fitti o radi secondo un
+     campo su grande scala (distanza minima 4–14 km), molti piccoli e pochi grandi, allungati lungo un campo di
+     direzioni dolce, il 15 % a sommità larga; messi **dopo** il drenaggio e lontani dai corsi d'acqua (prima
+     del drenaggio chiudevano conche: ~150 laghetti in più).
+   - Letto dei fiumi dalle sorgenti verso la foce, mai più alto a valle: il fiume taglia il bordo delle conche
+     (breccia, fino a 60 m oltre lo scavo normale) e le svuota; sui fondi piatti i corsi minori non scavano
+     (davano solchi paralleli). Laghi: conche > 20 m e ≥ 10 km² (75–99 per seme).
+   - `verificaPanorami` (in `verifica.js`): cime locali (finestra 5×5 km); panoramica se in ≥ 25 % di 32
+     direzioni qualcosa tra 20 e 30 km sporge sopra tutto ciò che sta davanti (curvatura compresa); copertura =
+     terra sotto 1500 m entro 10 km da una cima panoramica. **Oggi 79–82 %: la regola (≥ 90 %) non è ancora
+     rispettata.** In montagna 14–24 % (lì la regola non vale). La vista lo riporta; i punti si mostrano col
+     pulsante «Punti panoramici».
+   - Foschia diurna da 8 a 50 km (salire per guardare lontano è un'azione di gioco).
+   - Limiti: Carta ~1,2–1,5 s (oltre la soglia prevista per il Web Worker); in pianura i poggi piccoli sulla
+     Carta sembrano puntini regolari (rischio «pluriball», da giudicare in 3D); le conche restano molte perché il
+     rilievo collinare viene da rumore: il rimedio vero è l'erosione fluviale (stream power), proposta all'utente.
 5. **Orizzonte** (inserito dopo il passo 4): oltre il blocco di 2×2 km non si vedeva nulla, nemmeno una
    catena a pochi km. Terreno lontano solo da guardare, dalla Carta già in memoria (`js/3d/orizzonte.js`).
    *Prova:* dal pedemonte si vedono le montagne lontane; nessuna fessura al raccordo col blocco; FPS.
