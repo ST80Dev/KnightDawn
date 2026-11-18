@@ -4,6 +4,11 @@
 > Il prototipo è riuscito se, a fine M4, camminare sul terreno reale è fluido e piacevole.
 > Se ci si impantana su camera, collisioni o prestazioni, si valuta come proseguire.
 > La versione 2D resta nella cronologia git (commit `2c869fa`).
+>
+> **Esito della valutazione (novembre 2026): il prototipo prosegue.** Il gioco diventa **Carta e
+> Scene** su geografia reale di Europa, Nord Africa e Terrasanta (`docs/GDD.md` §2 *Il mondo*).
+> Questo documento copre le Scene 3D, i dati di terreno e l'architettura della Carta
+> (sezione «Carta e Scene»).
 
 ## Il minimo da raggiungere
 
@@ -212,28 +217,92 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
     ripide, **mai sotto ×0,5** (sul punto più ripido, ~30°: cammino 0,75 m/s, corsa 2,5 m/s). Di traverso
     si rallenta poco. Anche il blocco a 35° ora conta la pendenza del passo, non quella del versante:
     un pendio ripido si può tagliare di traverso. F3 mostra pendenza di marcia e fattore.
-  - **Pendenza e fatica**: in M5 il consumo di Forza (e i Passi) crescono con pendenza e corsa, non solo
-    con la distanza; altrimenti una salita costa tempo reale ma non tempo di gioco.
+  - **Pendenza e fatica**: in M5 il consumo di Forza cresce con pendenza e andatura, il tempo (Passi)
+    con la pendenza, non solo con la distanza; altrimenti una salita costa tempo reale ma non tempo di
+    gioco. La corsa **non** aggiunge tempo: copre la stessa distanza prima, quindi costa solo più Forza.
   - **Cadute** (dopo M5): oltre ~30–35° in discesa o di traverso, probabilità di scivolare per metro che
     cresce con pendenza e velocità (correndo molto di più); scivolata di qualche metro, danno alla Salute,
     costo di Forza; avviso "terreno ripido" nell'HUD. È un rischio scelto, risolto come un evento:
     **non** una prova di abilità (il gioco non è un action game). Oggi la discesa non ha limiti.
   - Cavallo: stessa curva con parametri propri (sale bene i pendii moderati, scende i ripidi con molta
     cautela, rifiuta prima di un uomo, indicativamente oltre 25–30°).
-  - Richiede il **terreno a blocchi** per tutta la regione giocabile (pipeline `tools/dem` già adatta;
-    ~132 KB per blocco di 2×2 km, ~53 MB per 40×40 km) e il caricamento del blocco accanto al bordo
-    (prima con dissolvenza, senza stacchi poi). Da decidere: estensione del mondo, blocchi generati
-    ovunque o solo vicino a strade e luoghi, strade per il viaggio.
-  - Ordine proposto: dopo M5 e dopo rocca e borgo; va insieme a vegetazione e oggetti sparsi,
-    altrimenti fermarsi "nel nulla" non offre niente.
+  - Richiede il **terreno a blocchi** e il caricamento del blocco accanto al bordo (prima con
+    dissolvenza, poi senza stacchi). Estensione del mondo, formato e provenienza dei dati sono decisi
+    in «Carta e Scene», più sotto.
+  - Fermarsi "nel nulla" offre qualcosa solo con vegetazione e oggetti sparsi: vanno fatti insieme.
 
-### M5 — Aggancio alla logica esistente (solo dopo la valutazione di M4)
-- La distanza percorsa si converte in **Passi** (valore in `config.js`), che fanno avanzare `Calendar`
-  e consumano Forza tramite `Knight`.
-- HUD in HTML: data, Forza, Onore. Salvataggio della posizione con `Save`.
-- **Accettazione:** camminando, la data avanza e la Forza cala come nel gioco 2D.
+### M5 — Aggancio alla logica esistente (ridotta, dopo la valutazione di M4)
+Nel 2D 1 Passo era 1 tile; ora il **Passo è solo un'unità di tempo** (~3 ore, `docs/GDD.md` §3).
+A scala reale l'intera area di 2×2 km vale meno di un Passo: è voluto, il tempo «grosso» lo
+consumeranno la Carta e le azioni.
+- **Tempo per distanza:** `METRI_PER_PASSO` in `config.js` (provvisorio: 12 000 m in piano, a piedi).
+  La salita aggiunge tempo (regola tipo Naismith: ~1 ora ogni 600 m di dislivello positivo, cioè ogni
+  metro di salita vale ~6,7 m in piano). L'andatura non cambia il tempo per metro.
+- **`Calendar` accumula frazioni di Passo.** L'HUD mostra anche l'ora approssimativa del giorno
+  (8 Passi = 1 giorno), altrimenti per molto tempo non si vede nulla muoversi. Veglia: il giorno si
+  ricava dai Passi (8 Passi = 1 giorno), non più un giorno per Passo.
+- **Forza per distanza:** nuova funzione in `Knight` che riceve metri, dislivello e andatura (solo
+  numeri: niente Three.js, regola 9). Scala provvisoria: 100 di Forza ≈ 30 km in piano camminando;
+  corsetta ×1,5, scatto ×3 al metro; la salita pesa come per il tempo. `TRAVEL_COST` per bioma
+  resta per la Carta.
+- **Forza a 0:** niente corsa né scatto, solo camminata. Tasto provvisorio «Accampati»: azione
+  atomica con `RECOVERY.accampamento` (+30 Forza), che fa avanzare il calendario di qualche Passo.
+- **HUD in HTML:** data (o «Veglia · giorno N») con l'ora, Forza, Salute, Volontà, Onore.
+- **Salvataggio locale** (localStorage, come da `CLAUDE.md`): posizione e direzione del cavaliere,
+  terreno corrente, stato di `Knight` e `Calendar`, autosalvataggio. Oggi `save.js` scrive su un
+  database remoto (Supabase) e contiene ancora le sezioni 2D (`World`, `GameScreen`): non si toccano
+  finché non si decide, perché toglierle cambia la struttura.
+- `Calendar.velocita` (secondi reali per Passo) non serve nelle Scene: resterà per la Carta.
+- **Accettazione:** camminando, l'ora avanza in proporzione alla distanza (circa 1 Passo ogni 12 km
+  in piano, di più in salita); la Forza cala, di più correndo e in salita; a Forza 0 si cammina
+  soltanto e «Accampati» la ricarica facendo passare il tempo; ricaricando la pagina si riparte dal
+  punto salvato con data e attributi salvati.
+
+## Carta e Scene — dati e architettura (deciso, da realizzare dopo M5)
+
+Design di gioco in `docs/GDD.md` §2 *Il mondo* e §3 *Viaggio*. Qui la parte tecnica.
+
+**Ordine proposto:** M5 ridotta → prototipo della Carta su un'area piccola, con passaggio
+Carta ↔ Scena → rocca e borgo → vegetazione e oggetti sparsi → estensione dei dati.
+
+- **Estensione:** la Carta copre Europa, Nord Africa e Terrasanta. Regione di partenza curata:
+  Montefeltro e Romagna (~100×100 km attorno a Tavullia). Si progetta per l'intera estensione
+  (coordinate, blocchi, caricamento su richiesta), si costruisce una regione alla volta.
+- **Carta:** celle di ~1 km ([TBD] 2 km nelle aree lontane). Per ogni cella: quota, pendenza,
+  bioma, segni di fiume, strada, costa e porto (~4 byte). Divisa in blocchi regionali caricati su
+  richiesta. Peso stimato: ~40 KB per 100×100 km, ~1,2 MB per l'Italia, qualche decina di MB per
+  tutta l'estensione [Ipotesi: il mare si comprime quasi a zero].
+- **Coordinate:** la Carta usa una proiezione unica. Candidata: EPSG:3035 (proiezione europea
+  equivalente, la stessa della griglia ufficiale europea a 1 km). [Da verificare] quanto deforma
+  ai margini (Nord Africa, Levante). L'UTM 33N di oggi non basta: non copre nemmeno tutta l'Italia.
+  Ogni Scena ha **coordinate locali centrate sul suo blocco**: a centinaia di km dall'origine i
+  numeri a 32 bit della scheda video farebbero tremare la scena.
+- **Risoluzione dei blocchi 3D:** il terreno di Tavullia viene da Copernicus a 30 m ricampionato a
+  7,8 m. I punti in più sono interpolati e non aggiungono informazione, ma occupano ~15 volte lo
+  spazio. Si salva il dato alla risoluzione vera (25–30 m) e lo si raffina nel browser, insieme al
+  dettaglio procedurale già previsto per il realismo del terreno (M4, «Dopo la valutazione»).
+  Stime a 30 m (16 bit per punto, non compressi): ~22 MB per 100×100 km, ~670 MB per l'Italia, ~22 GB
+  per l'Europa. GitHub Pages regge circa 1 GB per sito e 100 MB per file [Probabile]: ci sta la
+  regione di partenza, non tutto il resto.
+- **Provenienza dei blocchi 3D:**
+  1. **Regione di partenza inclusa nel gioco**, a 30 m. [Probabile] File compressi gzip e decompressi
+     con `DecompressionStream`, già presente nel browser (nessuna libreria).
+  2. **Altrove: download quando serve** dalle tile pubbliche di quota su AWS («Terrarium», le stesse
+     che `tools/dem/fetch_terrarium.py` sa leggere). Verificato a novembre 2026: accessibili dal
+     browser (CORS aperto a tutti); copertura mondiale; in Europa la fonte è EU-DEM (~25 m); ~120 KB
+     per tile al livello 12 (~7×7 km). Servizio gratuito e senza garanzie.
+  3. **Ripiego senza rete:** quota della Carta più dettaglio procedurale (rilievo plausibile, non vero).
+  - **Richiede di cambiare la regola 5 di `CLAUDE.md`** (dati esterni scaricati a runtime): si fa
+    quando si implementa, con conferma esplicita.
+- **Copertura del suolo, luoghi, strade:** candidati ESA WorldCover o CORINE (suolo), OpenStreetMap
+  (paesi, castelli `historic=castle`, fiumi, strade). [Da verificare] licenze e qualità prima di
+  sceglierli: OSM chiede attribuzione e ha clausole di condivisione del database. Licenze con
+  attribuzione → file dei crediti. Correzione verso il paesaggio medievale come in GDD §2.
+- **Generatori di architettura per area culturale:** il primo è quello attuale (mattoni,
+  malatestiano); gli altri si aggiungono quando servono le relative regioni.
 
 ## Fuori dal prototipo (non farlo ora)
 
-Multiplayer, server/VPS, NPC con IA, mondo a blocchi più grande di 2×2 km, mobile/touch,
-modelli esterni, combattimento in 3D, ombre di alta qualità.
+Multiplayer, server/VPS, NPC con IA, mobile/touch, modelli esterni, combattimento in 3D, ombre di
+alta qualità. Il mondo a blocchi più grande di 2×2 km non è più escluso: è pianificato dopo M5
+(«Carta e Scene»).
