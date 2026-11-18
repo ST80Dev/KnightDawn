@@ -224,7 +224,9 @@ function aggiornaPannello(now) {
     const k = knight.stato;
     testo += `\ncavaliere: x ${fmt(k.x)} · z ${fmt(k.z)} · quota ${fmt(k.y, 1)} m`
       + ` · pendenza ${fmt(suolo.getSlope(k.x, k.z))}° · ${fmt(k.velEffettiva, 1)} m/s`
-      + (k.bloccato ? ' · bloccato' : '');
+      + (k.bloccato ? ' · bloccato' : '')
+      + `\nmarcia: ${k.pendenzaMarcia >= 0 ? 'salita' : 'discesa'} ${fmt(Math.abs(Math.atan(k.pendenzaMarcia)) * 180 / Math.PI)}°`
+      + ` · velocità ×${fmt(k.fattorePendenza, 2)}`;
     testo += `\ncamera: ${modoCamera === 'segui' ? 'alle spalle' : 'libera (C per tornare)'}`;
     if (castle) {
       testo += castle.dentro(k.x, k.z) ? '\ncastello: nel cortile'
