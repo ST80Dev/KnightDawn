@@ -184,6 +184,27 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
     si apre la Carta del cronista. Niente interni 3D.
   - Gli edifici poggiano sul suolo composto (`componiSuolo`): ogni edificio porta la sua quota.
 
+- **Dopo la valutazione — movimento e viaggio (deciso con l'utente):** a scala reale anche 200 m di
+  corsa sono lunghi; il terreno **non** si miniaturizza. Due scale, ognuna coerente:
+  - **Locale, 1:1**: a piedi nell'area attorno a sé (castello, borgo, dintorni). Velocità a piedi
+    invariate: la lentezza è voluta (il garzone parte a piedi, `docs/EARLY_GAME.md`).
+  - **Cavallo**: trotto ~4 m/s, galoppo ~12–14 m/s. Milestone a sé (modello e animazione da codice).
+  - **Viaggio su mappa** per i km: si sceglie la destinazione, il tragitto si risolve in tempo di gioco,
+    Passi, Forza ed eventi di viaggio (logica già esistente, agganciata da M5). **Ci si può fermare
+    quando si vuole**: si carica il blocco di terreno in quel punto e si esplora in 3D; poi si riparte
+    dalla mappa. Anche gli eventi (imboscate, incontri) possono fermare il viaggio e portare in 3D lì.
+  - **"Vai a"** dentro l'area locale (300 m–1 km): destinazione indicata, dissolvenza, il tempo avanza
+    in base alla distanza. Un moltiplicatore di velocità al massimo 2x, solo come comodità: a 4x e oltre
+    animazione e camera diventano nauseanti e non basterebbe comunque per i km.
+  - Il tempo di gioco segue sempre la **distanza percorsa**, non i secondi reali: tutti i modi restano
+    coerenti con il calendario.
+  - Richiede il **terreno a blocchi** per tutta la regione giocabile (pipeline `tools/dem` già adatta;
+    ~132 KB per blocco di 2×2 km, ~53 MB per 40×40 km) e il caricamento del blocco accanto al bordo
+    (prima con dissolvenza, senza stacchi poi). Da decidere: estensione del mondo, blocchi generati
+    ovunque o solo vicino a strade e luoghi, strade per il viaggio.
+  - Ordine proposto: dopo M5 e dopo rocca e borgo; va insieme a vegetazione e oggetti sparsi,
+    altrimenti fermarsi "nel nulla" non offre niente.
+
 ### M5 — Aggancio alla logica esistente (solo dopo la valutazione di M4)
 - La distanza percorsa si converte in **Passi** (valore in `config.js`), che fanno avanzare `Calendar`
   e consumano Forza tramite `Knight`.
