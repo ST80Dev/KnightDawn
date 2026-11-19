@@ -1362,6 +1362,21 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
 2. **Alberi.** Latifoglia e conifera, livelli vicino e lontano, aggiornamento delle istanze vicine, crescita
    all'ingresso. *Prova:* il bosco si legge come bosco da vicino e da 1 km; nessun tronco sospeso o sepolto;
    FPS in pieno bosco e da un'altura che guarda il blocco; chiamate e istanze in F3; giudizio dell'utente sullo stile.
+   **Stato: fatto insieme alle mesh del passo 4 (richiesta dell'utente: tutti i punti diventano oggetti), da
+   provare dall'utente.** `js/3d/vegetazione3d.js` sostituisce i punti di controllo:
+   - *Modelli* da primitive deformate a codice, colori per vertice, `MeshLambertMaterial` (rocce sfaccettate):
+     latifoglia (~11 m, sei lobi di chioma e due rami), conifera (~14 m, cinque palchi frastagliati), pino a
+     ombrello, albero di riva (pioppo stretto e alto, verde più chiaro), albero secco (rami spogli), cespuglio, arbusto
+     alto (mugo, basso e scuro), sterpo, canne, sasso, masso semisepolto, affioramento (lastra larga e bassa), tronco
+     caduto. Variazione per istanza: tono, un po' di giallo, alberi più slanciati o tozzi, rocce inclinate.
+   - *Livelli di dettaglio*: alberi vicini fino a 150 m (~400–600 triangoli), medi fino a 500 m (~60–100), lontani
+     fino al bordo del blocco (~20–30, sagoma con fusto); cespugli e arbusti alti 70 m dettagliati e fino a 300 m
+     semplici; canne 150 m, sterpi 200 m, sassi 120 m, tronchi 250 m; massi e affioramenti in tutto il blocco.
+     Una `InstancedMesh` per tipo e livello (al più 22 chiamate, 14 nel blocco di partenza del seme 855588); matrici
+     calcolate una volta, ridistribuite tra i livelli ogni 12 m di spostamento della camera (2–3 ms in headless).
+   - *Misure* (headless, rendering software: non fa testo per gli FPS): partenza del seme 855588 ~12 500 oggetti
+     disegnati, 0,4–0,8 milioni di triangoli di vegetazione (1,1 in tutto); costruzione 35–40 ms oltre al
+     posizionamento. Nessun errore in console, nel mondo e a Tavullia. Le collisioni con i tronchi arrivano al passo 3.
 3. **Collisioni.** Tronchi, massi e affioramenti come ostacoli a griglia. *Prova:* si attraversa un bosco fitto
    scivolando tra i tronchi senza incastrarsi; la camera resta usabile nel bosco.
 4. **Arbusti e rocce.** Cespugli (macchia, margini, sottobosco), arbusti d'alta quota, sassi, massi, affioramenti

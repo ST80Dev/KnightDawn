@@ -689,6 +689,7 @@ async function init() {
     scene, camera, cam, controls, suolo, Knight, Calendar, Save,
     get terrain() { return terrain; }, get knight() { return knight; }, get castle() { return castle; },
     get carta() { return carta; }, get scena() { return scenaAttuale; }, get orizzonte() { return orizzonte; },
+    get vegetazione() { return vegetazione; },
     caricaScena, posizionaCavaliere,
   };
 
@@ -930,8 +931,10 @@ function aggiornaPannello(now) {
     testo += `\nterreno: ${terrain.meta.source} · ${fmt(terrain.minElev)}–${fmt(terrain.maxElev)} m · ${statPendenze}`;
     if (vegetazione) {
       const v = vegetazione;
-      testo += `\nvegetazione (V): ${fmt(v.totale)} oggetti · ${v.chiamate} chiamate · posizionamento ${fmt(v.msPosiziona)} ms`
-        + ` (campi ${fmt(v.msCampi)}) · costruzione ${fmt(v.msCostruzione)} ms${vegetazioneVisibile ? '' : ' · nascosta'}`
+      const st = v.statistiche();
+      testo += `\nvegetazione (V): ${fmt(v.totale)} oggetti, ${fmt(st.istanze)} disegnati · ${st.chiamate} chiamate`
+        + ` · ${fmt(st.triangoli)} triangoli · posizionamento ${fmt(v.msPosiziona)} ms (campi ${fmt(v.msCampi)})`
+        + ` · costruzione ${fmt(v.msCostruzione)} ms · livelli ${fmt(st.msAggiorna, 1)} ms${vegetazioneVisibile ? '' : ' · nascosta'}`
         + `\n  ${Object.entries(v.conteggi).filter(([, n]) => n).map(([k, n]) => `${k} ${fmt(n)}`).join(' · ')}`
         + `\ndisegno: ${fmt(renderer.info.render.calls)} chiamate · ${fmt(renderer.info.render.triangles)} triangoli`;
     }
@@ -979,6 +982,7 @@ function frame(now) {
       aggiornaNebbia(controls.target);
     }
   }
+  if (vegetazione && vegetazioneVisibile) vegetazione.aggiorna(camera.position.x, camera.position.z);
   aggiornaPannello(now);
   renderer.render(scene, camera);
 }
