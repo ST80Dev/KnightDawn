@@ -32,6 +32,7 @@ instabile durante lo sviluppo. In alternativa in locale con `python -m http.serv
 |---|---|
 | Scene 3D, terreno, generatore del mondo, milestone attuali | `docs/ESPLORAZIONE_3D.md` ⭐ |
 | Stile grafico 3D, materiali, cavaliere | `docs/GRAFICA_3D.md` |
+| Prestazioni: budget, misure, regole per ciò che si disegna | `docs/PRESTAZIONI.md` |
 | Visione, mondo e regole di generazione, tempo, meccaniche | `docs/GDD.md` |
 | Combattimento | `docs/COMBAT.md` |
 | Eventi | `docs/EVENTS.md` |
