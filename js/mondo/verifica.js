@@ -170,14 +170,15 @@ export const VARIETA = {
 };
 
 /** Tipo di paesaggio di una cella (per le regole di varietà): i biomi del 2D raggruppati. */
-export const TIPI = ['pianura', 'collina', 'bosco', 'montagna', 'neve', 'deserto', 'palude', 'acqua'];
+export const TIPI = ['pianura', 'collina', 'bosco', 'montagna', 'neve', 'deserto', 'palude', 'acqua', 'roccia'];
 export function tipoPaesaggio(bioma, acqua) {
   if (acqua) return 7;
   switch (bioma) {
     case 1: case 11: case 12: return 0;     // pianure
     case 3: return 1;                       // collina
     case 2: return 2;                       // foresta
-    case 4: case 10: return 3;              // montagna, roccia
+    case 4: return 3;                       // montagna (pascoli d'alta quota)
+    case 10: return 8;                      // roccia: creste, pareti, affioramenti
     case 7: case 8: return 4;               // neve, ghiaccio
     case 6: return 5;                       // sabbia
     case 5: return 6;                       // palude
@@ -255,10 +256,10 @@ export function verificaVarieta(carta) {
   }
   regole.push({ nome: 'finestre', ok: buone === finestre,
     testo: `finestre di ${F}×${F} km con almeno ${V.tipiMinimi} tipi di paesaggio: ${buone} su ${finestre}` });
-  // 2. Aree uniformi: diametro massimo senza interruzioni (zone estreme di neve e deserto escluse).
+  // 2. Aree uniformi: diametro massimo senza interruzioni (neve, deserto e roccia esclusi: zone estreme e rupi).
   let dMax = 0, dove = null;
   for (let i = 0; i < cols * rows; i++) {
-    if (tipo[i] === 4 || tipo[i] === 5 || tipo[i] === 7) continue;
+    if (tipo[i] === 4 || tipo[i] === 5 || tipo[i] === 7 || tipo[i] === 8) continue;
     if (distanza[i] > dMax) { dMax = distanza[i]; dove = [i % cols, (i / cols) | 0, TIPI[tipo[i]]]; }
   }
   regole.push({ nome: 'uniforme', ok: 2 * dMax <= V.uniforme,
@@ -273,5 +274,46 @@ export function verificaVarieta(carta) {
   let paludiAlte = 0;
   for (let i = 0; i < cols * rows; i++) if (tipo[i] === 6 && quota[i] > V.paludeQuota) paludiAlte++;
   regole.push({ nome: 'paludeQuota', ok: paludiAlte === 0, testo: `paludi sopra ${V.paludeQuota} m: ${paludiAlte}` });
+  // 5. Valichi: le creste aspre (invalicabili) non separano parti della stessa terraferma.
+  if (carta.asprezza) {
+    const separate = partiSeparate(carta);
+    regole.push({ nome: 'valichi', ok: separate === 0,
+      testo: `creste invalicabili: ${carta.statistiche?.valichi ?? '?'} valichi aperti, parti di terra separate ${separate}` });
+  }
   return { ok: regole.every((r) => r.ok), regole, peggiori: { finestre: cattive, uniforme: dove } };
+}
+
+/** Parti della terra percorribile (asprezza ≤ 0,5) separate dal resto della loro terraferma dalle creste aspre. */
+function partiSeparate(carta) {
+  const { cols, rows, mare, acque, asprezza } = carta, n = cols * rows;
+  const terra = (i) => !mare[i] && (!acque || acque[i] === 0);
+  const etichetta = (passa) => {
+    const comp = new Int32Array(n).fill(-1), coda = new Int32Array(n);
+    let c = 0;
+    for (let s0 = 0; s0 < n; s0++) {
+      if (comp[s0] >= 0 || !passa(s0)) continue;
+      let t = 0, f = 0; coda[f++] = s0; comp[s0] = c;
+      while (t < f) {
+        const i = coda[t++], x = i % cols;
+        for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) {
+          const j = i + b * cols + a, xx = x + a;
+          if ((!a && !b) || xx < 0 || xx >= cols || j < 0 || j >= n || comp[j] >= 0 || !passa(j)) continue;
+          comp[j] = c; coda[f++] = j;
+        }
+      }
+      c++;
+    }
+    return comp;
+  };
+  const terre = etichetta(terra), perc = etichetta((i) => terra(i) && asprezza[i] <= 0.5);
+  const parti = new Map();                       // terraferma → insieme delle parti percorribili
+  for (let i = 0; i < n; i++) {
+    if (perc[i] < 0) continue;
+    let s = parti.get(terre[i]);
+    if (!s) parti.set(terre[i], (s = new Set()));
+    s.add(perc[i]);
+  }
+  let separate = 0;
+  for (const s of parti.values()) separate += s.size - 1;
+  return separate;
 }

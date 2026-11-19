@@ -36,6 +36,7 @@ COLORI_BIOMI[BIOMA.SABBIA] = [222, 196, 138]; COLORI_BIOMI[BIOMA.NEVE] = [240, 2
 COLORI_BIOMI[BIOMA.GHIACCIO] = [200, 222, 236]; COLORI_BIOMI[BIOMA.FIUME] = [60, 110, 150];
 COLORI_BIOMI[BIOMA.ROCCIA] = [142, 136, 130]; COLORI_BIOMI[BIOMA.PIANURA_N] = [166, 150, 116];
 COLORI_BIOMI[BIOMA.PIANURA_S] = [206, 190, 128];
+const COLORE_VALICO = [232, 180, 60];
 const FASCE = [['pianura', 0, 200], ['collina', 200, 700], ['pedemonte', 700, 1500], ['montagna', 1500, Infinity]];
 const MARE_BASSO = [122, 158, 168], MARE_FONDO = [40, 70, 92];
 const LAGO = [104, 150, 178];
@@ -97,7 +98,7 @@ export function disegnaRilievo(carta, pixel = new Uint8ClampedArray(carta.cols *
         const ombra = 0.55 + 0.45 * Math.min(1.5, Math.max(0, luce));
         const base = livello === 'temperatura' && carta.temperatura ? tinta(SCALA_T, carta.temperatura[i])
           : livello === 'umidita' && carta.umidita ? tinta(SCALA_U, carta.umidita[i])
-            : livello === 'biomi' && carta.bioma ? COLORI_BIOMI[carta.bioma[i]]
+            : livello === 'biomi' && carta.bioma ? (carta.valico?.[i] ? COLORE_VALICO : COLORI_BIOMI[carta.bioma[i]])
               : tinta(TERRA, lago(i) ? livelloAcqua[i] : quota[i]);
         c = base.map((v) => v * ombra);
         const costa = (x > 0 && mare[i - 1]) || (x < cols - 1 && mare[i + 1])
@@ -166,7 +167,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
     else if (livello === 'biomi') {
       elLegenda.innerHTML = [BIOMA.PIANURA_N, BIOMA.PIANURA, BIOMA.PIANURA_S, BIOMA.COLLINA, BIOMA.FORESTA,
         BIOMA.MONTAGNA, BIOMA.ROCCIA, BIOMA.NEVE, BIOMA.GHIACCIO, BIOMA.SABBIA, BIOMA.PALUDE]
-        .map((b) => `${pallino(COLORI_BIOMI[b])} ${NOMI_BIOMI[b]}`).join(' ') + pan;
+        .map((b) => `${pallino(COLORI_BIOMI[b])} ${NOMI_BIOMI[b]}`).join(' ') + ` ${pallino(COLORE_VALICO)} valico` + pan;
     } else elLegenda.innerHTML = `quota 0 <i style="background:${sfumatura(TERRA)}"></i> 3500 m · non biomi` + pan;
   }
   legenda();

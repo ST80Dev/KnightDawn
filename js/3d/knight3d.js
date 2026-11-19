@@ -19,6 +19,7 @@ export const KNIGHT_CFG = {
   velIndietro: 0.9,     // m/s, passo all'indietro (senza corsa)
   velRotazione: 2.0,    // rad/s con A/D (circa 115°/s); in corsa un po' meno
   pendenzaMax: 35,      // gradi: oltre questa pendenza, nella direzione di marcia, il cavaliere non sale
+  pendenzaParete: 48,   // gradi: su un terreno così ripido non si sta, in nessuna direzione (pareti invalicabili)
   // Velocità secondo la pendenza nella direzione di marcia (curva tipo Tobler, ammorbidita per il gioco):
   // un po' più veloce sulle discese dolci (~3°), più lento in salita e sulle discese ripide.
   pendenzaK: 2.0,       // ripidità della curva (Tobler reale: 3,5)
@@ -296,12 +297,16 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
   const lim = () => terrain.half - cfg.margineBordo;
 
   // Un punto è raggiungibile se non obbliga a salire su una pendenza oltre il limite.
-  // Conta la pendenza nella direzione del passo: un versante ripido si può tagliare di traverso.
+  // Conta la pendenza nella direzione del passo: un versante ripido si può tagliare di traverso, una parete no.
   function puoAndare(x, z) {
     const d = Math.hypot(x - stato.x, z - stato.z);
     if (d < 1e-5) return true;
     // Acqua alta (se il terreno la segnala): non ci si entra; chi ci si trova già può uscirne.
     if (terrain.percorribile && !terrain.percorribile(x, z) && terrain.percorribile(stato.x, stato.z)) return false;
+    // Parete: oltre pendenzaParete non ci si entra (né salendo di traverso né scendendo); chi ci si trova
+    // già può spostarsi verso il meno ripido.
+    const pareteQui = terrain.getSlope(x, z);
+    if (pareteQui > cfg.pendenzaParete && pareteQui >= terrain.getSlope(stato.x, stato.z)) return false;
     const salita = terrain.getHeight(x, z) - terrain.getHeight(stato.x, stato.z);
     return !(salita > 0 && Math.atan(salita / d) > cfg.pendenzaMax * Math.PI / 180);
   }
