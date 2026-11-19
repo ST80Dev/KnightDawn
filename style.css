@@ -236,10 +236,7 @@ html, body {
 #carta .area {
   flex: 1;
   min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 10px;
+  overflow: hidden;              /* il canvas la riempie tutta: zoom e trascinamento dentro */
 }
 
 #carta canvas {

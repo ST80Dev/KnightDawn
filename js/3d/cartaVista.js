@@ -25,7 +25,6 @@ const FASCE = [['pianura', 0, 200], ['collina', 200, 700], ['pedemonte', 700, 15
 const MARE_BASSO = [122, 158, 168], MARE_FONDO = [40, 70, 92];
 const LAGO = [104, 150, 178];
 const COLORE_FIUME = '#2f6690';
-const SCALA = 2;                  // pixel del canvas per cella: fiumi e segni più nitidi
 const COSTA = [70, 52, 30];
 const ESAGERAZIONE = 6;           // quanto il rilievo pesa nell'ombreggiatura
 const COLORE_PANORAMA = 'rgba(150, 40, 30, 0.9)';
@@ -108,10 +107,12 @@ export function createCartaVista(contenitore, opzioni = {}) {
       <button type="button" class="genera">Genera</button>
       <button type="button" class="casuale">Seme casuale</button>
       <button type="button" class="panorami" title="Mostra le alture da cui si vede lontano (regola dei punti panoramici)">Punti panoramici</button>
+      <button type="button" class="intera" title="Tutta la Carta">Vista intera</button>
+      <button type="button" class="centra" title="Ingrandisci attorno al cavaliere">Centra sul cavaliere</button>
       <button type="button" class="tavullia" title="Terreno reale di Tavullia con il castello (scena di prova)">Tavullia (prova)</button>
       <span class="legenda" title="Colore = quota, non biomi (biomi al passo 7)">quota 0 <i></i> 3500 m · non biomi · <b>▴</b> punti panoramici</span>
       <span class="info"></span>
-      <span class="tasto">clic sulla terra: vai lì · M: torna alla scena</span>
+      <span class="tasto">rotella: zoom · trascina: sposta · clic sulla terra: vai lì · M: torna alla scena</span>
     </div>
     <div class="area"><canvas></canvas></div>
     <div class="piede">
@@ -134,26 +135,56 @@ export function createCartaVista(contenitore, opzioni = {}) {
   const ctx = canvas.getContext('2d');
   let carta = null;
   let rilievo = null;                            // immagine del rilievo della Carta mostrata (1 px per cella)
+  let tracciatiLaghi = null, tracciatiFiumi = null;   // Path2D in coordinate di cella, una volta per Carta
   let verifica = null;                           // esito di verificaFiumi
   let panorami = null;                           // esito di verificaPanorami
   let mostraPanorami = false;                    // i triangoli sono tanti: si mostrano a richiesta
 
+  // ─── Vista: centro (in celle = km) e zoom (1 = tutta la Carta nello spazio disponibile) ───
+  const ZOOM_MAX = 40;
+  const vista = { cx: 0, cy: 0, z: 1 };
+  let dpr = 1, larghezza = 1, altezza = 1;        // canvas in pixel del dispositivo
+  const base = () => Math.min(larghezza / carta.cols, altezza / carta.rows);   // pixel per cella a zoom 1
+  const scala = () => base() * vista.z;
+  const origine = () => [larghezza / 2 - vista.cx * scala(), altezza / 2 - vista.cy * scala()];
+  /** Da coordinate dello schermo (evento) a km della Carta. */
+  function inKm(e) {
+    const r = canvas.getBoundingClientRect();
+    const s = scala(), [tx, ty] = origine();
+    return [((e.clientX - r.left) * dpr - tx) / s, ((e.clientY - r.top) * dpr - ty) / s];
+  }
+  function vistaIntera() { vista.cx = carta.cols / 2; vista.cy = carta.rows / 2; vista.z = 1; }
+  function limitaVista() {
+    vista.z = Math.min(ZOOM_MAX, Math.max(1, vista.z));
+    vista.cx = Math.min(carta.cols, Math.max(0, vista.cx));
+    vista.cy = Math.min(carta.rows, Math.max(0, vista.cy));
+  }
+
+  let richiesto = false;
+  function ridisegnaPresto() {
+    if (richiesto) return;
+    richiesto = true;
+    requestAnimationFrame(() => { richiesto = false; if (carta && !el.hidden) ridisegna(); });
+  }
+
   function adatta() {
     if (!carta || el.hidden) return;
+    dpr = window.devicePixelRatio || 1;
     const w = area.clientWidth, h = area.clientHeight;
-    const scala = Math.min(w / carta.cols, h / carta.rows);
-    canvas.style.width = Math.floor(carta.cols * scala) + 'px';
-    canvas.style.height = Math.floor(carta.rows * scala) + 'px';
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    larghezza = canvas.width = Math.max(1, Math.round(w * dpr));
+    altezza = canvas.height = Math.max(1, Math.round(h * dpr));
+    ridisegna();
   }
 
   const diPartita = () => carta !== null && carta === opzioni.cartaAttuale?.();
 
   /** Mostra una Carta (quella della partita o un'anteprima). */
   function mostra(c) {
+    const nuova = !carta || carta.seme !== c.seme;
     carta = c;
     inSeme.value = String(carta.seme);
-    canvas.width = carta.cols * SCALA;
-    canvas.height = carta.rows * SCALA;
     rilievo = document.createElement('canvas');
     rilievo.width = carta.cols;
     rilievo.height = carta.rows;
@@ -161,46 +192,47 @@ export function createCartaVista(contenitore, opzioni = {}) {
     const img = c2.createImageData(carta.cols, carta.rows);
     disegnaRilievo(carta, img.data);
     c2.putImageData(img, 0, 0);
+    tracciatiLaghi = costruisciLaghi();
+    tracciatiFiumi = costruisciFiumi();
     // Verifiche già fatte dal Worker; altrimenti qui (Carte di altra provenienza).
     verifica = carta.verifiche?.fiumi ?? verificaFiumi(carta);
     panorami = carta.verifiche?.panorami ?? verificaPanorami(carta);
+    if (nuova) vistaIntera();
     disegnaIstogramma();
-    ridisegna();
     adatta();
   }
 
-  /** Fiumi: i tracciati curvi della Carta (tracciaFiumi), più larghi con il bacino. */
-  function disegnaFiumi() {
+  // Classi di larghezza dei fiumi: multipli della soglia del bacino → pixel sullo schermo.
+  const CLASSI_FIUMI = [[1, 0.8], [4, 1.2], [16, 1.7], [64, 2.4], [256, 3.2]];
+
+  /** Fiumi: i tracciati curvi della Carta (tracciaFiumi), un Path2D per classe di larghezza. */
+  function costruisciFiumi() {
     const { fiumi, sogliaFiume } = carta;
-    if (!fiumi) return;
-    ctx.strokeStyle = COLORE_FIUME;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    const classi = [[1, 0.35], [4, 0.6], [16, 0.9], [64, 1.3], [256, 1.8]];   // multipli della soglia → larghezza
-    for (let k = 0; k < classi.length; k++) {
-      const da = classi[k][0] * sogliaFiume, a = k + 1 < classi.length ? classi[k + 1][0] * sogliaFiume : Infinity;
-      ctx.lineWidth = classi[k][1];
-      ctx.beginPath();
+    if (!fiumi) return [];
+    return CLASSI_FIUMI.map(([da0], k) => {
+      const da = da0 * sogliaFiume, a = k + 1 < CLASSI_FIUMI.length ? CLASSI_FIUMI[k + 1][0] * sogliaFiume : Infinity;
+      const p = new Path2D();
       for (const f of fiumi) {
         let aperto = false;
         for (let i = 4; i < f.length; i += 4) {        // punti: x, y, bacino, letto
           const b = f[i + 2];
           if (b < da || b >= a) { aperto = false; continue; }
-          if (!aperto) { ctx.moveTo(f[i - 4], f[i - 3]); aperto = true; }
-          ctx.lineTo(f[i], f[i + 1]);
+          if (!aperto) { p.moveTo(f[i - 4], f[i - 3]); aperto = true; }
+          p.lineTo(f[i], f[i + 1]);
         }
       }
-      ctx.stroke();
-    }
+      return p;
+    });
   }
 
   /**
    * Laghi con contorni smussati: marching squares sul campo «lago» (1/0 ai centri delle celle) ammorbidito
    * con un filtro 3×3, soglia 0,5. A quadretti da 1 km sembravano macchie squadrate.
    */
-  function disegnaLaghi() {
+  function costruisciLaghi() {
     const { cols, rows, acque } = carta;
-    if (!acque) return;
+    const p = new Path2D();
+    if (!acque) return p;
     const v = new Float32Array(cols * rows);
     const k = [1, 2, 1, 2, 4, 2, 1, 2, 1];
     for (let y = 1; y < rows - 1; y++) {
@@ -216,8 +248,6 @@ export function createCartaVista(contenitore, opzioni = {}) {
         v[y * cols + x] = somma / 16;
       }
     }
-    ctx.fillStyle = `rgb(${LAGO.join(',')})`;
-    ctx.beginPath();
     const angoli = [[0, 0], [1, 0], [1, 1], [0, 1]];
     for (let y = 0; y < rows - 1; y++) {
       for (let x = 0; x < cols - 1; x++) {
@@ -232,42 +262,58 @@ export function createCartaVista(contenitore, opzioni = {}) {
             punti.push([angoli[a][0] + (angoli[b][0] - angoli[a][0]) * t, angoli[a][1] + (angoli[b][1] - angoli[a][1]) * t]);
           }
         }
-        ctx.moveTo(x + 0.5 + punti[0][0], y + 0.5 + punti[0][1]);
-        for (let p = 1; p < punti.length; p++) ctx.lineTo(x + 0.5 + punti[p][0], y + 0.5 + punti[p][1]);
-        ctx.closePath();
+        p.moveTo(x + 0.5 + punti[0][0], y + 0.5 + punti[0][1]);
+        for (let q = 1; q < punti.length; q++) p.lineTo(x + 0.5 + punti[q][0], y + 0.5 + punti[q][1]);
+        p.closePath();
       }
     }
-    ctx.fill();
+    return p;
   }
 
   /** Rilievo, laghi, fiumi, punti panoramici e (se è la Carta della partita) il cavaliere. */
   function ridisegna() {
+    const s = scala(), [tx, ty] = origine();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(rilievo, 0, 0, canvas.width, canvas.height);
-    ctx.setTransform(SCALA, 0, 0, SCALA, 0, 0);       // da qui in poi: coordinate in celle
-    disegnaLaghi();
-    disegnaFiumi();
+    ctx.fillStyle = '#1a0e04';
+    ctx.fillRect(0, 0, larghezza, altezza);
+    ctx.setTransform(s, 0, 0, s, tx, ty);            // da qui: coordinate in celle (km)
+    // Vista intera: celle nette. Da ×3: rilievo sfumato (più leggibile; coordinate e clic restano esatti).
+    ctx.imageSmoothingEnabled = vista.z >= 3;
+    ctx.drawImage(rilievo, 0, 0);
+    ctx.fillStyle = `rgb(${LAGO.join(',')})`;
+    ctx.fill(tracciatiLaghi);
+    ctx.strokeStyle = COLORE_FIUME;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    const spessore = (1 + 0.25 * Math.log2(vista.z)) * dpr / s;   // pixel sullo schermo, crescono poco con lo zoom
+    CLASSI_FIUMI.forEach(([, w], k) => { ctx.lineWidth = w * spessore; ctx.stroke(tracciatiFiumi[k]); });
+    // Segni in pixel dello schermo, indipendenti dallo zoom.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const P = (x, y) => [x * s + tx, y * s + ty];
     if (panorami && mostraPanorami) {
+      const m = 3.5 * dpr;
       ctx.fillStyle = COLORE_PANORAMA;
       ctx.beginPath();
       for (const [x, y] of panorami.punti) {
-        ctx.moveTo(x + 0.5, y - 0.6); ctx.lineTo(x + 1.2, y + 0.8); ctx.lineTo(x - 0.2, y + 0.8); ctx.closePath();
+        const [px, py] = P(x + 0.5, y + 0.5);
+        if (px < -m || py < -m || px > larghezza + m || py > altezza + m) continue;
+        ctx.moveTo(px, py - m); ctx.lineTo(px + m, py + m * 0.8); ctx.lineTo(px - m, py + m * 0.8); ctx.closePath();
       }
       ctx.fill();
     }
     const p = diPartita() ? opzioni.posizione?.() : null;
     if (p) {
-      ctx.lineWidth = 1;
+      const [px, py] = P(p.x, p.y);
+      ctx.lineWidth = 1.5 * dpr;
       ctx.strokeStyle = '#fff6e0';
-      ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(px, py, 6 * dpr, 0, Math.PI * 2); ctx.stroke();
       ctx.fillStyle = COLORE_CAVALIERE;
-      ctx.beginPath(); ctx.arc(p.x, p.y, 2.2, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(px, py, 4.5 * dpr, 0, Math.PI * 2); ctx.fill();
     }
-    const s = carta.statistiche;
+    const st = carta.statistiche;
     elInfo.textContent = `${diPartita() ? 'mondo della partita' : 'anteprima'} · ${carta.cols}×${carta.rows} km`
-      + ` · mare ${fmt(s.frazioneMare * 100, 1)} % · ${carta.daCache ? 'dalla cache' : `${fmt(s.ms)} ms`}`
-      + ` · controllo ${carta.controllo}`;
+      + ` · mare ${fmt(st.frazioneMare * 100, 1)} % · ${carta.daCache ? 'dalla cache' : `${fmt(st.ms)} ms`}`
+      + ` · controllo ${carta.controllo} · zoom ×${fmt(vista.z, 1)}`;
   }
 
   /** Genera un'anteprima per un seme (testo libero; vuoto = a caso), nel Web Worker. */
@@ -346,6 +392,14 @@ export function createCartaVista(contenitore, opzioni = {}) {
     e.currentTarget.classList.toggle('attivo', mostraPanorami);
     if (carta) ridisegna();
   });
+  el.querySelector('.intera').addEventListener('click', () => { if (carta) { vistaIntera(); ridisegna(); } });
+  el.querySelector('.centra').addEventListener('click', () => {
+    const p = diPartita() ? opzioni.posizione?.() : null;
+    if (!p) { elCursore.textContent = 'Il cavaliere non è su questa Carta.'; return; }
+    vista.cx = p.x; vista.cy = p.y; vista.z = Math.max(vista.z, 12);
+    limitaVista();
+    ridisegna();
+  });
   const btnTavullia = el.querySelector('.tavullia');
   if (opzioni.onTavullia) btnTavullia.addEventListener('click', () => opzioni.onTavullia());
   else btnTavullia.hidden = true;
@@ -355,31 +409,68 @@ export function createCartaVista(contenitore, opzioni = {}) {
   });
   window.addEventListener('resize', adatta);
 
+  // ─── Zoom (rotella, attorno al cursore), trascinamento e clic ───
+  canvas.addEventListener('wheel', (e) => {
+    if (!carta) return;
+    e.preventDefault();
+    const [x, y] = inKm(e);
+    vista.z *= e.deltaY < 0 ? 1.25 : 1 / 1.25;
+    vista.z = Math.min(ZOOM_MAX, Math.max(1, vista.z));
+    // Il punto sotto il cursore resta sotto il cursore.
+    const r = canvas.getBoundingClientRect(), s = scala();
+    vista.cx = x - ((e.clientX - r.left) * dpr - larghezza / 2) / s;
+    vista.cy = y - ((e.clientY - r.top) * dpr - altezza / 2) / s;
+    limitaVista();
+    ridisegnaPresto();
+  }, { passive: false });
+
+  let trascina = null;                           // { x, y, cx, cy, mosso }
+  canvas.addEventListener('pointerdown', (e) => {
+    if (!carta || e.button !== 0) return;
+    trascina = { x: e.clientX, y: e.clientY, cx: vista.cx, cy: vista.cy, mosso: false };
+    canvas.setPointerCapture(e.pointerId);
+  });
   canvas.addEventListener('pointermove', (e) => {
     if (!carta) return;
-    const r = canvas.getBoundingClientRect();
-    const x = Math.floor((e.clientX - r.left) / r.width * carta.cols);
-    const y = Math.floor((e.clientY - r.top) / r.height * carta.rows);
-    if (x < 0 || y < 0 || x >= carta.cols || y >= carta.rows) return;
+    if (trascina) {
+      const dx = e.clientX - trascina.x, dy = e.clientY - trascina.y;
+      if (Math.abs(dx) + Math.abs(dy) > 4) trascina.mosso = true;
+      if (trascina.mosso) {
+        const s = scala() / dpr;
+        vista.cx = trascina.cx - dx / s;
+        vista.cy = trascina.cy - dy / s;
+        limitaVista();
+        ridisegnaPresto();
+        canvas.style.cursor = 'grabbing';
+      }
+    }
+    const [xf, yf] = inKm(e);
+    const x = Math.floor(xf), y = Math.floor(yf);
+    if (x < 0 || y < 0 || x >= carta.cols || y >= carta.rows) { elCursore.innerHTML = '&nbsp;'; return; }
     const i = y * carta.cols + x;
     const q = carta.quota[i];
-    elCursore.textContent = `cella ${x}, ${y} (km da ovest, da nord) · `
+    elCursore.textContent = `${fmt(xf, 2)}, ${fmt(yf, 2)} km (da ovest, da nord) · cella ${x}, ${y} · `
       + (carta.acque?.[i] === ACQUA.LAGO ? `lago, superficie a ${fmt(carta.livelloAcqua[i])} m, fondo a ${fmt(q)} m`
         : carta.acque?.[i] === ACQUA.LAGO_COSTIERO ? `lago costiero, fondo a ${fmt(-q)} m sotto il livello del mare`
           : carta.mare[i] ? `mare, profondità ${fmt(-q)} m`
             : `quota ${fmt(q)} m (${fasciaDi(q)}) · catena ${fmt(carta.catena[i], 2)}`
               + (carta.bacino?.[i] >= carta.sogliaFiume ? ` · fiume, bacino ${fmt(carta.bacino[i])} km²` : ''));
   });
-  canvas.addEventListener('pointerleave', () => { elCursore.innerHTML = '&nbsp;'; });
-  canvas.addEventListener('click', (e) => {
-    if (!carta || !opzioni.onScegli) return;
-    const r = canvas.getBoundingClientRect();
-    const x = Math.floor((e.clientX - r.left) / r.width * carta.cols);
-    const y = Math.floor((e.clientY - r.top) / r.height * carta.rows);
+  const fine = (e) => {
+    if (!trascina) return;
+    const mosso = trascina.mosso;
+    trascina = null;
+    canvas.style.cursor = '';
+    if (mosso || e.type !== 'pointerup' || !opzioni.onScegli) return;
+    // Clic senza trascinamento: entra nella Scena centrata nel punto esatto (km, non il centro della cella).
+    const [x, y] = inKm(e);
     if (x < 0 || y < 0 || x >= carta.cols || y >= carta.rows) return;
-    if (carta.mare[y * carta.cols + x]) { elCursore.textContent = 'È mare: scegli una cella di terra.'; return; }
+    if (carta.mare[Math.floor(y) * carta.cols + Math.floor(x)]) { elCursore.textContent = 'È mare: scegli un punto di terra.'; return; }
     opzioni.onScegli(carta, x, y);
-  });
+  };
+  canvas.addEventListener('pointerup', fine);
+  canvas.addEventListener('pointercancel', fine);
+  canvas.addEventListener('pointerleave', () => { if (!trascina) elCursore.innerHTML = '&nbsp;'; });
 
   return {
     get aperta() { return !el.hidden; },

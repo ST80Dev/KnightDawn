@@ -23,7 +23,7 @@ export const CARTA_PREDEFINITA = { cols: 600, rows: 450, cella: 1000 };
 // Versione del generatore: entra nella chiave della cache delle Carte (IndexedDB, lavoratore.js).
 // VA CAMBIATA a ogni modifica che cambia le Carte generate, altrimenti il browser riusa Carte vecchie.
 // (In alternativa: ?rigenera nell'indirizzo ignora la cache.)
-export const VERSIONE_GENERATORE = 'm6-erosione-1';
+export const VERSIONE_GENERATORE = 'm6-erosione-3';
 
 // Parametri della forma (km dove non indicato). Valori di partenza, da tarare guardando le Carte.
 const FORMA = {
@@ -243,6 +243,18 @@ export function generaCarta(seme, opzioni = {}) {
   avanzamento?.('Erosione dei fiumi', 0.25);
 
   // ─── Fase 4a: erosione fluviale, poi di nuovo le fasce (trasformazione monotona: i fiumi scendono ancora) ───
+  // Prima, un'ondulazione su grande scala: su un pendio lungo e uniforme il flusso (8 direzioni) correva in
+  // diagonale dritta per decine di km e l'erosione la scavava. Così i fiumi deviano e piegano su 10–30 km.
+  const OE = EROSIONE.ondulazione, sOE = derivaSeme(seme, 45);
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const i = y * cols + x;
+      if (mare[i]) continue;
+      const A = OE.metri + OE.perMetro * quota[i];
+      quota[i] += A * (0.6 * fbm(x, y, sOE, OE.lunghezze[0], 3) + 0.4 * fbm(x, y, sOE ^ 0x2545f491, OE.lunghezze[1], 2));
+      if (quota[i] < 1) quota[i] = 1;
+    }
+  }
   erosioneFluviale(cols, rows, quota, mare, seme, (f) => avanzamento?.('Erosione dei fiumi', 0.25 + 0.5 * f));
   mappaFasce(quota, mare, carattere, quota);
   avanzamento?.('Fiumi, laghi e poggi', 0.78);
@@ -332,7 +344,10 @@ function mappaFasce(valori, mare, carattere, quota) {
 // a ogni passo ogni cella si avvicina alla cella a valle con peso forza·√(bacino km²). I fiumi grandi
 // incidono e si regolarizzano, i versanti cambiano poco, le conche attraversate dall'acqua si colmano dal
 // basso. Le direzioni di flusso si ricalcolano ogni `ogni` passi (riempimento e zone piatte come nel drenaggio).
-const EROSIONE = { iterazioni: 24, ogni: 3, forza: 0.004 };
+const EROSIONE = {
+  iterazioni: 24, ogni: 3, forza: 0.004,
+  ondulazione: { metri: 12, perMetro: 0.03, lunghezze: [12, 30] },   // prima dell'erosione (vedi generaCarta)
+};
 
 function erosioneFluviale(cols, rows, quota, mare, seme, avanzamento) {
   const E = EROSIONE, n = cols * rows;
@@ -619,22 +634,63 @@ function direzioni(cols, rows, riempita, foce, seme) {
 }
 
 /**
- * Zone piatte (Barnes, Lehman e Mulla, 2014). Una zona è un insieme collegato di celle con la stessa
- * quota riempita, che contiene almeno una cella senza vicine più basse. Gradiente combinato:
- * 2 × distanza dal bordo basso (celle con una vicina più bassa: da lì l'acqua esce) + vicinanza al bordo
- * alto (celle con una vicina più alta: l'acqua se ne allontana). Ogni cella senza direzione scende lungo
- * il gradiente; le celle del bordo basso tengono la loro direzione (verso una vicina più bassa).
+ * Zone piatte: insiemi collegati di celle con la stessa quota riempita (conche colmate), che contengono almeno
+ * una cella senza vicine più basse. Ogni cella senza direzione segue il percorso di costo minimo (Dijkstra)
+ * verso il bordo basso della zona (celle che hanno già dove scendere). Il costo di un passo varia dolcemente
+ * nello spazio (rumore su ~8 km): l'acqua segue i corridoi «più facili» e il percorso piega. (La distanza a
+ * scacchiera di Barnes, Lehman e Mulla 2014 dava rette a 45° lunghe decine di km attraverso le conche grandi,
+ * che l'erosione poi scavava.) Ogni cella punta alla precedente sul percorso minimo: niente cicli, nessuna cella
+ * senza uscita. Modifica `ricevente` e segna in `piatta` le celle diretta così.
  */
+const ZONE_PIATTE = { lunghezza: 8, variazione: 0.8 };
+
 function dirigiZonePiatte(cols, rows, riempita, foce, ricevente, seme, piatta) {
   const n = cols * rows;
   const zona = new Int32Array(n).fill(-1);
-  const dBasso = new Int32Array(n).fill(-1), dAlto = new Int32Array(n).fill(-1);
-  const celle = new Int32Array(n), codaB = new Int32Array(n), codaA = new Int32Array(n);
+  const dist = new Float64Array(n).fill(Infinity);
+  const prec = new Int32Array(n).fill(-1);
+  const costo = new Float32Array(n).fill(NaN);       // calcolato solo dove serve
+  const celle = new Int32Array(n);
+  const sC = derivaSeme(seme, 71);
+  const costoDi = (j) => {
+    if (Number.isNaN(costo[j])) {
+      const x = j % cols, y = (j - x) / cols;
+      costo[j] = 1 + ZONE_PIATTE.variazione * (fbm(x, y, sC, ZONE_PIATTE.lunghezza, 2) + 1) * 0.5;
+    }
+    return costo[j];
+  };
+  // Coda di priorità (heap binario) su (distanza, indice).
+  const hk = new Float64Array(n), hi = new Int32Array(n);
+  let dim = 0;
+  const minore = (a, b) => hk[a] < hk[b] || (hk[a] === hk[b] && hi[a] < hi[b]);
+  const scambia = (a, b) => { const k = hk[a]; hk[a] = hk[b]; hk[b] = k; const i = hi[a]; hi[a] = hi[b]; hi[b] = i; };
+  const metti = (k, i) => {
+    let c = dim++;
+    hk[c] = k; hi[c] = i;
+    while (c > 0) { const p = (c - 1) >> 1; if (!minore(c, p)) break; scambia(c, p); c = p; }
+  };
+  const togli = () => {
+    const i = hi[0], k = hk[0];
+    dim--;
+    if (dim > 0) {
+      hk[0] = hk[dim]; hi[0] = hi[dim];
+      let c = 0;
+      for (;;) {
+        const l = 2 * c + 1, r = l + 1;
+        let m = c;
+        if (l < dim && minore(l, m)) m = l;
+        if (r < dim && minore(r, m)) m = r;
+        if (m === c) break;
+        scambia(c, m); c = m;
+      }
+    }
+    return [i, k];
+  };
   let nz = 0;
   for (let s = 0; s < n; s++) {
     if (foce[s] || ricevente[s] >= 0 || zona[s] >= 0) continue;
     const livello = riempita[s];
-    let nc = 0, nb = 0, na = 0;
+    let nc = 0;
     celle[nc++] = s; zona[s] = nz;
     for (let t = 0; t < nc; t++) {
       const i = celle[t], x = i % cols, y = (i - x) / cols;
@@ -645,48 +701,25 @@ function dirigiZonePiatte(cols, rows, riempita, foce, ricevente, seme, piatta) {
         if (zona[j] < 0 && !foce[j] && riempita[j] === livello) { zona[j] = nz; celle[nc++] = j; }
       }
     }
-    for (let t = 0; t < nc; t++) {
-      const i = celle[t], x = i % cols, y = (i - x) / cols;
-      let alto = false;
-      for (let k = 0; k < 8; k++) {
-        const nx = x + V8X[k], ny = y + V8Y[k];
-        if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
-        if (riempita[ny * cols + nx] > livello) alto = true;
-      }
-      if (ricevente[i] >= 0) { dBasso[i] = 0; codaB[nb++] = i; }     // bordo basso: ha già dove scendere
-      if (alto) { dAlto[i] = 0; codaA[na++] = i; }
-    }
-    const espandi = (coda, quanti, d) => {
-      for (let t = 0; t < quanti; t++) {
-        const i = coda[t], x = i % cols, y = (i - x) / cols;
-        for (let k = 0; k < 8; k++) {
-          const nx = x + V8X[k], ny = y + V8Y[k];
-          if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
-          const j = ny * cols + nx;
-          if (zona[j] === nz && d[j] < 0) { d[j] = d[i] + 1; coda[quanti++] = j; }
-        }
-      }
-      return quanti;
-    };
-    nb = espandi(codaB, nb, dBasso);
-    na = espandi(codaA, na, dAlto);
-    let maxAlto = 0;
-    for (let t = 0; t < na; t++) if (dAlto[codaA[t]] > maxAlto) maxAlto = dAlto[codaA[t]];
-    const g = (i) => 2 * dBasso[i] + (dAlto[i] >= 0 ? maxAlto - dAlto[i] : 0);
-    for (let t = 0; t < nc; t++) {
-      const i = celle[t];
-      if (ricevente[i] >= 0 || dBasso[i] < 0) continue;
-      const x = i % cols, y = (i - x) / cols, gi = g(i);
-      let m = -1, gm = gi, voto = -1;
+    // Sorgenti del percorso: il bordo basso (celle della zona che hanno già dove scendere).
+    dim = 0;
+    for (let t = 0; t < nc; t++) { const i = celle[t]; if (ricevente[i] >= 0) { dist[i] = 0; metti(0, i); } }
+    while (dim > 0) {
+      const [i, d] = togli();
+      if (d > dist[i]) continue;
+      const x = i % cols, y = (i - x) / cols;
       for (let k = 0; k < 8; k++) {
         const nx = x + V8X[k], ny = y + V8Y[k];
         if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
         const j = ny * cols + nx;
-        if (zona[j] !== nz || dBasso[j] < 0) continue;
-        const gj = g(j), h = hash2(i, k, seme);
-        if (gj < gm || (gj === gm && gj < gi && h > voto)) { gm = gj; m = j; voto = h; }
+        if (zona[j] !== nz || ricevente[j] >= 0) continue;
+        const nd = d + V8D[k] * 0.5 * (costoDi(i) + costoDi(j));
+        if (nd < dist[j] || (nd === dist[j] && i < prec[j])) { dist[j] = nd; prec[j] = i; metti(nd, j); }
       }
-      if (m >= 0) { ricevente[i] = m; piatta[i] = 1; }
+    }
+    for (let t = 0; t < nc; t++) {
+      const i = celle[t];
+      if (ricevente[i] < 0 && prec[i] >= 0) { ricevente[i] = prec[i]; piatta[i] = 1; }
     }
     nz++;
   }
