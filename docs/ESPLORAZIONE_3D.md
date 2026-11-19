@@ -620,19 +620,21 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
      ~60 m (come l'orizzonte vicino; con quella fine il blocco veniva più roccioso dei dintorni e si vedeva
      il riquadro); la luce del blocco passa dalle normali fini a quelle su ~60 m negli ultimi 600 m verso il
      bordo. Limite: pareti davvero verticali richiedono rilievo apposito (oggi le pendenze arrivano a ~45°).
-   - **Grandi creste e forcelle** (deciso con l'utente, da provare). Una prima versione metteva distese di
-     guglie tutte uguali sul 35–45 % della montagna: senza punti di riferimento, ci si perdeva. Ora (`carta.js`,
-     `cresteEForcelle`, `VERSIONE_GENERATORE` = `m6-creste-1`): **3–7 creste per mondo** (una ogni ~2500 km² di
-     montagna), sulle cime più alte oltre 1800 m e ad almeno 28 km l'una dall'altra; ognuna è una muraglia
-     lunga 6–16 km nel verso della catena (asse principale delle celle alte attorno), alta 450–650 m sul
-     terreno, con 2–3 cime di altezza diversa, pareti sui fianchi (fino a ~60–70°) e un filo frastagliato in
-     cima. **Una forcella** per cresta (a volte due, sulle più lunghe): sella tra due cime, ~85 % più bassa del
-     profilo, con i fianchi allargati e il rilievo fine smorzato: si sale con pendii di 4–16° (seme 855588:
-     forcella a 3381 m tra cime a ~3750 m). La cresta si aggira dalle estremità o si passa la forcella. Sulla
-     Carta: `carta.creste` (asse, lunghezza, cime, forcelle), celle della muraglia a roccia (~100 celle),
-     forcelle gialle nella Carta dei biomi. *Cavaliere* (`knight3d.js`): oltre 48° di pendenza del terreno non
-     si entra in nessuna direzione. *Verifica*: regola «valichi» (nessuna parte di terra separata) e roccia tipo
-     di paesaggio a sé: 30 semi su 30 rispettano tutte le regole. Strade, pedaggi e luoghi alle forcelle con la
+   - **Gruppi montuosi e forcelle** (deciso con l'utente sul modello di Dolomiti e Alpi, da provare). Prima
+     distese di guglie tutte uguali (ci si perdeva), poi poche muraglie lunghe (troppo poche, tutte uguali).
+     Ora (`carta.js`, `massicciEForcelle`, `VERSIONE_GENERATORE` = `m6-massicci-1`): **4–12 gruppi** (uno ogni
+     ~900 km² di terra oltre 1400 m), su cime alte ad almeno 16 km l'uno dall'altro (con le valli in mezzo, dove
+     si cammina), ognuno con una **forma** sua — torre (cima a punta), altopiano (cima piatta), piramide,
+     cresta (allungata) — e 1–4 torri: pareti invalicabili (60–70°) sopra un piede di ghiaioni percorribili
+     (15–25°), contorno irregolare (speroni e canaloni), torri di 0,55–1,15 km di semiasse e 480–880 m sopra il
+     terreno. Tra le torri dello stesso gruppo i ghiaioni si toccano: le **forcelle**, selle ~400 m sotto le
+     vette con pendii di 3–13°. Sulla Carta: `carta.massicci` (id, forma, torri, forcelle), segno e numero di
+     ogni gruppo (il nome arriverà con i luoghi), forcelle gialle da zoom ×4, gruppo e forma sotto il
+     puntatore. Nelle Scene i ghiaioni e le forcelle hanno il rilievo fine smorzato, le pareti un frastaglio.
+     *Cavaliere* (`knight3d.js`): oltre 48° di pendenza del terreno non si entra in nessuna direzione.
+     *Verifica*: regola «valichi» (nessuna parte di terra chiusa dalle pareti) e roccia tipo di paesaggio a sé:
+     20 semi su 20 rispettano tutte le regole. Limiti: le cime innevate sembrano un po' «panettoni» (manca il
+     dettaglio verticale delle pareti, ~8 m di griglia); strade, pedaggi e luoghi alle forcelle con la
      milestone dei luoghi.
    Limiti noti: il limite delle nevi si calcola al caricamento della Scena (cambiando stagione dentro la
    Scena si aggiorna alla Scena successiva); niente alberi né rocce come oggetti (il bosco è un colore);

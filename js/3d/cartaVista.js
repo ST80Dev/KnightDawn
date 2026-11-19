@@ -9,7 +9,7 @@
 // Da zoom ×4 la parte visibile si ridisegna con le quote vere delle Scene (stessa funzione del terreno 3D,
 // fino a pochi metri per campione): ombreggiatura e curve di livello, per scegliere una cima o una conca.
 
-import { ACQUA, BIOMA, NOMI_BIOMI } from '../mondo/carta.js';
+import { ACQUA, BIOMA, NOMI_BIOMI, profiloMassicci } from '../mondo/carta.js';
 import { verificaFiumi, verificaPanorami, verificaVarieta } from '../mondo/verifica.js';
 import { semeDaTesto, derivaSeme } from '../mondo/rumore.js';
 import { quotaMondo, scavaFiumi, livelloLago, raffinaZona, percorsiFiumi } from '../mondo/scena.js';
@@ -165,6 +165,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
     if (livello === 'temperatura') elLegenda.innerHTML = `media annua −15 <i style="background:${sfumatura(SCALA_T)}"></i> 24 °C` + pan;
     else if (livello === 'umidita') elLegenda.innerHTML = `umidità secco <i style="background:${sfumatura(SCALA_U)}"></i> umido` + pan;
     else if (livello === 'biomi') {
+      // (i valichi della Carta dei biomi sono le forcelle dei gruppi montuosi)
       elLegenda.innerHTML = [BIOMA.PIANURA_N, BIOMA.PIANURA, BIOMA.PIANURA_S, BIOMA.COLLINA, BIOMA.FORESTA,
         BIOMA.MONTAGNA, BIOMA.ROCCIA, BIOMA.NEVE, BIOMA.GHIACCIO, BIOMA.SABBIA, BIOMA.PALUDE]
         .map((b) => `${pallino(COLORI_BIOMI[b])} ${NOMI_BIOMI[b]}`).join(' ') + ` ${pallino(COLORE_VALICO)} valico` + pan;
@@ -437,6 +438,23 @@ export function createCartaVista(contenitore, opzioni = {}) {
     // Segni in pixel dello schermo, indipendenti dallo zoom.
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const P = (x, y) => [x * s + tx, y * s + ty];
+    // Gruppi montuosi: un segno e un numero (il nome arriverà con i luoghi); forcelle in giallo.
+    if (carta.massicci) {
+      ctx.font = `${Math.round(11 * dpr)}px Georgia, serif`;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      for (const g of carta.massicci) {
+        const [px, py] = P(g.x, g.y), m = 5 * dpr;
+        if (px < -40 || py < -40 || px > larghezza + 40 || py > altezza + 40) continue;
+        ctx.fillStyle = '#2a1a0c'; ctx.strokeStyle = '#f4ead0'; ctx.lineWidth = 1.2 * dpr;
+        ctx.beginPath(); ctx.moveTo(px, py - m); ctx.lineTo(px + m, py + m * 0.8); ctx.lineTo(px - m, py + m * 0.8); ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#f4ead0'; ctx.fillText(`${g.id + 1}`, px + m + 2 * dpr, py);
+        if (vista.z >= 4) {
+          ctx.fillStyle = `rgb(${COLORE_VALICO.join(',')})`;
+          for (const f of g.forcelle) { const [fx, fy] = P(f.x, f.y); ctx.beginPath(); ctx.arc(fx, fy, 3 * dpr, 0, Math.PI * 2); ctx.fill(); }
+        }
+      }
+    }
     if (panorami && mostraPanorami) {
       const m = 3.5 * dpr;
       ctx.fillStyle = COLORE_PANORAMA;
@@ -630,11 +648,16 @@ export function createCartaVista(contenitore, opzioni = {}) {
       + (carta.acque?.[i] === ACQUA.LAGO ? `lago, superficie a ${fmt(carta.livelloAcqua[i])} m, fondo a ${fmt(q)} m`
         : carta.acque?.[i] === ACQUA.LAGO_COSTIERO ? `lago costiero, fondo a ${fmt(-q)} m sotto il livello del mare`
           : carta.mare[i] ? `mare, profondità ${fmt(-q)} m`
-            : `${esatta}quota della cella ${fmt(q)} m (${fasciaDi(q)})`
+            : gruppoSotto(xf, yf) + `${esatta}quota della cella ${fmt(q)} m (${fasciaDi(q)})`
               + (carta.bioma ? ` · ${NOMI_BIOMI[carta.bioma[i]]} · ${fmt(carta.temperatura[i], 1)} °C · umidità ${fmt(carta.umidita[i] * 100)} %` : '')
               + ` · catena ${fmt(carta.catena[i], 2)}`
               + (carta.bacino?.[i] >= carta.sogliaFiume ? ` · fiume, bacino ${fmt(carta.bacino[i])} km²` : ''));
   });
+  function gruppoSotto(x, y) {
+    if (!carta.massicci) return '';
+    const g = profiloMassicci(carta.massicci, x, y);
+    return g.gruppo >= 0 ? `gruppo montuoso ${g.gruppo + 1} (${g.forma}) · ` : '';
+  }
   const fine = (e) => {
     if (!trascina) return;
     const mosso = trascina.mosso;

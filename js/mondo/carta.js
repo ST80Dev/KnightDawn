@@ -24,7 +24,7 @@ export const CARTA_PREDEFINITA = { cols: 600, rows: 450, cella: 1000 };
 // Versione del generatore: entra nella chiave della cache delle Carte (IndexedDB, lavoratore.js).
 // VA CAMBIATA a ogni modifica che cambia le Carte generate, altrimenti il browser riusa Carte vecchie.
 // (In alternativa: ?rigenera nell'indirizzo ignora la cache.)
-export const VERSIONE_GENERATORE = 'm6-creste-1';
+export const VERSIONE_GENERATORE = 'm6-massicci-1';
 
 // Parametri della forma (km dove non indicato). Valori di partenza, da tarare guardando le Carte.
 const FORMA = {
@@ -268,8 +268,8 @@ export function generaCarta(seme, opzioni = {}) {
   // Lontani dai corsi d'acqua, che restano più bassi: l'acqua dei poggi scende verso di loro.
   const poggi = piazzaPoggi(seme, cols, rows, quota, mare, catena, dren);
 
-  // ─── Grandi creste e forcelle (dopo il passo 8) ───
-  const vette = cresteEForcelle(seme, cols, rows, quota, mare, dren.acque);
+  // ─── Gruppi montuosi e forcelle (dopo il passo 8) ───
+  const vette = massicciEForcelle(seme, cols, rows, quota, mare, dren.acque);
 
   // ─── Fasi 6–7: clima e biomi ───
   avanzamento?.('Clima e biomi', 0.88);
@@ -278,7 +278,7 @@ export function generaCarta(seme, opzioni = {}) {
   avanzamento?.('Varietà del paesaggio', 0.9);
   // Creste aspre: roccia (o neve, se lassù fa così freddo), prima delle correzioni che le vedono.
   for (let i = 0; i < n; i++) {
-    if (vette.asprezza[i] > CRESTE.invalicabile && clima.bioma[i] !== BIOMA.NEVE && clima.bioma[i] !== BIOMA.GHIACCIO
+    if (vette.asprezza[i] > MASSICCI.invalicabile && clima.bioma[i] !== BIOMA.NEVE && clima.bioma[i] !== BIOMA.GHIACCIO
       && !mare[i] && dren.acque[i] === ACQUA.TERRA) clima.bioma[i] = BIOMA.ROCCIA;
   }
   const correzioni = correggiVarieta(seme, cols, rows, quota, mare, dren, clima);
@@ -310,9 +310,9 @@ export function generaCarta(seme, opzioni = {}) {
     temperatura: clima.temperatura,           // °C, media annua alla quota della cella
     umidita: clima.umidita,                   // 0…1
     bioma: clima.bioma,                       // BIOMA.*
-    creste: vette.creste,                     // grandi creste: { x, y (km), dx, dy, lunghezza, semilarghezza, altezza, cime, forcelle }
-    asprezza: vette.asprezza,                 // 0…1: altezza relativa della cresta nella cella; > 0,5 parete
-    valico: vette.valico,                     // 1 = cella di una forcella
+    massicci: vette.massicci,                 // gruppi montuosi: { id, x, y (km), forma, altezza, torri, raggio }
+    asprezza: vette.asprezza,                 // 0…1; > 0,5: pareti di un gruppo
+    valico: vette.valico,                     // 1 = cella di una forcella tra le torri di un gruppo
     statistiche: {
       frazioneMare: celleMare / n, ms, cima, laghi: dren.laghi,
       biomi: Object.fromEntries(NOMI_BIOMI.map((nome, b) => [nome, contaBiomi[b] / (celleTerraB || 1)])),
@@ -462,129 +462,179 @@ function climaEBiomi(seme, cols, rows, quota, mare, acque) {
   return { temperaturaMare, temperatura, umidita, bioma, copertura };
 }
 
-// ─── Grandi creste e forcelle ────────────────────────────────────────────
+// ─── Gruppi montuosi e forcelle ──────────────────────────────────────────
 
 /**
- * Grandi creste (deciso con l'utente, al posto delle distese di guglie): poche muraglie di roccia sulle cime
- * più alte, lunghe nel verso della catena, con 2–3 cime e pareti invalicabili sui fianchi; una forcella (a volte
- * due) è la sella dove passare, ben sotto le vette. Riconoscibili da lontano; si aggirano o si passa la forcella.
- * Lunghezze in km, altezze in m.
+ * Gruppi montuosi riconoscibili (deciso con l'utente, sul modello delle Dolomiti): pochi gruppi distinti, ognuno
+ * con una forma sua, separati da valli dove si cammina. Ogni gruppo ha 1–4 torri (pareti invalicabili sopra un
+ * piede di ghiaioni percorribili); tra le torri dello stesso gruppo i ghiaioni si toccano e formano le forcelle.
+ * Ogni gruppo potrà avere un nome («il monte X») con i luoghi. Lunghezze in km, altezze in m.
  */
-export const CRESTE = {
-  quota: 1800,                  // m: cime da cui partono
-  distanza: 28,                 // km tra due creste
-  perArea: 2500,                // km² di montagna (≥ 1500 m) per cresta
-  numero: [3, 7],
-  lunghezza: [6, 16],
-  semilarghezza: [0.45, 0.6],   // km: dall'asse al piede della parete
-  altezza: [450, 650],          // m sopra il terreno, alle cime
-  sella: 0.6,                   // altezza tra una cima e l'altra (frazione)
-  cime: [2, 3],
-  forcella: { larghezza: 0.6, profondita: 0.85, allarga: 1.6 },   // km lungo l'asse; quanto si abbassa; quanto si
-                                // allargano i fianchi (la sella si raggiunge con pendii dolci da entrambi i lati)
+export const MASSICCI = {
+  quota: 1400,                  // m: cime da cui partono
+  distanza: 16,                 // km tra due gruppi (le valli in mezzo)
+  perArea: 900,                 // km² di terra oltre 1400 m per gruppo
+  numero: [4, 12],
+  forme: ['torre', 'altopiano', 'piramide', 'cresta'],
+  torri: [1, 4],
+  raggio: [0.55, 1.15],         // km: semiasse della torre (alla base della parete)
+  altezza: [480, 880],          // m sopra il terreno, in cima
+  contorno: { lunghezza: 0.45, ampiezza: 0.22 },   // km; il contorno delle pareti ondeggia (niente cilindri)
+  piede: 1.9,                   // il ghiaione arriva a piede × raggio
+  ghiaione: 0.22,               // altezza del ghiaione (frazione)
+  muro: 0.82,                   // la parete va da 1 a muro × raggio
   invalicabile: 0.5,
 };
 
-/** Profilo di una cresta nel punto (x, y in km): { a: 0…1 (altezza relativa), u: distanza dall'asse / semilarghezza,
- *  forcella: 0…1 } per la cresta più alta nel punto. */
-export function profiloCreste(creste, x, y, out = { a: 0, u: Infinity, forcella: 0, altezza: 0 }) {
-  out.a = 0; out.u = Infinity; out.forcella = 0; out.altezza = 0;
-  if (!creste) return out;
-  for (const c of creste) {
-    const rx = x - c.x, ry = y - c.y;
-    const lungo = rx * c.dx + ry * c.dy, lato = -rx * c.dy + ry * c.dx;
-    const t = lungo / c.lunghezza + 0.5;
-    if (t < -0.1 || t > 1.1 || Math.abs(lato) > c.semilarghezza * (1.05 + CRESTE.forcella.allarga)) continue;
-    let forcella = 0;
-    for (const f of c.forcelle) forcella = Math.max(forcella, smoothstep(CRESTE.forcella.larghezza, 0, Math.abs(t - f) * c.lunghezza));
-    const u = Math.abs(lato) / (c.semilarghezza * (1 + CRESTE.forcella.allarga * forcella));
-    if (u > 1.05) continue;
-    const fianco = 1 - smoothstep(0.15, 1, u);
-    const capi = smoothstep(0, 0.14, t) * smoothstep(1, 0.86, t);
-    let cime = 0;
-    for (const p of c.cime) { const d = (t - p.t) / 0.2; if (d * d < 1) cime = Math.max(cime, p.h * (1 - d * d)); }
-    const a = fianco * capi * (CRESTE.sella + (1 - CRESTE.sella) * cime) * (1 - CRESTE.forcella.profondita * forcella);
-    if (a > out.a) { out.a = a; out.u = u; out.forcella = forcella; out.altezza = a * c.altezza; }
+const FORME_TORRI = {           // esponente della superellisse, allungamento, cima
+  torre: { p: 2.6, allunga: [1, 1.5] },
+  altopiano: { p: 4, allunga: [1.2, 2] },
+  piramide: { p: 2, allunga: [1, 1.2] },
+  cresta: { p: 2.4, allunga: [2.6, 3.6] },
+};
+
+/**
+ * Profilo dei gruppi nel punto (x, y in km): { a: 0…1 altezza relativa, altezza (m), d (distanza normalizzata
+ * dalla torre più alta: < 1 parete e cima), forcella: 0…1 (sul ghiaione tra due torri dello stesso gruppo),
+ * forma, gruppo }.
+ */
+export function profiloMassicci(massicci, x, y, out = { a: 0, altezza: 0, d: Infinity, forcella: 0, forma: '', gruppo: -1 }) {
+  out.a = 0; out.altezza = 0; out.d = Infinity; out.forcella = 0; out.forma = ''; out.gruppo = -1;
+  if (!massicci) return out;
+  const M = MASSICCI;
+  for (const g of massicci) {
+    if (Math.abs(x - g.x) > g.raggio || Math.abs(y - g.y) > g.raggio) continue;
+    let primo = 0, secondo = 0;
+    for (const t of g.torri) {
+      const rx = x - t.x, ry = y - t.y;
+      const lx = (rx * t.cos + ry * t.sin) / t.a, ly = (-rx * t.sin + ry * t.cos) / t.b;
+      const F = FORME_TORRI[g.forma];
+      let d = Math.pow(Math.pow(Math.abs(lx), F.p) + Math.pow(Math.abs(ly), F.p), 1 / F.p);
+      if (d >= M.piede + M.contorno.ampiezza) continue;
+      // Contorno irregolare: speroni e canaloni nelle pareti, rientranze nei ghiaioni.
+      d *= 1 + M.contorno.ampiezza * fbm(x, y, g.seme, M.contorno.lunghezza, 3);
+      if (d >= M.piede) continue;
+      let a;
+      if (d >= 1) a = M.ghiaione * smoothstep(M.piede, 1, d);                       // ghiaione (~15–25°)
+      else if (d >= M.muro) a = M.ghiaione + (0.88 - M.ghiaione) * smoothstep(1, M.muro, d);   // parete
+      else {
+        const c = 1 - d / M.muro;                                                  // 0 al bordo della cima, 1 al centro
+        a = g.forma === 'altopiano' ? 0.88 + 0.06 * c
+          : g.forma === 'piramide' ? 0.88 + 0.5 * c
+            : g.forma === 'cresta' ? 0.88 + 0.25 * Math.max(0, 1 - Math.abs(ly) / (M.muro * 0.6)) * (1 - Math.abs(lx) * 0.4)
+              : 0.88 + 0.55 * Math.sqrt(c);                                       // torre: cima a punta, più alta
+      }
+      a *= t.h;
+      if (a > primo) { secondo = primo; primo = a; if (d < out.d || g !== out._g) { out.d = d; } } else if (a > secondo) secondo = a;
+      if (a >= out.a) { out.a = a; out.altezza = a * g.altezza; out.d = d; out.forma = g.forma; out.gruppo = g.id; out._g = g; }
+    }
+    // Forcella: sui ghiaioni dove due torri dello stesso gruppo si toccano (le due più alte nel punto, simili).
+    if (secondo > 0.04 && primo < M.ghiaione * 1.05) out.forcella = Math.max(out.forcella, Math.min(1, secondo / primo) * smoothstep(0.03, 0.12, secondo));
   }
   return out;
 }
 
 /**
- * Sceglie le creste (cime più alte e distanti, verso della catena dalla forma delle celle alte attorno) e ne
- * ricava l'asprezza per cella (> CRESTE.invalicabile: parete) e le celle delle forcelle.
- * @returns {{ creste: object[], asprezza: Float32Array, valico: Uint8Array, valichi: number, aspre: number }}
+ * Sceglie i gruppi (cime alte e distanti tra loro) con forma, torri e misure dal seme; ne ricava l'asprezza per
+ * cella (> MASSICCI.invalicabile: parete) e le celle delle forcelle.
  */
-function cresteEForcelle(seme, cols, rows, quota, mare, acque) {
-  const C = CRESTE, n = cols * rows;
+function massicciEForcelle(seme, cols, rows, quota, mare, acque) {
+  const M = MASSICCI, n = cols * rows;
   const rng = mulberry32(derivaSeme(seme, 81));
   const terra = (i) => !mare[i] && acque[i] === ACQUA.TERRA;
-  let montagna = 0;
-  for (let i = 0; i < n; i++) if (terra(i) && quota[i] >= 1500) montagna++;
-  const quante = Math.max(C.numero[0], Math.min(C.numero[1], Math.round(montagna / C.perArea)));
-  // Cime: massimi locali (raggio 4 celle) sopra C.quota, dalla più alta.
+  let alte = 0;
+  for (let i = 0; i < n; i++) if (terra(i) && quota[i] >= M.quota) alte++;
+  const quanti = Math.max(M.numero[0], Math.min(M.numero[1], Math.round(alte / M.perArea)));
   const cime = [];
   for (let y = 4; y < rows - 4; y++) {
     for (let x = 4; x < cols - 4; x++) {
       const i = y * cols + x;
-      if (!terra(i) || quota[i] < C.quota) continue;
+      if (!terra(i) || quota[i] < M.quota) continue;
       let massimo = true;
-      for (let b = -4; b <= 4 && massimo; b++) for (let a = -4; a <= 4; a++) if ((a || b) && quota[i + b * cols + a] > quota[i]) { massimo = false; break; }
+      for (let b = -3; b <= 3 && massimo; b++) for (let a = -3; a <= 3; a++) if ((a || b) && quota[i + b * cols + a] > quota[i]) { massimo = false; break; }
       if (massimo) cime.push(i);
     }
   }
-  cime.sort((a, b) => quota[b] - quota[a]);
-  const creste = [];
+  // Non solo le più alte: un po' di caso, così ci sono gruppi anche nel pedemonte alto.
+  const punteggio = new Map(cime.map((i) => [i, quota[i] * (0.75 + 0.5 * rng())]));
+  cime.sort((a, b) => punteggio.get(b) - punteggio.get(a));
+  const massicci = [];
   for (const i of cime) {
-    if (creste.length >= quante) break;
-    const x = i % cols, y = (i / cols) | 0;
-    if (creste.some((c) => Math.hypot(c.x - x - 0.5, c.y - y - 0.5) < C.distanza)) continue;
-    // Verso della catena: asse principale delle celle alte attorno (entro 7 km, fino a 350 m sotto la cima).
-    let sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0, k = 0;
-    for (let b = -7; b <= 7; b++) for (let a = -7; a <= 7; a++) {
-      const xx = x + a, yy = y + b;
-      if (xx < 0 || yy < 0 || xx >= cols || yy >= rows || a * a + b * b > 49) continue;
-      if (quota[yy * cols + xx] < quota[i] - 350) continue;
-      sx += a; sy += b; sxx += a * a; syy += b * b; sxy += a * b; k++;
-    }
-    const mx = sx / k, my = sy / k, vxx = sxx / k - mx * mx, vyy = syy / k - my * my, vxy = sxy / k - mx * my;
-    const tr = vxx + vyy, det = vxx * vyy - vxy * vxy, l1 = tr / 2 + Math.sqrt(Math.max(0, tr * tr / 4 - det));
-    let dx = vxy, dy = l1 - vxx;
-    if (Math.abs(dx) + Math.abs(dy) < 1e-6) { dx = l1 - vyy; dy = vxy; }
-    if (Math.abs(dx) + Math.abs(dy) < 1e-6) { const a = rng() * 6.283; dx = Math.cos(a); dy = Math.sin(a); }
-    const dl = Math.hypot(dx, dy); dx /= dl; dy /= dl;
-    const lunghezza = Math.min(C.lunghezza[1], Math.max(C.lunghezza[0], 3.2 * Math.sqrt(l1) * (0.8 + 0.4 * rng())));
-    const nc = C.cime[0] + Math.floor(rng() * (C.cime[1] - C.cime[0] + 1));
-    const cimeC = [];
-    for (let j = 0; j < nc; j++) cimeC.push({ t: (j + 0.5 + (rng() - 0.5) * 0.4) / nc, h: j === 0 ? 1 : 0.7 + 0.3 * rng() });
-    // Forcelle: tra due cime vicine (la prima a caso), a volte due.
-    const forcelle = [];
-    const tra = cimeC.slice(0, -1).map((p, j) => (p.t + cimeC[j + 1].t) / 2);
-    forcelle.push(tra[Math.floor(rng() * tra.length)]);
-    if (tra.length > 1 && lunghezza > 11 && rng() < 0.5) forcelle.push(tra.find((t) => t !== forcelle[0]));
-    creste.push({ x: x + 0.5 + mx * 0.5, y: y + 0.5 + my * 0.5, dx, dy, lunghezza,
-      semilarghezza: C.semilarghezza[0] + rng() * (C.semilarghezza[1] - C.semilarghezza[0]),
-      altezza: C.altezza[0] + rng() * (C.altezza[1] - C.altezza[0]), cime: cimeC, forcelle });
-  }
-  // Asprezza e forcelle per cella (al centro della cella e nei suoi quarti: le creste sono strette).
-  const asprezza = new Float32Array(n), valico = new Uint8Array(n);
-  const p = { a: 0, u: 0, forcella: 0, altezza: 0 };
-  for (let y = 0; y < rows; y++) {
-    for (let x = 0; x < cols; x++) {
-      const i = y * cols + x;
-      if (!terra(i)) continue;
-      let a = 0, f = 0;
-      for (const [ox, oy] of [[0.5, 0.5], [0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]]) {
-        profiloCreste(creste, x + ox, y + oy, p);
-        if (p.a > a) a = p.a;
-        if (p.u < 1 && p.forcella > f) f = p.forcella;
+    if (massicci.length >= quanti) break;
+    const cx = (i % cols) + 0.5, cy = ((i / cols) | 0) + 0.5;
+    if (massicci.some((g) => Math.hypot(g.x - cx, g.y - cy) < M.distanza)) continue;
+    const forma = M.forme[Math.floor(rng() * M.forme.length)];
+    const F = FORME_TORRI[forma];
+    const nt = forma === 'cresta' ? 1 + Math.floor(rng() * 2) : M.torri[0] + Math.floor(rng() * (M.torri[1] - M.torri[0] + 1));
+    const ang0 = rng() * Math.PI;
+    const torri = [];
+    for (let k = 0; k < nt; k++) {
+      const r = M.raggio[0] + rng() * (M.raggio[1] - M.raggio[0]);
+      const allunga = F.allunga[0] + rng() * (F.allunga[1] - F.allunga[0]);
+      const a = r * Math.sqrt(allunga), b = r / Math.sqrt(allunga);
+      // Torri vicine: i ghiaioni (piede × raggio) si toccano, le pareti no → forcelle tra le torri.
+      let tx = cx, ty = cy, vicina = -1;
+      if (k > 0) {
+        vicina = Math.floor(rng() * torri.length);
+        const prec = torri[vicina];
+        const ang = ang0 + (rng() - 0.5) * 2.2 + (k % 2) * Math.PI;
+        const dist = (Math.max(prec.a, prec.b) + Math.max(a, b)) * (1.15 + 0.35 * rng());
+        tx = prec.x + Math.cos(ang) * dist; ty = prec.y + Math.sin(ang) * dist;
       }
-      asprezza[i] = a;
-      if (f > 0.5) valico[i] = 1;
+      const rot = ang0 + (rng() - 0.5) * 0.8;
+      torri.push({ x: tx, y: ty, a, b, cos: Math.cos(rot), sin: Math.sin(rot), h: k === 0 ? 1 : 0.65 + 0.3 * rng(), vicina });
+    }
+    let raggio = 0;
+    for (const t of torri) raggio = Math.max(raggio, Math.hypot(t.x - cx, t.y - cy) + Math.max(t.a, t.b) * M.piede);
+    massicci.push({ id: massicci.length, seme: derivaSeme(seme, 900 + massicci.length), x: cx, y: cy, forma, altezza: M.altezza[0] + rng() * (M.altezza[1] - M.altezza[0]),
+      torri, raggio, forcelle: [] });
+  }
+  // Forcelle: tra ogni torre e quella a cui si appoggia, il punto più basso del profilo sulla congiungente
+  // (se lì non c'è parete: la sella sta sui ghiaioni).
+  const q = { a: 0, altezza: 0, d: 0, forcella: 0, forma: '', gruppo: -1 };
+  for (const g of massicci) {
+    for (const t of g.torri) {
+      if (t.vicina < 0) continue;
+      const u = g.torri[t.vicina];
+      let migliore = null, aMin = Infinity;
+      for (let k = 1; k < 40; k++) {
+        const f = k / 40, x = u.x + (t.x - u.x) * f, y = u.y + (t.y - u.y) * f;
+        profiloMassicci(massicci, x, y, q);
+        if (q.a < aMin) { aMin = q.a; migliore = { x, y, parete: q.d < 1 }; }
+      }
+      if (migliore && !migliore.parete) g.forcelle.push({ x: migliore.x, y: migliore.y });
+    }
+  }
+  const asprezza = new Float32Array(n), valico = new Uint8Array(n);
+  const p = { a: 0, altezza: 0, d: 0, forcella: 0, forma: '', gruppo: -1 };
+  for (const g of massicci) {
+    const x0 = Math.max(0, Math.floor(g.x - g.raggio)), x1 = Math.min(cols - 1, Math.ceil(g.x + g.raggio));
+    const y0 = Math.max(0, Math.floor(g.y - g.raggio)), y1 = Math.min(rows - 1, Math.ceil(g.y + g.raggio));
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const i = y * cols + x;
+        if (!terra(i)) continue;
+        let a = 0;
+        for (const [ox, oy] of [[0.5, 0.5], [0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]]) {
+          profiloMassicci(massicci, x + ox, y + oy, p);
+          if (p.d < 1) a = Math.max(a, 1); else a = Math.max(a, p.a * 0.5);
+        }
+        asprezza[i] = Math.max(asprezza[i], a);
+      }
+    }
+  }
+  // Celle delle forcelle: percorribili (anche se una parete sfiora la cella) e segnate come valichi.
+  for (const g of massicci) {
+    for (const f of g.forcelle) {
+      const i = Math.floor(f.y) * cols + Math.floor(f.x);
+      valico[i] = 1;
+      asprezza[i] = Math.min(asprezza[i], 0.3);
     }
   }
   let aspre = 0;
-  for (let i = 0; i < n; i++) if (asprezza[i] > C.invalicabile) aspre++;
-  return { creste, asprezza, valico, valichi: creste.reduce((s, c) => s + c.forcelle.length, 0), aspre };
+  for (let i = 0; i < n; i++) if (asprezza[i] > M.invalicabile) aspre++;
+  const valichi = massicci.reduce((s, g) => s + g.forcelle.length, 0);
+  return { massicci, asprezza, valico, valichi, aspre };
 }
 
 // ─── Fase 8: correzioni per le regole di varietà ─────────────────────────

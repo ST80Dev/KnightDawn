@@ -11,7 +11,7 @@
 // Il blocco usa coordinate locali centrate sul suo centro (vedi docs/ESPLORAZIONE_3D.md, Coordinate).
 
 import { gradienteD, derivaSeme, smoothstep, ridged } from './rumore.js';
-import { ACQUA, profiloCreste } from './carta.js';
+import { ACQUA, profiloMassicci } from './carta.js';
 import { tracciaPercorso, lettoMonotono, PERCORSO } from './fiumi.js';
 
 export const SCENA = { lato: 2000, celle: 256 };   // 2×2 km, 257×257 vertici (come Tavullia)
@@ -30,8 +30,8 @@ const DETTAGLIO = {
   // Montagna: oltre la rampa (quota della Carta) torna a crescere fino a `extra` m in più, piena sulle creste:
   // vette e crinali aspri, fondovalle percorribili.
   montagna: { rampa: [1200, 2200], extra: 220 },
-  // Grandi creste (Carta: creste): muraglia con pareti sui fianchi e cime; in cima un filo frastagliato.
-  creste: { frastaglio: 45, lunghezza: 320, ottave: 2, sella: 0.75 },
+  // Gruppi montuosi (Carta: massicci): torri con pareti sopra ghiaioni; pareti e cime un po' frastagliate.
+  massicci: { frastaglio: 40, lunghezza: 260, ottave: 2, liscio: 0.7 },
   erosione: 1.0,                // quanto la pendenza accumulata smorza le ottave fini
 };
 
@@ -189,22 +189,24 @@ export function quotaMondo(carta, x, z, seedDettaglio = derivaSeme(carta.seme, 1
       + Fo.perRilievo * rilievo + DETTAGLIO.montagna.extra * smoothstep(DETTAGLIO.montagna.rampa[0], DETTAGLIO.montagna.rampa[1], h))
       * (Fo.valle + (1 - Fo.valle) * cresta);
   } else ampiezza = A.fondale + (A.base - A.fondale) * smoothstep(-60, 0, h);
-  let cresta = 0, liscio = 1;
-  if (carta.creste && carta.creste.length && h > 0) {
-    const p = profiloCreste(carta.creste, x / 1000, z / 1000, _cresta);
+  let gruppo = 0, liscio = 1;
+  if (carta.massicci && carta.massicci.length && h > 0) {
+    const p = profiloMassicci(carta.massicci, x / 1000, z / 1000, _massiccio);
     if (p.a > 0) {
-      const K = DETTAGLIO.creste;
-      const filo = K.frastaglio * (ridged(x, z, seedDettaglio ^ 0x6a09e667, K.lunghezza, K.ottave) - 0.3)
-        * (1 - smoothstep(0, 0.6, p.u)) * (1 - p.forcella) * (pesi ? pesi[2] : 1);
-      cresta = p.altezza + filo * Math.min(1, p.a * 2);
-      // Nella forcella una sella liscia: anche il rilievo fine si smorza.
-      liscio = 1 - K.sella * p.forcella * (1 - smoothstep(0.5, 1, p.u));
+      const K = DETTAGLIO.massicci;
+      // Frastaglio solo su pareti e cime (d < 1): i ghiaioni restano lisci e percorribili.
+      const roccia = 1 - smoothstep(0.9, 1.05, p.d);
+      const filo = K.frastaglio * (ridged(x, z, seedDettaglio ^ 0x6a09e667, K.lunghezza, K.ottave) - 0.3) * roccia
+        * (pesi ? pesi[2] : 1);
+      gruppo = p.altezza + filo;
+      // Sui ghiaioni e nelle forcelle il rilievo fine si smorza: piede liscio, sella netta.
+      liscio = 1 - K.liscio * Math.max(p.forcella, smoothstep(1.9, 1.2, p.d) * (1 - roccia));
     }
   }
-  return h + liscio * ampiezza * fbmEroso(x, z, seedDettaglio, pesi) + cresta;
+  return h + liscio * ampiezza * fbmEroso(x, z, seedDettaglio, pesi) + gruppo;
 }
 
-const _cresta = { a: 0, u: 0, forcella: 0, altezza: 0 };
+const _massiccio = { a: 0, altezza: 0, d: Infinity, forcella: 0, forma: '', gruppo: -1 };
 
 /** Campo per cella della Carta (Float32Array) interpolato bilineare tra i centri delle celle. */
 function campoCarta(carta, campo, x, z) {

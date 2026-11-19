@@ -196,10 +196,12 @@ Regole **nuove** per il 3D e per la varietà ravvicinata:
   In montagna tra una cima e l'altra c'è quasi sempre un crinale più alto: lì la regola non vale.
 - **Limite delle nevi** calcolato da latitudine (temperatura) e stagione: d'inverno scende, d'estate
   sale. Neve e ghiaccio dipendono da quota e temperatura, non da un bioma dipinto.
-- **Grandi creste e forcelle** [deciso con l'utente, novembre 2026]: poche grandi creste riconoscibili (3–7
-  per mondo), muraglie di roccia con cime e pareti invalicabili, che si aggirano; in ognuna una forcella ben
-  definita, una sella sotto le vette dove passare, che diventa luogo di passaggio (e, con i luoghi, di strade,
-  pedaggi e imboscate). Niente distese di guglie uguali: ci si perderebbe.
+- **Gruppi montuosi riconoscibili** [deciso con l'utente, novembre 2026, sul modello di Dolomiti e Alpi]:
+  4–12 gruppi per mondo, ognuno con una forma sua (torre, altopiano, piramide, cresta), separati da valli
+  dove si cammina; pareti invalicabili, ghiaioni percorribili alla base, forcelle tra le torri dello stesso
+  gruppo. Ogni gruppo è un luogo («il monte X», con un nome quando arriveranno i luoghi) a cui andare; le
+  forcelle sono luoghi di passaggio (strade, pedaggi, imboscate). Niente distese di guglie uguali né creste
+  tutte identiche: ci si perderebbe.
 - **Accostamenti vietati**: niente deserto caldo vicino a neve o ghiacciai, e niente palude in
   quota. La temperatura di fondo varia solo su grande scala: nella fascia calda le cime restano
   sotto il limite delle nevi con margine. Distanza minima deserto–neve [TBD, es. 80 km].
