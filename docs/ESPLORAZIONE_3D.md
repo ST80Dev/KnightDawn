@@ -908,14 +908,17 @@ conoscenza sulla Carta. Tavullia resta la scena di prova con il castello di M4.
    - *Stadio 1:* ~55 000–65 000 celle ammesse; si affinano le 260 stime migliori, 65 per ognuna delle zone
      a 90, 140, 220 e 400 km dal centro.
    - *Valichi* (`trovaValichi`, deciso con l'utente: vedi `docs/GDD.md` §2, «Valichi e forcelle»): selle
-     della Carta (≥ 4 cambi di segno attorno alla cella) i cui due lati bassi scendono, seguendo il flusso,
-     a due fiumi diversi almeno 250 m più in basso, che lungo i fiumi si raggiungono solo con un giro
+     della Carta (≥ 4 cambi di segno attorno alla cella) **tra 1000 e 2000 m** i cui due lati bassi scendono,
+     seguendo il flusso, a due fiumi diversi almeno 300 m più in basso, che lungo i fiumi si raggiungono solo con un giro
      ≥ 25 km (o mai: foci diverse); ai due lati alti il crinale sale di ≥ 100 m entro 5 km; niente pareti
      dei gruppi montuosi nel raggio di 2 km (lì sono forcelle). Dei valichi entro 10 km il più basso.
      L'85 % ha una **sentinella** (`presidio`; la costruzione arriva con la milestone dei luoghi).
-     30 semi: 74–157 valichi per mondo, quota mediana 600–1400 m (10° percentile ~450 m, passi di
-     collina; 90° fino a ~2900 m), 1–22 entro 90 km dal centro; 35–145 ms. `carta.valico` resta il nome
-     delle celle di forcella (legenda corretta: «forcella»).
+     30 semi: 12–57 valichi per mondo, 0–12 entro 90 km dal centro. **L'85 % sta su una catena**: le valli
+     che si addentrano dai due lati lasciano una sella tra le testate. 119 delle 127 catene lunghe (crinale
+     oltre 1500 m esteso più di 40 km) hanno almeno un valico. `carta.valico` resta il nome delle celle di
+     forcella (legenda corretta: «forcella»).
+     *Prima versione (scartata dall'utente):* senza limiti di quota e con 250 m sui fondovalle, 74–157
+     valichi per mondo, il 10 % sotto i ~450 m: selle di collina, che sono semmai siti da rocca.
      *Correzione:* la prima versione del passo misurava la vicinanza alle **forcelle** (8–12 km): sono a
      2300–3400 m e la terra sotto i 900 m sta a 5–17 km, quindi in 30 semi nessun sito «di valico».
      L'utente ha fatto notare che il criterio era sbagliato in sé (le forcelle raramente si presidiano).
@@ -934,8 +937,11 @@ conoscenza sulla Carta. Tavullia resta la scena di prova con il castello di M4.
    - *Verifica* (`verificaLuoghi` in `verifica.js`, regola «rocche» anche in «Verifica 10 semi»): almeno 2
      siti su terra, non sulle pareti né vicino al bordo, ≥ 0,9 km dai fiumi, lavoro di terra e pendenza nei
      limiti, ≥ 10 km tra loro. **30 semi su 30: 3 siti, sempre allo scalino migliore** (zona 90 km,
-     distanza 20 km), **in 30 su 30 almeno uno di valico** (a 8–19 km dal valico, 300–1340 m);
-     400–600 ms per Carta nel Worker, valichi compresi. `VERSIONE_GENERATORE` = `m7-valichi-1`.
+     distanza 20 km), **in 26 su 30 almeno uno di valico** (negli altri 4 nessun valico entro ~110 km dal
+     centro); 400–600 ms per Carta nel Worker, valichi compresi. `VERSIONE_GENERATORE` = `m7-valichi-2`.
+     Le catene non sono una barriera fisica: fuori dalle pareti dei gruppi montuosi ci si può arrampicare
+     ovunque (pendenza p90 in montagna ~34°). Che si passi dai valichi lo deciderà il costo del viaggio
+     sulla Carta (pendenza, quota, neve) con le strade, nella milestone dei luoghi.
    - *Carta:* valichi come «)(» arancio, con un quadratino se hanno la sentinella; sotto il puntatore quota,
      altezza sui fondovalle, giro per le valli. Torre rossa più grande secondo la classe, partenza cerchiata, verso del borgo da zoom ×8;
      sotto il puntatore classe, carattere, quote, dominanza, lavoro di terra, pendenza, distanze; pulsanti

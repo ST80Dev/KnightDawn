@@ -202,12 +202,14 @@ Regole **nuove** per il 3D e per la varietà ravvicinata:
   gruppo. Ogni gruppo è un luogo («il monte X», con un nome quando arriveranno i luoghi) a cui andare.
   Niente distese di guglie uguali né creste tutte identiche: ci si perderebbe.
 - **Valichi e forcelle: due cose diverse** [deciso con l'utente, novembre 2026].
-  - *Valico*: passaggio ampio tra **due valli diverse**, ben più in alto dei fondovalle ma comodo; è la via
-    normale per passare da una valle all'altra (strade, pedaggi, imboscate). **Quasi sempre presidiato** da
+  - *Valico*: passaggio ampio tra **due valli diverse**, ben più in alto dei fondovalle ma comodo, tra
+    **~1000 e ~2000 m**; è la via normale per passare da una valle all'altra, anche attraverso una catena
+    (le valli che si addentrano dai due lati si avvicinano alle testate e lasciano una sella) (strade, pedaggi, imboscate). **Quasi sempre presidiato** da
     una costruzione di sentinella (torre, posto di guardia). Una rocca «di valico» sta più in basso, allo
     sbocco di una delle due valli.
   - *Forcella*: sella tra le torri di un gruppo montuoso, spesso molto più alta; passarci è **azzardato e
     faticoso**, spesso è nella neve, e **raramente qualcuno la sorveglia**: scorciatoia rischiosa, non strada.
+  - Una sella tra due valli più in basso, in collina, non è un valico: è semmai un buon posto per una rocca.
 - **Accostamenti vietati**: niente deserto caldo vicino a neve o ghiacciai, e niente palude in
   quota. La temperatura di fondo varia solo su grande scala: nella fascia calda le cime restano
   sotto il limite delle nevi con margine. Distanza minima deserto–neve [TBD, es. 80 km].

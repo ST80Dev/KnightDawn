@@ -114,7 +114,10 @@ function indiceFiumi(carta) {
 
 // ─── Valichi ────────────────────────────────────────────────────────────
 export const VALICHI = {
-  sopraFondovalle: 250,           // m: il valico sta almeno così sopra il fondovalle di entrambe le valli
+  // m: quota del valico (deciso con l'utente: un valico vero sta tra ~1000 e ~2000 m; più in basso, in collina,
+  // una sella tra due valli è semmai un buon posto per una rocca; più in alto si va verso le forcelle).
+  quota: [1000, 2000],
+  sopraFondovalle: 300,           // m: il valico sta almeno così sopra il fondovalle di entrambe le valli
   discesa: 30,                    // km: al più tanti passi di flusso per arrivare al fiume della valle
   deviazione: 25,                 // km: fuori dal valico, le due valli si raggiungono solo con un giro più lungo
   cresta: { sopra: 100, raggio: 5 }, // m, km: ai due lati il crinale sale almeno così (è un varco nel crinale)
@@ -154,7 +157,7 @@ export function trovaValichi(carta, V = VALICHI) {
   for (let y = 1; y < rows - 1; y++) {
     for (let x = 1; x < cols - 1; x++) {
       const i = y * cols + x, h = quota[i];
-      if (!terra(i) || bacino[i] >= sogliaFiume) continue;
+      if (!terra(i) || bacino[i] >= sogliaFiume || h < V.quota[0] || h > V.quota[1]) continue;
       // Sella: almeno 4 cambi di segno attorno (sopra / non sopra).
       let cambi = 0;
       const sopra = new Array(8);
