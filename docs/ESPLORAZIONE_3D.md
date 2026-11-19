@@ -567,6 +567,16 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
      per le celle di lago e toglie poi la profondità interpolata tra le celle (a riva il terreno resta quello
      dei dintorni); in più, nella fascia attorno al lago, il terreno sale fino al livello + 0,5 m. Il letto
      dei fiumi vicino ai laghi segue la stessa riva; un immissario arriva al livello del lago.
+   - *Rilievo fine a labirinto e fiumi tra gole o su terrapieni.* Misurato: il fiume non sale rispetto alla
+     Carta (1 m in mediana, 26 m all'1 % in pedemonte); è il rilievo fine della Scena, generato senza sapere
+     dei fiumi, a mettere colline (66 m nel 10 % dei punti, 155 m nell'1 %) o conche sul tracciato. Prima
+     correzione: l'ampiezza del rilievo fine non cresce più con la sola quota oltre 600 m (in pedemonte era
+     ~415 m ovunque), cresce con il dislivello locale della Carta ed è piena sulle creste, dimezzata nei
+     fondovalle (`DETTAGLIO.forma`). Pendenza p50/p90 in pedemonte da 17°/33° a 12°/25°, in montagna da
+     22°/37° a 13°/27°, collina quasi invariata (6,0°/13,2° → 5,5°/12,5°); area in conche > 5 m dimezzata.
+     **Da fare (deciso con l'utente):** fiumi tracciati sul terreno della Scena tra punti fissi della Carta
+     (percorso a costo minimo in un corridoio, che gira attorno alle alture), in `js/mondo/fiumi.js`, al
+     posto delle correzioni del terreno attorno al tracciato.
 7. **Temperatura, umidità, biomi** (fasi 6–7) e limite delle nevi nello shader; colori della Scena per
    bioma. *Prova:* livelli della Carta; neve sulle cime.
 8. **Regole di varietà e verifica automatica** (fase 8) su N semi, con esito per regola. Con i passi 3 e

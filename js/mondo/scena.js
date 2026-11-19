@@ -22,6 +22,10 @@ const DETTAGLIO = {
   // collinare (valli e crinali come a Tavullia: ~100 m di fondo valle ogni 500–800 m).
   // Tetto: oltre ~1300 m non cresce più (montagne percorribili a tratti, non pareti ovunque).
   ampiezza: { base: 8, perMetro: 0.05, collina: 0.32, rampa: [120, 420], massimo: 480, fondale: 1.5 },
+  // Forma della Carta (passo 6, dopo la prova): l'ampiezza non cresce più con la sola quota oltre `tetto` m
+  // (in pedemonte era ~415 m, un labirinto di gobbe uguale ovunque); cresce con il rilievo locale della Carta
+  // (dislivello nelle 3×3 celle attorno, × perRilievo) ed è piena sulle creste, ridotta a `valle` nei fondovalle.
+  forma: { tetto: 600, perRilievo: 0.2, valle: 0.5, cresta: 0.5 },
   erosione: 1.0,                // quanto la pendenza accumulata smorza le ottave fini
 };
 
@@ -80,6 +84,49 @@ export function quotaCarta(carta, x, z) {
   return somma;
 }
 
+// Forma della Carta per cella: dislivello nelle 3×3 celle attorno e convessità (quota meno la media delle
+// 5×5 attorno: > 0 sulle creste, < 0 nei fondovalle). Interpolate bilineari tra i centri delle celle.
+const _forma = new WeakMap();
+const _f = { rilievo: 0, convesso: 0 };
+function formaCarta(carta, x, z) {
+  const { cols, rows, cella } = carta;
+  let F = _forma.get(carta);
+  if (!F) {
+    const q = quoteLisce(carta).base;
+    const ril = new Float32Array(cols * rows), conv = new Float32Array(cols * rows);
+    const Q = (i, j) => q[Math.min(rows - 1, Math.max(0, j)) * cols + Math.min(cols - 1, Math.max(0, i))];
+    for (let j = 0; j < rows; j++) {
+      for (let i = 0; i < cols; i++) {
+        let mn = Infinity, mx = -Infinity, s = 0;
+        for (let b = -2; b <= 2; b++) {
+          for (let a = -2; a <= 2; a++) {
+            const v = Q(i + a, j + b);
+            s += v;
+            if (a >= -1 && a <= 1 && b >= -1 && b <= 1) { if (v < mn) mn = v; if (v > mx) mx = v; }
+          }
+        }
+        ril[j * cols + i] = Math.max(0, mx - mn);
+        conv[j * cols + i] = q[j * cols + i] - s / 25;
+      }
+    }
+    F = { ril, conv };
+    _forma.set(carta, F);
+  }
+  const u = x / cella - 0.5, v = z / cella - 0.5;
+  const i0 = Math.floor(u), j0 = Math.floor(v), fu = u - i0, fv = v - j0;
+  let r = 0, c = 0;
+  for (let b = 0; b < 2; b++) {
+    const j = Math.min(rows - 1, Math.max(0, j0 + b));
+    for (let a = 0; a < 2; a++) {
+      const i = Math.min(cols - 1, Math.max(0, i0 + a));
+      const w = (a ? fu : 1 - fu) * (b ? fv : 1 - fv);
+      r += w * F.ril[j * cols + i]; c += w * F.conv[j * cols + i];
+    }
+  }
+  _f.rilievo = r; _f.convesso = c;
+  return _f;
+}
+
 function pesi(t) {
   const t2 = t * t, t3 = t2 * t, s = 1 - t;
   return [s * s * s / 6, (3 * t3 - 6 * t2 + 4) / 6, (-3 * t3 + 3 * t2 + 3 * t + 1) / 6, t3 / 6];
@@ -123,12 +170,18 @@ export const OTTAVE_DETTAGLIO = Array.from({ length: DETTAGLIO.ottave }, (_, o) 
  */
 export function quotaMondo(carta, x, z, seedDettaglio = derivaSeme(carta.seme, 101), pesi = null) {
   const h = quotaCarta(carta, x, z);
-  const A = DETTAGLIO.ampiezza;
+  const A = DETTAGLIO.ampiezza, Fo = DETTAGLIO.forma;
   // Sulla costa il dettaglio resta pieno: su un pendio così dolce sposta la riva di ~100 m e la rende
   // irregolare (insenature, lingue di terra). Verso il largo si spegne.
-  const ampiezza = h > 0
-    ? Math.min(A.massimo, A.base + A.perMetro * h + A.collina * h * smoothstep(A.rampa[0], A.rampa[1], h))
-    : A.fondale + (A.base - A.fondale) * smoothstep(-60, 0, h);
+  let ampiezza;
+  if (h > 0) {
+    const hq = Math.min(h, Fo.tetto);
+    const { rilievo, convesso } = formaCarta(carta, x, z);
+    // Cresta o fondovalle: quanto la Carta sta sopra la media dei dintorni, rispetto al rilievo locale.
+    const cresta = smoothstep(-Fo.cresta, Fo.cresta, convesso / (rilievo + 20));
+    ampiezza = Math.min(A.massimo, A.base + A.perMetro * hq + A.collina * hq * smoothstep(A.rampa[0], A.rampa[1], hq)
+      + Fo.perRilievo * rilievo) * (Fo.valle + (1 - Fo.valle) * cresta);
+  } else ampiezza = A.fondale + (A.base - A.fondale) * smoothstep(-60, 0, h);
   return h + ampiezza * fbmEroso(x, z, seedDettaglio, pesi);
 }
 
