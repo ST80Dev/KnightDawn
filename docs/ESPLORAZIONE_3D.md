@@ -1355,8 +1355,17 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      ~200 m); roccia su 6° di pendenza invece di 12°, affioramenti con soglia più stretta. Il clima resta continuo.
      Vale per colore e vegetazione insieme (bosco più netto ai margini). Effetto visibile ma modesto: la
      morbidezza che resta viene dal colore per vertice (7,8 m nel blocco, 62,5–2000 m negli anelli) e dalle
-     normali lisce; il dettaglio per pixel (più fitto vicino, meno lontano) richiede un materiale del terreno
-     con rumore nel fragment shader [proposto, da decidere].
+     normali lisce.
+   - *Colore per pixel* [chiesto dall'utente: «più vicino più definito, più lontano meno»; fatto nella sessione
+     M6]: `materialeSuolo` (terrain.js), usato dal blocco e dagli anelli dell'orizzonte. I vertici portano gli
+     strati di `coloreMondo` (base, peso di roccia e neve, variazione, tono della roccia: attributi `base` e
+     `strati`; `color` resta il colore completo per vertice). Nel fragment shader roccia e neve hanno una soglia
+     per pixel sul peso interpolato più un rumore del mondo (scale 2–512 m): bordi netti e frastagliati, morbidi
+     da lontano per anti-alias (`fwidth`); prato e roccia hanno un dettaglio di luminosità (2–128 m) che si
+     spegne con la distanza (scala s tra 60·s e 200·s m). Rumore periodico su 8192 m in coordinate del mondo:
+     blocchi diversi danno lo stesso disegno. `coperturaMondo` non cambia: la roccia piena dipinta sta dove il
+     peso di roccia supera ~0,5 (± il rumore), dove la vegetazione mette affioramenti e sassi. Da misurare gli
+     FPS su GPU vera (in headless nessun errore).
    - *Punti di controllo* (`js/3d/vegetazione3d.js`): un punto colorato per oggetto, 3 chiamate; tasto `V`.
      F3: oggetti per tipo, chiamate, ms di posizionamento (e dei campi), chiamate e triangoli totali.
    - *Misure* (Node, blocchi di 2×2 km): posizionamento 100–200 ms (campi sui vertici 55–100 ms; il blocco ne costa
