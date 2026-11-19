@@ -1419,8 +1419,9 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
        volte il modello (tanti piccoli, pochi enormi); **frane** a macchie ai piedi dei pendii ripidi in montagna con
        massi più fitti e fino a ~8 m; più sassi in montagna; **ciottoli** vicino al cavaliere (griglia di 1,5 m,
        raggio 40 m). Le collisioni con i massi grandi restano per il passo 3.
-     - *Suolo nello shader del terreno* (`materialeSuolo` in `terrain.js`, solo mondo generato): ciuffi chiari e scuri
-       e chiazze vicino alla camera, terra nuda a chiazze nei prati, **lettiera** sotto il bosco tra marrone chiaro,
+     - *Suolo nello shader del terreno* (`materialeSuolo` in `terrain.js`, unito al colore per pixel fatto in parallelo
+       nella sessione del generatore, che dà già il dettaglio del prato): terra nuda a chiazze nei prati (anche negli
+       anelli dell'orizzonte), **lettiera** sotto il bosco tra marrone chiaro,
        marrone scuro, quasi nero e muschio (tre scale di rumore), **fango** vicino all'acqua. Bosco e acqua arrivano
        per vertice dal posizionamento (`suolo`, attributo `aSuolo`); niente lettiera nella spianata di rocca e borgo;
        negli ultimi 120 m del blocco terra, lettiera e fango sfumano (l'orizzonte ha il solo colore).
