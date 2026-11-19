@@ -18,6 +18,7 @@ import { createFollowCamera } from './camera.js';
 import { createCastle } from './castle3d.js';
 import { createCartaVista } from './cartaVista.js';
 import { creaOrizzonte } from './orizzonte.js';
+import { creaAcqueScena } from './acqua.js';
 import { generaCartaAsincrona } from '../mondo/generatore.js';
 import { generaScena } from '../mondo/scena.js';
 import { semeDaTesto } from '../mondo/rumore.js';
@@ -35,7 +36,7 @@ const LONTANO = 60000;                    // m: distanza massima disegnata dalla
 const PARAMETRI = new URL(window.location.href).searchParams;
 const TAVULLIA = PARAMETRI.get('terreno') === 'tavullia';   // scena di prova (terreno reale, castello)
 const COLORE_ACQUA = '#4d7282';
-const PROFONDITA_GUADO = 0.6;             // m d'acqua oltre i quali il cavaliere non entra
+const PROFONDITA_GUADO = 0.9;             // m d'acqua oltre i quali il cavaliere non entra (fiumi piccoli: si guadano)
 
 // ─── Renderer, scena, camera ────────────────────────────────────────────
 const canvas = document.getElementById('scena');
@@ -232,6 +233,8 @@ let knight = null;
 let castle = null;                        // solo a Tavullia (fino a «rocca e borgo»)
 let acqua = null;                         // superficie del mare a quota 0, se la Scena ne ha
 let orizzonte = null;                     // terreno lontano attorno alla Scena (solo mondo generato)
+let acqueScena = null;                    // fiumi e laghi in quota della Scena (mesh)
+let livelliAcqua = null;                  // { fiume, lago, cols, cell, half }: pelo dell'acqua per vertice
 let carta = null;                         // Carta del mondo generato (null a Tavullia)
 let scenaAttuale = null;                  // { tipo: 'tavullia' } | { tipo: 'mondo', cx, cz } (centro, m del mondo)
 let statPendenze = '';                    // percentili della pendenza della Scena (F3)
@@ -243,16 +246,35 @@ const suolo = {
   getHeight: (x, z) => _suolo.getHeight(x, z),
   getSlope: (x, z) => _suolo.getSlope(x, z),
   contains: (x, z) => _suolo.contains(x, z),
-  percorribile: (x, z) => _suolo.getHeight(x, z) > -PROFONDITA_GUADO,
+  percorribile: (x, z) => {
+    const h = _suolo.getHeight(x, z);
+    if (h <= -PROFONDITA_GUADO) return false;                    // mare
+    const l = livelloAcquaIn(x, z);
+    return Number.isNaN(l) || l - h <= PROFONDITA_GUADO;          // fiumi profondi e laghi
+  },
   get half() { return _suolo.half; },
   get size() { return _suolo.size; },
   get minElev() { return _suolo.minElev; },
   get maxElev() { return _suolo.maxElev; },
   get meta() { return _suolo.meta; },
 };
-// La camera non scende sotto il pelo dell'acqua.
+/** Pelo dell'acqua di fiumi e laghi in quota nel punto (vertice più vicino del blocco), o NaN. */
+function livelloAcquaIn(x, z) {
+  const L = livelliAcqua;
+  if (!L) return NaN;
+  const c = Math.round((x + L.half) / L.cell), r = Math.round((z + L.half) / L.cell);
+  if (c < 0 || r < 0 || c >= L.cols || r >= L.cols) return NaN;
+  const a = L.fiume[r * L.cols + c], b = L.lago[r * L.cols + c];
+  return Number.isNaN(a) ? b : Number.isNaN(b) ? a : Math.max(a, b);
+}
+// La camera non scende sotto il pelo dell'acqua (mare, fiumi, laghi).
 const suoloCamera = {
-  getHeight: (x, z) => (acqua ? Math.max(_suolo.getHeight(x, z), 0) : _suolo.getHeight(x, z)),
+  getHeight: (x, z) => {
+    let h = _suolo.getHeight(x, z);
+    if (acqua && h < 0) h = 0;
+    const l = livelloAcquaIn(x, z);
+    return Number.isNaN(l) || l < h ? h : l;
+  },
   getSlope: (x, z) => _suolo.getSlope(x, z),
   contains: (x, z) => _suolo.contains(x, z),
   get half() { return _suolo.half; },
@@ -386,12 +408,14 @@ function misuraPendenze(t) {
  * @param {{tipo:'tavullia'} | {tipo:'mondo', cx:number, cz:number}} desc
  */
 async function caricaScena(desc) {
-  for (const o of [terrain?.mesh, acqua, castle?.object, orizzonte?.oggetto]) {
+  for (const o of [terrain?.mesh, acqua, castle?.object, orizzonte?.oggetto, acqueScena]) {
     if (o) { scene.remove(o); libera(o); }
   }
   castle = null;
   acqua = null;
   orizzonte = null;
+  acqueScena = null;
+  livelliAcqua = null;
   emissivi = [];
   ostacoli.length = 0;
   occlusori.length = 0;
@@ -405,8 +429,11 @@ async function caricaScena(desc) {
     ostacoli.push(castle);
     occlusori.push(...castle.solidi);
   } else {
-    const { meta, heights } = generaScena(carta, desc.cx, desc.cz);
+    const { meta, heights, acqua: dati } = generaScena(carta, desc.cx, desc.cz);
     terrain = createTerrain(meta, heights);
+    acqueScena = creaAcqueScena(dati, meta, COLORE_ACQUA);
+    if (acqueScena) scene.add(acqueScena);
+    livelliAcqua = { fiume: dati.fiume, lago: dati.lago, cols: meta.cols, cell: meta.cellSize, half: meta.sizeMeters / 2 };
   }
   scene.add(terrain.mesh);
 
@@ -567,7 +594,8 @@ async function init() {
   window.kd = {
     scene, camera, cam, controls, suolo, Knight, Calendar, Save,
     get terrain() { return terrain; }, get knight() { return knight; }, get castle() { return castle; },
-    get carta() { return carta; }, get scena() { return scenaAttuale; }, caricaScena, posizionaCavaliere,
+    get carta() { return carta; }, get scena() { return scenaAttuale; }, get orizzonte() { return orizzonte; },
+    caricaScena, posizionaCavaliere,
   };
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no'
@@ -774,6 +802,8 @@ function aggiornaPannello(now) {
       + ` · ${Calendar.eNotte() ? 'notte 1:' + TEMPO_SCENA.RAPPORTO_NOTTE : 'giorno 1:' + TEMPO_SCENA.RAPPORTO_GIORNO}`
       + (inPausa ? ' · in pausa' : '')
       + ` · sole ${fmt(posizioneSole(ora).altezza)}° · Forza ${fmt(Knight.forza.cur, 2)}`;
+    const pelo = livelloAcquaIn(k.x, k.z);
+    if (!Number.isNaN(pelo)) testo += `\nacqua: pelo a ${fmt(pelo, 1)} m · profondità ${fmt(Math.max(0, pelo - k.y), 1)} m`;
     testo += `\ncamera: ${modoCamera === 'segui' ? 'alle spalle' : 'libera (C per tornare)'}`;
     if (castle) {
       testo += castle.dentro(k.x, k.z) ? '\ncastello: nel cortile'
