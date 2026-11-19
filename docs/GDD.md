@@ -210,6 +210,18 @@ Regole **nuove** per il 3D e per la varietà ravvicinata:
   calanchi, fossi, stagni, radure, alberi isolati.
 - **I fiumi scendono davvero.** Nel 2D seguivano la distanza dal mare, non la quota. In 3D il loro
   letto deve scendere sempre e scavare la valle nel rilievo.
+- **Strade, ponti e guadi** [deciso con l'utente, novembre 2026; si fanno **con i luoghi, dopo M6**:
+  un ponte sta dove una strada incrocia un fiume, e una strada collega luoghi]. Nelle Scene i fiumi
+  piccoli (fino a ~0,9 m d'acqua) si guadano, i grandi e i laghi no: non si deve poter passare ovunque,
+  e il viaggio va indirizzato in modo coerente.
+  - *Strade* tra i luoghi lungo i percorsi più comodi (poca pendenza, pochi attraversamenti, evitando
+    paludi e creste), in gerarchia: strade maestre tra città e castelli, carrarecce verso i villaggi,
+    sentieri (anche di pastori e di valico). Nelle Scene: terra battuta, terreno spianato sulla striscia.
+  - *Ponti* dove una strada incrocia un fiume non guadabile, sparsi e quindi preziosi (luoghi da
+    sorvegliare, pedaggi, imboscate); *guadi naturali* nei tratti larghi e bassi; *traghetti* sui fiumi
+    più grandi.
+  - Dove la strada passa, vegetazione meno folta (con i biomi, passo 7 di M6): la si segue anche senza
+    vederla sulla Carta.
 
 **Biomi.** Restano le categorie del 2D (pianura nei suoi tre tipi, foresta, collina, montagna,
 roccia, palude, sabbia/deserto, neve, ghiaccio, fiume, acqua): eventi e costi già scritti restano
