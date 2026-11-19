@@ -488,7 +488,7 @@ async function caricaScena(desc) {
     }
     vegetazione = creaVegetazione(posizionaVegetazione({
       heights, cols: meta.cols, cell: meta.cellSize, cx: desc.cx, cz: desc.cz, acqua: dati,
-      copertura: coperturaMondo(carta, Calendar.stagione), seme: carta.seme,
+      copertura: coperturaMondo(carta, Calendar.stagione), seme: carta.seme, carta,
       piani: (carta.luoghi || []).flatMap((l) => l.piani || []), mare: true,
     }), terrain);
   }
