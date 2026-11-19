@@ -12,10 +12,9 @@
   restano solo dove la forma vera è squadrata (mattoni, travi, casse).
 - **Materiali:** `MeshStandardMaterial` per ciò che deve sembrare metallo, pietra levigata, stoffa, cuoio
   (`metalness`, `roughness`). `MeshLambertMaterial` resta per superfici grandi e opache (terreno, vegetazione).
-- **Riflessi:** il metallo senza un ambiente da riflettere appare nero. L'ambiente si **genera dal cielo della
-  scena** (sfera con i colori di cielo, orizzonte e suolo + disco del sole → PMREM) e si rigenera solo quando la
-  luce cambia (ciclo giorno/notte). Oggi vive in `knight3d.js` (`creaRiflessi`); quando servirà anche ad altri
-  modelli va spostato in un modulo comune (cambio di struttura: chiedere conferma).
+- **Riflessi:** per scelta dell'utente niente mappe d'ambiente: i metalli sono satinati (`MeshPhongMaterial`, luccichio
+  del sole). Se un giorno servissero riflessi veri: `MeshStandardMaterial` + ambiente generato dal cielo (PMREM),
+  rigenerato solo al cambio di luce e mai nello stesso fotogramma della creazione della Scena.
 - **Texture:** solo generate dal codice (canvas o shader). Non sono asset esterni. Colori dalla palette.
 - **Dettaglio fine nello shader:** dove la griglia è troppo rada per dare forma (terreno: un punto ogni 7,8 m),
   si inclina la normale nello shader con rumore in coordinate del blocco: solo luce, la geometria e `getHeight`
@@ -40,8 +39,9 @@ armatura completa con elmo chiuso è il caso più favorevole: niente volto, mani
 1. **Forme e metallo vero — fatto, accettato dall'utente.** Grande elmo con fessure, fori di respirazione e
    rinforzi in ottone; spallacci a lamine; cosciali, ginocchiere, schinieri, scarpe a lamine; bracciali,
    cubitiere, guanti; sopraveste con falda e cintura; scudo curvo con bordo di ferro e umbone; spada con
-   guardia, pomolo a disco e fodero. Materiali fisici + riflessi dal cielo (`knight.aggiornaRiflessi`, chiamata
-   da `aggiornaCielo` in `main.js`). ~15 000 triangoli.
+   guardia, pomolo a disco e fodero. ~15 000 triangoli. **Riflessi tolti** su richiesta dell'utente («omettere così
+   tanto realismo nei riflessi su armatura ed elmo», novembre 2026): metalli satinati Phong con il solo luccichio
+   del sole, stoffa/cuoio/legno Lambert; niente mappa d'ambiente (PMREM), quindi anche nessun ricalcolo al cambio di luce.
 2. **Texture da codice.** Cotta di maglia alle giunture, trama della stoffa (sopraveste, mantello), cuoio,
    graffi e usura sull'acciaio (variazione di `roughness`), stemma disegnato su scudo e sopraveste al posto
    delle croci in rilievo.

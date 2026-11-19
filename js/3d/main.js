@@ -144,7 +144,6 @@ function aggiornaCielo() {
   for (const e of emissivi) e.m.emissive.copy(e.base).multiplyScalar(luceRiflessa);
   const ombra = knight && knight.object.getObjectByName('ombra-cavaliere');
   if (ombra) ombra.material.opacity = 0.35 + 0.65 * giorno;
-  if (knight) knight.aggiornaRiflessi(renderer, { sfondo: scene.background, cielo, sole });
 }
 
 // ─── HUD ────────────────────────────────────────────────────────────────
@@ -533,7 +532,6 @@ function posizionaCavaliere(x, z, direzione) {
   if (!knight) {
     knight = createKnight(suolo, { x, z, direzione }, ostacoli);
     scene.add(knight.object);
-    _oraCielo = -1;                        // ricalcola le luci: servono anche ai riflessi dell'acciaio
   } else {
     Object.assign(knight.stato, { x, z, direzione, velocita: 0, velAngolare: 0, velEffettiva: 0 });
     knight.update(0, { avanti: 0, gira: 0, giroMouse: 0, corsa: false, camminata: false });
@@ -1051,7 +1049,7 @@ function frame(now) {
   if (vegetazione && vegetazioneVisibile) vegetazione.aggiorna(camera.position.x, camera.position.z, sole.position, _luceGiorno);
   aggiornaPannello(now);
   renderer.render(scene, camera);
-  infoFrame.calls = renderer.info.render.calls;          // letti subito: i riflessi del cavaliere disegnano anche loro
+  infoFrame.calls = renderer.info.render.calls;          // letti subito, prima di altri disegni
   infoFrame.triangles = renderer.info.render.triangles;
 }
 
