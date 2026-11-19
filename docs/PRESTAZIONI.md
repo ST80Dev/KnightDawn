@@ -92,6 +92,17 @@ Nel codice di oggi [Probabile, da confermare con le misure del passo 1]:
 - I passi 2–5 toccano file di tutte le sessioni (`main.js`, `terrain.js`, `vegetazione3d.js`, `castle3d.js`,
   `knight3d.js`): si lavora un file alla volta, avvisando prima il proprietario, unendo `main` spesso.
 
+## Dove stanno i parametri (dalle sessioni proprietarie)
+
+- *Vegetazione* (`js/3d/vegetazione3d.js`, `js/mondo/vegetazione.js`): livelli e distanze in `creaModelli` (alberi
+  60 / 300 / oltre; cespugli 35 / 160 m) e `VICINO` (erba 70 m, felci 70, ciottoli 50); densità in `VEGETAZIONE`; ombre
+  finte in `OMBRE` (sole 1024², piede 2048²); micro-rilievo del prato in `materialeSuolo` (`wPrato`, entro 80 m).
+- *Strade e fiumi* (`js/3d/acqua.js`, sessione M6): nastro delle strade (`creaNastroStrada`) alzato di 0,25 m sul terreno
+  disegnato con `polygonOffset`; nastri dei fiumi a +0,03 m sul pelo. **Cambiando la profondità** (invertita o due
+  passate) verificare che non spariscano né sfarfallino.
+- *Anelli dell'orizzonte*: quota da `quotaFinale` (`js/mondo/scena.js`, sessione M6); un materiale ridotto per gli anelli
+  non dovrebbe richiedere cambi lì, altrimenti scrivere a M6.
+
 ## Rischi e incertezze
 
 - [Probabile] La profondità logaritmica e l'MSAA sono una parte grossa del costo nel bosco; lo dirà il passo 1.
