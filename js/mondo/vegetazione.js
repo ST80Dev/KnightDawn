@@ -190,8 +190,9 @@ export const VEGETAZIONE = {
   // (massi e affioramenti nemmeno a 1 m dal bordo); erba non sulla carreggiata, felci non entro `libero`.
   strada: { libero: 2, radi: 6, massi: 1 },
   acquaCelle: 4,                         // distanza dall'acqua misurata fino a 4 celle
-  // Solo vicino al cavaliere (erbaAttorno): probabilità per cella di 0,6 m (erba) e di 2 m (felci).
-  vicino: { erba: 0.75, felce: 0.45, ciottolo: 1, passoErba: 0.6, passoFelci: 2, passoCiottoli: 1.5 },
+  // Solo vicino al cavaliere (erbaAttorno): probabilità per cella di 1,1 m (erba), 2,2 m (felci), 1,6 m (ciottoli).
+  // Erba e felci più rade (richiesta dell'utente): il prato lo fa soprattutto lo shader del terreno (colori, chiaroscuri).
+  vicino: { erba: 0.4, felce: 0.12, ciottolo: 1, passoErba: 1.1, passoFelci: 2.2, passoCiottoli: 1.6 },
 };
 
 const _cop = nuovaCopertura();

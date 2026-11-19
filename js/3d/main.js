@@ -1046,7 +1046,7 @@ function frame(now) {
       aggiornaNebbia(controls.target);
     }
   }
-  if (vegetazione && vegetazioneVisibile) vegetazione.aggiorna(camera.position.x, camera.position.z, now / 1000);
+  if (vegetazione && vegetazioneVisibile) vegetazione.aggiorna(camera.position.x, camera.position.z);
   aggiornaPannello(now);
   renderer.render(scene, camera);
   infoFrame.calls = renderer.info.render.calls;          // letti subito: i riflessi del cavaliere disegnano anche loro

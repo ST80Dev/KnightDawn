@@ -338,6 +338,7 @@ uniform vec3 uNeveVersante;
 uniform vec3 uNeveV;
 uniform vec3 uDettaglioNeve;
 float kdNeve = 0.0;   // quanta neve c'è in questo pixel (la usa il dettaglio della normale)
+float kdPrato = 0.0;  // quanto prato o sottobosco (vegetazione: micro-rilievo della normale)
 uniform vec2 uCentro;
 uniform float uMezzo;
 varying vec3 vBase;
@@ -395,13 +396,26 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
         if (suoloV > 0.01) {
           vec3 lett = mix(vec3(0.011, 0.0065, 0.003), vec3(0.06, 0.036, 0.016), smoothstep(0.3, 0.8, r2));
           lett = mix(lett, vec3(0.003, 0.003, 0.002), smoothstep(0.55, 0.8, r3 * 0.5 + r2 * 0.5) * 0.85);
-          lett = mix(lett, vec3(0.012, 0.03, 0.007), smoothstep(0.45, 0.68, r4) * 0.85);
+          lett = mix(lett, vec3(0.012, 0.03, 0.007), smoothstep(0.62, 0.8, r4) * 0.6);
           lett *= 0.6 + 0.8 * r3;
           cPrato = mix(cPrato, lett, vSuolo.x * 0.95 * prato * blocco);
           cPrato = mix(cPrato, vec3(0.07, 0.055, 0.035) * (0.8 + 0.4 * r2), smoothstep(0.3, 1.0, vSuolo.y) * 0.6 * blocco);
         }
+        // Colori vari e chiaroscuri da vicino (richiesta dell'utente: «colorazione varia e chiaroscuri marcati nel
+        // breve anche senza pendenze, senza sprecare FPS in oggetti»): chiazze secche (ocra) e cupe (verde scuro) su
+        // 4–16 m, luminosità che oscilla di ±25 % su 4 m entro ~150 m. Il rilievo finto è in normal_fragment_maps.
+        float vicinoP = 1.0 - smoothstep(60.0, 180.0, dist);
+        if (vicinoP > 0.0 && prato > 0.01) {
+          float r5 = rumoreSuolo(p, 4.0), r6 = rumoreSuolo(p + 37.0, 16.0);
+          float aperto = 1.0 - vSuolo.x;
+          cPrato = mix(cPrato, vec3(0.30, 0.23, 0.07), smoothstep(0.58, 0.82, r6) * 0.4 * prato * aperto * vicinoP);
+          cPrato = mix(cPrato, vec3(0.035, 0.08, 0.02), smoothstep(0.55, 0.8, r5 * 0.6 + r2 * 0.4) * 0.35 * prato * aperto * vicinoP);
+          cPrato *= mix(1.0, 0.62 + 0.76 * r5, prato * vicinoP);
+        }
+
       }
     }
+    kdPrato = smoothstep(0.3, 0.6, (vBase.g - vBase.b) / max(vBase.g, 0.001)) * (1.0 - roccia);
     vec3 c = mix(cPrato, cRoccia * (1.0 + 0.5 * dettaglio), roccia);
     // Strada di terra battuta (js/mondo/strade.js): bordo frastagliato di qualche decimetro, solchi delle ruote
     // ed erba al centro sulle strade da carro; si spegne con la distanza come il resto del dettaglio.
@@ -434,6 +448,7 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
     vec3 cNeve = mix(uNeve, uNeveVersante, smoothstep(uNeveV.x, uNeveV.y, pendNeve) * uNeveV.z);
     c = mix(c, cNeve * (1.0 + 0.3 * dettaglio), neve);
     kdNeve = neve;
+    kdPrato *= 1.0 - neve;
     diffuseColor.rgb = c;
   }`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
@@ -449,6 +464,18 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
       float gz = (KD_NEVE(p + vec2(0.0, e)) - KD_NEVE(p - vec2(0.0, e))) / (2.0 * e);
       #undef KD_NEVE
       normal = normalize(normal - (viewMatrix * vec4(gx, 0.0, gz, 0.0)).xyz * wNeve);
+    }
+    // Vegetazione: micro-rilievo del prato e del sottobosco (gobbe ~4 m, zolle ~2 m, ciuffi ~1 m) entro ~150 m. La luce
+    // del sole fa da sé il chiaroscuro anche dove il terreno è piano; al tramonto e di notte cambia con lei.
+    float wPrato = kdPrato * 1.1 * (1.0 - smoothstep(50.0, 150.0, length(vViewPosition)));
+    if (wPrato > 0.001) {
+      const float e = 0.15;
+      vec2 p = vMondo;
+      #define KD_PRATO(q) (rumoreSuolo(q, 4.0) * 0.55 + rumoreSuolo(q + 13.0, 2.0) * 0.3 + rumoreSuolo(q + 29.0, 1.0) * 0.12)
+      float gx = (KD_PRATO(p + vec2(e, 0.0)) - KD_PRATO(p - vec2(e, 0.0))) / (2.0 * e);
+      float gz = (KD_PRATO(p + vec2(0.0, e)) - KD_PRATO(p - vec2(0.0, e))) / (2.0 * e);
+      #undef KD_PRATO
+      normal = normalize(normal - (viewMatrix * vec4(gx, 0.0, gz, 0.0)).xyz * wPrato);
     }
   }`);
   };

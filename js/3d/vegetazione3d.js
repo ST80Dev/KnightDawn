@@ -459,24 +459,21 @@ const TONO = {
 };
 const GIALLO = new THREE.Color('#d9c85a');
 const RIASSEGNA_DOPO = 12;              // m di spostamento della camera prima di ridistribuire le istanze
-const VICINO = { erba: { raggio: 32, max: 16000 }, felce: { raggio: 45, max: 3000 }, ciottolo: { raggio: 40, max: 6000 }, rifai: 4 };
+// Raggi lunghi con densità bassa (richiesta dell'utente: il bordo del cerchio a ~30 m si vedeva).
+const VICINO = { erba: { raggio: 70, max: 12000 }, felce: { raggio: 70, max: 3000 }, ciottolo: { raggio: 50, max: 6000 }, rifai: 5 };
 
-/** Materiale con il vento: oscilla la parte alta (y locale) secondo il tempo e la posizione dell'istanza. */
-function materialeVento(opz, ampiezza, tempo) {
-  const mat = new THREE.MeshLambertMaterial(opz);
+/**
+ * Materiale di erba e felci: fili e fronde sono a una faccia vista dai due lati; la normale non si capovolge sul retro
+ * (altrimenti il retro guarda in basso e resta nero), così prendono la luce come il prato. Niente vento (deciso con
+ * l'utente: niente iperrealismo).
+ */
+function materialeFili(opz) {
+  const mat = new THREE.MeshLambertMaterial({ ...opz, side: THREE.DoubleSide });
   mat.onBeforeCompile = (sh) => {
-    sh.uniforms.uTempo = tempo;
-    sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uTempo;')
-      .replace('#include <begin_vertex>', `#include <begin_vertex>
-      #ifdef USE_INSTANCING
-        vec3 kdI = instanceMatrix[3].xyz;
-        float kdW = position.y * position.y * ${ampiezza.toFixed(3)};
-        transformed.x += sin(uTempo * 1.9 + kdI.x * 0.31 + kdI.z * 0.17) * kdW;
-        transformed.z += cos(uTempo * 1.6 + kdI.z * 0.27 - kdI.x * 0.11) * kdW * 0.7;
-      #endif`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\n  normal = normalize(vNormal);');
   };
-  mat.customProgramCacheKey = () => `kd-vento-${ampiezza}`;
+  mat.customProgramCacheKey = () => 'kd-fili-1';
   return mat;
 }
 
@@ -492,7 +489,6 @@ export function creaVegetazione(pos, terrain = null) {
   const oggetto = new THREE.Group();
   oggetto.name = 'vegetazione';
   const modelli = creaModelli();
-  const tempo = { value: 0 };
 
   // Suolo: lettiera sotto il bosco e fango vicino all'acqua (shader del terreno, terrain.js).
   const superficie = terrain?.mesh.getObjectByName('terreno-superficie');
@@ -554,13 +550,13 @@ export function creaVegetazione(pos, terrain = null) {
   // Erba e felci attorno alla camera: ricalcolate ogni pochi metri (posizionamento deterministico, js/mondo).
   const rnd = casuale(77);
   const vicini = {
-    erba: { geo: ciuffoErba(rnd), vento: 0.35, ...VICINO.erba },
-    felce: { geo: felce(rnd), vento: 0.08, ...VICINO.felce },
-    ciottolo: { geo: unisci([rocciaSpigolosa(0.12, rnd, { dettaglio: 0, tagli: 5, y: 0.02, sy: 0.6 })]), vento: 0, piatto: true, ...VICINO.ciottolo },
+    erba: { geo: ciuffoErba(rnd), fili: true, ...VICINO.erba },
+    felce: { geo: felce(rnd), fili: true, ...VICINO.felce },
+    ciottolo: { geo: unisci([rocciaSpigolosa(0.12, rnd, { dettaglio: 0, tagli: 5, y: 0.02, sy: 0.6 })]), piatto: true, ...VICINO.ciottolo },
   };
   for (const [nome, V] of Object.entries(vicini)) {
-    V.mesh = new THREE.InstancedMesh(V.geo, V.vento
-      ? materialeVento({ vertexColors: true, side: THREE.DoubleSide }, V.vento, tempo)
+    V.mesh = new THREE.InstancedMesh(V.geo, V.fili
+      ? materialeFili({ vertexColors: true })
       : new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: !!V.piatto }), V.max);
     V.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     V.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(V.max * 3), 3);
@@ -606,7 +602,7 @@ export function creaVegetazione(pos, terrain = null) {
         q.setFromAxisAngle(_v.set(0, 1, 0), T.dati[o + 4]);
         sc.set(s, s * (0.8 + 0.5 * v), s);
         m4.compose(p, q, sc).toArray(am, j * 16);
-        if (nome === 'erba') coloreSotto(_c, x, z).multiplyScalar(0.95 + 0.2 * v);
+        if (nome === 'erba') coloreSotto(_c, x, z).multiplyScalar(1.15 + 0.25 * v);
         else if (nome === 'ciottolo') { const b = 0.65 + 0.5 * v, w = (v * 7.7) % 1 - 0.5; _c.setRGB(b * (1 + 0.1 * w), b, b * (1 - 0.1 * w)); }
         else _c.setRGB(0.85 + 0.3 * v, 0.85 + 0.3 * v, 0.85 + 0.2 * v);
         ac[j * 3] = _c.r; ac[j * 3 + 1] = _c.g; ac[j * 3 + 2] = _c.b;
@@ -623,9 +619,8 @@ export function creaVegetazione(pos, terrain = null) {
   }
 
   let ultimo = null, msAggiorna = 0;
-  /** Ridistribuisce le istanze tra livelli e varianti secondo la distanza dalla camera (x, z locali); t: tempo (s). */
-  function aggiorna(cx, cz, t = 0) {
-    tempo.value = t;
+  /** Ridistribuisce le istanze tra livelli e varianti secondo la distanza dalla camera (x, z locali). */
+  function aggiorna(cx, cz) {
     aggiornaVicini(cx, cz);
     if (ultimo && Math.hypot(cx - ultimo.x, cz - ultimo.z) < RIASSEGNA_DOPO) return;
     const t1 = performance.now();
