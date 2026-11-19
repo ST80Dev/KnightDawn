@@ -27,7 +27,7 @@ export const CARTA_PREDEFINITA = { cols: 120, rows: 90, cella: 1000 };
 // VA CAMBIATA a ogni modifica che cambia le Carte generate, altrimenti il browser riusa Carte vecchie.
 // (In alternativa: ?rigenera nell'indirizzo ignora la cache.)
 // Comprende i luoghi (M7, js/mondo/luoghi.js), che si aggiungono alla Carta nel Worker e stanno nella stessa cache.
-export const VERSIONE_GENERATORE = 'regione-1';
+export const VERSIONE_GENERATORE = 'regione-2';   // -2: punti panoramici solo alture (verifiche in cache)
 
 // Parametri della forma (km dove non indicato). Valori di partenza, da tarare guardando le Carte.
 const FORMA = {

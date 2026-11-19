@@ -1019,6 +1019,12 @@ conoscenza sulla Carta. Tavullia resta la scena di prova con il castello di M4.
      tra un luogo e l'altro non c'è ancora nulla): corsetta 4,5 m/s (era 3,2), scatto 8 (era 6); 1 km in ~3,7 e
      ~2,1 minuti reali. Carta riallineata: `METRI_PER_PASSO` 4860 (~37 minuti di gioco per km, ~14 km al giorno).
      La cura vera resta la densità (cose della campagna ogni 0,5–1,5 km, dettagli ogni 100–300 m).
+   - *Punti panoramici solo sulle alture* (segnalato dall'utente: la pianura aperta era piena di triangoli, la
+     collina quasi vuota). La griglia ogni 3 km faceva passare i punti di pianura, che vedono le montagne lontane
+     già da terra. Ora (`verificaPanorami`): candidati solo se almeno 40 m sopra la media dei dintorni a 2 km;
+     una direzione conta solo se dall'altura si vede qualcosa tra 15 e 30 km che dal piede non si vedeva; sulla
+     Carta il punto migliore ogni 10 km. Con 20–30 km la copertura scendeva a 85–89 % in 5 semi su 30 (le colline
+     si coprono tra loro); con 15–30 km: 95,7–98+ %, tutti i 30 semi oltre il 90 %.
    - *Stadio 2:* il punto più alto della cella (griglia di 50 m, poi 10 m) deve essere **una cima vera**:
      nulla più alto entro 150, 300 e 450 m (16 direzioni). Senza questa regola il primo sito del seme 48213
      era un dosso a 469 m ai piedi di un rilievo di 522 m a 400 m di distanza, e il borgo cadeva nella sella.
