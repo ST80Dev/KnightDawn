@@ -153,15 +153,20 @@ COLORI_SCENA[BIOMA.COLLINA] = new THREE.Color('#9aa65a');
 COLORI_SCENA[BIOMA.FORESTA] = new THREE.Color('#41652c');
 COLORI_SCENA[BIOMA.MONTAGNA] = new THREE.Color('#87975a');       // pascoli d'alta quota
 COLORI_SCENA[BIOMA.ROCCIA] = new THREE.Color('#8e8678');
-COLORI_SCENA[BIOMA.NEVE] = new THREE.Color('#eef1f4');
-COLORI_SCENA[BIOMA.GHIACCIO] = new THREE.Color('#d6e6f0');
+COLORI_SCENA[BIOMA.NEVE] = new THREE.Color('#dde3ea');
+COLORI_SCENA[BIOMA.GHIACCIO] = new THREE.Color('#c3d3df');
 COLORI_SCENA[BIOMA.SABBIA] = new THREE.Color('#d6bf8a');
 COLORI_SCENA[BIOMA.PALUDE] = new THREE.Color('#5f7048');
 COLORI_SCENA[BIOMA.FIUME] = COLORI_SCENA[BIOMA.PIANURA];
 const COLORE_ROCCIA = new THREE.Color('#8f877a');
 const COLORE_ROCCIA_SCURA = new THREE.Color('#6c665e');
 const COLORE_GHIAIONE = new THREE.Color('#9d978b');
-const COLORE_NEVE = new THREE.Color('#f1f3f6');
+// Neve: un bianco freddo che al sole pieno NON satura (con '#f1f3f6' ogni faccia rivolta al sole usciva a 255 e
+// salita e discesa avevano lo stesso colore; la luce calda del sole la rendeva anche color crema). Sui versanti
+// vira all'azzurro-grigio delle ombre sulla neve: il rilievo si legge anche vicino al cavaliere.
+const COLORE_NEVE = new THREE.Color('#dde3ea');
+const COLORE_NEVE_VERSANTE = new THREE.Color('#9fadc2');
+const NEVE_VERSANTE = [2, 24, 0.85];       // gradi di pendenza fine (inizio, pieno) e quanto vira al massimo
 const COLORE_RADURA = new THREE.Color('#7f9f4c');
 const COLORE_ALPEGGIO = new THREE.Color('#8a985c');
 
@@ -173,13 +178,14 @@ export const COLORI_MONDO = COPERTURA;
  * La copertura (bosco, radure, roccia, neve…) viene da coperturaMondo, la stessa da cui la vegetazione decide dove
  * stanno alberi, cespugli e rocce: alberi e colore dicono la stessa cosa.
  * @param {object} carta  @param {number} stagione  indice del calendario (0 primavera … 3 inverno)
- * @returns {(out: THREE.Color, x: number, z: number, h: number, pendenza: number) => THREE.Color}
+ * @returns {(out: THREE.Color, x: number, z: number, h: number, pendenza: number, pendenzaFine?: number) => THREE.Color}
+ *   pendenza: su ~60 m (copertura); pendenzaFine: quella locale della superficie (per la neve), se nota.
  */
 export function coloreMondo(carta, stagione = 0) {
   const K = COLORI_MONDO;
   const copertura = coperturaMondo(carta, stagione), cp = nuovaCopertura();
   const c = new THREE.Color();
-  return (out, x, z, h, pendenza) => {
+  return (out, x, z, h, pendenza, pendenzaFine = pendenza) => {
     copertura(cp, x, z, h, pendenza);
     out.setRGB(0, 0, 0);
     for (let k = 0; k < 4; k++) {
@@ -205,7 +211,11 @@ export function coloreMondo(carta, stagione = 0) {
     // Variazione lenta di luminosità (niente distese piatte, niente chiazze a triangoli).
     out.multiplyScalar(cp.variazione);
     // Neve: sopra il limite della stagione, non sui pendii più ripidi; sempre sulla neve perenne.
-    if (cp.neve > 0) out.lerp(COLORE_NEVE, cp.neve);
+    if (cp.neve > 0) {
+      c.copy(COLORE_NEVE).lerp(COLORE_NEVE_VERSANTE,
+        smoothstep(NEVE_VERSANTE[0], NEVE_VERSANTE[1], pendenzaFine) * NEVE_VERSANTE[2]);
+      out.lerp(c, cp.neve);
+    }
     return out;
   };
 }
@@ -234,7 +244,8 @@ function buildSurfaceMondo(heights, cols, rows, cell, half, colore, centro) {
       const l = Math.hypot(gx, 1, gz);
       nor[i * 3] = -gx / l; nor[i * 3 + 1] = 1 / l; nor[i * 3 + 2] = -gz / l;
       const pend = Math.atan(Math.hypot(sx, sz)) * 180 / Math.PI;
-      colore(tmp, cx - half + c * cell, cz - half + r * cell, heights[i], pend);
+      const pendFine = Math.atan(Math.hypot(gx, gz)) * 180 / Math.PI;
+      colore(tmp, cx - half + c * cell, cz - half + r * cell, heights[i], pend, pendFine);
       col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
     }
   }
