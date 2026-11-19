@@ -19,11 +19,15 @@ import { specchio, distanzaPiano } from './scena.js';
 
 /** Parametri della copertura: sono quelli del colore del terreno (in terrain.js anche come COLORI_MONDO). */
 export const COPERTURA = {
-  bordo: { spostamento: 350, lunghezza: 1600 },   // m: i confini tra biomi ondeggiano di ±350 m
-  roccia: [32, 44],                               // gradi: dal prato (o bosco) alla roccia
-  rocciaBosco: [38, 50],
-  rocciaAlta: [18, 30],                           // gradi, sopra il limite degli alberi e nei biomi di montagna
-  affioramenti: { lunghezza: 90, soglia: [0.2, 0.42], pendenza: [15, 26] },   // chiazze di roccia sui pendii medi
+  // Confini tra biomi: ondeggiano di ±350 m (4 ottave: frastagliati fino a ~200 m) e sono netti, non sfumati su
+  // tutto il km della cella [richiesto dall'utente: i colori devono dire il terreno, non sfumarsi]. I pesi
+  // bilineari delle 4 celle si accentuano con la potenza `nitidezza` (8: passaggio largo ~140 m). Il clima
+  // (temperatura, umidità) resta continuo. Lontano la griglia degli anelli ammorbidisce da sola.
+  bordo: { spostamento: 350, lunghezza: 1600, ottave: 4, nitidezza: 8 },
+  roccia: [35, 41],                               // gradi: dal prato (o bosco) alla roccia (prima 32–44: sfumato)
+  rocciaBosco: [41, 47],
+  rocciaAlta: [21, 27],                           // gradi, sopra il limite degli alberi e nei biomi di montagna
+  affioramenti: { lunghezza: 90, soglia: [0.27, 0.35], pendenza: [15, 26] },   // chiazze di roccia sui pendii medi
   ghiaioni: { sotto: [3, 6], quanto: 0.25 },      // °C sotto il limite degli alberi: detriti anche sui pendii dolci
   scalaPendenza: 62.5,                            // m: pendenza per il colore su questa scala (come l'orizzonte vicino)
   toni: { lunghezza: 140 },                       // roccia chiara e scura
@@ -56,10 +60,11 @@ export function coperturaMondo(carta, stagione = 0) {
   const nomeStagione = STAGIONI[stagione] ?? 'primavera';
   const s1 = derivaSeme(carta.seme, 301), s2 = derivaSeme(carta.seme, 302), s3 = derivaSeme(carta.seme, 303);
   const s4 = derivaSeme(carta.seme, 304), s5 = derivaSeme(carta.seme, 305);
+  const nitidi = new Float64Array(4);
   return (out, x, z, h, pendenza) => {
     // Confini irregolari: si legge la Carta in un punto spostato da un rumore.
-    const bx = x + K.bordo.spostamento * fbm(x, z, s1, K.bordo.lunghezza, 2);
-    const bz = z + K.bordo.spostamento * fbm(x, z, s2, K.bordo.lunghezza, 2);
+    const bx = x + K.bordo.spostamento * fbm(x, z, s1, K.bordo.lunghezza, K.bordo.ottave);
+    const bz = z + K.bordo.spostamento * fbm(x, z, s2, K.bordo.lunghezza, K.bordo.ottave);
     const u = bx / cella - 0.5, v = bz / cella - 0.5;
     const i0 = Math.floor(u), j0 = Math.floor(v), fu = u - i0, fv = v - j0;
     let t0 = 0, bosco = 0, neveFissa = 0, monte = 0, umid = 0, n = 0;
@@ -68,14 +73,25 @@ export function coperturaMondo(carta, stagione = 0) {
       for (let a = 0; a < 2; a++) {
         const i = specchio(i0 + a, cols), k = j * cols + i;
         const w = (a ? fu : 1 - fu) * (b ? fv : 1 - fv);
-        const bi = bioma ? bioma[k] : BIOMA.PIANURA;
-        out.bi[n] = bi; out.w[n] = w; n++;
+        out.bi[n] = bioma ? bioma[k] : BIOMA.PIANURA; out.w[n] = w; n++;
         t0 += (temperaturaMare ? temperaturaMare[k] : 10) * w;
         umid += (umidita ? umidita[k] : 0.5) * w;
-        if (bi === BIOMA.FORESTA) bosco += w;
-        if (bi === BIOMA.NEVE || bi === BIOMA.GHIACCIO) neveFissa += w;
-        if (bi === BIOMA.ROCCIA) monte += w; else if (bi === BIOMA.MONTAGNA) monte += 0.5 * w;
       }
+    }
+    // Confini netti: peso di ciascun bioma (somma delle celle uguali) alla potenza `nitidezza`, poi normalizzato.
+    // Le celle dello stesso bioma si spartiscono il suo peso in proporzione al bilineare.
+    let somma = 0;
+    for (let a = 0; a < 4; a++) {
+      let wb = 0;
+      for (let b = 0; b < 4; b++) if (out.bi[b] === out.bi[a]) wb += out.w[b];
+      nitidi[a] = wb > 0 ? Math.pow(wb, K.bordo.nitidezza - 1) * out.w[a] : 0;
+      somma += nitidi[a];
+    }
+    for (let a = 0; a < 4; a++) {
+      const w = (out.w[a] = nitidi[a] / somma), bi = out.bi[a];
+      if (bi === BIOMA.FORESTA) bosco += w;
+      if (bi === BIOMA.NEVE || bi === BIOMA.GHIACCIO) neveFissa += w;
+      if (bi === BIOMA.ROCCIA) monte += w; else if (bi === BIOMA.MONTAGNA) monte += 0.5 * w;
     }
     const T = t0 - CLIMA.gradiente * h;
     out.t0 = t0; out.T = T; out.umidita = umid; out.bosco = bosco; out.neveFissa = neveFissa; out.monte = monte;

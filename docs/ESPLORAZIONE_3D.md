@@ -1343,6 +1343,14 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      massi 20, affioramenti 40, tronchi caduti 15), quota dal triangolo disegnato. 13 tipi: latifoglia, conifera,
      pino, albero di riva, albero secco, cespuglio, arbusto alto, sterpo, canne, sasso, masso, affioramento, tronco.
      Erba, fiori e felci (solo vicino al cavaliere) arrivano al passo 5.
+   - *Confini netti tra biomi* [richiesto dall'utente dopo il passo 1: «i colori si sfumano nei bordi»]: in
+     `coperturaMondo` i pesi bilineari delle 4 celle della Carta si accentuano (peso di ciascun bioma alla potenza
+     8, passaggio largo ~140 m invece di ~1 km), lo spostamento dei confini ha 4 ottave (frastagliato fino a
+     ~200 m); roccia su 6° di pendenza invece di 12°, affioramenti con soglia più stretta. Il clima resta continuo.
+     Vale per colore e vegetazione insieme (bosco più netto ai margini). Effetto visibile ma modesto: la
+     morbidezza che resta viene dal colore per vertice (7,8 m nel blocco, 62,5–2000 m negli anelli) e dalle
+     normali lisce; il dettaglio per pixel (più fitto vicino, meno lontano) richiede un materiale del terreno
+     con rumore nel fragment shader [proposto, da decidere].
    - *Punti di controllo* (`js/3d/vegetazione3d.js`): un punto colorato per oggetto, 3 chiamate; tasto `V`.
      F3: oggetti per tipo, chiamate, ms di posizionamento (e dei campi), chiamate e triangoli totali.
    - *Misure* (Node, blocchi di 2×2 km): posizionamento 100–200 ms (campi sui vertici 55–100 ms; il blocco ne costa
