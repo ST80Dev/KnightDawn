@@ -1007,6 +1007,9 @@ conoscenza sulla Carta. Tavullia resta la scena di prova con il castello di M4.
      20–25 minuti): in salita la curva della velocità è più dolce (`pendenzaKSalita` 0,7, minimo ×0,7 invece di
      ×0,5); discese e piano invariati. Minuti di corsetta per 100 m di dislivello a 10°/15°/20°/30°: da
      4,3/3,4/3,0/2,1 a 3,4/2,4/2,0/1,5 (un escursionista vero: ~10). Crinale a 800 m in ~12–16 minuti.
+   - *Tempo nelle Scene ×10* (deciso con l'utente): un solo rapporto, da fermi come in movimento, di giorno come
+     di notte (prima ×15 e ×60). Dal castello al valico ~3,5 ore di gioco in ~20 minuti reali; la Carta conta già
+     la salita (`VIAGGIO.METRI_PER_METRO_SALITA`). M6 chiusa dall'utente.
    - *Stadio 2:* il punto più alto della cella (griglia di 50 m, poi 10 m) deve essere **una cima vera**:
      nulla più alto entro 150, 300 e 450 m (16 direzioni). Senza questa regola il primo sito del seme 48213
      era un dosso a 469 m ai piedi di un rilievo di 522 m a 400 m di distanza, e il borgo cadeva nella sella.

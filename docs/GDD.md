@@ -133,8 +133,8 @@ paragone per la credibilità del terreno generato.
   ferma il viaggio, si è lì in 3D a scala 1:1 e ci si muove liberamente nei dintorni. In scena il tempo
   scorre col tempo reale, compresso (§3 *Tempo e calendario*); le azioni costano la loro durata
   plausibile, alla conferma. Il combattimento resta a turni.
-- Nelle Scene il tempo scorre al ritmo della presenza (di giorno un'ora canonica ogni ~12 minuti
-  reali); i giorni di viaggio si consumano sulla Carta. Il gioco di persona si ottiene con scene **dense**
+- Nelle Scene il tempo scorre al ritmo della presenza (un'ora canonica ogni ~18 minuti reali, da fermi
+  come in movimento, di giorno come di notte); i giorni di viaggio si consumano sulla Carta. Il gioco di persona si ottiene con scene **dense**
   (castello, borgo, dintorni di 1–2 km con cose da fare), non con distanze lunghe a piedi.
 
 **Dimensioni e densità** [deciso con l'utente, novembre 2026; prima era una proposta di 600×450 km].
@@ -356,8 +356,7 @@ azioni del giocatore — non dal cronometro.
 | Contesto                          | Come scorre il tempo                              |
 |-----------------------------------|---------------------------------------------------|
 | Viaggio sulla Carta               | 1 Passo ogni *N* secondi reali (velocità scelta)  |
-| Scena 3D, di giorno (Prima–Vespri)| Tempo reale ×15: 1 Passo ogni 12 min reali, anche da fermi |
-| Scena 3D, di notte (Compieta–Lodi)| Tempo reale ×60: 1 Passo ogni 3 min reali; dormendo, salto a Prima |
+| Scena 3D, di giorno e di notte    | Tempo reale ×10: 1 Passo ogni 18 min reali, da fermi come in movimento; dormendo, salto a Prima |
 | **Pausa (`P`, scheda nascosta)**  | **Nulla scorre**: né Passi, né deadlines, né mondo |
 | Pausa modale (pre-recap, POI)     | Come la pausa: nulla scorre                       |
 | Lettura evento / scelta narrativa | Nulla scorre durante la lettura                   |
@@ -413,13 +412,16 @@ rivisti quando si agganciano alle Scene.
 | Addestrarsi                                        | mezza giornata    | 2–4 Passi         |
 | Dormire (all'addiaccio ~+30 Forza da Compieta; di più in locanda) | fino a Prima | salto atomico |
 
-Esempio: attraversare la piazza (5 minuti reali ≈ 75 minuti di gioco) e parlare con 4 persone
-(≈ 40–60 minuti) fa circa 2 ore: un giro al mercato.
+Esempio: attraversare la piazza (5 minuti reali ≈ 50 minuti di gioco) e parlare con 4 persone
+(≈ 40–60 minuti) fa poco meno di 2 ore: un giro al mercato.
 
-**Ritmo del tempo nelle Scene.** Di giorno un'ora canonica ogni 12 minuti reali: le ore di luce
-(Prima–Vespri, dalle 6 alle 21) durano circa un'ora reale; 10 minuti di esplorazione ≈ 2,5 ore di
-gioco. Per non dover aspettare davvero c'è **Avanza** (salto alla prossima ora canonica, di
-giorno o di notte). La notte di solito si salta dormendo; chi resta sveglio la vede passare in ~9 minuti
+**Ritmo del tempo nelle Scene** [rivisto con l'utente, novembre 2026: prima ×15 di giorno e ×60 di notte].
+Un solo rapporto **×10**, da fermi come in movimento, di giorno come di notte: stando fermi il tempo non corre
+più in fretta. Un'ora canonica ogni 18 minuti reali; dal castello al valico (~5 km, ~900 m di salita, ~20
+minuti reali di corsetta) passano ~3,5 ore, come per un escursionista vero e quasi come sulla Carta, che
+conta la salita (regola tipo Naismith). In piano la Scena costa di più della Carta (1 km di corsetta ≈ 50
+minuti di gioco, sulla Carta ~15): è il tempo della presenza. Le ore lunghe le decide il giocatore. Per non dover aspettare davvero c'è **Avanza** (salto alla prossima ora canonica, di
+giorno o di notte). La notte di solito si salta dormendo; chi resta sveglio la vede passare in ~54 minuti
 reali, oppure ora per ora con Avanza, al
 buio e con incontri più rischiosi: vegliare è una scelta, non un'attesa. A ogni ora canonica il mondo
 «gira» (meteo, scadenze, possibile incontro casuale, notizie), come nel 2D; gli incontri di persona
