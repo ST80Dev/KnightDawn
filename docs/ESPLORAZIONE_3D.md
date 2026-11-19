@@ -1664,6 +1664,10 @@ nuovo: serve la conferma (regola 2).
 
 1. Passi 3–5 (colore e vegetazione con l'altra sessione, ponti e guadi, viaggio sulla Carta): quando.
 2. ~~Velocità su strada~~ [deciso con l'utente: su strada e sentiero in salita si rallenta meno che fuori; fatto: `terrain.suStrada` (main.js, carreggiata + 0,5 m) e in `knight3d.js` curva di salita dimezzata (K 0,35 invece di 0,7) con minimo 0,85 invece di 0,7: al 10 % 0,97 invece di 0,93, al 25 % 0,92 invece di 0,84. In piano e in discesa nessuna differenza].
+3. **Penalità fuori strada** [deciso con l'utente, novembre 2026]: si fa **con i villaggi e gli altri luoghi**, quando la
+   rete sarà fitta (strada più vicina quasi sempre entro 1–2 km). Non piatta ma **secondo il terreno** (dalla copertura
+   di `coperturaMondo`): prati e campi quasi come una carrareccia; bosco fitto, macchia, ghiaioni, palude e pendii
+   senza tornanti più lenti e più faticosi (velocità e Forza). Con il viaggio sulla Carta lungo le strade (passo 5).
 
 ## Fuori dal prototipo (non farlo ora)
 
