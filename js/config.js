@@ -87,10 +87,13 @@ const VIAGGIO = {
 };
 
 // Tempo nelle Scene 3D: scorre col tempo reale, compresso, anche da fermi (si ferma con la pausa).
-// Di notte (Compieta, Mattutino, Lodi) scorre più in fretta: di solito la notte si salta dormendo.
+// Un solo rapporto, da fermi come in movimento, di giorno come di notte (deciso con l'utente, novembre 2026):
+// dal castello al valico (~5 km, ~900 m di salita, ~20 minuti reali) passano ~3,5 ore, come per un
+// escursionista vero e quasi come sulla Carta (che conta la salita: METRI_PER_METRO_SALITA). Le ore lunghe
+// (riposo, notte) le decide il giocatore: R, T o la Carta.
 const TEMPO_SCENA = {
-  RAPPORTO_GIORNO: 15,   // 1 s reale = 15 s di gioco: un'ora canonica (3 h) ogni 12 minuti reali
-  RAPPORTO_NOTTE:  60,   // un'ora canonica ogni 3 minuti reali
+  RAPPORTO_GIORNO: 10,   // 1 s reale = 10 s di gioco: un'ora canonica (3 h) ogni 18 minuti reali
+  RAPPORTO_NOTTE:  10,   // uguale: di notte il tempo non corre più in fretta
 };
 
 // Seed RNG semplice (mulberry32) per texture procedurali
