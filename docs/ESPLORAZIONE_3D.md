@@ -1636,7 +1636,7 @@ nuovo: serve la conferma (regola 2).
   - *Strade larghe, a cunei e spigoli fuori dal castello*: il colore del terreno per vertice (7,8 m) non disegna una
     carreggiata di 1–4,5 m. Ora la strada è un **nastro** suo (`creaNastroStrada` in `js/3d/acqua.js`): 5 vertici per
     sezione (bordi, solchi, centro), un punto ogni 2 m, appoggiato sul terreno disegnato + 25 cm (con 6 cm spariva
-    sotto le pieghe dei triangoli). Lo strato `strada` del suolo resta spento.
+    sotto le pieghe dei triangoli). Lo strato `strada` del suolo è tolto (anche dallo shader: meno costo per pixel).
 - **Vegetazione**: `distanzaStrada(carta, x, z)` è pronta; l'esclusione degli alberi dalla carreggiata è della
   sessione della vegetazione (passo 3 di questo piano).
 
