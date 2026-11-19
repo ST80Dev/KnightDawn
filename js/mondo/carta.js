@@ -24,7 +24,7 @@ export const CARTA_PREDEFINITA = { cols: 600, rows: 450, cella: 1000 };
 // Versione del generatore: entra nella chiave della cache delle Carte (IndexedDB, lavoratore.js).
 // VA CAMBIATA a ogni modifica che cambia le Carte generate, altrimenti il browser riusa Carte vecchie.
 // (In alternativa: ?rigenera nell'indirizzo ignora la cache.)
-export const VERSIONE_GENERATORE = 'm6-varieta-1';
+export const VERSIONE_GENERATORE = 'm6-vette-1';
 
 // Parametri della forma (km dove non indicato). Valori di partenza, da tarare guardando le Carte.
 const FORMA = {
@@ -268,11 +268,19 @@ export function generaCarta(seme, opzioni = {}) {
   // Lontani dai corsi d'acqua, che restano più bassi: l'acqua dei poggi scende verso di loro.
   const poggi = piazzaPoggi(seme, cols, rows, quota, mare, catena, dren);
 
+  // ─── Vette aspre e valichi (dopo il passo 8) ───
+  const vette = asprezzaEValichi(seme, cols, rows, quota, mare, dren.acque);
+
   // ─── Fasi 6–7: clima e biomi ───
   avanzamento?.('Clima e biomi', 0.88);
   const clima = climaEBiomi(seme, cols, rows, quota, mare, dren.acque);
   // ─── Fase 8: correzioni per le regole di varietà (solo la copertura, mai il rilievo) ───
   avanzamento?.('Varietà del paesaggio', 0.9);
+  // Creste aspre: roccia (o neve, se lassù fa così freddo), prima delle correzioni che le vedono.
+  for (let i = 0; i < n; i++) {
+    if (vette.asprezza[i] > ASPREZZA.invalicabile && clima.bioma[i] !== BIOMA.NEVE && clima.bioma[i] !== BIOMA.GHIACCIO
+      && !mare[i] && dren.acque[i] === ACQUA.TERRA) clima.bioma[i] = BIOMA.ROCCIA;
+  }
   const correzioni = correggiVarieta(seme, cols, rows, quota, mare, dren, clima);
   const contaBiomi = new Array(NOMI_BIOMI.length).fill(0);
   let celleTerraB = 0;
@@ -302,10 +310,12 @@ export function generaCarta(seme, opzioni = {}) {
     temperatura: clima.temperatura,           // °C, media annua alla quota della cella
     umidita: clima.umidita,                   // 0…1
     bioma: clima.bioma,                       // BIOMA.*
+    asprezza: vette.asprezza,                 // 0…1: creste aspre (nelle Scene pareti e guglie); > 0,5 invalicabile
+    valico: vette.valico,                     // 1 = cella di un valico aperto tra le creste
     statistiche: {
       frazioneMare: celleMare / n, ms, cima, laghi: dren.laghi,
       biomi: Object.fromEntries(NOMI_BIOMI.map((nome, b) => [nome, contaBiomi[b] / (celleTerraB || 1)])),
-      copertura: clima.copertura, correzioni,
+      copertura: clima.copertura, correzioni, valichi: vette.valichi, celleAspre: vette.aspre,
       fasce: { pianura: fasce[0] / celleTerra2, collina: fasce[1] / celleTerra2,
         pedemonte: fasce[2] / celleTerra2, montagna: fasce[3] / celleTerra2 },
     },
@@ -451,6 +461,130 @@ function climaEBiomi(seme, cols, rows, quota, mare, acque) {
   return { temperaturaMare, temperatura, umidita, bioma, copertura };
 }
 
+// ─── Vette aspre e valichi ───────────────────────────────────────────────
+
+/**
+ * Creste aspre in montagna (deciso con l'utente): sulle celle con asprezza alta le Scene aggiungono guglie e
+ * pareti oltre la pendenza che il cavaliere sale; il cavaliere cerca i passaggi più dolci. Lunghezze in km.
+ */
+export const ASPREZZA = {
+  quota: [1300, 2000],          // m: dalla fascia di montagna
+  cresta: [-0.3, 0.35],        // convessità relativa al rilievo locale: sulle creste, non nei fondovalle
+  gruppi: { lunghezza: 22, soglia: [0.28, 0.5] },   // a gruppi (massicci di guglie), non un muro continuo
+  invalicabile: 0.5,
+  valico: 1,                    // celle attorno al percorso del valico in cui l'asprezza si azzera
+};
+
+/**
+ * Asprezza delle celle e valichi. Le celle con asprezza > ASPREZZA.invalicabile non si attraversano: se una
+ * parte della terra percorribile resta separata dal resto della sua terraferma, si apre un valico nel passaggio
+ * più conveniente (il più basso, il meno aspro) verso la parte più grande, finché tutto è collegato.
+ * @returns {{ asprezza: Float32Array, valico: Uint8Array, valichi: number, aspre: number }}
+ */
+function asprezzaEValichi(seme, cols, rows, quota, mare, acque) {
+  const A = ASPREZZA, n = cols * rows;
+  const sG = derivaSeme(seme, 81);
+  const Q = (x, y) => Math.max(0, quota[Math.min(rows - 1, Math.max(0, y)) * cols + Math.min(cols - 1, Math.max(0, x))]);
+  const asprezza = new Float32Array(n), valico = new Uint8Array(n);
+  const terra = (i) => !mare[i] && acque[i] === ACQUA.TERRA;
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const i = y * cols + x;
+      if (!terra(i)) continue;
+      const fascia = smoothstep(A.quota[0], A.quota[1], quota[i]);
+      if (fascia <= 0) continue;
+      let s = 0, mn = Infinity, mx = -Infinity;
+      for (let b = -2; b <= 2; b++) for (let a = -2; a <= 2; a++) {
+        const v = Q(x + a, y + b); s += v;
+        if (Math.abs(a) <= 1 && Math.abs(b) <= 1) { if (v < mn) mn = v; if (v > mx) mx = v; }
+      }
+      const cresta = smoothstep(A.cresta[0], A.cresta[1], (quota[i] - s / 25) / (mx - mn + 50));
+      const gruppi = smoothstep(A.gruppi.soglia[0], A.gruppi.soglia[1], 0.5 + 0.5 * fbm(x, y, sG, A.gruppi.lunghezza, 3));
+      asprezza[i] = fascia * cresta * gruppi;
+    }
+  }
+  // Componenti della terra percorribile (8 vicini) e terraferme (tutta la terra).
+  const componenti = (passa) => {
+    const comp = new Int32Array(n).fill(-1), dim = [];
+    const coda = new Int32Array(n);
+    for (let s0 = 0; s0 < n; s0++) {
+      if (comp[s0] >= 0 || !passa(s0)) continue;
+      const c = dim.length;
+      let t = 0, f = 0; coda[f++] = s0; comp[s0] = c;
+      while (t < f) {
+        const i = coda[t++], x = i % cols;
+        for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) {
+          const xx = x + a, j = i + b * cols + a;
+          if ((!a && !b) || xx < 0 || xx >= cols || j < 0 || j >= n || comp[j] >= 0 || !passa(j)) continue;
+          comp[j] = c; coda[f++] = j;
+        }
+      }
+      dim.push(f);
+    }
+    return { comp, dim };
+  };
+  const terre = componenti(terra);
+  let valichi = 0;
+  for (let giro = 0; giro < 20; giro++) {
+    const perc = componenti((i) => terra(i) && asprezza[i] <= A.invalicabile);
+    // La parte percorribile più grande di ogni terraferma.
+    const principale = new Map();
+    perc.dim.forEach((d, c) => { principale.set(c, d); });
+    const migliore = new Map();                  // terraferma → componente percorribile più grande
+    for (let i = 0; i < n; i++) {
+      const c = perc.comp[i];
+      if (c < 0) continue;
+      const t = terre.comp[i], m = migliore.get(t);
+      if (m === undefined || perc.dim[c] > perc.dim[m]) migliore.set(t, c);
+    }
+    const isolata = (i) => perc.comp[i] >= 0 && perc.comp[i] !== migliore.get(terre.comp[i]);
+    let ci = 0; for (let i = 0; i < n; i++) if (isolata(i)) { ci++; break; }
+    if (!ci) break;
+    // Dijkstra dalle parti principali sulla terra: attraversare una cella aspra costa molto (più è aspra e alta).
+    const dist = new Float64Array(n).fill(Infinity), da = new Int32Array(n).fill(-1);
+    const heap = [];
+    const spingi = (k, d) => { heap.push([d, k]); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
+    const togli = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let i = 0; for (;;) { let f = 2 * i + 1; if (f >= heap.length) break; if (f + 1 < heap.length && heap[f + 1][0] < heap[f][0]) f++; if (heap[f][0] >= heap[i][0]) break; [heap[f], heap[i]] = [heap[i], heap[f]]; i = f; } } return top; };
+    for (let i = 0; i < n; i++) if (perc.comp[i] >= 0 && perc.comp[i] === migliore.get(terre.comp[i])) { dist[i] = 0; spingi(i, 0); }
+    while (heap.length) {
+      const [d, i] = togli();
+      if (d > dist[i]) continue;
+      if (isolata(i)) continue;                  // raggiunta una parte isolata: non si prosegue oltre
+      const x = i % cols;
+      for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) {
+        const xx = x + a, j = i + b * cols + a;
+        if ((!a && !b) || xx < 0 || xx >= cols || j < 0 || j >= n || !terra(j)) continue;
+        const passo = (a && b ? Math.SQRT2 : 1) * (1 + (asprezza[j] > A.invalicabile ? 20 * asprezza[j] + quota[j] / 200 : 0));
+        if (d + passo < dist[j]) { dist[j] = d + passo; da[j] = i; spingi(j, d + passo); }
+      }
+    }
+    // Per ogni parte isolata, la sua cella più vicina: da lì il valico fino alla parte principale.
+    const vicina = new Map();
+    for (let i = 0; i < n; i++) {
+      if (!isolata(i) || !Number.isFinite(dist[i])) continue;
+      const c = perc.comp[i], v = vicina.get(c);
+      if (v === undefined || dist[i] < dist[v]) vicina.set(c, i);
+    }
+    if (!vicina.size) break;
+    for (const i0 of vicina.values()) {
+      for (let i = i0; i >= 0; i = da[i]) {
+        const x = i % cols, y = (i / cols) | 0;
+        for (let b = -A.valico; b <= A.valico; b++) for (let a = -A.valico; a <= A.valico; a++) {
+          const xx = x + a, yy = y + b;
+          if (xx < 0 || yy < 0 || xx >= cols || yy >= rows) continue;
+          const j = yy * cols + xx;
+          if (asprezza[j] > 0) { if (asprezza[j] > A.invalicabile) valico[j] = 1; asprezza[j] = Math.min(asprezza[j], 0.2); }
+        }
+        if (dist[i] === 0) break;
+      }
+      valichi++;
+    }
+  }
+  let aspre = 0;
+  for (let i = 0; i < n; i++) if (asprezza[i] > A.invalicabile) aspre++;
+  return { asprezza, valico, valichi, aspre };
+}
+
 // ─── Fase 8: correzioni per le regole di varietà ─────────────────────────
 
 /**
@@ -519,7 +653,7 @@ function correggiVarieta(seme, cols, rows, quota, mare, dren, clima) {
     const { tipo, distanza } = uniformita(carta);
     const centri = [];
     for (let i = 0; i < n; i++) {
-      if (tipo[i] === 4 || tipo[i] === 5 || tipo[i] === 7 || 2 * distanza[i] <= V.uniforme) continue;
+      if (tipo[i] === 4 || tipo[i] === 5 || tipo[i] === 7 || tipo[i] === 8 || 2 * distanza[i] <= V.uniforme) continue;
       const x = i % cols, y = (i / cols) | 0;
       let massimo = true;                                      // massimo locale della distanza (5×5)
       for (let b = -2; b <= 2 && massimo; b++) for (let a = -2; a <= 2; a++) {

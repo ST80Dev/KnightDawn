@@ -10,7 +10,7 @@
 // La cella (c, r) della Carta copre [c·cella, (c+1)·cella] × [r·cella, (r+1)·cella].
 // Il blocco usa coordinate locali centrate sul suo centro (vedi docs/ESPLORAZIONE_3D.md, Coordinate).
 
-import { gradienteD, derivaSeme, smoothstep } from './rumore.js';
+import { gradienteD, derivaSeme, smoothstep, ridged } from './rumore.js';
 import { ACQUA } from './carta.js';
 import { tracciaPercorso, lettoMonotono, PERCORSO } from './fiumi.js';
 
@@ -30,6 +30,9 @@ const DETTAGLIO = {
   // Montagna: oltre la rampa (quota della Carta) torna a crescere fino a `extra` m in più, piena sulle creste:
   // vette e crinali aspri, fondovalle percorribili.
   montagna: { rampa: [1200, 2200], extra: 220 },
+  // Creste aspre (Carta: asprezza): guglie e pareti oltre la pendenza che il cavaliere sale. Rumore «ridged»
+  // (creste affilate) pesato dall'asprezza della Carta; nei valichi l'asprezza è bassa e le pareti non ci sono.
+  guglie: { lunghezza: 700, ottave: 3, altezza: 450, media: 0.25, da: [0.2, 0.75] },
   erosione: 1.0,                // quanto la pendenza accumulata smorza le ottave fini
 };
 
@@ -187,7 +190,29 @@ export function quotaMondo(carta, x, z, seedDettaglio = derivaSeme(carta.seme, 1
       + Fo.perRilievo * rilievo + DETTAGLIO.montagna.extra * smoothstep(DETTAGLIO.montagna.rampa[0], DETTAGLIO.montagna.rampa[1], h))
       * (Fo.valle + (1 - Fo.valle) * cresta);
   } else ampiezza = A.fondale + (A.base - A.fondale) * smoothstep(-60, 0, h);
-  return h + ampiezza * fbmEroso(x, z, seedDettaglio, pesi);
+  let guglie = 0;
+  if (carta.asprezza && h > 0) {
+    const G = DETTAGLIO.guglie, a = smoothstep(G.da[0], G.da[1], campoCarta(carta, carta.asprezza, x, z));
+    if (a > 0) guglie = a * G.altezza * (ridged(x, z, seedDettaglio ^ 0x6a09e667, G.lunghezza, G.ottave) - G.media)
+      * (pesi ? pesi[1] : 1);
+  }
+  return h + ampiezza * fbmEroso(x, z, seedDettaglio, pesi) + guglie;
+}
+
+/** Campo per cella della Carta (Float32Array) interpolato bilineare tra i centri delle celle. */
+function campoCarta(carta, campo, x, z) {
+  const { cols, rows, cella } = carta;
+  const u = x / cella - 0.5, v = z / cella - 0.5;
+  const i0 = Math.floor(u), j0 = Math.floor(v), fu = u - i0, fv = v - j0;
+  let r = 0;
+  for (let b = 0; b < 2; b++) {
+    const j = Math.min(rows - 1, Math.max(0, j0 + b));
+    for (let a = 0; a < 2; a++) {
+      const i = Math.min(cols - 1, Math.max(0, i0 + a));
+      r += (a ? fu : 1 - fu) * (b ? fv : 1 - fv) * campo[j * cols + i];
+    }
+  }
+  return r;
 }
 
 // ─── Fiumi e laghi nelle Scene (passo 6) ────────────────────────────────
