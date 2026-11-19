@@ -1112,6 +1112,24 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
    nel blocco; partenza davanti alla porta della rocca (provvisoria). *Prova:* come M4 (giro attorno, ingresso
    dalla porta, nessuna compenetrazione, camera mai coperta) su un sito di valle e uno d'altura; Tavullia
    invariata.
+   **Stato: fatto, da provare dall'utente.**
+   - `castle3d.js`: cinta rettangolare (`latoX` di traverso, `latoZ` lungo l'asse della porta; senza, quadrata
+     come a Tavullia), quota del cortile dal piano del terrapieno (`piano`, mai sotto il terreno interno),
+     `CLASSI_ROCCA`: rocca minore 34×30 m (mura 7,5 m, mastio 9 m di lato e 18 di altezza), casata 46×40 (9;
+     11/22), sede maggiore 58×50 (10; 13/26), dentro i piani di 40×36, 52×46, 64×56 m.
+   - `main.js` (`costruisciRocche`): una rocca per ogni luogo il cui piano tocca il blocco (o gli sta a meno di
+     150 m), in coordinate del blocco (i blocchi ora stanno su una griglia, `centroBlocco`: il sito di solito
+     non è al centro), porta verso il borgo (`verso`), rampa fino a 40 m. Il terreno sotto viene dal blocco e,
+     fuori, da `quotaFinale`: una rocca tagliata dal bordo si costruisce intera. Collisioni, luci delle torce,
+     pavimento costruito (`componiSuolo`) e raycast della camera come a Tavullia. Al posto delle aste.
+   - Un salvataggio che cade dentro le mura (partite di prima) riparte fuori dalla porta del borgo.
+   - *Misure* (Chromium headless, 3 semi: 12345 e 241996 di valle, 99454 di valle con salti grandi): 32
+     assalti da 70 m verso il centro per seme, di corsa per 40 s: si entra nel cortile solo nell'assalto
+     allineato alla porta (1 su 32), nessuna compenetrazione oltre 5 cm. Tavullia: stesso castello, cortile a
+     173,65 m, nessuna rocca del mondo.
+   Limiti: dove tra rocca e prima terrazza il salto è grande (seme 99454, ~12 m) la rampa è lunga e ripida e
+   attraversa le terrazze: va ridisegnata con la via del borgo (passo 4). Nessuna prova della camera
+   (stesso meccanismo di M4, già misurato).
 4. **Borgo murato.** Contorno secondo il carattere del sito, terrazze con muri di contenimento, porta del
    borgo, via in rampa, raccordo con la rocca; ancora senza edifici; partenza fuori dalla porta del borgo.
    *Prova:* da fuori si capisce dove si è (rocca sopra le mura, crinale dietro); si entra, si sale alla
@@ -1174,10 +1192,12 @@ siti validi su 30 semi su 30 (verifica automatica). Con il passo 9: dal borgo si
 8. **Valichi e forcelle distinti**; valichi tra 1000 e ~2500 m, quasi sempre con sentinella (GDD §2).
 9. **Castello di valle come partenza**, a ≤ 5 km da un crinale 800 m più alto (regione di 120×90 km).
 
+10. **Passo 9 in M7** (blocco che segue il cavaliere): approvato.
+11. **Vegetazione e oggetti sparsi in parallelo a M7** (deroga alla regola 4 decisa dall'utente): altra sessione,
+    sezione a sé in questo documento; esclude i terrapieni dei luoghi (`carta.luoghi[].piani`).
+
 ### Da decidere
 
-- **Uscire dal blocco in M7** (punto 6, passo 9)? Senza, il crinale del castello di valle si vede ma non si
-  raggiunge di persona.
 - **Torri di sentinella dei valichi**: in M7 o con la milestone dei luoghi (oggi fuori da M7)?
 
 ## Vegetazione e oggetti sparsi (in parallelo a M7)
