@@ -47,7 +47,7 @@ const COLORE_PANORAMA = 'rgba(150, 40, 30, 0.9)';
 const COLORE_CAVALIERE = '#e8402a';
 const DISTANZE_CAVALIERE = [10, 20];   // km: cerchi attorno al cavaliere
 // Tempo di marcia a piedi sulla Carta (docs/GDD.md §3 Viaggio): un Passo (3 h) ogni VIAGGIO.METRI_PER_PASSO.
-const MINUTI_PER_KM = typeof VIAGGIO !== 'undefined' ? 180 * 1000 / VIAGGIO.METRI_PER_PASSO : 52;
+const MINUTI_PER_KM = typeof VIAGGIO !== 'undefined' ? 180 * 1000 / VIAGGIO.METRI_PER_PASSO : 37;
 const ORE_MARCIA_GIORNO = 9;           // ~3 Passi di marcia al giorno
 // Rocche (M7): segno più grande secondo la classe; candidati scartati come puntini (pulsante «Candidati»).
 const CLASSI_ROCCA = { minore: ['rocca minore', 5], casata: ['castello di casata', 6.5], maggiore: ['sede maggiore', 8] };
