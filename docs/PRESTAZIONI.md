@@ -1,4 +1,4 @@
-# Milestone «Prestazioni» — piano (da approvare)
+# Milestone «Prestazioni» — piano (approvato, fase corrente)
 
 > Richiesta dell'utente (novembre 2026): «senza continuare a mettere toppe e togliere cose man mano, come possiamo avere
 > una cosa più realistica da qui in avanti, se con questi elementi siamo già a 30 FPS? Con cavallo, personaggi ed
@@ -9,7 +9,9 @@
 
 - In pieno bosco ~30 FPS; senza vegetazione 40–45 FPS (misure dell'utente con F3). Un `CONTEXT_LOST` (crash della
   scheda) causato dalle ombre su tela 2D di ~78 000 oggetti in un solo fotogramma, ora corretto.
-- **Scheda di riferimento: integrata Intel** (quella dell'utente). È il «PC medio» della regola 8 di `CLAUDE.md`.
+- **Scheda di riferimento: Intel UHD Graphics 730** (integrata, 24 unità di calcolo; Chrome su Windows via ANGLE
+  Direct3D 11, driver 30.0.101.1273), schermo **1920×1080, ridimensionamento di Windows 100%** (`devicePixelRatio` 1).
+  È il «PC medio» della regola 8 di `CLAUDE.md`.
 - Causa di fondo [Probabile]: ogni sessione aggiunge la sua parte senza un tetto di costo e senza misure sulla scheda
   vera (in headless il rendering è software). Le singole scelte erano ragionevoli; sommate sforano.
 
@@ -22,7 +24,8 @@ Nel codice di oggi [Probabile, da confermare con le misure del passo 1]:
    di profondità anticipato. Nel bosco ogni strato nascosto (foglie dietro foglie, terreno sotto gli alberi) esegue lo
    shader per intero. Serve per disegnare da 0,2 m a 130 km.
 2. **`antialias: true`** (MSAA): più campioni per pixel.
-3. **Risoluzione** fino a `devicePixelRatio` 2 (con lo zoom di Windows al 125–150% sono 1,5–2,2 volte i pixel).
+3. **Risoluzione**: sulla scheda di riferimento `devicePixelRatio` è 1, quindi 1920×1080 = ~2 milioni di pixel, nessun
+   raddoppio. Pesa su schermi con ridimensionamento sopra il 100% (fino a ×2,2 i pixel).
 4. **Shader del suolo** a colore per pixel: decine di letture di rumore per pixel vicino (suolo, neve, lettiera,
    micro-rilievo del prato, ombre).
 5. **Chiamate di disegno:** rocca 170 oggetti, cavaliere 86; il borgo, il cavallo e le persone ne aggiungerebbero
@@ -31,8 +34,7 @@ Nel codice di oggi [Probabile, da confermare con le misure del passo 1]:
 
 ## Obiettivi e budget
 
-- **60 FPS nel preset «medio»** sulla scheda dell'utente, alla sua risoluzione; **mai sotto 30** in nessun preset.
-  Da confermare con l'utente.
+- **60 FPS nel preset «medio»** sulla UHD 730 a 1920×1080; **mai sotto 30** in nessun preset (confermato dall'utente).
 - Budget per fotogramma (16,6 ms), **provvisorio**: si tara con le misure del passo 1.
 
 | Sistema | GPU (ms) | Chiamate | Note |
@@ -83,14 +85,18 @@ Nel codice di oggi [Probabile, da confermare con le misure del passo 1]:
 
 ## Organizzazione
 
-- **Una sessione responsabile delle prestazioni** (proposta: la sessione «M1 - grafica», che ha già misure e
-  diagnostica). Le altre la consultano prima di aggiungere cose costose e non cambiano renderer, preset o budget.
+- **M7 è in pausa** finché questa milestone non è chiusa (decisione dell'utente, regola 4): nessuna sessione aggiunge
+  cose disegnate nuove; si possono chiudere lavori già in corso solo se non aumentano il costo.
+- **Sessione responsabile: «M1 - grafica»** (decisione dell'utente). Le altre la consultano prima di aggiungere cose
+  costose e non cambiano renderer, preset o budget.
 - I passi 2–5 toccano file di tutte le sessioni (`main.js`, `terrain.js`, `vegetazione3d.js`, `castle3d.js`,
   `knight3d.js`): si lavora un file alla volta, avvisando prima il proprietario, unendo `main` spesso.
 
 ## Rischi e incertezze
 
 - [Probabile] La profondità logaritmica e l'MSAA sono una parte grossa del costo nel bosco; lo dirà il passo 1.
+- [Ipotesi] Con ANGLE su Direct3D 11 non è certo che ci siano `EXT_clip_control` (profondità invertita) ed
+  `EXT_disjoint_timer_query_webgl2` (timer GPU): il passo 1 lo verifica e mostra nel pannello F3 cosa c'è.
 - [Ipotesi] `reversedDepthBuffer` sul buffer di profondità del canvas (24 bit) potrebbe non bastare per 0,2 m–130 km:
   in quel caso le due passate, più lavoro ma soluzione classica.
 - [Certo] I timer GPU possono mancare su alcuni browser o driver: il ripiego (F4, tempi CPU) è più grossolano.
@@ -100,13 +106,12 @@ Nel codice di oggi [Probabile, da confermare con le misure del passo 1]:
   d'insieme lontano.
 - Costo in tempo [Ipotesi]: 2–3 sessioni di lavoro per i passi 1–5, senza contenuti nuovi.
 
-## Da decidere con l'utente
+## Decisioni prese con l'utente (novembre 2026)
 
-1. **M7 in pausa** durante questa milestone (regola 4), o in parallelo con il vincolo di non aggiungere cose disegnate?
-2. Obiettivo: 60 FPS nel preset medio, mai sotto 30 — va bene?
-3. Quale sessione è responsabile delle prestazioni?
-4. Dati della scheda: nome esatto (in Chrome `chrome://gpu`, riga «GL_RENDERER»), risoluzione dello schermo e
-   ridimensionamento di Windows (100%, 125%, 150%…).
+1. M7 in pausa durante questa milestone.
+2. Obiettivo: 60 FPS nel preset medio, mai sotto 30.
+3. Sessione responsabile: «M1 - grafica».
+4. Scheda: Intel UHD Graphics 730 (ANGLE, Direct3D 11), 1920×1080 al 100%.
 
 ## Risultati del percorso di prova
 
