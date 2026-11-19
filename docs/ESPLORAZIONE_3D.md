@@ -497,6 +497,15 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
    **Tavullia e mondo della partita.** «Tavullia (prova)» è solo la scena di prova di 2×2 km, non la modalità
    reale (milestone dopo M6). Anche a Tavullia la partita conserva il suo mondo (seme nel salvataggio e
    nell'indirizzo): la Carta riporta lì e non a un seme a caso.
+   **Fiumi dritti per decine di km (segnalati dall'utente sul seme 350364).** Due cause, due rimedi:
+   - le zone piatte (conche colmate) si attraversavano con la distanza a scacchiera di Barnes: rette a 45°
+     fino allo sfioro, poi scavate dall'erosione. Ora percorso di costo minimo (Dijkstra) verso il bordo
+     basso, con un costo che varia dolcemente (rumore su ~8 km, ±40 %): il percorso piega; ogni cella punta
+     alla precedente sul percorso minimo, quindi niente cicli né celle senza uscita;
+   - prima dell'erosione un'ondulazione su 12 e 30 km (12 m + 3 % della quota): sui pendii lunghi e uniformi
+     il flusso devia invece di correre dritto.
+   Restano tratti di ~30 km poco curvi e, sulle pianure in pendenza, affluenti paralleli «a pettine».
+   `VERSIONE_GENERATORE` = `m6-erosione-3`.
 5. **Orizzonte** (inserito dopo il passo 4): oltre il blocco di 2×2 km non si vedeva nulla, nemmeno una
    catena a pochi km. Terreno lontano solo da guardare, dalla Carta già in memoria (`js/3d/orizzonte.js`).
    *Prova:* dal pedemonte si vedono le montagne lontane; nessuna fessura al raccordo col blocco; FPS.
