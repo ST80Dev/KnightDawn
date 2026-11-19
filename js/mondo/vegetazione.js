@@ -152,11 +152,12 @@ export function coperturaTavullia() {
  * `scala`: intervallo della scala casuale. Le densità sono in `densitaVertice`.
  */
 export const TIPI = [
-  { nome: 'latifoglia', gruppo: 'alberi', scala: [0.75, 1.25] },
-  { nome: 'conifera', gruppo: 'alberi', scala: [0.7, 1.3] },
-  { nome: 'pino', gruppo: 'alberi', scala: [0.8, 1.2] },
-  { nome: 'riva', gruppo: 'alberi', scala: [0.75, 1.2] },
-  { nome: 'secco', gruppo: 'alberi', scala: [0.6, 1.1] },
+  // Età diverse (richiesta dell'utente: alberi tutti uguali): molti giovani e bassi, pochi vecchi molto alti.
+  { nome: 'latifoglia', gruppo: 'alberi', scala: [0.45, 1.45], curva: 1.4 },
+  { nome: 'conifera', gruppo: 'alberi', scala: [0.4, 1.5], curva: 1.4 },
+  { nome: 'pino', gruppo: 'alberi', scala: [0.55, 1.3], curva: 1.2 },
+  { nome: 'riva', gruppo: 'alberi', scala: [0.55, 1.3], curva: 1.2 },
+  { nome: 'secco', gruppo: 'alberi', scala: [0.5, 1.15] },
   { nome: 'cespuglio', gruppo: 'arbusti', passo: 4, scala: [0.6, 1.4] },
   { nome: 'arbusto alto', gruppo: 'arbusti', passo: 4, scala: [0.6, 1.3] },
   { nome: 'sterpo', gruppo: 'arbusti', passo: 5, scala: [0.6, 1.2] },

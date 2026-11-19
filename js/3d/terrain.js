@@ -340,7 +340,7 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
       vec2 loc = abs(vMondo - uCentro);
       loc = min(loc, ${P.toFixed(1)} - loc);
       float blocco = 1.0 - smoothstep(uMezzo - 120.0, uMezzo, max(loc.x, loc.y));
-      float r1 = rumoreSuolo(p, 32.0), r2 = rumoreSuolo(p, 8.0), r3 = rumoreSuolo(p, 2.0), r4 = rumoreSuolo(p + 911.0, 16.0);
+      float r1 = rumoreSuolo(p, 32.0), r2 = rumoreSuolo(p, 8.0), r3 = rumoreSuolo(p, 2.0), r4 = 1.0 - r1;   // 3 rumori (prestazioni)
       float terra = smoothstep(0.62, 0.78, r1 * 0.6 + r2 * 0.4) * prato;
       cPrato = mix(cPrato, vec3(0.19, 0.125, 0.06) * (0.8 + 0.4 * r3), terra * 0.5);
       vec3 lett = mix(vec3(0.011, 0.0065, 0.003), vec3(0.06, 0.036, 0.016), smoothstep(0.3, 0.8, r2));
