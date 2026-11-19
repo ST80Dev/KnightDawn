@@ -13,6 +13,7 @@ import { ACQUA, BIOMA, NOMI_BIOMI, profiloMassicci } from '../mondo/carta.js';
 import { verificaFiumi, verificaPanorami, verificaVarieta, verificaLuoghi } from '../mondo/verifica.js';
 import { semeDaTesto, derivaSeme } from '../mondo/rumore.js';
 import { quotaFinale, livelloLago, raffinaZona, percorsiFiumi } from '../mondo/scena.js';
+import { raffinaStrade, percorsiStrade, STRADE } from '../mondo/strade.js';
 
 // Colori del rilievo: SOLO quota (metri), a un solo tono, più alto = più scuro. Niente verdi, ocra o
 // bianchi: si leggerebbero come biomi (prati, deserti, neve), che arrivano al passo 7 come livello a sé.
@@ -60,7 +61,8 @@ const COLORE_VALICHI = '#d9822b';
 // Rilievo fine della parte visibile: da zoom DA, un campione ogni `passo` pixel (CSS) dello schermo,
 // calcolato a pezzi tra un fotogramma e l'altro (`budget` ms) dopo che la vista si è fermata (`attesa` ms).
 const DETTAGLIO = { da: 1, passo: 2, attesa: 120, budget: 12, esagerazione: 2, equidistanze: [5, 10, 20, 25, 50, 100, 200, 250, 500],
-  percorsi: 130 };  // km: finestra entro cui si cercano e si disegnano i percorsi dei fiumi sul terreno
+  percorsi: 130,    // km: finestra entro cui si cercano e si disegnano i percorsi dei fiumi sul terreno
+  strade: 24 };     // km: finestra entro cui si cerca il tracciato fine delle strade (~50–100 ms per tratto di 4 km)
 const fasciaDi = (m) => FASCE.find(([, a, b]) => m >= a && m < b)?.[0] ?? 'montagna';
 const LUCE = (() => {             // luce da nord-ovest, alta 45°
   const x = -1, y = -1, z = 1.4142135623730951;
@@ -387,6 +389,14 @@ export function createCartaVista(contenitore, opzioni = {}) {
       if (mio !== lavoro || carta !== c0) return;
       percorsi = percorsiFiumi(c0, x0 * C - 1000, y0 * C - 1000, x1 * C + 1000, y1 * C + 1000);
     }
+    // Finestra ancora più piccola: il tracciato fine delle strade (tornanti), prima delle quote (le strade le spianano).
+    let strade = null;
+    if (x1 - x0 <= DETTAGLIO.strade && y1 - y0 <= DETTAGLIO.strade) {
+      const C = c0.cella;
+      raffinaStrade(c0, (x0 + x1) / 2 * C, (y0 + y1) / 2 * C, Math.max(x1 - x0, y1 - y0) / 2 * C);
+      if (mio !== lavoro || carta !== c0) return;
+      strade = percorsiStrade(c0, x0 * C - 500, y0 * C - 500, x1 * C + 500, y1 * C + 500);
+    }
     const h = new Float32Array(nx * ny), acqua = new Float32Array(nx * ny);
     const seme = derivaSeme(c0.seme, 101), C = c0.cella, esito = { quota: 0, livello: NaN };
     let t = performance.now();
@@ -433,7 +443,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
       }
     }
     g.putImageData(dati, 0, 0);
-    dettaglio = { img, x0, y0, w: nx * k, h: ny * k, eq, chiave, percorsi };
+    dettaglio = { img, x0, y0, w: nx * k, h: ny * k, eq, chiave, percorsi, strade };
     if (chiaveInCorso === chiave) chiaveInCorso = '';
     ridisegna();
   }
@@ -472,7 +482,24 @@ export function createCartaVista(contenitore, opzioni = {}) {
       }
     } else CLASSI_FIUMI.forEach(([, w], k) => { ctx.lineWidth = w * spessore; ctx.stroke(tracciatiFiumi[k]); });
     // Strade e sentieri: terra battuta, tratteggio per mulattiere e sentieri.
-    if (tracciatiStrade) {
+    const stradeFini = dettaglio?.strade && dettaglio.chiave === chiaveVista() ? dettaglio.strade : null;
+    if (stradeFini) {
+      // Il tracciato delle Scene (tornanti compresi), largo almeno ~1 pixel.
+      const C = carta.cella;
+      for (const [classe, w, trattino] of STILE_STRADE) {
+        ctx.strokeStyle = classe === 'sentiero' ? COLORE_SENTIERO : COLORE_STRADA;
+        ctx.lineWidth = Math.max(w * dpr / s, 2 * STRADE.classi[classe].semi / C);
+        ctx.setLineDash(trattino.map((t) => t * spessore));
+        for (const f of stradeFini) {
+          if (f.classe !== classe) continue;
+          ctx.beginPath();
+          ctx.moveTo(f.x[0] / C, f.z[0] / C);
+          for (let i = 1; i < f.x.length; i++) ctx.lineTo(f.x[i] / C, f.z[i] / C);
+          ctx.stroke();
+        }
+      }
+      ctx.setLineDash([]);
+    } else if (tracciatiStrade) {
       for (const [classe, w, trattino] of STILE_STRADE) {
         const p = tracciatiStrade[classe];
         if (!p) continue;
@@ -600,7 +627,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
       + ` · mare ${fmt(st.frazioneMare * 100, 1)} % · ${carta.daCache ? 'dalla cache' : `${fmt(st.ms)} ms`}`
       + ` · controllo ${carta.controllo} · zoom ×${fmt(vista.z, 1)}`
       + (vista.z < DETTAGLIO.da || livello !== 'rilievo' ? '' : dettaglio?.chiave === chiaveVista()
-        ? ` · rilievo delle Scene, curve ogni ${dettaglio.eq} m${dettaglio.percorsi ? ' · fiumi come nelle Scene' : ''}`
+        ? ` · rilievo delle Scene, curve ogni ${dettaglio.eq} m${dettaglio.percorsi ? ' · fiumi come nelle Scene' : ''}${dettaglio.strade ? ' · strade come nelle Scene' : ''}`
         : ' · calcolo del rilievo delle Scene…');
     chiediDettaglio();
   }

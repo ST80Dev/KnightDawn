@@ -123,7 +123,7 @@ function anello(celle, colore, cx, cz) {
   for (let r = 0; r < celle.n; r++) for (let c = 0; c < celle.n; c++) celle.cella(r, c, faccia);
   const m = px.length;
   const pos = new Float32Array(m * 3), nor = new Float32Array(m * 3), col = new Float32Array(m * 3);
-  const bas = new Float32Array(m * 3), str = new Float32Array(m * 4), via = new Float32Array(m * 3), S = nuoviStrati();
+  const bas = new Float32Array(m * 3), str = new Float32Array(m * 4), S = nuoviStrati();
   const tmp = new THREE.Color();
   for (let i = 0; i < m; i++) {
     const l = Math.hypot(nx[i], ny[i], nz[i]) || 1;
@@ -135,7 +135,6 @@ function anello(celle, colore, cx, cz) {
     col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
     bas[i * 3] = S.base.r; bas[i * 3 + 1] = S.base.g; bas[i * 3 + 2] = S.base.b;
     str[i * 4] = S.roccia; str[i * 4 + 1] = S.neve; str[i * 4 + 2] = S.variazione; str[i * 4 + 3] = S.tono;
-    via[i * 3] = 99; via[i * 3 + 1] = 0; via[i * 3 + 2] = 99;   // strade solo nel blocco (larghe pochi metri)
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
@@ -143,7 +142,6 @@ function anello(celle, colore, cx, cz) {
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.setAttribute('base', new THREE.BufferAttribute(bas, 3));
   geo.setAttribute('strati', new THREE.BufferAttribute(str, 4));
-  geo.setAttribute('strada', new THREE.BufferAttribute(via, 3));
   geo.setIndex(tri.length > 65535 ? new THREE.Uint32BufferAttribute(tri, 1) : new THREE.Uint16BufferAttribute(tri, 1));
   geo.computeBoundingSphere();
   return geo;

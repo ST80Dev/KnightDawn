@@ -18,7 +18,6 @@ import * as THREE from 'three';
 import { BIOMA, CLIMA } from '../mondo/carta.js';
 import { smoothstep } from '../mondo/rumore.js';
 import { COPERTURA, coperturaMondo, nuovaCopertura } from '../mondo/vegetazione.js';
-import { distanzaStrada } from '../mondo/strade.js';
 
 const PAL = (typeof PALETTE !== 'undefined') ? PALETTE : {};
 
@@ -173,7 +172,6 @@ const NEVE_VERSANTE = [2, 24, 0.85];       // gradi di pendenza (inizio, pieno) 
 const DETTAGLIO_NEVE = [1.4, 50, 150];     // forza; pieno fino a (m dalla camera); spento a (m)
 const COLORE_RADURA = new THREE.Color('#7f9f4c');
 const COLORE_ALPEGGIO = new THREE.Color('#8a985c');
-const COLORE_STRADA = new THREE.Color('#9b8461');      // terra battuta
 
 // Parametri del colore: sono quelli della copertura (js/mondo/vegetazione.js), condivisi con la vegetazione.
 export const COLORI_MONDO = COPERTURA;
@@ -188,7 +186,7 @@ export const COLORI_MONDO = COPERTURA;
 export function coloreMondo(carta, stagione = 0) {
   const K = COLORI_MONDO;
   const copertura = coperturaMondo(carta, stagione), cp = nuovaCopertura();
-  const c = new THREE.Color(), strada = { d: Infinity, lato: 0, semi: 0, h: 0, classe: '' };
+  const c = new THREE.Color();
   // `strati` (facoltativo): per il materiale a colore per pixel (materialeSuolo) scrive il colore prima di roccia e
   // neve (base, già con la variazione di luminosità), i pesi di roccia e neve, la variazione e il tono della roccia.
   return (out, x, z, h, pendenza, strati = null) => {
@@ -213,11 +211,6 @@ export function coloreMondo(carta, stagione = 0) {
     if (strati) {
       strati.base.copy(out).multiplyScalar(cp.variazione);
       strati.roccia = cp.roccia; strati.neve = cp.neve; strati.variazione = cp.variazione; strati.tono = cp.tonoRoccia;
-      // Strada: scostamento con segno dall'asse (lineare lungo un tratto dritto: interpolato tra i vertici resta
-      // esatto) e semilarghezza; lontano dalle strade 99 m.
-      distanzaStrada(carta, x, z, strada);
-      if (strada.d < 40) { strati.lato = strada.lato; strati.semi = strada.semi; strati.distanza = strada.d; }
-      else { strati.lato = 99; strati.semi = 0; strati.distanza = 99; }
     }
     if (cp.roccia > 0) {
       c.copy(COLORE_ROCCIA).lerp(COLORE_ROCCIA_SCURA, cp.tonoRoccia);
@@ -299,7 +292,6 @@ export function materialeSuolo(cx, cz, mezzo = 1e9) {
     uRoccia: { value: COLORE_ROCCIA.clone() },
     uRocciaScura: { value: COLORE_ROCCIA_SCURA.clone() },
     uNeve: { value: COLORE_NEVE.clone() },
-    uStrada: { value: COLORE_STRADA.clone() },
     uNeveVersante: { value: COLORE_NEVE_VERSANTE.clone() },
     uNeveV: { value: new THREE.Vector3(...NEVE_VERSANTE) },
     uDettaglioNeve: { value: new THREE.Vector3(...DETTAGLIO_NEVE) },
@@ -313,8 +305,6 @@ export function materialeSuolo(cx, cz, mezzo = 1e9) {
       .replace('#include <common>', `#include <common>
 attribute vec3 base;
 attribute vec4 strati;
-attribute vec3 strada;
-varying vec3 vStrada;
 attribute vec2 aSuolo;
 varying vec2 vSuolo;
 uniform vec2 uOrigine;
@@ -324,7 +314,6 @@ varying vec2 vMondo;`)
       .replace('#include <project_vertex>', `#include <project_vertex>
   vBase = base;
   vStrati = strati;
-  vStrada = strada;
   vSuolo = aSuolo;
   vMondo = (modelMatrix * vec4(transformed, 1.0)).xz + uOrigine;`);
     sh.fragmentShader = sh.fragmentShader
@@ -332,8 +321,6 @@ varying vec2 vMondo;`)
 uniform vec3 uRoccia;
 uniform vec3 uRocciaScura;
 uniform vec3 uNeve;
-uniform vec3 uStrada;
-varying vec3 vStrada;
 uniform vec3 uNeveVersante;
 uniform vec3 uNeveV;
 uniform vec3 uDettaglioNeve;
@@ -403,24 +390,7 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
       }
     }
     vec3 c = mix(cPrato, cRoccia * (1.0 + 0.5 * dettaglio), roccia);
-    // Strada di terra battuta (js/mondo/strade.js): bordo frastagliato di qualche decimetro, solchi delle ruote
-    // ed erba al centro sulle strade da carro; si spegne con la distanza come il resto del dettaglio.
-    // fwidth fuori dal ramo: le derivate dentro un ramo non uniforme non sono definite.
-    float aS = abs(vStrada.x);
-    float bordoS = vStrada.y > 0.0 && dist < ${(2 * SUOLO.spegni[1]).toFixed(1)}
-      ? (rumoreSuolo(p + 91.0, 2.0) - 0.5) * 0.5 * spegniSuolo(2.0, dist) : 0.0;
-    float xS = (vStrada.y + bordoS - aS) / max(vStrada.y, 0.3);
-    float eS = max(fwidth(xS) * 0.75, 0.02);
-    if (vStrada.y > 0.0) {
-      // Alle estremità e nelle curve strette lo scostamento cambia segno tra due vertici e l'interpolazione
-      // inventerebbe un cuneo di strada: la distanza senza segno (che interpolata sovrastima, mai sottostima) lo esclude.
-      float suStrada = smoothstep(-eS, eS, xS) * (1.0 - smoothstep(vStrada.y + 5.0, vStrada.y + 7.0, vStrada.z));
-      float solchi = vStrada.y > 1.2 ? (1.0 - smoothstep(0.0, 0.35, abs(aS - 0.45 * vStrada.y))) * spegniSuolo(1.0, dist) : 0.0;
-      float centro = vStrada.y > 1.2 ? (1.0 - smoothstep(0.0, 0.3, aS)) * 0.35 * spegniSuolo(1.0, dist) : 0.0;
-      vec3 cS = uStrada * vStrati.z * (1.0 + 0.8 * dettaglio) * (1.0 - 0.15 * solchi);
-      cS = mix(cS, vBase, centro);
-      c = mix(c, cS, suStrada);
-    }
+    // Le strade sono un nastro a parte (js/3d/acqua.js, creaNastroStrada): il suolo non le disegna.
     // La neve ha un bordo suo (rumore spostato), non quello della roccia.
     // Rumore del bordo della neve solo dove la neve può esserci e non è già spento. fwidth (in sogliaSuolo)
     // resta fuori dai rami: le derivate dentro un ramo non uniforme non sono definite.
@@ -458,7 +428,7 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
 
 /** Contenitore degli strati di coloreMondo (da riusare). */
 export function nuoviStrati() {
-  return { base: new THREE.Color(), roccia: 0, neve: 0, variazione: 1, tono: 0, lato: 99, semi: 0, distanza: 99 };
+  return { base: new THREE.Color(), roccia: 0, neve: 0, variazione: 1, tono: 0 };
 }
 
 /**
@@ -469,7 +439,7 @@ function buildSurfaceMondo(heights, cols, rows, cell, half, colore, centro) {
   const n = cols * rows;
   const H = (c, r) => heights[Math.min(Math.max(r, 0), rows - 1) * cols + Math.min(Math.max(c, 0), cols - 1)];
   const nor = new Float32Array(n * 3), col = new Float32Array(n * 3);
-  const bas = new Float32Array(n * 3), str = new Float32Array(n * 4), via = new Float32Array(n * 3), S = nuoviStrati();
+  const bas = new Float32Array(n * 3), str = new Float32Array(n * 4), S = nuoviStrati();
   const tmp = new THREE.Color();
   const cx = centro ? centro.x : 0, cz = centro ? centro.z : 0;
   // Il colore usa la pendenza su ~60 m (come l'orizzonte vicino): con quella fine il blocco veniva più roccioso
@@ -490,7 +460,6 @@ function buildSurfaceMondo(heights, cols, rows, cell, half, colore, centro) {
       col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
       bas[i * 3] = S.base.r; bas[i * 3 + 1] = S.base.g; bas[i * 3 + 2] = S.base.b;
       str[i * 4] = S.roccia; str[i * 4 + 1] = S.neve; str[i * 4 + 2] = S.variazione; str[i * 4 + 3] = S.tono;
-      via[i * 3] = S.lato; via[i * 3 + 1] = S.semi; via[i * 3 + 2] = S.distanza;
     }
   }
   const pos = new Float32Array(n * 3);
@@ -515,7 +484,6 @@ function buildSurfaceMondo(heights, cols, rows, cell, half, colore, centro) {
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.setAttribute('base', new THREE.BufferAttribute(bas, 3));
   geo.setAttribute('strati', new THREE.BufferAttribute(str, 4));
-  geo.setAttribute('strada', new THREE.BufferAttribute(via, 3));
   geo.setIndex(new THREE.BufferAttribute(indici, 1));
   geo.computeBoundingSphere();
   geo.computeBoundingBox();
