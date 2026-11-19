@@ -23,7 +23,7 @@ export const CARTA_PREDEFINITA = { cols: 600, rows: 450, cella: 1000 };
 // Versione del generatore: entra nella chiave della cache delle Carte (IndexedDB, lavoratore.js).
 // VA CAMBIATA a ogni modifica che cambia le Carte generate, altrimenti il browser riusa Carte vecchie.
 // (In alternativa: ?rigenera nell'indirizzo ignora la cache.)
-export const VERSIONE_GENERATORE = 'm6-erosione-3';
+export const VERSIONE_GENERATORE = 'm6-biomi-1';
 
 // Parametri della forma (km dove non indicato). Valori di partenza, da tarare guardando le Carte.
 const FORMA = {
@@ -267,6 +267,13 @@ export function generaCarta(seme, opzioni = {}) {
   // Lontani dai corsi d'acqua, che restano più bassi: l'acqua dei poggi scende verso di loro.
   const poggi = piazzaPoggi(seme, cols, rows, quota, mare, catena, dren);
 
+  // ─── Fasi 6–7: clima e biomi ───
+  avanzamento?.('Clima e biomi', 0.88);
+  const clima = climaEBiomi(seme, cols, rows, quota, mare, dren.acque);
+  const contaBiomi = new Array(NOMI_BIOMI.length).fill(0);
+  let celleTerraB = 0;
+  for (let i = 0; i < n; i++) if (!mare[i] && dren.acque[i] === ACQUA.TERRA) { contaBiomi[clima.bioma[i]]++; celleTerraB++; }
+
   // Statistiche: parte della terra per fascia di quota (dopo poggi e valli).
   const fasce = [0, 0, 0, 0];
   let cima = 0;
@@ -287,8 +294,14 @@ export function generaCarta(seme, opzioni = {}) {
     ricevente: dren.ricevente,     // cella a valle (-1 = foce: mare, lago costiero, bordo)
     bacino: dren.bacino,           // km² drenati dalla cella
     sogliaFiume: DRENAGGIO.fiume,
+    temperaturaMare: clima.temperaturaMare,   // °C, media annua al livello del mare (limite delle nevi)
+    temperatura: clima.temperatura,           // °C, media annua alla quota della cella
+    umidita: clima.umidita,                   // 0…1
+    bioma: clima.bioma,                       // BIOMA.*
     statistiche: {
       frazioneMare: celleMare / n, ms, cima, laghi: dren.laghi,
+      biomi: Object.fromEntries(NOMI_BIOMI.map((nome, b) => [nome, contaBiomi[b] / (celleTerraB || 1)])),
+      copertura: clima.copertura,
       fasce: { pianura: fasce[0] / celleTerra2, collina: fasce[1] / celleTerra2,
         pedemonte: fasce[2] / celleTerra2, montagna: fasce[3] / celleTerra2 },
     },
@@ -300,6 +313,149 @@ export function generaCarta(seme, opzioni = {}) {
   avanzamento?.('Verifiche', 0.92);
   carta.statistiche.ms = performance.now() - t0;
   return carta;
+}
+
+// ─── Fasi 6–7: clima e biomi (passo 7) ──────────────────────────────────
+
+/** Biomi: gli stessi codici del 2D (World.BIOME), così costi di viaggio (TRAVEL_COST) ed eventi restano validi. */
+export const BIOMA = {
+  ACQUA: 0, PIANURA: 1, FORESTA: 2, COLLINA: 3, MONTAGNA: 4, PALUDE: 5,
+  SABBIA: 6, NEVE: 7, GHIACCIO: 8, FIUME: 9, ROCCIA: 10, PIANURA_N: 11, PIANURA_S: 12,
+};
+export const NOMI_BIOMI = ['acqua', 'pianura', 'foresta', 'collina', 'montagna', 'palude', 'sabbia', 'neve',
+  'ghiaccio', 'fiume', 'roccia', 'pianura settentrionale', 'pianura meridionale'];
+
+// Temperature: media annua (°C). Lunghezze in km.
+export const CLIMA = {
+  latitudine: [-4, 21],          // al livello del mare: nord, sud (riga 0 = nord)
+  scostamento: 2,                // ± per seme (mondi più caldi o più freddi)
+  rumore: { lunghezza: 220, ampiezza: 3 },   // solo su grande scala (GDD: niente salti di clima)
+  gradiente: 0.0065,             // °C in meno per metro di quota
+  stagioni: { inverno: -9, estate: 8 },      // scarto dalla media annua (per il limite delle nevi)
+  neve: -5,                      // media annua sotto cui la neve resta tutto l'anno (Alpi: ~−5 °C a ~2900 m)
+  mareGhiacciato: -3,            // media annua del mare sotto cui il mare gela
+  bosco: 1.5,                    // limite degli alberi: media annua minima
+  umidita: { mare: 80, lunghezza: 150, monti: [800, 2000] },
+  // Biomi (soglie): collina dove il dislivello nelle 3×3 celle supera `mosso` m; roccia dove la pendenza
+  // della Carta supera `ripido` (o `ripidoAlto` sopra il limite degli alberi).
+  biomi: { mosso: 110, ripido: 0.45, ripidoAlto: 0.25, nord: 5, sud: 16,
+    deserto: { caldo: 16, secco: 0.32 }, palude: { quota: 40, umida: 0.68, caldo: 6, piatto: 45 },
+    boschi: { lunghezza: 28, copertura: [0.2, 0.42], umida: 0.3, caldo: 24 },
+    bordo: { lunghezza: 7, ampiezza: 1.5 } },   // soglie frastagliate: transizioni brevi e irregolari
+};
+
+/**
+ * Temperatura media annua al livello del mare (°C) per ogni cella: latitudine, scostamento del seme e un
+ * rumore su grande scala. La temperatura a una quota h è questa − CLIMA.gradiente · h.
+ */
+function temperatureBase(seme, cols, rows) {
+  const C = CLIMA, n = cols * rows;
+  const rng = mulberry32(derivaSeme(seme, 61));
+  const sposta = (rng() * 2 - 1) * C.scostamento;
+  const sT = derivaSeme(seme, 62);
+  const t = new Float32Array(n);
+  for (let y = 0; y < rows; y++) {
+    const lat = C.latitudine[0] + (C.latitudine[1] - C.latitudine[0]) * (y / (rows - 1));
+    for (let x = 0; x < cols; x++) {
+      t[y * cols + x] = lat + sposta + C.rumore.ampiezza * fbm(x, y, sT, C.rumore.lunghezza, 3);
+    }
+  }
+  return t;
+}
+
+/**
+ * Fasi 6–7: temperatura, umidità e biomi per cella.
+ * @returns {{ temperaturaMare: Float32Array, temperatura: Float32Array, umidita: Float32Array, bioma: Uint8Array,
+ *   copertura: number }}
+ */
+function climaEBiomi(seme, cols, rows, quota, mare, acque) {
+  const C = CLIMA, B = C.biomi, n = cols * rows;
+  const temperaturaMare = temperatureBase(seme, cols, rows);
+  const temperatura = new Float32Array(n);
+  for (let i = 0; i < n; i++) temperatura[i] = temperaturaMare[i] - C.gradiente * Math.max(0, quota[i]);
+
+  // Umidità 0…1: vicinanza al mare (1 / (1 + d / 80 km)), rumore su grande scala, piogge sui rilievi.
+  const dMare = distanze(cols, rows, (i) => mare[i] === 1);
+  const rng = mulberry32(derivaSeme(seme, 63));
+  const aridita = (rng() * 2 - 1) * 0.08;               // carattere: mondi più secchi o più umidi
+  const copertura = B.boschi.copertura[0] + rng() * (B.boschi.copertura[1] - B.boschi.copertura[0]);
+  const sU = derivaSeme(seme, 64), sB = derivaSeme(seme, 65), sF = derivaSeme(seme, 66), sJ = derivaSeme(seme, 67);
+  const umidita = new Float32Array(n);
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const i = y * cols + x;
+      const vicino = 1 / (1 + dMare[i] / C.umidita.mare);
+      const r = 0.5 + 0.5 * fbm(x, y, sU, C.umidita.lunghezza, 4);
+      const monti = smoothstep(C.umidita.monti[0], C.umidita.monti[1], quota[i]);
+      umidita[i] = Math.min(1, Math.max(0, 0.45 * vicino + 0.45 * r + 0.15 * monti - aridita));
+    }
+  }
+
+  // Dislivello nelle 3×3 celle e pendenza (Carta): collina, roccia.
+  // (il fondale conta come 0: accanto alla costa il dislivello è quello della terra)
+  const Q = (x, y) => Math.max(0, quota[Math.min(rows - 1, Math.max(0, y)) * cols + Math.min(cols - 1, Math.max(0, x))]);
+  const bioma = new Uint8Array(n);
+  const punteggio = new Float32Array(n).fill(-1);        // boschi: punteggio delle celle che li ammettono
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const i = y * cols + x;
+      const T = temperatura[i], T0 = temperaturaMare[i], u = umidita[i], q = quota[i];
+      if (mare[i]) { bioma[i] = T0 < C.mareGhiacciato ? BIOMA.GHIACCIO : BIOMA.ACQUA; continue; }
+      if (acque[i] === ACQUA.LAGO || acque[i] === ACQUA.LAGO_COSTIERO) {
+        bioma[i] = T < C.neve ? BIOMA.GHIACCIO : BIOMA.ACQUA; continue;
+      }
+      // Bordo frastagliato: un rumore fine sposta le soglie di temperatura (transizioni brevi e irregolari).
+      const j = B.bordo.ampiezza * fbm(x, y, sJ, B.bordo.lunghezza, 3);
+      let mn = Infinity, mx = -Infinity;
+      for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) { const v = Q(x + a, y + b); if (v < mn) mn = v; if (v > mx) mx = v; }
+      const mosso = mx - mn;
+      const gx = (Q(x + 1, y) - Q(x - 1, y)) / 2000, gy = (Q(x, y + 1) - Q(x, y - 1)) / 2000;
+      const pend = Math.sqrt(gx * gx + gy * gy);
+      let b;
+      if (T + j < C.neve) b = BIOMA.NEVE;
+      else if (pend > B.ripido || (T + j < C.bosco && pend > B.ripidoAlto)) b = BIOMA.ROCCIA;
+      else if (q >= 1500) b = BIOMA.MONTAGNA;
+      else if (q < B.palude.quota && u > B.palude.umida && T > B.palude.caldo && mosso < B.palude.piatto
+        && dMare[i] <= 4) b = BIOMA.PALUDE;
+      else if (T0 + j > B.deserto.caldo && u < B.deserto.secco && q < 700) b = BIOMA.SABBIA;
+      else if (mosso > B.mosso || q >= 700) b = BIOMA.COLLINA;
+      else b = T + j < B.nord ? BIOMA.PIANURA_N : T + j > B.sud ? BIOMA.PIANURA_S : BIOMA.PIANURA;
+      // Boschi a grumi: grande scala + umidità + dettaglio dei bordi; sotto il limite degli alberi.
+      if ((b === BIOMA.PIANURA || b === BIOMA.PIANURA_N || b === BIOMA.PIANURA_S || b === BIOMA.COLLINA
+        || b === BIOMA.MONTAGNA) && T + j > C.bosco && T < B.boschi.caldo && u > B.boschi.umida) {
+        const c1 = 0.5 + 0.5 * fbm(x, y, sB, B.boschi.lunghezza, 3);
+        const c2 = 0.5 + 0.5 * fbm(x, y, sF, B.boschi.lunghezza / 2.2, 2);
+        punteggio[i] = c1 * 0.55 + u * 0.25 + c2 * 0.2 - (b === BIOMA.MONTAGNA ? 0.06 : 0);
+      }
+      bioma[i] = b;
+    }
+  }
+  // Soglia dei boschi per quantile: la parte di terra a bosco è la copertura del seme (20–42 %).
+  let terra = 0;
+  const validi = [];
+  for (let i = 0; i < n; i++) {
+    if (!mare[i] && acque[i] === ACQUA.TERRA) terra++;
+    if (punteggio[i] >= 0) validi.push(punteggio[i]);
+  }
+  if (validi.length) {
+    validi.sort((a, b) => a - b);
+    const parte = Math.min(0.9, copertura * terra / validi.length);
+    const soglia = validi[Math.min(validi.length - 1, Math.floor((1 - parte) * validi.length))];
+    for (let i = 0; i < n; i++) if (punteggio[i] >= soglia) bioma[i] = BIOMA.FORESTA;
+  }
+  return { temperaturaMare, temperatura, umidita, bioma, copertura };
+}
+
+/**
+ * Quota (m) del limite delle nevi in un punto, dalla temperatura media annua al livello del mare e dalla
+ * stagione: la quota a cui la temperatura della stagione scende a 0 °C.
+ * @param {number} t0  temperatura media annua al livello del mare (°C)
+ * @param {'inverno'|'primavera'|'estate'|'autunno'} stagione
+ */
+export function limiteNevi(t0, stagione = 'primavera') {
+  const S = CLIMA.stagioni;
+  const scarto = stagione === 'inverno' ? S.inverno : stagione === 'estate' ? S.estate : (S.inverno + S.estate) / 4;
+  return (t0 + scarto) / CLIMA.gradiente;
 }
 
 // ─── Fasi 2b e 4a: fasce di quota, erosione fluviale ─────────────────────

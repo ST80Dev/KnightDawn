@@ -9,7 +9,7 @@
 // Da zoom ×4 la parte visibile si ridisegna con le quote vere delle Scene (stessa funzione del terreno 3D,
 // fino a pochi metri per campione): ombreggiatura e curve di livello, per scegliere una cima o una conca.
 
-import { ACQUA } from '../mondo/carta.js';
+import { ACQUA, BIOMA, NOMI_BIOMI } from '../mondo/carta.js';
 import { verificaFiumi, verificaPanorami } from '../mondo/verifica.js';
 import { semeDaTesto, derivaSeme } from '../mondo/rumore.js';
 import { quotaMondo, scavaFiumi, livelloLago, raffinaZona, percorsiFiumi } from '../mondo/scena.js';
@@ -24,6 +24,18 @@ const TERRA = [
   [1500, [132, 112, 90]],
   [3500, [76, 62, 52]],
 ];
+// Livelli (passo 7): temperatura media annua alla quota della cella, umidità, biomi.
+const SCALA_T = [[-15, [80, 100, 185]], [-5, [150, 170, 220]], [0, [232, 236, 242]], [8, [168, 200, 120]],
+  [15, [232, 200, 100]], [24, [196, 84, 48]]];
+const SCALA_U = [[0, [205, 172, 110]], [0.5, [150, 182, 120]], [1, [46, 104, 150]]];
+const COLORI_BIOMI = [];
+COLORI_BIOMI[BIOMA.ACQUA] = [74, 120, 150]; COLORI_BIOMI[BIOMA.PIANURA] = [172, 192, 112];
+COLORI_BIOMI[BIOMA.FORESTA] = [66, 106, 58]; COLORI_BIOMI[BIOMA.COLLINA] = [158, 150, 96];
+COLORI_BIOMI[BIOMA.MONTAGNA] = [128, 114, 100]; COLORI_BIOMI[BIOMA.PALUDE] = [92, 112, 84];
+COLORI_BIOMI[BIOMA.SABBIA] = [222, 196, 138]; COLORI_BIOMI[BIOMA.NEVE] = [240, 242, 246];
+COLORI_BIOMI[BIOMA.GHIACCIO] = [200, 222, 236]; COLORI_BIOMI[BIOMA.FIUME] = [60, 110, 150];
+COLORI_BIOMI[BIOMA.ROCCIA] = [142, 136, 130]; COLORI_BIOMI[BIOMA.PIANURA_N] = [166, 150, 116];
+COLORI_BIOMI[BIOMA.PIANURA_S] = [206, 190, 128];
 const FASCE = [['pianura', 0, 200], ['collina', 200, 700], ['pedemonte', 700, 1500], ['montagna', 1500, Infinity]];
 const MARE_BASSO = [122, 158, 168], MARE_FONDO = [40, 70, 92];
 const LAGO = [104, 150, 178];
@@ -54,8 +66,11 @@ function tinta(scala, t) {
   return scala[scala.length - 1][1];
 }
 
-/** Pixel RGBA (una cella = un pixel) della Carta: tinte per quota, rilievo ombreggiato, costa. */
-export function disegnaRilievo(carta, pixel = new Uint8ClampedArray(carta.cols * carta.rows * 4)) {
+/**
+ * Pixel RGBA (una cella = un pixel) della Carta: tinte del livello (quota, temperatura, umidità o biomi),
+ * rilievo ombreggiato, costa.
+ */
+export function disegnaRilievo(carta, pixel = new Uint8ClampedArray(carta.cols * carta.rows * 4), livello = 'rilievo') {
   const { cols, rows, quota, mare, acque, livelloAcqua } = carta;
   const lago = (i) => acque && acque[i] === ACQUA.LAGO;
   const q = (x, y) => {
@@ -70,7 +85,9 @@ export function disegnaRilievo(carta, pixel = new Uint8ClampedArray(carta.cols *
     for (let x = 0; x < cols; x++) {
       const i = y * cols + x;
       let c;
-      if (mare[i]) {
+      if (mare[i] && livello === 'biomi' && carta.bioma) {
+        c = COLORI_BIOMI[carta.bioma[i]];
+      } else if (mare[i]) {
         c = tinta([[0, MARE_BASSO], [1, MARE_FONDO]], Math.sqrt(Math.min(1, -quota[i] / 2500)));
       } else {
         const dx = (q(x + 1, y) - q(x - 1, y)) * 0.5 / carta.cella * ESAGERAZIONE;
@@ -78,7 +95,11 @@ export function disegnaRilievo(carta, pixel = new Uint8ClampedArray(carta.cols *
         const l = Math.sqrt(dx * dx + dy * dy + 1);
         const luce = (-dx * LUCE[0] - dy * LUCE[1] + LUCE[2]) / l / piatto;
         const ombra = 0.55 + 0.45 * Math.min(1.5, Math.max(0, luce));
-        c = tinta(TERRA, lago(i) ? livelloAcqua[i] : quota[i]).map((v) => v * ombra);
+        const base = livello === 'temperatura' && carta.temperatura ? tinta(SCALA_T, carta.temperatura[i])
+          : livello === 'umidita' && carta.umidita ? tinta(SCALA_U, carta.umidita[i])
+            : livello === 'biomi' && carta.bioma ? COLORI_BIOMI[carta.bioma[i]]
+              : tinta(TERRA, lago(i) ? livelloAcqua[i] : quota[i]);
+        c = base.map((v) => v * ombra);
         const costa = (x > 0 && mare[i - 1]) || (x < cols - 1 && mare[i + 1])
           || (y > 0 && mare[i - cols]) || (y < rows - 1 && mare[i + cols]);
         if (costa) c = c.map((v, k) => v * 0.45 + COSTA[k] * 0.55);
@@ -114,10 +135,14 @@ export function createCartaVista(contenitore, opzioni = {}) {
       <button type="button" class="genera">Genera</button>
       <button type="button" class="casuale">Seme casuale</button>
       <button type="button" class="panorami" title="Mostra le alture da cui si vede lontano (regola dei punti panoramici)">Punti panoramici</button>
+      <select class="livello" title="Che cosa mostra la Carta">
+        <option value="rilievo">Rilievo</option><option value="temperatura">Temperatura</option>
+        <option value="umidita">Umidità</option><option value="biomi">Biomi</option>
+      </select>
       <button type="button" class="intera" title="Tutta la Carta">Vista intera</button>
       <button type="button" class="centra" title="Ingrandisci attorno al cavaliere">Centra sul cavaliere</button>
       <button type="button" class="tavullia" title="Terreno reale di Tavullia con il castello (scena di prova)">Tavullia (prova)</button>
-      <span class="legenda" title="Colore = quota, non biomi (biomi al passo 7)">quota 0 <i></i> 3500 m · non biomi · <b>▴</b> punti panoramici</span>
+      <span class="legenda"></span>
       <span class="info"></span>
       <span class="tasto">rotella: zoom · trascina: sposta · clic sulla terra: vai lì · M: torna alla scena</span>
     </div>
@@ -128,9 +153,24 @@ export function createCartaVista(contenitore, opzioni = {}) {
       <canvas class="istogramma" width="360" height="56" title="Quote della terra, a passi di 100 m"></canvas>
     </div>`;
   contenitore.appendChild(el);
-  el.querySelector('.legenda i').style.background = 'linear-gradient(to right, '
-    + TERRA.map(([, c], k) => `rgb(${c.join(',')}) ${k / (TERRA.length - 1) * 100}%`).join(', ') + ')';
-  el.querySelector('.legenda b').style.color = COLORE_PANORAMA;
+  const elLegenda = el.querySelector('.legenda');
+  const selLivello = el.querySelector('.livello');
+  let livello = 'rilievo';
+  const sfumatura = (scala) => 'linear-gradient(to right, ' + scala.map(([, c], k) => `rgb(${c.join(',')}) ${k / (scala.length - 1) * 100}%`).join(', ') + ')';
+  const pallino = (c) => `<i style="width:10px;background:rgb(${c.join(',')})"></i>`;
+  function legenda() {
+    const pan = ` · <b style="color:${COLORE_PANORAMA}">▴</b> punti panoramici`;
+    if (livello === 'temperatura') elLegenda.innerHTML = `media annua −15 <i style="background:${sfumatura(SCALA_T)}"></i> 24 °C` + pan;
+    else if (livello === 'umidita') elLegenda.innerHTML = `umidità secco <i style="background:${sfumatura(SCALA_U)}"></i> umido` + pan;
+    else if (livello === 'biomi') {
+      elLegenda.innerHTML = [BIOMA.PIANURA_N, BIOMA.PIANURA, BIOMA.PIANURA_S, BIOMA.COLLINA, BIOMA.FORESTA,
+        BIOMA.MONTAGNA, BIOMA.ROCCIA, BIOMA.NEVE, BIOMA.GHIACCIO, BIOMA.SABBIA, BIOMA.PALUDE]
+        .map((b) => `${pallino(COLORI_BIOMI[b])} ${NOMI_BIOMI[b]}`).join(' ') + pan;
+    } else elLegenda.innerHTML = `quota 0 <i style="background:${sfumatura(TERRA)}"></i> 3500 m · non biomi` + pan;
+  }
+  legenda();
+  selLivello.addEventListener('change', () => { livello = selLivello.value; legenda(); if (carta) mostra(carta); });
+  selLivello.addEventListener('keydown', (e) => e.stopPropagation());
   const elFasce = el.querySelector('.fasce');
   const isto = el.querySelector('.istogramma');
 
@@ -197,7 +237,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
     rilievo.height = carta.rows;
     const c2 = rilievo.getContext('2d');
     const img = c2.createImageData(carta.cols, carta.rows);
-    disegnaRilievo(carta, img.data);
+    disegnaRilievo(carta, img.data, livello);
     c2.putImageData(img, 0, 0);
     tracciatiLaghi = costruisciLaghi();
     tracciatiFiumi = costruisciFiumi();
@@ -282,7 +322,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
   let chiaveInCorso = '', lavoro = 0, attesa = 0;
   const chiaveVista = () => `${carta.seme}|${vista.cx}|${vista.cy}|${vista.z}|${larghezza}|${altezza}`;
   function chiediDettaglio() {
-    if (vista.z < DETTAGLIO.da) { clearTimeout(attesa); chiaveInCorso = ''; lavoro++; return; }
+    if (vista.z < DETTAGLIO.da || livello !== 'rilievo') { clearTimeout(attesa); chiaveInCorso = ''; lavoro++; return; }
     const k = chiaveVista();
     if (k === chiaveInCorso || dettaglio?.chiave === k) return;
     clearTimeout(attesa);
@@ -366,7 +406,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
     // Vista intera: celle nette. Da ×3: rilievo sfumato (più leggibile; coordinate e clic restano esatti).
     ctx.imageSmoothingEnabled = vista.z >= 3;
     ctx.drawImage(rilievo, 0, 0);
-    if (dettaglio && dettaglio.chiave.startsWith(carta.seme + '|') && vista.z >= DETTAGLIO.da) {
+    if (dettaglio && dettaglio.chiave.startsWith(carta.seme + '|') && vista.z >= DETTAGLIO.da && livello === 'rilievo') {
       ctx.imageSmoothingEnabled = true;            // i laghi ci sono già, con la forma che hanno nelle Scene
       ctx.drawImage(dettaglio.img, dettaglio.x0, dettaglio.y0, dettaglio.w, dettaglio.h);
     } else {
@@ -416,7 +456,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
     elInfo.textContent = `${diPartita() ? 'mondo della partita' : 'anteprima'} · ${carta.cols}×${carta.rows} km`
       + ` · mare ${fmt(st.frazioneMare * 100, 1)} % · ${carta.daCache ? 'dalla cache' : `${fmt(st.ms)} ms`}`
       + ` · controllo ${carta.controllo} · zoom ×${fmt(vista.z, 1)}`
-      + (vista.z < DETTAGLIO.da ? '' : dettaglio?.chiave === chiaveVista()
+      + (vista.z < DETTAGLIO.da || livello !== 'rilievo' ? '' : dettaglio?.chiave === chiaveVista()
         ? ` · rilievo delle Scene, curve ogni ${dettaglio.eq} m${dettaglio.percorsi ? ' · fiumi come nelle Scene' : ''}`
         : ' · calcolo del rilievo delle Scene…');
     chiediDettaglio();
@@ -472,7 +512,9 @@ export function createCartaVista(contenitore, opzioni = {}) {
         + ` ${verifica.foci.mare}, in lago ${verifica.foci.lago}, oltre il confine ${verifica.foci.bordo}`
         + ` · verifica ${verifica.ok ? 'superata' : `FALLITA (${verifica.errori.length}): ${verifica.errori[0]}`}` : '')
       + (panorami ? ` · punti panoramici ${fmt(panorami.punti.length)}: ${fmt(panorami.copertura * 100, 1)} % della terra`
-        + ` entro ${panorami.raggio} km da uno (regola ≥ ${fmt(panorami.soglia * 100)} %: ${panorami.ok ? 'rispettata' : 'NON rispettata'})` : '');
+        + ` entro ${panorami.raggio} km da uno (regola ≥ ${fmt(panorami.soglia * 100)} %: ${panorami.ok ? 'rispettata' : 'NON rispettata'})` : '')
+      + (carta.statistiche.biomi ? ' · biomi: ' + Object.entries(carta.statistiche.biomi).filter(([, v]) => v >= 0.0005)
+        .sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${fmt(v * 100, 1)} %`).join(', ') : '');
   }
 
   function apri() {
@@ -561,7 +603,9 @@ export function createCartaVista(contenitore, opzioni = {}) {
       + (carta.acque?.[i] === ACQUA.LAGO ? `lago, superficie a ${fmt(carta.livelloAcqua[i])} m, fondo a ${fmt(q)} m`
         : carta.acque?.[i] === ACQUA.LAGO_COSTIERO ? `lago costiero, fondo a ${fmt(-q)} m sotto il livello del mare`
           : carta.mare[i] ? `mare, profondità ${fmt(-q)} m`
-            : `${esatta}quota della cella ${fmt(q)} m (${fasciaDi(q)}) · catena ${fmt(carta.catena[i], 2)}`
+            : `${esatta}quota della cella ${fmt(q)} m (${fasciaDi(q)})`
+              + (carta.bioma ? ` · ${NOMI_BIOMI[carta.bioma[i]]} · ${fmt(carta.temperatura[i], 1)} °C · umidità ${fmt(carta.umidita[i] * 100)} %` : '')
+              + ` · catena ${fmt(carta.catena[i], 2)}`
               + (carta.bacino?.[i] >= carta.sogliaFiume ? ` · fiume, bacino ${fmt(carta.bacino[i])} km²` : ''));
   });
   const fine = (e) => {
