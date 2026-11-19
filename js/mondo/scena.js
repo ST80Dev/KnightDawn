@@ -57,9 +57,40 @@ function quoteLisce(carta) {
       if (acque[i] === ACQUA.LAGO) { base[i] = livelloAcqua[i]; fondo[i] = livelloAcqua[i] - quota[i]; }
     }
   }
+  if (carta.mare) correggiCosta(carta, base);
   q = { base, fondo };
   _liscia.set(carta, q);
   return q;
+}
+
+// La B-spline cubica non interpola: al centro di una cella vale 4/9 della cella e il resto delle vicine. Un braccio
+// di mare largo 1–2 km (celle a −40 m) fra terre a 100–200 m saliva sopra lo zero: nella Scena era terra, sulla
+// Carta mare, e la Carta non lasciava sceglierlo [segnalato dall'utente]. Comanda la Carta: si abbassano i punti di
+// controllo del mare (e si alzano quelli della terra) finché al centro di ogni cella il segno è quello della Carta.
+const COSTA_SCENA = { mare: 15, terra: 3, giri: 12 };   // m sotto/sopra lo zero al centro della cella
+
+function correggiCosta(carta, base) {
+  const { cols, rows, mare } = carta, K = COSTA_SCENA, W = [1 / 6, 4 / 6, 1 / 6];
+  const valore = (x, y) => {
+    let s = 0;
+    for (let b = -1; b <= 1; b++) {
+      const j = specchio(y + b, rows);
+      for (let a = -1; a <= 1; a++) s += W[a + 1] * W[b + 1] * base[j * cols + specchio(x + a, cols)];
+    }
+    return s;
+  };
+  for (let giro = 0; giro < K.giri; giro++) {
+    let cambiate = 0;
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const i = y * cols + x, v = valore(x, y);
+        // Si corregge di poco più del necessario (le vicine si muovono anch'esse): converge in pochi giri.
+        if (mare[i] && v > -K.mare) { base[i] -= 1.2 * (v + K.mare) / (W[1] * W[1]); cambiate++; }
+        else if (!mare[i] && v < K.terra) { base[i] += 1.2 * (K.terra - v) / (W[1] * W[1]); cambiate++; }
+      }
+    }
+    if (!cambiate) break;
+  }
 }
 
 /**
@@ -253,8 +284,11 @@ function campoCarta(carta, campo, x, z) {
 // rilievo vi torna man mano: la valle segue i rilievi attorno invece di essere un solco liscio e uniforme.
 
 const FIUMI_SCENA = {
-  semilarghezza: { base: 1.5, perRadice: 0.6, max: 60 }, // m: base + perRadice·√bacino (km²): torrente da 20 km² ~8 m
-  profondita: { base: 0.5, perRadice: 0.022 },           // m d'acqua: ~0,8 m a 150 km² (si guada), ~1,2 m a 1000 km², ~2,7 m a 10 000 km²
+  // Larghezza e profondità crescono con il bacino (deciso con l'utente: torrenti piccoli alla sorgente, fiumi
+  // grandi alle foci e dopo molti affluenti). Semilarghezza = k · bacino^esponente (km²), come nei fiumi veri
+  // (larghezza ∝ portata^0,5–0,6): larghezza ~3,5 m a 20 km², ~12 m a 150, ~35 m a 1000, ~65 m a 2500.
+  semilarghezza: { k: 0.3, esponente: 0.6, min: 1.2, max: 70 },
+  profondita: { base: 0.3, perRadice: 0.045 },           // m d'acqua: ~0,5 a 20 km², ~0,85 a 150 (si guada), ~1,7 a 1000, ~2,5 a 2500
   sponda: { larghezza: 6, altezza: 0.8 },                // m: sponde basse oltre il pelo dell'acqua
   argine: 0.4,                                          // pendenza oltre le sponde dove il terreno è più basso
   versante: 0.12, curva: 2,                              // pendenza dei versanti: versante + curva·(fuori/R)²
@@ -285,8 +319,8 @@ export function fiumiScena(carta) {
     const w = new Float64Array(m), prof = new Float64Array(m);
     for (let i = 0; i < m; i++) {
       x[i] = f[i * 4] * C; z[i] = f[i * 4 + 1] * C;
-      const r = Math.sqrt(Math.max(1, f[i * 4 + 2]));
-      w[i] = Math.min(F.semilarghezza.max, F.semilarghezza.base + F.semilarghezza.perRadice * r);
+      const b = Math.max(1, f[i * 4 + 2]), r = Math.sqrt(b), SW = F.semilarghezza;
+      w[i] = Math.min(SW.max, Math.max(SW.min, SW.k * Math.pow(b, SW.esponente)));
       prof[i] = F.profondita.base + F.profondita.perRadice * r;
       // Letto sotto la superficie liscia della Carta: pelo dell'acqua F.sponda.altezza sotto il terreno.
       // Vicino ai laghi conta la riva rialzata come nella Scena (scavaFiumi), dentro il livello del lago.

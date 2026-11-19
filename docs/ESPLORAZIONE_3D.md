@@ -535,8 +535,12 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
      0,2 km, alle confluenze lo stesso letto del fiume principale e a monte mai più basso. Verificato: 0
      risalite su 421 tracciati (seme 48213).
    - *Sezione* (`scavaFiumi`, funzione del solo punto del mondo, quindi blocchi accanto e orizzonte
-     combaciano): alveo a parabola largo 2·(3 + 0,6·√bacino) m (max 120 m), profondo 0,5 + 0,022·√bacino m
-     (~0,8 m a 150 km², si guada; ~2,7 m a 10 000 km²), sponde basse di 6 m, poi versanti che risalgono
+     combaciano): alveo a parabola largo 2·0,3·bacino^0,6 m (max 140 m; come nei fiumi veri, larghezza ∝
+     portata^0,5–0,6), profondo 0,3 + 0,045·√bacino m. Il fiume cresce lungo il corso [richiesto
+     dall'utente: torrenti piccoli alla sorgente, grandi alle foci e dopo gli affluenti]: ~3,5 m e ~0,5 m
+     d'acqua a 20 km², ~12 m e ~0,85 m a 150 (si guada ancora), ~35 m e ~1,7 m a 1000, ~65 m e ~2,5 m a
+     2500 km² (prima 8 m → 17 m → 65 m: i torrenti erano già larghi). Seme 48213: larghezze p5/p50/p95
+     4/16/63 m; il fiume più lungo va da 12 a 67 m. Sponde basse di 6 m, poi versanti che risalgono
      fino al terreno sempre più ripidi entro 1 km; dove il terreno è più basso del fiume un argine che
      scende piano (il fiume non resta sospeso).
    - *Acqua:* nastro lungo il tracciato al pelo dell'acqua; laghi in quota come quadrati da ~31 m al livello
@@ -567,6 +571,12 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
      per le celle di lago e toglie poi la profondità interpolata tra le celle (a riva il terreno resta quello
      dei dintorni); in più, nella fascia attorno al lago, il terreno sale fino al livello + 0,5 m. Il letto
      dei fiumi vicino ai laghi segue la stessa riva; un immissario arriva al livello del lago.
+   - *Bracci di mare che nella Scena erano terra.* La B-spline non interpola: un braccio di mare largo 1–2 km
+     (celle a −40 m) fra terre alte saliva sopra lo zero; nella Scena era terra percorribile, sulla Carta mare
+     (non si poteva scegliere). Misurato: 44 celle di mare su 2133 (seme 48213) più che a metà terra. Comanda la
+     Carta: `correggiCosta` (scena.js) abbassa i punti di controllo del mare (al centro della cella ≤ −15 m) e
+     alza quelli della terra (≥ +3 m), in pochi giri, 3–5 ms. Ora 0 celle di mare a metà terra su 3 semi; terra
+     a metà mare 0–8 celle (resti di riva). Fiumi, giunture e terrapieni invariati.
    - *Rilievo fine a labirinto e fiumi tra gole o su terrapieni.* Misurato: il fiume non sale rispetto alla
      Carta (1 m in mediana, 26 m all'1 % in pedemonte); è il rilievo fine della Scena, generato senza sapere
      dei fiumi, a mettere colline (66 m nel 10 % dei punti, 155 m nell'1 %) o conche sul tracciato. Prima
@@ -1339,6 +1349,14 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      massi 20, affioramenti 40, tronchi caduti 15), quota dal triangolo disegnato. 13 tipi: latifoglia, conifera,
      pino, albero di riva, albero secco, cespuglio, arbusto alto, sterpo, canne, sasso, masso, affioramento, tronco.
      Erba, fiori e felci (solo vicino al cavaliere) arrivano al passo 5.
+   - *Confini netti tra biomi* [richiesto dall'utente dopo il passo 1: «i colori si sfumano nei bordi»]: in
+     `coperturaMondo` i pesi bilineari delle 4 celle della Carta si accentuano (peso di ciascun bioma alla potenza
+     8, passaggio largo ~140 m invece di ~1 km), lo spostamento dei confini ha 4 ottave (frastagliato fino a
+     ~200 m); roccia su 6° di pendenza invece di 12°, affioramenti con soglia più stretta. Il clima resta continuo.
+     Vale per colore e vegetazione insieme (bosco più netto ai margini). Effetto visibile ma modesto: la
+     morbidezza che resta viene dal colore per vertice (7,8 m nel blocco, 62,5–2000 m negli anelli) e dalle
+     normali lisce; il dettaglio per pixel (più fitto vicino, meno lontano) richiede un materiale del terreno
+     con rumore nel fragment shader [proposto, da decidere].
    - *Punti di controllo* (`js/3d/vegetazione3d.js`): un punto colorato per oggetto, 3 chiamate; tasto `V`.
      F3: oggetti per tipo, chiamate, ms di posizionamento (e dei campi), chiamate e triangoli totali.
    - *Misure* (Node, blocchi di 2×2 km): posizionamento 100–200 ms (campi sui vertici 55–100 ms; il blocco ne costa
