@@ -574,9 +574,23 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
      ~415 m ovunque), cresce con il dislivello locale della Carta ed è piena sulle creste, dimezzata nei
      fondovalle (`DETTAGLIO.forma`). Pendenza p50/p90 in pedemonte da 17°/33° a 12°/25°, in montagna da
      22°/37° a 13°/27°, collina quasi invariata (6,0°/13,2° → 5,5°/12,5°); area in conche > 5 m dimezzata.
-     **Da fare (deciso con l'utente):** fiumi tracciati sul terreno della Scena tra punti fissi della Carta
-     (percorso a costo minimo in un corridoio, che gira attorno alle alture), in `js/mondo/fiumi.js`, al
-     posto delle correzioni del terreno attorno al tracciato.
+     Le montagne risultavano troppo dolci (segnalato dall'utente): fondovalle meno smorzati, più rilievo
+     dove la Carta è accidentata e in montagna fino a 220 m in più sulle creste. Pendenza p50/p90: collina
+     6,4°/14,2°, pedemonte 13,8°/28,3°, montagna 19,5°/34,0°.
+   - **Fiumi tracciati sul terreno della Scena** (deciso con l'utente, `js/mondo/fiumi.js`). Punti fissi
+     solo a sorgente, foce e confluenze (alla confluenza nel punto più basso di una griglia 7×7 a 80 m); il
+     loro letto scende sempre lungo il fiume. Tra due punti fissi il percorso è quello a costo minimo su una
+     griglia di 40 m (16 direzioni) in un corridoio di 800 m attorno al tracciato della Carta: costa salire
+     sopra il letto atteso (al quadrato, 6 m raddoppiano il costo), poco allontanarsi dal tracciato (in
+     pianura tiene le anse della Carta); poi punti ogni 20 m e media mobile su ~200 m. Letto: la successione
+     non crescente più vicina al terreno incontrato (scava i dossi e colma le conche quanto basta). Il
+     percorso si cerca per i tratti entro 6 km dalla Scena (e nella Carta zoomata entro una finestra di 50
+     km, dove si disegnano i fiumi come nelle Scene); più lontano l'orizzonte usa il tracciato della Carta.
+     Misure (seme 855588, tratti entro 20 km): terreno sopra il pelo dell'acqua sull'asse p10/p50/p90/p99
+     da −19/3/28/76 m (tracciato della Carta) a −5/1/8/28 m; a 150 m dall'asse −9/3/21/38 m (versanti di
+     valle, non gole). Tempi: preparazione dei punti fissi ~0,6 s alla prima Scena, percorsi 60–400 ms al
+     cambio di zona, orizzonte 250–390 ms. Limiti: tratti lunghi tra due confluenze si calcolano interi; nei
+     casi peggiori (1 %) restano tagli o colmate di 20–30 m.
 7. **Temperatura, umidità, biomi** (fasi 6–7) e limite delle nevi nello shader; colori della Scena per
    bioma. *Prova:* livelli della Carta; neve sulle cime.
 8. **Regole di varietà e verifica automatica** (fase 8) su N semi, con esito per regola. Con i passi 3 e
