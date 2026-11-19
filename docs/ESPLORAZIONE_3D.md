@@ -535,8 +535,12 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
      0,2 km, alle confluenze lo stesso letto del fiume principale e a monte mai più basso. Verificato: 0
      risalite su 421 tracciati (seme 48213).
    - *Sezione* (`scavaFiumi`, funzione del solo punto del mondo, quindi blocchi accanto e orizzonte
-     combaciano): alveo a parabola largo 2·(3 + 0,6·√bacino) m (max 120 m), profondo 0,5 + 0,022·√bacino m
-     (~0,8 m a 150 km², si guada; ~2,7 m a 10 000 km²), sponde basse di 6 m, poi versanti che risalgono
+     combaciano): alveo a parabola largo 2·0,3·bacino^0,6 m (max 140 m; come nei fiumi veri, larghezza ∝
+     portata^0,5–0,6), profondo 0,3 + 0,045·√bacino m. Il fiume cresce lungo il corso [richiesto
+     dall'utente: torrenti piccoli alla sorgente, grandi alle foci e dopo gli affluenti]: ~3,5 m e ~0,5 m
+     d'acqua a 20 km², ~12 m e ~0,85 m a 150 (si guada ancora), ~35 m e ~1,7 m a 1000, ~65 m e ~2,5 m a
+     2500 km² (prima 8 m → 17 m → 65 m: i torrenti erano già larghi). Seme 48213: larghezze p5/p50/p95
+     4/16/63 m; il fiume più lungo va da 12 a 67 m. Sponde basse di 6 m, poi versanti che risalgono
      fino al terreno sempre più ripidi entro 1 km; dove il terreno è più basso del fiume un argine che
      scende piano (il fiume non resta sospeso).
    - *Acqua:* nastro lungo il tracciato al pelo dell'acqua; laghi in quota come quadrati da ~31 m al livello
@@ -567,6 +571,12 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
      per le celle di lago e toglie poi la profondità interpolata tra le celle (a riva il terreno resta quello
      dei dintorni); in più, nella fascia attorno al lago, il terreno sale fino al livello + 0,5 m. Il letto
      dei fiumi vicino ai laghi segue la stessa riva; un immissario arriva al livello del lago.
+   - *Bracci di mare che nella Scena erano terra.* La B-spline non interpola: un braccio di mare largo 1–2 km
+     (celle a −40 m) fra terre alte saliva sopra lo zero; nella Scena era terra percorribile, sulla Carta mare
+     (non si poteva scegliere). Misurato: 44 celle di mare su 2133 (seme 48213) più che a metà terra. Comanda la
+     Carta: `correggiCosta` (scena.js) abbassa i punti di controllo del mare (al centro della cella ≤ −15 m) e
+     alza quelli della terra (≥ +3 m), in pochi giri, 3–5 ms. Ora 0 celle di mare a metà terra su 3 semi; terra
+     a metà mare 0–8 celle (resti di riva). Fiumi, giunture e terrapieni invariati.
    - *Rilievo fine a labirinto e fiumi tra gole o su terrapieni.* Misurato: il fiume non sale rispetto alla
      Carta (1 m in mediana, 26 m all'1 % in pedemonte); è il rilievo fine della Scena, generato senza sapere
      dei fiumi, a mettere colline (66 m nel 10 % dei punti, 155 m nell'1 %) o conche sul tracciato. Prima
@@ -1339,6 +1349,23 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      massi 20, affioramenti 40, tronchi caduti 15), quota dal triangolo disegnato. 13 tipi: latifoglia, conifera,
      pino, albero di riva, albero secco, cespuglio, arbusto alto, sterpo, canne, sasso, masso, affioramento, tronco.
      Erba, fiori e felci (solo vicino al cavaliere) arrivano al passo 5.
+   - *Confini netti tra biomi* [richiesto dall'utente dopo il passo 1: «i colori si sfumano nei bordi»]: in
+     `coperturaMondo` i pesi bilineari delle 4 celle della Carta si accentuano (peso di ciascun bioma alla potenza
+     8, passaggio largo ~140 m invece di ~1 km), lo spostamento dei confini ha 4 ottave (frastagliato fino a
+     ~200 m); roccia su 6° di pendenza invece di 12°, affioramenti con soglia più stretta. Il clima resta continuo.
+     Vale per colore e vegetazione insieme (bosco più netto ai margini). Effetto visibile ma modesto: la
+     morbidezza che resta viene dal colore per vertice (7,8 m nel blocco, 62,5–2000 m negli anelli) e dalle
+     normali lisce.
+   - *Colore per pixel* [chiesto dall'utente: «più vicino più definito, più lontano meno»; fatto nella sessione
+     M6]: `materialeSuolo` (terrain.js), usato dal blocco e dagli anelli dell'orizzonte. I vertici portano gli
+     strati di `coloreMondo` (base, peso di roccia e neve, variazione, tono della roccia: attributi `base` e
+     `strati`; `color` resta il colore completo per vertice). Nel fragment shader roccia e neve hanno una soglia
+     per pixel sul peso interpolato più un rumore del mondo (scale 2–512 m): bordi netti e frastagliati, morbidi
+     da lontano per anti-alias (`fwidth`); prato e roccia hanno un dettaglio di luminosità (2–128 m) che si
+     spegne con la distanza (scala s tra 60·s e 200·s m). Rumore periodico su 8192 m in coordinate del mondo:
+     blocchi diversi danno lo stesso disegno. `coperturaMondo` non cambia: la roccia piena dipinta sta dove il
+     peso di roccia supera ~0,5 (± il rumore), dove la vegetazione mette affioramenti e sassi. Da misurare gli
+     FPS su GPU vera (in headless nessun errore).
    - *Punti di controllo* (`js/3d/vegetazione3d.js`): un punto colorato per oggetto, 3 chiamate; tasto `V`.
      F3: oggetti per tipo, chiamate, ms di posizionamento (e dei campi), chiamate e triangoli totali.
    - *Misure* (Node, blocchi di 2×2 km): posizionamento 100–200 ms (campi sui vertici 55–100 ms; il blocco ne costa
@@ -1461,6 +1488,87 @@ Carta e `VERSIONE_GENERATORE` invariate.
 8. **Griglia del blocco allineata al mondo: fatta qui** (`centroBlocco` in `scena.js`).
 9. **Bordo del blocco** (stacco tra gli ultimi alberi e il colore piatto dell'orizzonte): **non affrontato**, si
    vedrà più avanti.
+
+## Strade e sentieri (proposta, da approvare)
+
+> Chiesto dall'utente (novembre 2026): «strade di terra battuta che colleghino gli elementi di colline e pianure,
+> e sentieri di montagna; un compromesso tra il tragitto più breve e pendenze non esagerate, a cavallo e a
+> piedi». Riferimenti: `docs/GDD.md` §2 («Strade, ponti e guadi», valichi e forcelle) e §3 «Viaggio».
+> **Stato: piano da approvare; nessun codice.**
+
+**Cosa c'è oggi** [Certo, dal codice]: rocche e borghi di M7 (3 per mondo), valichi (2 per mondo), gruppi
+montuosi con le forcelle, fiumi con bacino, profondità e guadabilità (fino a ~0,9 m, bacino ~150 km²). Il
+viottolo dalle porte del borgo è l'unica «strada». Il GDD prevede 30–40 castelli e 60–100 villaggi: **la rete
+vera ha bisogno di luoghi che ancora non ci sono** [Certo]. Con 3 rocche e 2 valichi una rete generata oggi è
+rada; il generatore deve quindi prendere i nodi come dati e funzionare uguale quando i luoghi arriveranno.
+
+### Decisioni tecniche (proposte)
+
+**1. Due scale, come i fiumi.** Sulla Carta la **rete** (celle di 1 km, ricerca A* a 16 direzioni, pochi ms per
+tutta la regione); nella Scena il **tracciato fine** di ogni tratto (griglia di ~10–20 m in un corridoio attorno
+al tracciato della Carta, come `tracciaPercorso` per i fiumi), dove nascono i **tornanti**. Su celle di 1 km i
+tornanti non esistono: lì la pendenza si misura sulla quota della Carta e il vincolo duro vale solo nella Scena.
+
+**2. Costo: corto ma non ripido.** Costo di un passo = lunghezza × (1 + (p / p₀)²) + attraversamenti, con p la
+pendenza lungo il passo; oltre p_max il passo è vietato (il percorso è costretto a girare: tornanti o
+traversi). Per classe [Ipotesi, da tarare guardando]:
+
+| Classe | Per chi | p₀ (comoda) | p_max | Larghezza nella Scena |
+|---|---|---|---|---|
+| strada maestra | carri, cavalli, a piedi | 5 % | 10 % | 4–5 m |
+| carrareccia | carri leggeri, cavalli | 7 % | 14 % | 3 m |
+| mulattiera | cavallo a mano, bestie da soma | 12 % | 25 % (tornanti) | 2 m |
+| sentiero di montagna | a piedi | 20 % | 45 % (tornanti stretti) | 1 m |
+
+Il quadrato fa sì che un po' di salita costi poco e molta salita molto: il tracciato allunga quanto serve, non
+di più (come le strade vere). Altri costi: guado (basso, solo dove si guada), **ponte** (alto, così i ponti sono
+pochi e le strade ci convergono), palude ed esposizione sulle creste (alti), bosco (lieve), neve e quota oltre il
+limite degli alberi (per le classi da carro), terrapieni di rocca e borgo vietati salvo le porte.
+
+**3. La rete.** Nodi: rocche e borghi (porte), valichi, e poi villaggi, porti e luoghi speciali quando ci
+saranno. Grafo: albero di copertura minimo sui costi di viaggio, più i collegamenti in cui il giro sull'albero
+supera ~1,5 volte il diretto (le reti vere hanno anelli). I tratti si tracciano dal più importante: i passi
+già su una strada costano meno, così le strade **si uniscono** in tronchi comuni invece di correre parallele, e
+gli incroci nascono da soli (crocevia, possibili luoghi). Gerarchia: maestre tra rocche e verso i valichi
+principali, carrarecce verso borghi e villaggi, mulattiere sui valichi alti.
+
+**4. Sentieri di montagna.** Dalle testate delle valli (e dagli alpeggi) ai valichi e alle **forcelle** dei
+gruppi montuosi (per il GDD scorciatoie rischiose, non strade), con la classe «sentiero»: ripidi, a tornanti
+stretti, segnati più deboli. Alcuni a vicolo cieco (a un panorama, a un alpeggio): i sentieri veri non vanno
+sempre da qualche parte.
+
+**5. Nella Scena.** Striscia spianata lungo il tracciato (in pendio taglio a monte e rilevato a valle, raccordati;
+la quota resta pura funzione del punto del mondo, quindi blocchi e orizzonte combaciano), colore di **terra
+battuta** come nuovo strato di `materialeSuolo` (bordi netti per pixel, solchi delle ruote vicino), niente
+alberi né cespugli sulla striscia e radi ai margini (la vegetazione legge una `distanzaStrada(x, z)` come oggi
+`distanzaPiano`: va concordato con la sessione della vegetazione), ponti da codice dove la strada passa un fiume
+non guadabile, guadi con sassi.
+
+**6. Carta e viaggio.** Strade disegnate per classe; il viaggio sulla Carta (A* sulle celle, GDD §3) preferisce
+le strade: costo per cella ridotto su strada, tempi e Forza per classe. A piedi e a cavallo nella Scena: su
+strada non si rallenta per il terreno [da decidere].
+
+**Moduli.** Nuovo `js/mondo/strade.js` (senza Three.js né DOM: rete sulla Carta e tracciato fine, gira nel
+Worker); strade nella cache della Carta (`VERSIONE_GENERATORE`); ponti in `js/3d/` (nome da decidere). Un file
+nuovo: serve la conferma (regola 2).
+
+### Passi (proposta)
+
+1. **Rete sulla Carta** con i nodi di oggi; disegno nella vista della Carta; verifiche in Node su 30 semi
+   (pendenza massima per classe sulle celle, numero di ponti, lunghezza rispetto alla linea d'aria).
+2. **Tracciato fine e tornanti** nella Scena, striscia spianata. *Prova:* salire a un valico a piedi e a cavallo.
+3. **Colore e vegetazione** (con la sessione della vegetazione).
+4. **Ponti e guadi.**
+5. **Viaggio sulla Carta** lungo le strade.
+
+### Da decidere
+
+1. Farla ora in parallelo a M7 e alla vegetazione (deroga alla regola 4), o dopo la milestone dei luoghi?
+   [Probabile] conviene fare ora i passi 1–2 sui nodi esistenti (il generatore non cambia quando i luoghi
+   arriveranno) e rinviare il resto.
+2. Le pendenze massime della tabella (strada maestra al 10 %, mulattiera al 25 %, sentiero al 45 %).
+3. Il nome del file nuovo `js/mondo/strade.js`.
+4. Su strada nella Scena si va più veloci (o non si rallenta in salita come fuori strada)?
 
 ## Fuori dal prototipo (non farlo ora)
 

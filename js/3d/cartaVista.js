@@ -273,7 +273,9 @@ export function createCartaVista(contenitore, opzioni = {}) {
   }
 
   // Classi di larghezza dei fiumi: multipli della soglia del bacino → pixel sullo schermo.
-  const CLASSI_FIUMI = [[0.13, 0.45], [1, 0.8], [4, 1.2], [16, 1.7], [64, 2.4], [256, 3.2]];   // la prima: torrenti
+  // Classi per bacino (multipli di sogliaFiume, 150 km²): torrenti da 20 km², poi 150, 375, 900, 1800 km²
+  // (nella regione di 120×90 km i bacini più grandi arrivano a ~2500 km²).
+  const CLASSI_FIUMI = [[0.13, 0.35], [1, 0.7], [2.5, 1.1], [6, 1.6], [12, 2.3]];
 
   /** Fiumi: i tracciati curvi della Carta (tracciaFiumi), un Path2D per classe di larghezza. */
   function costruisciFiumi() {
