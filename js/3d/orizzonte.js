@@ -19,8 +19,8 @@
 import * as THREE from 'three';
 import { quotaMondo, quotaCarta, scavaFiumi, livelloLago, tracciatiFiumi, SCENA, OTTAVE_DETTAGLIO } from '../mondo/scena.js';
 import { creaNastro, materialeAcqua, SOPRA_PELO } from './acqua.js';
-import { hash2, derivaSeme } from '../mondo/rumore.js';
-import { coloreTerreno } from './terrain.js';
+import { derivaSeme } from '../mondo/rumore.js';
+import { coloreMondo } from './terrain.js';
 
 export const ORIZZONTE = {
   anelli: [                                // passo e bordo esterno (m); il bordo interno è il precedente
@@ -87,32 +87,50 @@ function celleAnello(buco, passo, raggio, fini, P) {
   return { n, cella, passo, buco, raggio };
 }
 
-/** Mesh di un anello: facce piatte con colore per faccia. */
-function anello(celle, colore) {
-  const pos = [], col = [];
-  const tmp = new THREE.Color();
-  let seme = 0;
-  function tri(a, b, c) {
+/**
+ * Mesh di un anello: vertici condivisi, normali lisce (somma delle facce attorno) e colore per vertice dalla
+ * funzione del mondo generato (coloreMondo in terrain.js), come il blocco della Scena: niente chiazze a triangoli.
+ * `colore(out, x, z, h, pendenza)` in coordinate del mondo; h è la quota vera (senza la curvatura).
+ */
+function anello(celle, colore, cx, cz) {
+  const indice = new Map();
+  const px = [], py = [], pz = [], nx = [], ny = [], nz = [], tri = [];
+  const vertice = (p) => {
+    const k = p[0] * 1e6 + p[2];
+    let i = indice.get(k);
+    if (i === undefined) {
+      i = px.length; indice.set(k, i);
+      px.push(p[0]); py.push(p[1]); pz.push(p[2]); nx.push(0); ny.push(0); nz.push(0);
+    }
+    return i;
+  };
+  function faccia(a, b, c) {
     let ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
     let wx = c[0] - a[0], wy = c[1] - a[1], wz = c[2] - a[2];
-    let nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
-    if (ny < 0) { const t = b; b = c; c = t; nx = -nx; ny = -ny; nz = -nz; }   // faccia verso l'alto
-    const len = Math.hypot(nx, ny, nz) || 1;
-    const pendenza = Math.acos(Math.min(1, ny / len)) * 180 / Math.PI;
-    colore(tmp, (a[1] + b[1] + c[1]) / 3, pendenza, seme);
-    pos.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
-    for (let k = 0; k < 3; k++) col.push(tmp.r, tmp.g, tmp.b);
+    let fx = uy * wz - uz * wy, fy = uz * wx - ux * wz, fz = ux * wy - uy * wx;
+    if (fy < 0) { const t = b; b = c; c = t; fx = -fx; fy = -fy; fz = -fz; }   // faccia verso l'alto
+    const ia = vertice(a), ib = vertice(b), ic = vertice(c);
+    for (const i of [ia, ib, ic]) { nx[i] += fx; ny[i] += fy; nz[i] += fz; }   // pesate per area
+    tri.push(ia, ib, ic);
   }
-  for (let r = 0; r < celle.n; r++) {
-    for (let c = 0; c < celle.n; c++) {
-      seme = hash2(c, r, 911) / 4294967296;
-      celle.cella(r, c, tri);
-    }
+  for (let r = 0; r < celle.n; r++) for (let c = 0; c < celle.n; c++) celle.cella(r, c, faccia);
+  const m = px.length;
+  const pos = new Float32Array(m * 3), nor = new Float32Array(m * 3), col = new Float32Array(m * 3);
+  const tmp = new THREE.Color();
+  for (let i = 0; i < m; i++) {
+    const l = Math.hypot(nx[i], ny[i], nz[i]) || 1;
+    const a = nx[i] / l, b = ny[i] / l, c = nz[i] / l;
+    pos[i * 3] = px[i]; pos[i * 3 + 1] = py[i]; pos[i * 3 + 2] = pz[i];
+    nor[i * 3] = a; nor[i * 3 + 1] = b; nor[i * 3 + 2] = c;
+    const pendenza = Math.acos(Math.min(1, b)) * 180 / Math.PI;
+    colore(tmp, cx + px[i], cz + pz[i], py[i] + abbassamento(Math.hypot(px[i], pz[i])), pendenza);
+    col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
   }
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-  geo.computeVertexNormals();                // facce piatte: i tre vertici di una faccia non sono condivisi
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setIndex(tri.length > 65535 ? new THREE.Uint32BufferAttribute(tri, 1) : new THREE.Uint16BufferAttribute(tri, 1));
   geo.computeBoundingSphere();
   return geo;
 }
@@ -192,18 +210,19 @@ function acqueOrizzonte(carta, cx, cz, anelli, colore) {
 /**
  * Orizzonte per la Scena centrata in (cx, cz) del mondo.
  * @param {object} carta  dalla generaCarta
- * @param {object} terrain  il blocco della Scena (per la scala dei colori: minElev, maxElev)
+ * @param {object} terrain  il blocco della Scena
  * @param {string} coloreAcqua
+ * @param {number} stagione  indice del calendario (colori e limite delle nevi)
  * @returns {{ oggetto: THREE.Group, acqua: THREE.Mesh|null, triangoli: number, ms: number }}
  */
-export function creaOrizzonte(carta, cx, cz, terrain, coloreAcqua) {
+export function creaOrizzonte(carta, cx, cz, terrain, coloreAcqua, stagione = 0) {
   const t0 = performance.now();
   const O = ORIZZONTE, half = SCENA.lato / 2;
   const seme = derivaSeme(carta.seme, 101);                // lo stesso del blocco (generaScena)
   const nOttave = OTTAVE_DETTAGLIO.length;
   const pesi = new Float64Array(nOttave);
   let minimo = Infinity;
-  const colore = (out, h, pendenza, rnd) => coloreTerreno(out, h, pendenza, rnd, terrain.minElev, terrain.maxElev);
+  const colore = coloreMondo(carta, stagione);
 
   const quota = (x, z) => {
     const d = Math.max(Math.abs(x), Math.abs(z));
@@ -237,9 +256,9 @@ export function creaOrizzonte(carta, cx, cz, terrain, coloreAcqua) {
     interno = raggio;
     passoDentro = passo;
   }
-  const geometrie = anelli.map((a) => anello(a, colore));
+  const geometrie = anelli.map((a) => anello(a, colore, cx, cz));
 
-  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
   const oggetto = new THREE.Group();
   oggetto.name = 'orizzonte';
   for (const g of geometrie) oggetto.add(new THREE.Mesh(g, mat));
@@ -258,6 +277,6 @@ export function creaOrizzonte(carta, cx, cz, terrain, coloreAcqua) {
   // Fiumi e laghi in quota oltre il blocco (passo 6): continuano quelli della Scena.
   const acque = acqueOrizzonte(carta, cx, cz, anelli, coloreAcqua);
   if (acque) oggetto.add(acque);
-  const triangoli = geometrie.reduce((t, g) => t + g.attributes.position.count / 3, 0);
+  const triangoli = geometrie.reduce((t, g) => t + g.index.count / 3, 0);
   return { oggetto, acqua, triangoli, ms: performance.now() - t0 };
 }

@@ -23,7 +23,7 @@ export const CARTA_PREDEFINITA = { cols: 600, rows: 450, cella: 1000 };
 // Versione del generatore: entra nella chiave della cache delle Carte (IndexedDB, lavoratore.js).
 // VA CAMBIATA a ogni modifica che cambia le Carte generate, altrimenti il browser riusa Carte vecchie.
 // (In alternativa: ?rigenera nell'indirizzo ignora la cache.)
-export const VERSIONE_GENERATORE = 'm6-biomi-1';
+export const VERSIONE_GENERATORE = 'm6-biomi-2';
 
 // Parametri della forma (km dove non indicato). Valori di partenza, da tarare guardando le Carte.
 const FORMA = {
@@ -333,6 +333,7 @@ export const CLIMA = {
   gradiente: 0.0065,             // °C in meno per metro di quota
   stagioni: { inverno: -9, estate: 8 },      // scarto dalla media annua (per il limite delle nevi)
   neve: -5,                      // media annua sotto cui la neve resta tutto l'anno (Alpi: ~−5 °C a ~2900 m)
+  neveSuolo: -3,                 // media della stagione sotto cui il manto di neve resta al suolo
   mareGhiacciato: -3,            // media annua del mare sotto cui il mare gela
   bosco: 1.5,                    // limite degli alberi: media annua minima
   umidita: { mare: 80, lunghezza: 150, monti: [800, 2000] },
@@ -448,14 +449,15 @@ function climaEBiomi(seme, cols, rows, quota, mare, acque) {
 
 /**
  * Quota (m) del limite delle nevi in un punto, dalla temperatura media annua al livello del mare e dalla
- * stagione: la quota a cui la temperatura della stagione scende a 0 °C.
+ * stagione: la quota a cui la media della stagione scende a CLIMA.neveSuolo (alla latitudine media ~1800 m in
+ * primavera e autunno, ~3000 m d'estate, ~400 m d'inverno).
  * @param {number} t0  temperatura media annua al livello del mare (°C)
  * @param {'inverno'|'primavera'|'estate'|'autunno'} stagione
  */
 export function limiteNevi(t0, stagione = 'primavera') {
   const S = CLIMA.stagioni;
-  const scarto = stagione === 'inverno' ? S.inverno : stagione === 'estate' ? S.estate : (S.inverno + S.estate) / 4;
-  return (t0 + scarto) / CLIMA.gradiente;
+  const scarto = stagione === 'inverno' ? S.inverno : stagione === 'estate' ? S.estate : 0;
+  return (t0 + scarto - CLIMA.neveSuolo) / CLIMA.gradiente;
 }
 
 // ─── Fasi 2b e 4a: fasce di quota, erosione fluviale ─────────────────────

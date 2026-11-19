@@ -12,7 +12,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { loadTerrain, componiSuolo, createTerrain } from './terrain.js';
+import { loadTerrain, componiSuolo, createTerrain, coloreMondo } from './terrain.js';
 import { createKnight } from './knight3d.js';
 import { createFollowCamera } from './camera.js';
 import { createCastle } from './castle3d.js';
@@ -430,7 +430,7 @@ async function caricaScena(desc) {
     occlusori.push(...castle.solidi);
   } else {
     const { meta, heights, acqua: dati } = generaScena(carta, desc.cx, desc.cz);
-    terrain = createTerrain(meta, heights);
+    terrain = createTerrain(meta, heights, false, coloreMondo(carta, Calendar.stagione));
     acqueScena = creaAcqueScena(dati, meta, COLORE_ACQUA);
     if (acqueScena) scene.add(acqueScena);
     livelliAcqua = { fiume: dati.fiume, lago: dati.lago, cols: meta.cols, cell: meta.cellSize, half: meta.sizeMeters / 2 };
@@ -439,7 +439,7 @@ async function caricaScena(desc) {
 
   if (desc.tipo === 'mondo') {
     // Orizzonte: terreno lontano fino a ~50 km. Le pareti laterali del blocco si vedrebbero dall'esterno.
-    orizzonte = creaOrizzonte(carta, desc.cx, desc.cz, terrain, COLORE_ACQUA);
+    orizzonte = creaOrizzonte(carta, desc.cx, desc.cz, terrain, COLORE_ACQUA, Calendar.stagione);
     scene.add(orizzonte.oggetto);
     const pareti = terrain.mesh.getObjectByName('terreno-bordo');
     if (pareti) pareti.visible = false;
