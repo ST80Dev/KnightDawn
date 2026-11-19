@@ -14,6 +14,7 @@
 import { BIOMA, CLIMA, limiteNevi } from './carta.js';
 import { fbm, derivaSeme, smoothstep, hash2 } from './rumore.js';
 import { specchio, distanzaPiano } from './scena.js';
+import { distanzaStrada } from './strade.js';
 
 // ─── 1. Copertura del terreno (condivisa con il colore) ───────────────────
 
@@ -184,6 +185,10 @@ export const VEGETAZIONE = {
   pendenza: { alberi: [30, 40], arbusti: [36, 46], pareti: 48 },   // gradi (pendenza fine della mesh)
   riva: { celle: [1, 3], densita: 0.22, canne: 0.35 },             // celle di 7,8 m dall'acqua
   spianata: 20,                          // m oltre la scarpata dei terrapieni: niente alberi né arbusti
+  // Strade (js/mondo/strade.js, concordato con la sessione del generatore): m oltre il bordo della carreggiata.
+  // Alberi, arbusti, canne e tronchi: niente entro `libero`, radi fino a `radi`; rocce e ciottoli non sulla carreggiata
+  // (massi e affioramenti nemmeno a 1 m dal bordo); erba non sulla carreggiata, felci non entro `libero`.
+  strada: { libero: 2, radi: 6, massi: 1 },
   acquaCelle: 4,                         // distanza dall'acqua misurata fino a 4 celle
   // Solo vicino al cavaliere (erbaAttorno): probabilità per cella di 0,6 m (erba) e di 2 m (felci).
   vicino: { erba: 0.75, felce: 0.45, ciottolo: 1, passoErba: 0.6, passoFelci: 2, passoCiottoli: 1.5 },
@@ -269,6 +274,7 @@ function densitaVertice(cp, pend, pf, distAcqua, x, z, semeBordo, D, i) {
  * @param {Function} o.copertura  coperturaMondo(carta) o coperturaTavullia()
  * @param {number} o.seme  seme del mondo
  * @param {Array} o.piani  terrapieni (come carta.luoghi[].piani, coordinate del mondo): niente oggetti dentro né sulla scarpata
+ * @param {object} [o.carta]  la Carta, per le strade (distanzaStrada, dopo generaScena); senza, niente strade
  * @param {boolean} [o.mare]  true: sotto quota 0,3 m è mare
  * @returns {{ tipi: Object<string, {dati: Float32Array, n: number, gruppo: string}>, ms: number, msCampi: number }}
  */
@@ -361,6 +367,17 @@ export function posizionaVegetazione(o) {
     return m;
   };
 
+  // Strade: metri oltre il bordo della carreggiata (Infinity se nessuna strada vicina).
+  const _st = { d: Infinity, lato: 0, semi: 0, h: 0, classe: '' };
+  const oltreStrada = o.carta?.strade ? (X, Z) => { distanzaStrada(o.carta, X, Z, _st); return _st.d - _st.semi; } : () => Infinity;
+  /** Vegetazione alta ai lati della strada: niente entro `libero`, poi sempre più fitta fino a `radi`. */
+  const lontanoDaStrada = (X, Z, ix, iz, sm) => {
+    const m = oltreStrada(X, Z);
+    if (m >= V.strada.radi) return true;
+    if (m < V.strada.libero) return false;
+    return hash2(ix, iz, sm ^ 0x5be0cd19) / 4294967296 < (m - V.strada.libero) / (V.strada.radi - V.strada.libero);
+  };
+
   const buffer = {};
   for (const t of TIPI) buffer[t.nome] = [];
   const emetti = (t, ix, iz, sm, lx, lz, y, fattoreScala) => {
@@ -393,7 +410,7 @@ export function posizionaVegetazione(o) {
     const p = campo(D.alberi);
     if (u >= p || !asciutta()) return;
     const pf = pendenzaFine();
-    if (pf > V.pendenza.alberi[1] || oltreScarpata(X, Z) < V.spianata) return;
+    if (pf > V.pendenza.alberi[1] || oltreScarpata(X, Z) < V.spianata || !lontanoDaStrada(X, Z, ix, iz, sA)) return;
     const wc = campo(D.conifera), wp = campo(D.pino), ws = campo(D.secco), wr = campo(D.riva);
     const wl = Math.max(0, 1 - wc - wp) * (1 - wr);
     const tot = wl + wc + wp + ws + wr;
@@ -418,6 +435,7 @@ export function posizionaVegetazione(o) {
       if (pf > V.pendenza.pareti) return;
       const oltre = oltreScarpata(X, Z);
       if (oltre < 0 || (vegetale && oltre < V.spianata)) return;
+      if (vegetale ? !lontanoDaStrada(X, Z, ix, iz, sm) : oltreStrada(X, Z) < (t.nome === 'sasso' ? 0 : V.strada.massi)) return;
       emetti(t, ix, iz, sm, lx, lz, quota(), t.nome === 'masso' ? 1 + 1.2 * campo(D.frana) : 1);
     });
   });
@@ -461,6 +479,7 @@ export function posizionaVegetazione(o) {
           if (hash2(ix, iz, sm) / 4294967296 >= campo(A) || !asciutta()) continue;
           const oltre = oltreScarpata(X, Z);
           if (oltre < 0 || (nome === 'felce' && oltre < V.spianata)) continue;
+          if (oltreStrada(X, Z) < (nome === 'felce' ? V.strada.libero : 0)) continue;
           const h = hash2(ix, iz, sm ^ 0x2545f491);
           b.push(lx, quota(), lz, 0.7 + 0.6 * ((h & 0xffff) / 65536), ((h >>> 16) & 0x3ff) / 1024 * 2 * Math.PI, (h >>> 26) / 64);
         }

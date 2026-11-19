@@ -1466,6 +1466,11 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      dettagliati 160. Nello stesso bosco: **540 000 triangoli** di vegetazione (erano ~2,1 milioni), 22 chiamate.
    - *Età diverse* (richiesta dell'utente: «alberi troppo identici, stesse altezze»): scale da 0,4–0,45 a 1,45–1,5
      con più alberi giovani (esponente 1,4), altezza indipendente dalla larghezza (0,72–1,28).
+   - *Strade* (concordato con la sessione del generatore, `distanzaStrada` in `js/mondo/strade.js`, `VEGETAZIONE.strada`):
+     niente alberi, arbusti, canne e tronchi entro 2 m dal bordo della carreggiata, radi fino a 6 m; sassi e ciottoli
+     non sulla carreggiata, massi e affioramenti nemmeno a 1 m; erba non sulla carreggiata, felci non entro 2 m. La
+     Carta arriva a `posizionaVegetazione` (`carta`). Seme 855588, 570549, 171289, 7: nessun oggetto sulla carreggiata,
+     nessun albero entro 2 m, zona comune tra blocchi identica.
 3. **Collisioni.** Tronchi, massi e affioramenti come ostacoli a griglia. *Prova:* si attraversa un bosco fitto
    scivolando tra i tronchi senza incastrarsi; la camera resta usabile nel bosco.
 4. **Arbusti e rocce.** Cespugli (macchia, margini, sottobosco), arbusti d'alta quota, sassi, massi, affioramenti
