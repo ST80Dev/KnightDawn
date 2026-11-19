@@ -242,6 +242,7 @@ function rocciaSpigolosa(r, rnd, { dettaglio = 1, tagli = 8, sx = 1, sy = 0.7, s
     if (i % 3 === 0) { tono = rnd(); lic = rnd() < 0.08 ? 0.35 : 0; }
     const su = Math.max(0, nf.getY(i));
     c.copy(scuro).lerp(chiaro, 0.25 + 0.45 * tono + 0.3 * su).lerp(lichene, lic * su);
+    c.multiplyScalar(0.55 + 0.45 * Math.min(1, Math.max(0, (py - y + 0.15 * r) / (0.5 * r))));   // base scura (contatto)
   });
 }
 
@@ -257,7 +258,7 @@ const COL = {
 /** Ciuffo d'erba: fili piegati (due triangoli ciascuno), alla base scuri, in punta chiari. Il colore vero è per istanza. */
 function ciuffoErba(rnd, fili = 14) {
   const pos = [], col = [];
-  const ca = new THREE.Color(0.82, 0.84, 0.8), cb = new THREE.Color(1.12, 1.12, 1.0);
+  const ca = new THREE.Color(0.62, 0.66, 0.6), cb = new THREE.Color(1.12, 1.12, 1.0);
   for (let k = 0; k < fili; k++) {
     const a = rnd() * Math.PI * 2, d = rnd() * 0.16, h = 0.18 + rnd() * 0.24, w = 0.02 + rnd() * 0.015;
     const bx = Math.cos(a) * d, bz = Math.sin(a) * d;
@@ -459,24 +460,21 @@ const TONO = {
 };
 const GIALLO = new THREE.Color('#d9c85a');
 const RIASSEGNA_DOPO = 12;              // m di spostamento della camera prima di ridistribuire le istanze
-const VICINO = { erba: { raggio: 32, max: 16000 }, felce: { raggio: 45, max: 3000 }, ciottolo: { raggio: 40, max: 6000 }, rifai: 4 };
+// Raggi lunghi con densità bassa (richiesta dell'utente: il bordo del cerchio a ~30 m si vedeva).
+const VICINO = { erba: { raggio: 70, max: 12000 }, felce: { raggio: 70, max: 3000 }, ciottolo: { raggio: 50, max: 6000 }, rifai: 5 };
 
-/** Materiale con il vento: oscilla la parte alta (y locale) secondo il tempo e la posizione dell'istanza. */
-function materialeVento(opz, ampiezza, tempo) {
-  const mat = new THREE.MeshLambertMaterial(opz);
+/**
+ * Materiale di erba e felci: fili e fronde sono a una faccia vista dai due lati; la normale non si capovolge sul retro
+ * (altrimenti il retro guarda in basso e resta nero), così prendono la luce come il prato. Niente vento (deciso con
+ * l'utente: niente iperrealismo).
+ */
+function materialeFili(opz) {
+  const mat = new THREE.MeshLambertMaterial({ ...opz, side: THREE.DoubleSide });
   mat.onBeforeCompile = (sh) => {
-    sh.uniforms.uTempo = tempo;
-    sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform float uTempo;')
-      .replace('#include <begin_vertex>', `#include <begin_vertex>
-      #ifdef USE_INSTANCING
-        vec3 kdI = instanceMatrix[3].xyz;
-        float kdW = position.y * position.y * ${ampiezza.toFixed(3)};
-        transformed.x += sin(uTempo * 1.9 + kdI.x * 0.31 + kdI.z * 0.17) * kdW;
-        transformed.z += cos(uTempo * 1.6 + kdI.z * 0.27 - kdI.x * 0.11) * kdW * 0.7;
-      #endif`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\n  normal = normalize(vNormal);');
   };
-  mat.customProgramCacheKey = () => `kd-vento-${ampiezza}`;
+  mat.customProgramCacheKey = () => 'kd-fili-1';
   return mat;
 }
 
@@ -487,12 +485,107 @@ function materialeVento(opz, ampiezza, tempo) {
  * @returns {{ oggetto: THREE.Group, aggiorna: (x: number, z: number, t?: number) => void, conteggi: Object<string, number>,
  *   totale: number, msPosiziona: number, msCampi: number, msCostruzione: number, statistiche: () => object }}
  */
+// ─── Ombre finte e piede scuro (richiesta dell'utente: gli oggetti sembravano sospesi sopra il terreno) ───
+// Nel gioco non ci sono ombre proiettate (costerebbero un secondo disegno della scena). Al loro posto due texture del
+// blocco lette dallo shader del suolo (terrain.js, materialeSuolo): l'ombra di ogni albero, cespuglio e roccia, a
+// macchia sfumata spostata dalla parte opposta al sole e allungata quando il sole è basso (ridisegnata quando il sole si
+// sposta, a pezzi su più fotogrammi); e il piede scuro attorno al punto di contatto, fisso. Una lettura per pixel.
+
+/** Per tipo: altezza del centro della chioma o dell'oggetto (h), raggio (r), mezza altezza (v), ombra (a), piede (p, m). */
+const FORMA_OMBRA = {
+  latifoglia: { h: 7.6, r: 3.6, v: 3.0, a: 0.75, p: 1.6 }, conifera: { h: 7.0, r: 2.6, v: 6.0, a: 0.8, p: 1.4 },
+  pino: { h: 10.2, r: 4.0, v: 1.3, a: 0.7, p: 1.4 }, riva: { h: 10.5, r: 2.0, v: 5.0, a: 0.7, p: 1.4 },
+  secco: { h: 5.0, r: 1.8, v: 2.5, a: 0.3, p: 1.0 }, cespuglio: { h: 0.55, r: 1.0, v: 0.6, a: 0.6, p: 1.2 },
+  'arbusto alto': { h: 0.35, r: 1.3, v: 0.4, a: 0.6, p: 1.4 }, sterpo: { h: 0.5, r: 0.6, v: 0.5, a: 0.3, p: 0.6 },
+  canne: { h: 1.0, r: 0.45, v: 1.0, a: 0.4, p: 0.6 }, sasso: { h: 0.1, r: 0.35, v: 0.15, a: 0.6, p: 0.45 },
+  masso: { h: 0.4, r: 1.3, v: 0.8, a: 0.7, p: 1.6 }, affioramento: { h: 0.2, r: 3.0, v: 0.6, a: 0.6, p: 3.2 },
+  tronco: { h: 0.25, r: 1.6, v: 0.3, a: 0.5, p: 1.8 },
+};
+const OMBRE = { lato: 1024, latoPiede: 2048, rifaiGradi: 5, perFotogramma: 6000, forza: 0.5, piede: 0.42 };
+
+/** Macchia sfumata bianca (64×64) da stampare scalata. */
+function macchia() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.55, 'rgba(255,255,255,0.75)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  return c;
+}
+
+function nuovaTela(lato) {
+  const c = document.createElement('canvas');
+  c.width = c.height = lato;
+  const g = c.getContext('2d');
+  g.fillStyle = '#000'; g.fillRect(0, 0, lato, lato);
+  return { c, g };
+}
+
+/**
+ * Ombre del blocco. `oggetti`: Float32Array [x, z, s, tipo…] (coordinate locali). Restituisce le due texture e
+ * `passo(sole)`: avanza il disegno delle ombre del sole (a pezzi) e, quando ha finito, scambia la texture.
+ */
+function creaOmbre(oggetti, forme, half) {
+  const M = macchia(), n = oggetti.length / 4;
+  const k = (L) => L / (2 * half);
+  // Piede: fisso, disegnato subito.
+  const P = nuovaTela(OMBRE.latoPiede), kp = k(OMBRE.latoPiede);
+  P.g.globalCompositeOperation = 'lighten';
+  for (let i = 0; i < n; i++) {
+    const f = forme[oggetti[i * 4 + 3]], s = oggetti[i * 4 + 2], r = f.p * s * kp;
+    P.g.globalAlpha = 0.85;
+    P.g.drawImage(M, (oggetti[i * 4] + half) * kp - r, (oggetti[i * 4 + 1] + half) * kp - r, 2 * r, 2 * r);
+  }
+  const piede = new THREE.CanvasTexture(P.c);
+  piede.flipY = false; piede.generateMipmaps = false; piede.minFilter = THREE.LinearFilter;
+  // Sole: due tele, una mostrata e una in lavorazione.
+  const tele = [nuovaTela(OMBRE.lato), nuovaTela(OMBRE.lato)];
+  const sole = new THREE.CanvasTexture(tele[0].c);
+  sole.flipY = false; sole.generateMipmaps = false; sole.minFilter = THREE.LinearFilter;
+  let mostrata = 0, lavoro = null, disegnato = null;
+  const ko = k(OMBRE.lato);
+  function passo(dir) {
+    // dir: direzione verso il sole (normalizzata). Sotto l'orizzonte niente da fare.
+    if (!lavoro) {
+      if (dir.y < 0.03) return;
+      if (disegnato && disegnato.angleTo(dir) < OMBRE.rifaiGradi * Math.PI / 180) return;
+      const t = tele[1 - mostrata];
+      t.g.setTransform(1, 0, 0, 1, 0, 0);
+      t.g.globalAlpha = 1; t.g.globalCompositeOperation = 'source-over';
+      t.g.fillStyle = '#000'; t.g.fillRect(0, 0, OMBRE.lato, OMBRE.lato);
+      t.g.globalCompositeOperation = 'lighten';
+      // Sistema ruotato: l'asse u va dalla parte opposta al sole.
+      const dx = -dir.x, dz = -dir.z, l = Math.hypot(dx, dz) || 1;
+      const ca = dx / l, sa = dz / l, cot = Math.min(4, Math.sqrt(1 - dir.y * dir.y) / Math.max(dir.y, 0.05));
+      t.g.setTransform(ca * ko, sa * ko, -sa * ko, ca * ko, OMBRE.lato / 2, OMBRE.lato / 2);
+      lavoro = { t, i: 0, ca, sa, cot, dir: dir.clone() };
+    }
+    // La prima volta tutto subito (si è appena caricata la Scena); poi a pezzi, per non dare scatti.
+    const { t, ca, sa, cot } = lavoro, fine = disegnato ? Math.min(n, lavoro.i + OMBRE.perFotogramma) : n;
+    for (let i = lavoro.i; i < fine; i++) {
+      const f = forme[oggetti[i * 4 + 3]], s = oggetti[i * 4 + 2], x = oggetti[i * 4], z = oggetti[i * 4 + 1];
+      const u = x * ca + z * sa, w = -x * sa + z * ca;
+      const lungo = 2 * f.r * s + 2 * f.v * s * cot, largo = 2 * f.r * s, centro = u + f.h * s * cot;
+      t.g.globalAlpha = f.a;
+      t.g.drawImage(M, centro - lungo / 2, w - largo / 2, lungo, largo);
+    }
+    lavoro.i = fine;
+    if (fine >= n) {                         // finito: si mostra la tela nuova
+      mostrata = 1 - mostrata;
+      sole.image = tele[mostrata].c;
+      sole.needsUpdate = true;
+      disegnato = lavoro.dir;
+      lavoro = null;
+    }
+  }
+  return { sole, piede, passo, oggetti: n };
+}
+
 export function creaVegetazione(pos, terrain = null) {
   const t0 = performance.now();
   const oggetto = new THREE.Group();
   oggetto.name = 'vegetazione';
   const modelli = creaModelli();
-  const tempo = { value: 0 };
 
   // Suolo: lettiera sotto il bosco e fango vicino all'acqua (shader del terreno, terrain.js).
   const superficie = terrain?.mesh.getObjectByName('terreno-superficie');
@@ -551,16 +644,33 @@ export function creaVegetazione(pos, terrain = null) {
     tipi.push({ nome, n: t.n, livelli, mesh, matrici, colori, xz, varia });
   }
 
+  // Ombre finte e piede scuro nello shader del suolo (solo il mondo generato: materialeSuolo).
+  const uniSuolo = superficie?.material?.userData?.uniformi;
+  let ombre = null;
+  if (uniSuolo && terrain) {
+    const nomi = Object.keys(FORMA_OMBRA), forme = nomi.map((k) => FORMA_OMBRA[k]);
+    const lista = [];
+    nomi.forEach((nome, ti) => {
+      const t = pos.tipi[nome];
+      if (!t) return;
+      for (let k = 0; k < t.n; k++) lista.push(t.dati[k * STRIDE], t.dati[k * STRIDE + 2], t.dati[k * STRIDE + 3], ti);
+    });
+    ombre = creaOmbre(Float32Array.from(lista), forme, terrain.half);
+    uniSuolo.uOmbre.value = ombre.sole;
+    uniSuolo.uPiede.value = ombre.piede;
+    uniSuolo.uOmbreForza.value.set(0, OMBRE.piede);
+  }
+
   // Erba e felci attorno alla camera: ricalcolate ogni pochi metri (posizionamento deterministico, js/mondo).
   const rnd = casuale(77);
   const vicini = {
-    erba: { geo: ciuffoErba(rnd), vento: 0.35, ...VICINO.erba },
-    felce: { geo: felce(rnd), vento: 0.08, ...VICINO.felce },
-    ciottolo: { geo: unisci([rocciaSpigolosa(0.12, rnd, { dettaglio: 0, tagli: 5, y: 0.02, sy: 0.6 })]), vento: 0, piatto: true, ...VICINO.ciottolo },
+    erba: { geo: ciuffoErba(rnd), fili: true, ...VICINO.erba },
+    felce: { geo: felce(rnd), fili: true, ...VICINO.felce },
+    ciottolo: { geo: unisci([rocciaSpigolosa(0.12, rnd, { dettaglio: 0, tagli: 5, y: 0.02, sy: 0.6 })]), piatto: true, ...VICINO.ciottolo },
   };
   for (const [nome, V] of Object.entries(vicini)) {
-    V.mesh = new THREE.InstancedMesh(V.geo, V.vento
-      ? materialeVento({ vertexColors: true, side: THREE.DoubleSide }, V.vento, tempo)
+    V.mesh = new THREE.InstancedMesh(V.geo, V.fili
+      ? materialeFili({ vertexColors: true })
       : new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: !!V.piatto }), V.max);
     V.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     V.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(V.max * 3), 3);
@@ -606,7 +716,7 @@ export function creaVegetazione(pos, terrain = null) {
         q.setFromAxisAngle(_v.set(0, 1, 0), T.dati[o + 4]);
         sc.set(s, s * (0.8 + 0.5 * v), s);
         m4.compose(p, q, sc).toArray(am, j * 16);
-        if (nome === 'erba') coloreSotto(_c, x, z).multiplyScalar(0.95 + 0.2 * v);
+        if (nome === 'erba') coloreSotto(_c, x, z).multiplyScalar(1.15 + 0.25 * v);
         else if (nome === 'ciottolo') { const b = 0.65 + 0.5 * v, w = (v * 7.7) % 1 - 0.5; _c.setRGB(b * (1 + 0.1 * w), b, b * (1 - 0.1 * w)); }
         else _c.setRGB(0.85 + 0.3 * v, 0.85 + 0.3 * v, 0.85 + 0.2 * v);
         ac[j * 3] = _c.r; ac[j * 3 + 1] = _c.g; ac[j * 3 + 2] = _c.b;
@@ -623,9 +733,20 @@ export function creaVegetazione(pos, terrain = null) {
   }
 
   let ultimo = null, msAggiorna = 0;
-  /** Ridistribuisce le istanze tra livelli e varianti secondo la distanza dalla camera (x, z locali); t: tempo (s). */
-  function aggiorna(cx, cz, t = 0) {
-    tempo.value = t;
+  /** Ridistribuisce le istanze tra livelli e varianti secondo la distanza dalla camera (x, z locali). */
+  let msOmbre = 0;
+  /**
+   * Ogni fotogramma: erba vicina, livelli di dettaglio e (se `sole`, direzione verso il sole) ombre finte.
+   * `giorno` 0–1 attenua le ombre del sole di notte.
+   */
+  function aggiorna(cx, cz, sole = null, giorno = 1) {
+    if (ombre && sole) {
+      const t2 = performance.now();
+      _v.copy(sole).normalize();
+      ombre.passo(_v);
+      uniSuolo.uOmbreForza.value.set(OMBRE.forza * giorno * Math.min(1, Math.max(0, (_v.y - 0.03) / 0.12)), OMBRE.piede * (0.6 + 0.4 * giorno));
+      msOmbre = performance.now() - t2;
+    }
     aggiornaVicini(cx, cz);
     if (ultimo && Math.hypot(cx - ultimo.x, cz - ultimo.z) < RIASSEGNA_DOPO) return;
     const t1 = performance.now();
@@ -667,13 +788,15 @@ export function creaVegetazione(pos, terrain = null) {
       istanze += m.count; chiamate++;
       triangoli += m.count * m.geometry.attributes.position.count / 3;
     });
-    return { istanze, chiamate, triangoli, msAggiorna, msVicino, erba: vicini.erba.mesh.count, felci: vicini.felce.mesh.count,
+    return { istanze, chiamate, triangoli, msAggiorna, msVicino, msOmbre, ombre: ombre ? ombre.oggetti : 0, erba: vicini.erba.mesh.count, felci: vicini.felce.mesh.count,
       ciottoli: vicini.ciottolo.mesh.count };
   }
 
   const conteggi = Object.fromEntries(Object.entries(pos.tipi).map(([k, t]) => [k, t.n]));
   return {
     oggetto, aggiorna, statistiche, conteggi,
+    /** Con la vegetazione nascosta (tasto V) spariscono anche le sue ombre. */
+    nascondiOmbre: () => { if (uniSuolo) uniSuolo.uOmbreForza.value.set(0, 0); },
     totale: Object.values(conteggi).reduce((s, v) => s + v, 0),
     msPosiziona: pos.ms, msCampi: pos.msCampi,
     msCostruzione: performance.now() - t0,
