@@ -256,7 +256,7 @@ const FIUMI_SCENA = {
   semilarghezza: { base: 1.5, perRadice: 0.6, max: 60 }, // m: base + perRadice·√bacino (km²): torrente da 20 km² ~8 m
   profondita: { base: 0.5, perRadice: 0.022 },           // m d'acqua: ~0,8 m a 150 km² (si guada), ~1,2 m a 1000 km², ~2,7 m a 10 000 km²
   sponda: { larghezza: 6, altezza: 0.8 },                // m: sponde basse oltre il pelo dell'acqua
-  argine: 0.15,                                          // pendenza oltre le sponde dove il terreno è più basso
+  argine: 0.4,                                          // pendenza oltre le sponde dove il terreno è più basso
   versante: 0.12, curva: 2,                              // pendenza dei versanti: versante + curva·(fuori/R)²
   valle: { base: 120, perSemilarghezza: 8 },             // R (m oltre le sponde): ~240 m a 15 m di semilarghezza
   raggio: 1000,                                          // R massimo (m), per l'indice spaziale
@@ -265,7 +265,7 @@ const FIUMI_SCENA = {
   cellaIndice: 1000,                                     // m: celle dell'indice spaziale dei tratti
   // Tratti tra punti fissi (js/mondo/fiumi.js): sorgente, foce e confluenze. Alla confluenza il punto fisso
   // sta nel punto più basso del terreno in una griglia di 7×7 punti a `scosta` m attorno al tracciato.
-  tratti: { scosta: 80, zona: 6000, tieni: 6 },
+  tratti: { scosta: 80, zona: 6000, tieni: 6, fondo: 4 },
 };
 
 const _fiumi = new WeakMap();
@@ -366,6 +366,8 @@ function puntiFissi(carta, curve) {
     let prev = Infinity, kPrev = 0;
     for (const k of ord) {
       let x = cv.x[k], z = cv.z[k], L = cv.letto[k];
+      // Sorgente: mai sopra il terreno vero della Scena (la Carta levigata sta spesso più in alto del fondo).
+      if (k === 0) L = Math.min(L, quota(x, z) - cv.prof[k] - F.sponda.altezza);
       if (k === m - 1 && foce[ci]) {
         const f = fissi[foce[ci][0]].get(foce[ci][1]);
         if (f) { x = f.x; z = f.z; L = f.L; }
@@ -417,16 +419,21 @@ function polilinea(carta, pronto, id) {
   const r = pronto.raffinati.get(id);
   if (r) return r;
   if (!tr.grezzo) {
-    // Tracciato della Carta con gli estremi nei punti fissi e il letto tra i loro due valori.
+    // Tracciato della Carta con gli estremi nei punti fissi; il letto segue il terreno vero della Scena (sempre in
+    // discesa tra i due punti fissi). Con il letto della Carta il fiume restava sopra il fondo e l'argine lo
+    // reggeva su un terrapieno (segnalato dall'utente).
     const cv = pronto.curve[tr.ci], n = tr.kb - tr.ka + 1;
     const p = { x: new Float64Array(n), z: new Float64Array(n), letto: new Float64Array(n), w: new Float64Array(n), prof: new Float64Array(n) };
+    const seme = derivaSeme(carta.seme, 101), y = new Float64Array(n);
     for (let j = 0; j < n; j++) {
       const i = tr.ka + j;
       p.x[j] = cv.x[i]; p.z[j] = cv.z[i]; p.w[j] = cv.w[i]; p.prof[j] = cv.prof[i];
-      p.letto[j] = Math.min(tr.A.L, Math.max(tr.B.L, cv.letto[i]));
     }
-    p.x[0] = tr.A.x; p.z[0] = tr.A.z; p.letto[0] = tr.A.L;
-    p.x[n - 1] = tr.B.x; p.z[n - 1] = tr.B.z; p.letto[n - 1] = tr.B.L;
+    p.x[0] = tr.A.x; p.z[0] = tr.A.z; p.x[n - 1] = tr.B.x; p.z[n - 1] = tr.B.z;
+    for (let j = 0; j < n; j++) {
+      y[j] = conRiva(carta, p.x[j], p.z[j], quotaMondo(carta, p.x[j], p.z[j], seme), false) - p.prof[j] - FIUMI_SCENA.sponda.altezza;
+    }
+    p.letto = lettoMonotono(y, tr.A.L, tr.B.L);
     tr.grezzo = conRiquadro(p);
   }
   return tr.grezzo;
@@ -456,6 +463,15 @@ function conRiquadro(p) {
   return p;
 }
 
+/** Il tracciato corre sul fondo: a ogni punto, il terreno a 80 m ai lati non sta più di `metri` m sotto. */
+function sulFondo(quota, px, pz, metri) {
+  for (let j = 1; j < px.length - 1; j++) {
+    const vx = px[j + 1] - px[j - 1], vz = pz[j + 1] - pz[j - 1], l = Math.hypot(vx, vz) || 1, h = quota(px[j], pz[j]);
+    for (const s of [-80, 80]) if (quota(px[j] - vz / l * s, pz[j] + vx / l * s) < h - metri) return false;
+  }
+  return true;
+}
+
 /** Cerca sul terreno il percorso di un tratto (una volta per Carta). */
 function raffina(carta, pronto, id) {
   if (pronto.raffinati.has(id)) return;
@@ -472,7 +488,7 @@ function raffina(carta, pronto, id) {
   // tiene com'è: in pianura il terreno non decide, e il percorso cercato perdeva le anse.
   let peggio = -Infinity;
   for (let j = 0; j < n; j++) peggio = Math.max(peggio, quota(px[j], pz[j]) - pref[j]);
-  if (peggio <= F.tratti.tieni) { pronto.raffinati.set(id, polilinea(carta, pronto, id)); return; }
+  if (peggio <= F.tratti.tieni && sulFondo(quota, px, pz, F.tratti.fondo)) { pronto.raffinati.set(id, polilinea(carta, pronto, id)); return; }
   const via = tracciaPercorso(px, pz, pref, tr.A, tr.B, quota);
   if (!via) { pronto.raffinati.set(id, polilinea(carta, pronto, id)); return; }
   const m = via.x.length;

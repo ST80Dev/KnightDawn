@@ -16,8 +16,11 @@ export const PERCORSO = {
   dislivello: 6,        // m: salire di tanto sopra il livello atteso raddoppia il costo (cresce col quadrato)
   attrazione: 3,        // costo in più al bordo del corridoio (cresce col quadrato della distanza): con poco
                         // richiamo, in pianura il percorso più corto era una retta e perdeva le anse della Carta
+  // Fondovalle (segnalato dall'utente: fiumi a mezza costa su terrapieni): costa stare dove a fianco il terreno
+  // scende più in basso (non si è sul fondo): (quota − minimo dei vicini a `fondo.distanza` m) / `fondo.metri`, al quadrato.
+  fondo: { distanza: 80, metri: 1 },
   passo: 20,            // m: distanza tra i punti del percorso finale
-  liscia: [5, 4],       // media mobile su ±5 punti (~200 m), 4 passate: via i gradini della griglia
+  liscia: [3, 2],       // media mobile su ±5 punti (~200 m), 4 passate: via i gradini della griglia
 };
 
 /**
@@ -65,13 +68,24 @@ export function tracciaPercorso(px, pz, pref, A, B, quota, P = PERCORSO) {
       }
     }
   }
-  const costo = new Float64Array(N).fill(Infinity);
+  const costo = new Float64Array(N).fill(Infinity), hq = new Float64Array(N).fill(NaN);
+  for (let k = 0; k < N; k++) if (d2[k] <= W * W) hq[k] = quota(x0 + (k % nx) * g, z0 + ((k / nx) | 0) * g);
+  const passiFondo = Math.max(1, Math.round(P.fondo.distanza / g));
   for (let k = 0; k < N; k++) {
-    if (d2[k] > W * W) continue;
-    const x = x0 + (k % nx) * g, z = z0 + ((k / nx) | 0) * g;
-    const sopra = Math.max(0, quota(x, z) - rc[k]) / P.dislivello;
+    if (Number.isNaN(hq[k])) continue;
+    const c = k % nx, r = (k / nx) | 0, h = hq[k];
+    const sopra = Math.max(0, h - rc[k]) / P.dislivello;
     const via = Math.sqrt(d2[k]) / W;
-    costo[k] = 1 + sopra * sopra + P.attrazione * via * via;
+    let minimo = h;
+    for (let b = -passiFondo; b <= passiFondo; b += passiFondo) for (let a = -passiFondo; a <= passiFondo; a += passiFondo) {
+      const cc = c + a, rr = r + b;
+      if ((a || b) && cc >= 0 && rr >= 0 && cc < nx && rr < nz) {
+        const v = hq[rr * nx + cc];
+        if (v < minimo) minimo = v;
+      }
+    }
+    const fondo = (h - minimo) / P.fondo.metri;
+    costo[k] = 1 + sopra * sopra + fondo * fondo + P.attrazione * via * via;
   }
   const cellaDi = (x, z) => {
     const c = Math.min(nx - 1, Math.max(0, Math.round((x - x0) / g)));
@@ -198,6 +212,13 @@ export function lettoMonotono(y, alto, basso) {
   const out = new Float64Array(n);
   let i = 0;
   for (let b = 0; b < val.length; b++) for (; i <= fine[b]; i++) out[i] = val[b];
+  // Mai sopra il terreno incontrato (segnalato dall'utente: nelle conche lungo la via la media lasciava il fiume
+  // sospeso su un terrapieno): dove serve si scende, e da lì in giù il letto non risale.
+  let tetto = alto;
+  for (let k = 0; k < n; k++) {
+    tetto = Math.min(tetto, out[k], Math.max(basso, Math.min(alto, y[k])));
+    out[k] = tetto;
+  }
   out[0] = alto; out[n - 1] = basso;
   return out;
 }
