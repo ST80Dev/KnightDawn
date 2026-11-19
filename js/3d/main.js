@@ -20,7 +20,9 @@ import { createCartaVista } from './cartaVista.js';
 import { creaOrizzonte } from './orizzonte.js';
 import { creaAcqueScena } from './acqua.js';
 import { generaCartaAsincrona, verificaSemi } from '../mondo/generatore.js';
-import { generaScena } from '../mondo/scena.js';
+import { generaScena, centroBlocco } from '../mondo/scena.js';
+import { posizionaVegetazione, coperturaMondo, coperturaTavullia } from '../mondo/vegetazione.js';
+import { creaVegetazione } from './vegetazione3d.js';
 import { semeDaTesto } from '../mondo/rumore.js';
 
 // Nebbia sulla distanza vera dalla camera, non sulla profondità lungo l'asse di vista (come fa Three.js):
@@ -240,6 +242,11 @@ let livelliAcqua = null;                  // { fiume, lago, cols, cell, half }: 
 let carta = null;                         // Carta del mondo generato (null a Tavullia)
 let scenaAttuale = null;                  // { tipo: 'tavullia' } | { tipo: 'mondo', cx, cz } (centro, m del mondo)
 let statPendenze = '';                    // percentili della pendenza della Scena (F3)
+let vegetazione = null;                   // alberi, arbusti, rocce della Scena (vegetazione3d.js)
+let vegetazioneVisibile = true;           // tasto V
+// Il blocco del mondo si centra sulla griglia fissa del mondo (centroBlocco): le coordinate locali chieste per la
+// Scena (rispetto al centro richiesto) si spostano di tanto in posizionaCavaliere.
+let scostamento = { x: 0, z: 0 };
 
 // Suolo calpestabile della Scena attuale: terreno + superfici costruite (cortile, rampa). Cavaliere e
 // camera ricevono questi oggetti una volta sola; cambiando Scena cambia solo ciò a cui rimandano.
@@ -431,8 +438,15 @@ function segnapostiLuoghi(cx, cz, ter) {
  * @param {{tipo:'tavullia'} | {tipo:'mondo', cx:number, cz:number}} desc
  */
 async function caricaScena(desc) {
-  for (const o of [terrain?.mesh, acqua, castle?.object, orizzonte?.oggetto, acqueScena, segnaposti]) {
+  for (const o of [terrain?.mesh, acqua, castle?.object, orizzonte?.oggetto, acqueScena, segnaposti, vegetazione?.oggetto]) {
     if (o) { scene.remove(o); libera(o); }
+  }
+  vegetazione = null;
+  scostamento = { x: 0, z: 0 };
+  if (desc.tipo === 'mondo') {
+    const cx = centroBlocco(desc.cx), cz = centroBlocco(desc.cz);
+    scostamento = { x: desc.cx - cx, z: desc.cz - cz };
+    desc = { ...desc, cx, cz };
   }
   castle = null;
   segnaposti = null;
@@ -460,7 +474,24 @@ async function caricaScena(desc) {
     livelliAcqua = { fiume: dati.fiume, lago: dati.lago, cols: meta.cols, cell: meta.cellSize, half: meta.sizeMeters / 2 };
     segnaposti = segnapostiLuoghi(desc.cx, desc.cz, terrain);
     if (segnaposti) scene.add(segnaposti);
+    vegetazione = creaVegetazione(posizionaVegetazione({
+      heights, cols: meta.cols, cell: meta.cellSize, cx: desc.cx, cz: desc.cz, acqua: dati,
+      copertura: coperturaMondo(carta, Calendar.stagione), seme: carta.seme,
+      piani: (carta.luoghi || []).flatMap((l) => l.piani || []), mare: true,
+    }));
   }
+  if (desc.tipo === 'tavullia') {
+    // Profilo fisso di collina temperata; niente vegetazione sul colle del castello e sulla rampa.
+    const m = terrain.meta, C = castle.cfg;
+    vegetazione = creaVegetazione(posizionaVegetazione({
+      heights: terrain.heights, cols: m.cols, cell: m.cellSize, cx: 0, cz: 0, acqua: null,
+      copertura: coperturaTavullia(), seme: 7,
+      piani: [{ cx: C.x, cz: C.z, ux: 1, uz: 0, a: C.lato / 2 + 9, b: C.lato / 2 + 9, r: 4, s: 10 }],
+      mare: terrain.minElev < 0,
+    }));
+  }
+  vegetazione.oggetto.visible = vegetazioneVisibile;
+  scene.add(vegetazione.oggetto);
   scene.add(terrain.mesh);
 
   if (desc.tipo === 'mondo') {
@@ -486,6 +517,7 @@ async function caricaScena(desc) {
 
 /** Mette il cavaliere in (x, z) locali della Scena attuale; lo crea la prima volta. */
 function posizionaCavaliere(x, z, direzione) {
+  x += scostamento.x; z += scostamento.z;
   if (!knight) {
     knight = createKnight(suolo, { x, z, direzione }, ostacoli);
     scene.add(knight.object);
@@ -768,6 +800,10 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyR' && !e.repeat) riposa();
   if (e.code === 'KeyT' && !e.repeat) avanza();
   if (e.code === 'KeyP' && !e.repeat) cambiaPausa();
+  if (e.code === 'KeyV' && !e.repeat && vegetazione) {
+    vegetazioneVisibile = !vegetazioneVisibile;
+    vegetazione.oggetto.visible = vegetazioneVisibile;
+  }
   if (e.code === 'F8' && !e.repeat) {
     e.preventDefault();
     nuovaPartita();
@@ -892,6 +928,13 @@ function aggiornaPannello(now) {
   }
   if (terrain) {
     testo += `\nterreno: ${terrain.meta.source} · ${fmt(terrain.minElev)}–${fmt(terrain.maxElev)} m · ${statPendenze}`;
+    if (vegetazione) {
+      const v = vegetazione;
+      testo += `\nvegetazione (V): ${fmt(v.totale)} oggetti · ${v.chiamate} chiamate · posizionamento ${fmt(v.msPosiziona)} ms`
+        + ` (campi ${fmt(v.msCampi)}) · costruzione ${fmt(v.msCostruzione)} ms${vegetazioneVisibile ? '' : ' · nascosta'}`
+        + `\n  ${Object.entries(v.conteggi).filter(([, n]) => n).map(([k, n]) => `${k} ${fmt(n)}`).join(' · ')}`
+        + `\ndisegno: ${fmt(renderer.info.render.calls)} chiamate · ${fmt(renderer.info.render.triangles)} triangoli`;
+    }
     if (orizzonte) testo += `\norizzonte: fino a ${fmt(110)} km · ${fmt(orizzonte.triangoli)} triangoli · ${fmt(orizzonte.ms)} ms`;
     if (scenaAttuale?.tipo === 'mondo' && knight) {
       testo += `\nmondo: cavaliere a ${fmt((scenaAttuale.cx + knight.stato.x) / 1000, 2)},`
