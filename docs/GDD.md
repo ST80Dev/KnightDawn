@@ -149,8 +149,8 @@ tra due luoghi d'interesse c'erano ore di cammino e le missioni si sarebbero all
   regole, verificate in automatico: in montagna dal fondovalle al crinale ci sono **~3–5 km**; una parte dei
   castelli sta nei fondovalle o allo sbocco delle valli, **a ≤ 5 km da un crinale** con almeno ~800 m di
   dislivello.
-- **Spostamenti**: o di persona nella Scena o sulla Carta. Da castello a castello ~4–5 ore di gioco sulla
-  Carta (1,5 Passi di marcia); il mondo intero si attraversa in ~3 giorni di marcia (~30 ore di cammino).
+- **Spostamenti**: o di persona nella Scena o sulla Carta, allo **stesso costo in tempo di gioco** (§3).
+  Da castello a castello ~2 giorni a piedi, ~1 a cavallo; il mondo si attraversa in ~9–12 giorni a piedi.
 - **Varietà nella distribuzione, non nel numero**: un mondo ha sempre catena, colline, pianura, costa,
   laghi, fiumi e il clima dal freddo all'arido, solo meno ripetuti. Si rimpicciolisce la scala d'insieme
   (forma del continente, numero di catene, fascia del clima), non la scala locale (larghezza delle catene,
@@ -408,40 +408,46 @@ rivisti quando si agganciano alle Scene.
 | Contrattare al mercato (più acquisti)              | 1–2 ore           | 1/3–2/3           |
 | Curare una ferita lieve                            | 1–3 ore           | 1/3–1             |
 | Sosta di riposo di giorno (+10 Forza)              | ~3 ore            | 1                 |
-| Avanza: lasciar passare il tempo (recupero da fermi) | fino alla prossima ora canonica | il resto del Passo |
 | Addestrarsi                                        | mezza giornata    | 2–4 Passi         |
 | Dormire (all'addiaccio ~+30 Forza da Compieta; di più in locanda) | fino a Prima | salto atomico |
 
-Esempio: attraversare la piazza (5 minuti reali ≈ 50 minuti di gioco) e parlare con 4 persone
-(≈ 40–60 minuti) fa poco meno di 2 ore: un giro al mercato.
+Esempio: girare il borgo a piedi (10 minuti reali ≈ 1h40 di gioco), parlare con 3–4 persone (~45–60 minuti),
+contrattare al mercato o dal fabbro (1–2 ore) e una sosta in taverna (~1 ora): ~14 minuti reali, mezza giornata
+di gioco. **Il calendario scorre per ciò che si fa** (muoversi, parlare, contrattare, riposare), non per il tempo
+reale passato a decidere.
 
 **Ritmo del tempo nelle Scene** [rivisto con l'utente, novembre 2026: prima ×15 di giorno e ×60 di notte].
 Un solo rapporto **×10**, da fermi come in movimento, di giorno come di notte: stando fermi il tempo non corre
 più in fretta. Un'ora canonica ogni 18 minuti reali; dal castello al valico (~5 km, ~900 m di salita, ~20
 minuti reali di corsetta) passano ~3,5 ore, come per un escursionista vero e quasi come sulla Carta, che
-conta la salita (regola tipo Naismith). In piano la Scena costa di più della Carta (1 km di corsetta ≈ 50
-minuti di gioco, sulla Carta ~15): è il tempo della presenza. Le ore lunghe le decide il giocatore. Per non dover aspettare davvero c'è **Avanza** (salto alla prossima ora canonica, di
-giorno o di notte). La notte di solito si salta dormendo; chi resta sveglio la vede passare in ~54 minuti
-reali, oppure ora per ora con Avanza, al
-buio e con incontri più rischiosi: vegliare è una scelta, non un'attesa. A ogni ora canonica il mondo
+conta la salita (regola tipo Naismith). **La Carta è allineata alla Scena**: 1 km di corsetta costa ~52
+minuti di gioco in entrambe (a piedi ~10 km al giorno; a cavallo ~20), così andare di persona non è mai una
+penalità di calendario: costa solo tempo reale. **Niente salti di tempo senza motivo** [deciso con
+l'utente]: Avanza (tasto T) resta solo per i test. Il tempo passa muovendosi, agendo o riposando (R); per
+arrivare a un'ora precisa (un incontro a Vespri, le porte del borgo) ci saranno azioni con un motivo e un
+luogo: aspettare all'osteria, fare la guardia, appostarsi. La notte di solito si salta dormendo; chi resta
+sveglio la vede passare in ~54 minuti reali, al buio e con incontri più rischiosi: vegliare è una scelta. A ogni ora canonica il mondo
 «gira» (meteo, scadenze, possibile incontro casuale, notizie), come nel 2D; gli incontri di persona
 invece nascono dai luoghi e dalle persone, senza aspettare l'ora. Nelle Scene la Forza cala con la
 distanza (di più correndo e in salita) e **si recupera da fermi**, ~10 per Passo di gioco, allo stesso
-ritmo che si aspetti davvero, si usi Avanza o si riposi.
+ritmo che si aspetti o si riposi.
 
 #### Corrispondenza con viaggio medievale
 
-Ritmi indicativi (da tarare): **a piedi ~12 km per Passo di marcia** in piano (pendenza e terreno
-rallentano), circa 3 Passi di marcia al giorno, poi la Forza impone la sosta. A cavallo ~20 km per
-Passo. Per mare ~20–25 km per Passo, giorno e notte, secondo il meteo. Le **soste** (notte,
+Ritmi [rivisti con l'utente, novembre 2026: Carta allineata alla Scena, prima 12 km per Passo]: **a piedi
+~3,5 km per Passo di marcia** in piano (la salita conta come strada in più: 600 m ≈ 4 km), circa 3 Passi di
+marcia al giorno (~10 km), poi la Forza impone la sosta. **A cavallo ~2×**: ~7 km per Passo, ~20 km al giorno
+(di persona il galoppo va a ~13 min per km ma consuma il vigore del cavallo; sulla giornata la media è la
+stessa). Per mare ~2–2,5× a piedi, giorno e notte, secondo il meteo [da ritarare]. Sono ritmi di gioco, non
+reali (un viandante vero fa 25–30 km al giorno): il mondo è piccolo in km e grande in giorni. Le **soste** (notte,
 accampamento) sono azioni atomiche: avanzano il calendario d'un colpo, senza tempo reale.
 
 | Distanza nel mondo generato | Esempio | Tempo in-fiction | Tempo reale (15 s / 3 s per Passo) |
 |---|---|---|---|
-| ~18 km | da un castello al vicino | ~1,5 Passi di marcia (~4,5 ore) | ~25 s / ~5 s |
-| 30–45 km | da una fascia climatica alla vicina | 1–1,5 giorni | ~1 min / ~10 s |
-| 90 km | da nord a sud | ~2,5 giorni (~7,5 Passi di marcia + soste) | ~2 min / ~25 s |
-| 120 km | da ovest a est | ~3,5 giorni | ~3 min / ~30 s |
+| ~18 km | da un castello al vicino | ~2 giorni a piedi (~5 Passi di marcia), ~1 a cavallo | ~1,5 min / ~20 s |
+| 30–45 km | da una fascia climatica alla vicina | 3–4,5 giorni a piedi | ~3 min / ~40 s |
+| 90 km | da nord a sud | ~9 giorni a piedi (~26 Passi di marcia + soste) | ~7 min / ~1,5 min |
+| 120 km | da ovest a est | ~12 giorni a piedi, ~6 a cavallo | ~9 min / ~2 min |
 
 Il tempo reale esclude le soste per gli eventi, che sono il gioco vero. [Mondo di 120×90 km, deciso con
 l'utente: il tempo si passa nei luoghi e nelle Scene, non a marciare sulla Carta.] Il calendario (Diario,
@@ -496,11 +502,10 @@ Durante la Veglia:
 - A scala 1:1, a piedi (poi a cavallo). Il tempo scorre col tempo reale compresso (§3 *Tempo e
   calendario*); la Forza segue la distanza: correre fa vedere più cose nello stesso tempo ma stanca
   di più.
-- Muoversi nella Scena costa più tempo di gioco che sulla Carta (1 km di corsa ≈ 1h20 contro ~15 min):
-  **la Scena è il tempo della presenza** (guardarsi attorno, fermarsi, parlare), **la Carta quello della
-  marcia** con una meta. Per non incentivare scorciatoie: la Carta si usa solo per mete fuori dall'area
-  locale (oltre ~2 km); «Vai a» dentro l'area locale (300 m–1 km, con dissolvenza) costa il tempo che
-  servirebbe a piedi.
+- Muoversi nella Scena costa lo **stesso tempo di gioco** che sulla Carta (1 km di corsetta ≈ 52 minuti):
+  si sceglie solo quanto tempo reale spendere. **La Scena è il tempo della presenza** (guardarsi attorno,
+  cercare, salire a guardare oltre, parlare), **la Carta quello della marcia** con una meta. Uso tipico:
+  sulla Carta fino ai dintorni della meta, di persona gli ultimi 1–3 km.
 - Dettagli in `docs/ESPLORAZIONE_3D.md`.
 
 ### Combattimento

@@ -325,8 +325,8 @@ const _guadagno = (prima) => {
   return g > 0 ? `: Forza +${g}.` : '.';
 };
 
-// Avanza (T): salto atomico all'inizio della prossima ora canonica, di giorno o di notte: serve per
-// non dover aspettare davvero (il tramonto, un'apertura…). Da fermi si recupera come aspettando.
+// Avanza (T, solo per i test: niente salti di tempo senza motivo, docs/GDD.md §3): salto atomico
+// all'inizio della prossima ora canonica. Da fermi si recupera come aspettando.
 function avanza() {
   if (!knight || inPausa) return;
   if (knight.stato.velEffettiva > 0.1) { messaggio('Fermati prima di far passare il tempo.'); return; }
@@ -350,7 +350,7 @@ function riposa() {
     messaggio(`Dormi all'addiaccio fino a Prima (${_ore(passi)})${_guadagno(prima)}`);
   } else {
     if (Knight.forza.cur >= Knight.forza.max) {
-      messaggio('Sei riposato. Per far passare il tempo: T (Avanza).');
+      messaggio('Sei riposato: la Forza è piena.');
       return;
     }
     Calendar.avanza(VIAGGIO.PASSI_SOSTA);
@@ -652,7 +652,7 @@ async function init() {
   };
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no'
-    + ' · T: avanza all\'ora dopo · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: Carta (clic: vai lì)'
+    + ' · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: Carta (clic: vai lì)'
     + ' · F3: info · F8: nuova partita',
   'aiuto');
 }

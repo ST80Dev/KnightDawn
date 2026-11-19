@@ -1010,6 +1010,11 @@ conoscenza sulla Carta. Tavullia resta la scena di prova con il castello di M4.
    - *Tempo nelle Scene ×10* (deciso con l'utente): un solo rapporto, da fermi come in movimento, di giorno come
      di notte (prima ×15 e ×60). Dal castello al valico ~3,5 ore di gioco in ~20 minuti reali; la Carta conta già
      la salita (`VIAGGIO.METRI_PER_METRO_SALITA`). M6 chiusa dall'utente.
+   - *Carta allineata alla Scena* (deciso con l'utente): `VIAGGIO.METRI_PER_PASSO` 3456 m (un Passo = 18 minuti
+     reali di corsetta a ×10), ~52 minuti di gioco per km, ~10 km al giorno a piedi; a cavallo ~2× (solo regola:
+     `METRI_PER_PASSO_CAVALLO`, il cavallo è una milestone futura). Forza invariata (100 ≈ 30 km camminando: una
+     giornata di marcia ne consuma ~metà–tre quarti). Cerchi della Carta con ore e giorni di marcia. Tasto T
+     (Avanza) solo per i test, tolto dall'aiuto a schermo: il tempo passa muovendosi, agendo o riposando.
    - *Stadio 2:* il punto più alto della cella (griglia di 50 m, poi 10 m) deve essere **una cima vera**:
      nulla più alto entro 150, 300 e 450 m (16 direzioni). Senza questa regola il primo sito del seme 48213
      era un dosso a 469 m ai piedi di un rilievo di 522 m a 400 m di distanza, e il borgo cadeva nella sella.
