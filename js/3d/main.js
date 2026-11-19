@@ -490,7 +490,7 @@ async function caricaScena(desc) {
       heights, cols: meta.cols, cell: meta.cellSize, cx: desc.cx, cz: desc.cz, acqua: dati,
       copertura: coperturaMondo(carta, Calendar.stagione), seme: carta.seme,
       piani: (carta.luoghi || []).flatMap((l) => l.piani || []), mare: true,
-    }));
+    }), terrain);
   }
   if (desc.tipo === 'tavullia') {
     // Profilo fisso di collina temperata; niente vegetazione sul colle del castello e sulla rampa.
@@ -500,7 +500,7 @@ async function caricaScena(desc) {
       copertura: coperturaTavullia(), seme: 7,
       piani: [{ cx: C.x, cz: C.z, ux: 1, uz: 0, a: C.lato / 2 + 9, b: C.lato / 2 + 9, r: 4, s: 10 }],
       mare: terrain.minElev < 0,
-    }));
+    }), terrain);
   }
   vegetazione.oggetto.visible = vegetazioneVisibile;
   scene.add(vegetazione.oggetto);
@@ -959,6 +959,7 @@ function aggiornaPannello(now) {
       testo += `\nvegetazione (V): ${fmt(v.totale)} oggetti, ${fmt(st.istanze)} disegnati · ${st.chiamate} chiamate`
         + ` · ${fmt(st.triangoli)} triangoli · posizionamento ${fmt(v.msPosiziona)} ms (campi ${fmt(v.msCampi)})`
         + ` · costruzione ${fmt(v.msCostruzione)} ms · livelli ${fmt(st.msAggiorna, 1)} ms${vegetazioneVisibile ? '' : ' · nascosta'}`
+        + `\n  vicino: erba ${fmt(st.erba)} ciuffi · felci ${fmt(st.felci)} · ciottoli ${fmt(st.ciottoli)} · ${fmt(st.msVicino, 1)} ms`
         + `\n  ${Object.entries(v.conteggi).filter(([, n]) => n).map(([k, n]) => `${k} ${fmt(n)}`).join(' · ')}`
         + `\ndisegno: ${fmt(renderer.info.render.calls)} chiamate · ${fmt(renderer.info.render.triangles)} triangoli`;
     }
@@ -1007,7 +1008,7 @@ function frame(now) {
       aggiornaNebbia(controls.target);
     }
   }
-  if (vegetazione && vegetazioneVisibile) vegetazione.aggiorna(camera.position.x, camera.position.z);
+  if (vegetazione && vegetazioneVisibile) vegetazione.aggiorna(camera.position.x, camera.position.z, now / 1000);
   aggiornaPannello(now);
   renderer.render(scene, camera);
 }
