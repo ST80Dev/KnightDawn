@@ -1162,13 +1162,13 @@ siti validi su 30 semi su 30 (verifica automatica). Con il passo 9: dal borgo si
   raggiunge di persona.
 - **Torri di sentinella dei valichi**: in M7 o con la milestone dei luoghi (oggi fuori da M7)?
 
-## Vegetazione e oggetti sparsi (in parallelo a M7) — piano da approvare
+## Vegetazione e oggetti sparsi (in parallelo a M7)
 
 > Autorizzata dall'utente in parallelo a M7 (deroga alla regola 4 di `CLAUDE.md`). Design di partenza: M4,
 > «Dopo la valutazione — realismo del terreno» (punto 2, oggetti sparsi a *instancing*) e «stile
 > simil-realistico da codice»; M6 passo 7 (`coloreMondo`); M7, terrapieni (passo 2) e blocco che segue il
 > cavaliere (punto 6, passo 9); `docs/GDD.md` §2 («Dentro le Scene», regole di varietà, «Dimensioni e densità»).
-> **Stato: piano scritto, da approvare. Nessun codice finché l'utente non risponde alle domande in fondo.**
+> **Stato: piano approvato dall'utente (novembre 2026) con le decisioni in fondo; passo 1 fatto, da provare.**
 
 **Obiettivo.** Nelle Scene del mondo generato ci sono alberi, arbusti, erba, sassi, massi e affioramenti dove il
 colore del terreno già li promette: il bosco dipinto diventa bosco, la macchia sui pendii diventa cespugli, le
@@ -1317,6 +1317,31 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
    danno gli stessi oggetti nella zona comune; nessun oggetto in acqua, in alveo, oltre 48° o sui terrapieni, su
    30 semi. *Prova:* i punti verdi scuri coprono il bosco dipinto e lasciano le radure; niente punti in fiumi,
    laghi, pareti, rocca e borgo; F3 mostra conteggi per tipo e ms di costruzione; colori del terreno uguali a prima.
+   **Stato: fatto, da provare dall'utente.**
+   - *Copertura condivisa* (`coperturaMondo` in `js/mondo/vegetazione.js`, usata da `coloreMondo`): colori del
+     terreno identici al bit a prima (1,2 milioni di punti a caso, 3 semi, primavera e inverno). `COLORI_MONDO`
+     resta come altro nome di `COPERTURA`.
+   - *Griglia del blocco sul mondo* (`centroBlocco` in `scena.js`, chiamato da `generaScena` e da `caricaScena`): il
+     centro si sposta al più di 3,9 m su un multiplo di 7,8125 m; il cavaliere resta nello stesso punto del mondo
+     (`scostamento` in `posizionaCavaliere`, anche per i salvataggi di prima). Due blocchi a 1 km hanno le stesse
+     quote e lo stesso pelo dell'acqua su tutti i 33 153 vertici in comune.
+   - *Posizionamento* (`posizionaVegetazione`): densità per vertice (bosco come il colore con bordi frastagliati da un
+     rumore su 90 m, alberi isolati, rive, limite degli alberi, pendenza fine, roccia, ghiaioni, neve), una griglia
+     del mondo per tipo (alberi 6 m con la specie per peso; cespugli e arbusti alti 4 m, sterpi 5, canne 3, sassi 5,
+     massi 20, affioramenti 40, tronchi caduti 15), quota dal triangolo disegnato. 13 tipi: latifoglia, conifera,
+     pino, albero di riva, albero secco, cespuglio, arbusto alto, sterpo, canne, sasso, masso, affioramento, tronco.
+     Erba, fiori e felci (solo vicino al cavaliere) arrivano al passo 5.
+   - *Punti di controllo* (`js/3d/vegetazione3d.js`): un punto colorato per oggetto, 3 chiamate; tasto `V`.
+     F3: oggetti per tipo, chiamate, ms di posizionamento (e dei campi), chiamate e triangoli totali.
+   - *Misure* (Node, blocchi di 2×2 km): posizionamento 100–200 ms (campi sui vertici 55–100 ms; il blocco ne costa
+     125–145); oggetti per blocco: bosco 60 000–75 000 (alberi 40 000–63 000), collina 6 000–20 000, pianura
+     5 000–35 000, montagna 25 000–40 000 (soprattutto arbusti alti e sassi), sud e sabbia 7 000–25 000, palude
+     ~30 000. **30 semi su 30** (blocco della partenza): nessun oggetto in acqua né sui terrapieni; il blocco spostato
+     di 1 km mette gli stessi oggetti nella zona comune (oltre 40 m dai bordi). Tavullia: ~10 800 oggetti, nessuno sul
+     colle del castello. In headless nessun errore.
+   - *Limiti*: nei ~30 m dal bordo la pendenza «di zona» e la distanza dall'acqua non vedono oltre il blocco (lì
+     blocchi vicini possono differire); il seme 48213 parte in una valle fredda (0,9 °C al mare): niente alberi, solo
+     arbusti alti, coerente col clima; da vicino un punto copre mezzo schermo (sono punti di prova, non oggetti).
 2. **Alberi.** Latifoglia e conifera, livelli vicino e lontano, aggiornamento delle istanze vicine, crescita
    all'ingresso. *Prova:* il bosco si legge come bosco da vicino e da 1 km; nessun tronco sospeso o sepolto;
    FPS in pieno bosco e da un'altura che guarda il blocco; chiamate e istanze in F3; giudizio dell'utente sullo stile.
@@ -1331,8 +1356,8 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
    alberi, palude (canne, alberi secchi), rive (alberi di riva, canne), alberi isolati, fiori, felci, tronchi
    caduti. *Prova:* su 3–4 semi, scene in pianura, collina, bosco, montagna, sud arido, nord freddo e lungo un
    fiume si distinguono a colpo d'occhio.
-7. **Stagioni, ombre e rifiniture.** Colori per stagione, inverno spoglio, neve sulle conifere; ombre degli alberi
-   vicini se il budget regge; bordo del blocco (punto 8). *Prova:* le quattro stagioni a colpo d'occhio; FPS.
+7. **Rifiniture** (stagioni rinviate, ombre dopo: decisioni 4 e 6). Vento, toni per istanza, resa delle chiome
+   dopo il giudizio dell'utente al passo 2; bordo del blocco non affrontato (decisione 9). *Prova:* FPS invariati.
 8. **Misure e chiusura.** Caso peggiore (bosco fitto in collina accanto alla rocca di partenza, dopo il merge di
    M7) di giorno e di notte; verifica su 30 semi delle esclusioni; aggiornare «Stile visivo» in testa al documento.
    *Prova:* 60 FPS su PC medio dell'utente su Pages; vegetazione ≤ 40 chiamate.
@@ -1362,21 +1387,20 @@ Carta e `VERSIONE_GENERATORE` invariate.
 - [Probabile] Se la griglia del blocco non si allinea al mondo (domanda 8), al cambio di blocco qualche oggetto
   vicino a una soglia (riva, 48°, bordo di un terrapieno) può comparire o sparire.
 
-### Domande per l'utente (da decidere prima del codice)
+### Decisioni prese con l'utente (novembre 2026)
 
-1. **File nuovi**: `js/mondo/vegetazione.js` (posizionamento, senza grafica) e `js/3d/vegetazione3d.js` (mesh)?
-   E si sposta il calcolo della copertura (bosco, radure, roccia) da `coloreMondo` a una funzione pura condivisa?
-2. **Quota degli oggetti dalla mesh del blocco** invece che da `quotaFinale` diretta (motivo al punto 3)? Le
-   decisioni restano sulle grandezze del mondo.
-3. **Tavullia**: niente vegetazione (invariata, come deciso in M7) oppure un profilo fisso «collina temperata»?
-4. **Stagioni** in questa milestone (passo 7) o rinviate?
-5. **Collisioni**: solo tronchi, massi e affioramenti; arbusti, erba e sassi si attraversano?
-6. **Ombre degli alberi vicini**: da provare al passo 7 se il budget regge, o niente ombre?
-7. **Spianata attorno alle mura**: 40 m senza alberi né cespugli fuori dalla scarpata del terrapieno?
-8. **Griglia del blocco allineata al mondo** (centro multiplo di 7,8125 m): la propongo alla sessione di M7 per il
-   passo 9, o la faccio qui in `generaScena` (piccolo spostamento del blocco, ≤ 4 m)?
-9. **Bordo del blocco**: se si vede lo stacco tra alberi e colore piatto dell'orizzonte, si accetta o si valuta una
-   fascia di alberi semplificati nel primo anello dell'orizzonte (oggi esclusa dai vincoli)?
+1. **File nuovi approvati:** `js/mondo/vegetazione.js` (posizionamento, senza grafica) e `js/3d/vegetazione3d.js`
+   (mesh); la copertura (bosco, radure, roccia, neve) si sposta da `coloreMondo` in `coperturaMondo`, condivisa.
+2. **Quota degli oggetti dalla mesh del blocco**; le decisioni sulle grandezze del mondo (campionate sui vertici
+   del blocco, che stanno su punti fissi del mondo).
+3. **Tavullia: profilo fisso di collina temperata** (bosco e roccia dove il suo colore li dipinge).
+4. **Stagioni rinviate** (il passo 7 resta per le rifiniture).
+5. **Collisioni**: tronchi, massi, affioramenti e sassi grandi; sassi piccoli, arbusti ed erba si attraversano.
+6. **Ombre della vegetazione: dopo.**
+7. **Spianata attorno alle mura: non fondamentale**; resta un parametro (`VEGETAZIONE.spianata`, 20 m).
+8. **Griglia del blocco allineata al mondo: fatta qui** (`centroBlocco` in `scena.js`).
+9. **Bordo del blocco** (stacco tra gli ultimi alberi e il colore piatto dell'orizzonte): **non affrontato**, si
+   vedrà più avanti.
 
 ## Fuori dal prototipo (non farlo ora)
 
