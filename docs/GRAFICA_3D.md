@@ -53,19 +53,19 @@ armatura completa con elmo chiuso è il caso più favorevole: niente volto, mani
 Piano generale (superficie sfumata + dettaglio nello shader, poi oggetti sparsi): `docs/ESPLORAZIONE_3D.md`,
 M4 «Dopo la valutazione», e la sezione *Vegetazione e oggetti sparsi*.
 
-### Neve (`coloreMondo` e `buildSurfaceMondo` in `js/3d/terrain.js`) — fatto, da provare dall'utente
+### Neve (`materialeSuolo` in `js/3d/terrain.js`) — fatto, da provare dall'utente
 
 Problema segnalato dall'utente: sulla neve, soprattutto vicino al cavaliere, non si capivano salite e discese.
 - Causa misurata: con `#f1f3f6` la neve al sole usciva a `255,249,227` (rosso saturo); tra 0° e 20° di
   inclinazione la differenza era di 2 livelli su 255. La luce calda del sole la rendeva anche color crema.
-- Rimedio:
-  1. bianco freddo che non satura (`#dde3ea`);
-  2. sui versanti vira all'azzurro-grigio delle ombre sulla neve, secondo la **pendenza fine** della superficie
-     (`coloreMondo` riceve un sesto argomento facoltativo; l'orizzonte usa ancora quella su ~60 m);
-  3. **dettaglio nello shader** (`conDettaglioNeve`): cumuli larghi (~9 m), onde del vento allungate (2–4 m) e
-     grana fine (~1 m) inclinano la normale dove c'è neve (attributo `aNeve` per vertice, dalla copertura);
-     pieno fino a 50 m dalla camera, svanisce a 150 m. Parametri in `DETTAGLIO_NEVE`.
-- Estensione naturale: lo stesso meccanismo per prato, terra e roccia (piano del terreno).
+- Rimedio, dentro il materiale a colore per pixel del terreno (`materialeSuolo`, che decide roccia e neve pixel
+  per pixel):
+  1. bianco freddo che non satura (`COLORE_NEVE` `#dde3ea`, anche per i biomi neve e ghiaccio);
+  2. sui versanti la neve vira all'azzurro-grigio delle ombre (`COLORE_NEVE_VERSANTE`), secondo la pendenza
+     della normale del pixel (`NEVE_VERSANTE`: da 2° a 24°);
+  3. dettaglio della normale dove c'è neve: cumuli larghi (~8 m), onde del vento allungate (4×2 m) e grana fine
+     (~1 m), pieno fino a 50 m dalla camera, spento a 150 m (`DETTAGLIO_NEVE`). Solo luce.
+- Estensione naturale: lo stesso meccanismo (normale inclinata nello shader) per prato, terra e roccia.
 
 ## Apporti esterni (rinviati)
 

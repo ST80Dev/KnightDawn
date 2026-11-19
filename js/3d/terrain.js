@@ -161,12 +161,15 @@ COLORI_SCENA[BIOMA.FIUME] = COLORI_SCENA[BIOMA.PIANURA];
 const COLORE_ROCCIA = new THREE.Color('#8f877a');
 const COLORE_ROCCIA_SCURA = new THREE.Color('#6c665e');
 const COLORE_GHIAIONE = new THREE.Color('#9d978b');
-// Neve: un bianco freddo che al sole pieno NON satura (con '#f1f3f6' ogni faccia rivolta al sole usciva a 255 e
-// salita e discesa avevano lo stesso colore; la luce calda del sole la rendeva anche color crema). Sui versanti
-// vira all'azzurro-grigio delle ombre sulla neve: il rilievo si legge anche vicino al cavaliere.
+// Neve (docs/GRAFICA_3D.md): un bianco freddo che al sole pieno NON satura. Con '#f1f3f6' ogni faccia rivolta al sole
+// usciva a 255 (misurato): salita e discesa avevano lo stesso colore, e la luce calda la rendeva color crema.
+// Nel materiale per pixel (materialeSuolo) la neve vira all'azzurro-grigio delle ombre sui versanti (pendenza della
+// normale del pixel) e, vicino alla camera, cumuli e onde del vento inclinano la normale: il rilievo si legge
+// anche vicino al cavaliere, dove la griglia da 7,8 m è liscia. Solo luce: geometria e getHeight non cambiano.
 const COLORE_NEVE = new THREE.Color('#dde3ea');
 const COLORE_NEVE_VERSANTE = new THREE.Color('#9fadc2');
-const NEVE_VERSANTE = [2, 24, 0.85];       // gradi di pendenza fine (inizio, pieno) e quanto vira al massimo
+const NEVE_VERSANTE = [2, 24, 0.85];       // gradi di pendenza (inizio, pieno) e quanto vira al massimo
+const DETTAGLIO_NEVE = [1.4, 50, 150];     // forza; pieno fino a (m dalla camera); spento a (m)
 const COLORE_RADURA = new THREE.Color('#7f9f4c');
 const COLORE_ALPEGGIO = new THREE.Color('#8a985c');
 
@@ -178,16 +181,16 @@ export const COLORI_MONDO = COPERTURA;
  * La copertura (bosco, radure, roccia, neve…) viene da coperturaMondo, la stessa da cui la vegetazione decide dove
  * stanno alberi, cespugli e rocce: alberi e colore dicono la stessa cosa.
  * @param {object} carta  @param {number} stagione  indice del calendario (0 primavera … 3 inverno)
- * @returns {(out: THREE.Color, x: number, z: number, h: number, pendenza: number, pendenzaFine?: number) => THREE.Color}
- *   pendenza: su ~60 m (copertura); pendenzaFine: quella locale della superficie (per la neve), se nota.
+ * @returns {(out: THREE.Color, x: number, z: number, h: number, pendenza: number) => THREE.Color}
  */
 export function coloreMondo(carta, stagione = 0) {
   const K = COLORI_MONDO;
   const copertura = coperturaMondo(carta, stagione), cp = nuovaCopertura();
   const c = new THREE.Color();
-  const colore = (out, x, z, h, pendenza, pendenzaFine = pendenza) => {
+  // `strati` (facoltativo): per il materiale a colore per pixel (materialeSuolo) scrive il colore prima di roccia e
+  // neve (base, già con la variazione di luminosità), i pesi di roccia e neve, la variazione e il tono della roccia.
+  return (out, x, z, h, pendenza, strati = null) => {
     copertura(cp, x, z, h, pendenza);
-    colore.neve = cp.neve;
     out.setRGB(0, 0, 0);
     for (let k = 0; k < 4; k++) {
       const col = COLORI_SCENA[cp.bi[k]] || COLORI_SCENA[BIOMA.PIANURA], w = cp.w[k];
@@ -205,6 +208,10 @@ export function coloreMondo(carta, stagione = 0) {
     out.lerp(COLORI_SCENA[BIOMA.FORESTA], K.macchia[2] * (1 - bosco) * (1 - neveFissa) * cp.macchia);
     // Roccia, affioramenti e ghiaioni.
     if (cp.ghiaia > 0) out.lerp(COLORE_GHIAIONE, cp.ghiaia);
+    if (strati) {
+      strati.base.copy(out).multiplyScalar(cp.variazione);
+      strati.roccia = cp.roccia; strati.neve = cp.neve; strati.variazione = cp.variazione; strati.tono = cp.tonoRoccia;
+    }
     if (cp.roccia > 0) {
       c.copy(COLORE_ROCCIA).lerp(COLORE_ROCCIA_SCURA, cp.tonoRoccia);
       out.lerp(c, cp.roccia);
@@ -212,63 +219,142 @@ export function coloreMondo(carta, stagione = 0) {
     // Variazione lenta di luminosità (niente distese piatte, niente chiazze a triangoli).
     out.multiplyScalar(cp.variazione);
     // Neve: sopra il limite della stagione, non sui pendii più ripidi; sempre sulla neve perenne.
-    if (cp.neve > 0) {
-      c.copy(COLORE_NEVE).lerp(COLORE_NEVE_VERSANTE,
-        smoothstep(NEVE_VERSANTE[0], NEVE_VERSANTE[1], pendenzaFine) * NEVE_VERSANTE[2]);
-      out.lerp(c, cp.neve);
-    }
+    if (cp.neve > 0) out.lerp(COLORE_NEVE, cp.neve);
     return out;
   };
-  colore.neve = 0;   // copertura di neve (0–1) dell'ultimo punto colorato: la usa il dettaglio della superficie
-  return colore;
 }
 
-// ─── Dettaglio fine della neve (nello shader) ───────────────────────────
-// La griglia del terreno ha un punto ogni 7,8 m: vicino al cavaliere la neve era una distesa liscia, senza nulla
-// che la luce potesse mettere in ombra. Lo shader aggiunge cumuli e increspature (scale 1–9 m) inclinando la
-// normale dove c'è neve: solo luce, la geometria non cambia (i piedi restano sulla superficie di getHeight).
-// Si dissolve con la distanza (oltre ~150 m non serve e farebbe tremolare l'immagine).
-const DETTAGLIO_NEVE = { forza: 1.4, vicino: 50, lontano: 150 };
+// ─── Colore per pixel del mondo generato ────────────────────────────────
+//
+// Richiesto dall'utente: «i colori si sfumano nei bordi», «più vicino più definito, più lontano meno». Il colore
+// per vertice (7,8 m nel blocco, 62,5–2000 m negli anelli) sfumava ogni passaggio su un triangolo intero. Ora i
+// vertici portano gli strati di coloreMondo (base, roccia, neve) e il fragment shader decide pixel per pixel:
+// - roccia e neve con una soglia sul peso interpolato più un rumore del mondo a più scale: bordi netti e
+//   frastagliati; la soglia si allarga con fwidth (anti-alias), quindi lontano il bordo torna morbido da solo;
+// - dettaglio del prato e venature della roccia: rumori da 2 m a 128 m che si spengono quando la loro
+//   lunghezza d'onda scende sotto ~3 pixel (vicino definito, lontano liscio, niente sfarfallio).
+// Il rumore è in coordinate del mondo e periodico su 8192 m (scale potenze di 2): blocchi diversi danno lo
+// stesso disegno nello stesso punto. La copertura (coperturaMondo) resta l'unica fonte: la vegetazione la legge
+// uguale; la roccia dipinta piena è dove il peso di roccia supera ~0,5 (± il rumore).
+export const SUOLO = {
+  periodo: 8192,
+  // Bordo di roccia e neve: [scala (m), ampiezza]. Somma delle ampiezze ~0,6: con peso 0,2–0,8 decide il rumore.
+  bordo: [[512, 0.2], [128, 0.18], [32, 0.16], [8, 0.12], [2, 0.06]],
+  dettaglio: [[2, 0.16], [8, 0.13], [32, 0.09], [128, 0.06]],   // variazione di luminosità del prato
+  venature: [[2, 0.35], [8, 0.4]],                             // tono della roccia (chiara/scura)
+  spegni: [60, 200],     // la scala s si spegne tra 60·s e 200·s m dalla camera (~8 → ~3 pixel per onda)
+};
 
-function conDettaglioNeve(mat) {
+const ottaveGLSL = (lista, varNome) => lista.map(([s, a]) =>
+  `  ${varNome} += (rumoreSuolo(p, ${s.toFixed(1)}) - 0.5) * ${a.toFixed(3)} * spegniSuolo(${s.toFixed(1)}, dist);`).join('\n');
+
+/**
+ * Materiale del terreno del mondo generato a colore per pixel. La geometria deve avere gli attributi `base` (vec3)
+ * e `strati` (vec4: roccia, neve, variazione, tono della roccia), oltre a `color` (colore per vertice completo, per
+ * chi lo legge). (cx, cz): coordinate del mondo dell'origine della mesh.
+ */
+export function materialeSuolo(cx, cz) {
+  const P = SUOLO.periodo;
+  const mat = new THREE.MeshLambertMaterial();
+  const uniformi = {
+    uOrigine: { value: new THREE.Vector2(((cx % P) + P) % P, ((cz % P) + P) % P) },
+    uRoccia: { value: COLORE_ROCCIA.clone() },
+    uRocciaScura: { value: COLORE_ROCCIA_SCURA.clone() },
+    uNeve: { value: COLORE_NEVE.clone() },
+    uNeveVersante: { value: COLORE_NEVE_VERSANTE.clone() },
+    uNeveV: { value: new THREE.Vector3(...NEVE_VERSANTE) },
+    uDettaglioNeve: { value: new THREE.Vector3(...DETTAGLIO_NEVE) },
+  };
   mat.onBeforeCompile = (sh) => {
-    sh.uniforms.uDettaglioNeve = { value: new THREE.Vector3(DETTAGLIO_NEVE.forza, DETTAGLIO_NEVE.vicino,
-      DETTAGLIO_NEVE.lontano) };
+    Object.assign(sh.uniforms, uniformi);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
-attribute float aNeve;
-varying float vNeve;
-varying vec2 vPosSuolo;`)
+attribute vec3 base;
+attribute vec4 strati;
+uniform vec2 uOrigine;
+varying vec3 vBase;
+varying vec4 vStrati;
+varying vec2 vMondo;`)
       .replace('#include <project_vertex>', `#include <project_vertex>
-vNeve = aNeve;
-vPosSuolo = (modelMatrix * vec4(transformed, 1.0)).xz;`);
+  vBase = base;
+  vStrati = strati;
+  vMondo = (modelMatrix * vec4(transformed, 1.0)).xz + uOrigine;`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
+uniform vec3 uRoccia;
+uniform vec3 uRocciaScura;
+uniform vec3 uNeve;
+uniform vec3 uNeveVersante;
+uniform vec3 uNeveV;
 uniform vec3 uDettaglioNeve;
-varying float vNeve;
-varying vec2 vPosSuolo;
-float kdHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-float kdRumore(vec2 p) {
-  vec2 i = floor(p), f = fract(p), u = f * f * (3.0 - 2.0 * f);
-  return mix(mix(kdHash(i), kdHash(i + vec2(1.0, 0.0)), u.x), mix(kdHash(i + vec2(0.0, 1.0)), kdHash(i + vec2(1.0)), u.x), u.y);
+float kdNeve = 0.0;   // quanta neve c'è in questo pixel (la usa il dettaglio della normale)
+varying vec3 vBase;
+varying vec4 vStrati;
+varying vec2 vMondo;
+float hashSuolo(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
 }
-// quota (m) delle increspature: cumuli larghi, onde del vento allungate, grana fine
-float kdNeve(vec2 p) {
-  return kdRumore(p / 9.0) * 0.9 + kdRumore(vec2(p.x / 4.5, p.y / 2.2)) * 0.3 + kdRumore(p / 1.1) * 0.06;
+// Rumore a valori, periodico su ${P} m (la scala è una potenza di 2).
+float rumoreSuolo(vec2 p, float scala) {
+  float per = ${P.toFixed(1)} / scala;
+  vec2 q = p / scala, i = floor(q), f = fract(q), u = f * f * (3.0 - 2.0 * f);
+  float a = hashSuolo(mod(i, per)), b = hashSuolo(mod(i + vec2(1.0, 0.0), per));
+  float c = hashSuolo(mod(i + vec2(0.0, 1.0), per)), d = hashSuolo(mod(i + vec2(1.0, 1.0), per));
+  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+float spegniSuolo(float scala, float dist) {
+  return 1.0 - smoothstep(scala * ${SUOLO.spegni[0].toFixed(1)}, scala * ${SUOLO.spegni[1].toFixed(1)}, dist);
+}
+float sogliaSuolo(float x) {
+  float e = max(fwidth(x) * 0.75, 0.02);
+  return smoothstep(0.5 - e, 0.5 + e, x);
 }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+  {
+    float dist = length(vViewPosition);
+    vec2 p = vMondo;
+    float bordo = 0.0, dettaglio = 0.0, venature = 0.0;
+${ottaveGLSL(SUOLO.bordo, 'bordo')}
+${ottaveGLSL(SUOLO.dettaglio, 'dettaglio')}
+${ottaveGLSL(SUOLO.venature, 'venature')}
+    float roccia = sogliaSuolo(vStrati.x + bordo);
+    vec3 cRoccia = mix(uRoccia, uRocciaScura, clamp(vStrati.w + venature, 0.0, 1.0)) * vStrati.z;
+    vec3 c = mix(vBase * (1.0 + dettaglio), cRoccia * (1.0 + 0.5 * dettaglio), roccia);
+    // La neve ha un bordo suo (rumore spostato), non quello della roccia.
+    float neve = sogliaSuolo(vStrati.y + 0.8 * bordo + (rumoreSuolo(p + 517.0, 16.0) - 0.5) * 0.12 * spegniSuolo(16.0, dist));
+    // Sui versanti la neve vira all'azzurro-grigio: pendenza dalla normale del pixel (vista → mondo).
+    vec3 nMondo = normalize((vec4(normalize(vNormal), 0.0) * viewMatrix).xyz);
+    float pendNeve = degrees(acos(clamp(nMondo.y, -1.0, 1.0)));
+    vec3 cNeve = mix(uNeve, uNeveVersante, smoothstep(uNeveV.x, uNeveV.y, pendNeve) * uNeveV.z);
+    c = mix(c, cNeve * (1.0 + 0.3 * dettaglio), neve);
+    kdNeve = neve;
+    diffuseColor.rgb = c;
+  }`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-{
-  float wNeve = vNeve * uDettaglioNeve.x * (1.0 - smoothstep(uDettaglioNeve.y, uDettaglioNeve.z, length(vViewPosition)));
-  if (wNeve > 0.001) {
-    const float e = 0.12;
-    float gx = (kdNeve(vPosSuolo + vec2(e, 0.0)) - kdNeve(vPosSuolo - vec2(e, 0.0))) / (2.0 * e);
-    float gz = (kdNeve(vPosSuolo + vec2(0.0, e)) - kdNeve(vPosSuolo - vec2(0.0, e))) / (2.0 * e);
-    normal = normalize(normal - (viewMatrix * vec4(gx, 0.0, gz, 0.0)).xyz * wNeve);
-  }
-}`);
+  {
+    // Cumuli larghi (~8 m), onde del vento allungate, grana fine (~1 m): inclinano la normale dove c'è neve.
+    float wNeve = kdNeve * uDettaglioNeve.x
+      * (1.0 - smoothstep(uDettaglioNeve.y, uDettaglioNeve.z, length(vViewPosition)));
+    if (wNeve > 0.001) {
+      const float e = 0.12;
+      vec2 p = vMondo;
+      #define KD_NEVE(q) (rumoreSuolo(q, 8.0) * 0.8 + rumoreSuolo(vec2((q).x, (q).y * 2.0), 4.0) * 0.3 + rumoreSuolo(q, 1.0) * 0.06)
+      float gx = (KD_NEVE(p + vec2(e, 0.0)) - KD_NEVE(p - vec2(e, 0.0))) / (2.0 * e);
+      float gz = (KD_NEVE(p + vec2(0.0, e)) - KD_NEVE(p - vec2(0.0, e))) / (2.0 * e);
+      #undef KD_NEVE
+      normal = normalize(normal - (viewMatrix * vec4(gx, 0.0, gz, 0.0)).xyz * wNeve);
+    }
+  }`);
   };
-  mat.customProgramCacheKey = () => 'dettaglio-neve-1';
+  mat.customProgramCacheKey = () => 'suolo-mondo';
   return mat;
+}
+
+/** Contenitore degli strati di coloreMondo (da riusare). */
+export function nuoviStrati() {
+  return { base: new THREE.Color(), roccia: 0, neve: 0, variazione: 1, tono: 0 };
 }
 
 /**
@@ -278,7 +364,8 @@ float kdNeve(vec2 p) {
 function buildSurfaceMondo(heights, cols, rows, cell, half, colore, centro) {
   const n = cols * rows;
   const H = (c, r) => heights[Math.min(Math.max(r, 0), rows - 1) * cols + Math.min(Math.max(c, 0), cols - 1)];
-  const nor = new Float32Array(n * 3), col = new Float32Array(n * 3), neve = new Float32Array(n);
+  const nor = new Float32Array(n * 3), col = new Float32Array(n * 3);
+  const bas = new Float32Array(n * 3), str = new Float32Array(n * 4), S = nuoviStrati();
   const tmp = new THREE.Color();
   const cx = centro ? centro.x : 0, cz = centro ? centro.z : 0;
   // Il colore usa la pendenza su ~60 m (come l'orizzonte vicino): con quella fine il blocco veniva più roccioso
@@ -295,10 +382,10 @@ function buildSurfaceMondo(heights, cols, rows, cell, half, colore, centro) {
       const l = Math.hypot(gx, 1, gz);
       nor[i * 3] = -gx / l; nor[i * 3 + 1] = 1 / l; nor[i * 3 + 2] = -gz / l;
       const pend = Math.atan(Math.hypot(sx, sz)) * 180 / Math.PI;
-      const pendFine = Math.atan(Math.hypot(gx, gz)) * 180 / Math.PI;
-      colore(tmp, cx - half + c * cell, cz - half + r * cell, heights[i], pend, pendFine);
+      colore(tmp, cx - half + c * cell, cz - half + r * cell, heights[i], pend, S);
       col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
-      neve[i] = colore.neve || 0;
+      bas[i * 3] = S.base.r; bas[i * 3 + 1] = S.base.g; bas[i * 3 + 2] = S.base.b;
+      str[i * 4] = S.roccia; str[i * 4 + 1] = S.neve; str[i * 4 + 2] = S.variazione; str[i * 4 + 3] = S.tono;
     }
   }
   const pos = new Float32Array(n * 3);
@@ -321,11 +408,12 @@ function buildSurfaceMondo(heights, cols, rows, cell, half, colore, centro) {
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  geo.setAttribute('aNeve', new THREE.BufferAttribute(neve, 1));
+  geo.setAttribute('base', new THREE.BufferAttribute(bas, 3));
+  geo.setAttribute('strati', new THREE.BufferAttribute(str, 4));
   geo.setIndex(new THREE.BufferAttribute(indici, 1));
   geo.computeBoundingSphere();
   geo.computeBoundingBox();
-  const m = new THREE.Mesh(geo, conDettaglioNeve(new THREE.MeshLambertMaterial({ vertexColors: true })));
+  const m = new THREE.Mesh(geo, materialeSuolo(cx, cz));
   m.name = 'terreno-superficie';
   return m;
 }

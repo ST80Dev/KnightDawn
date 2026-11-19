@@ -20,6 +20,7 @@ persona che ci cammina sopra seguendo il terreno, e un castello low-poly in cui 
 - Low-poly, *flat shading*, colori pieni: niente texture fotografiche.
   **Direzione decisa per dopo M4: simil-realistico, non iper-realistico**, per terreno, cavaliere e
   castello, spinto **al massimo con il solo codice**. Dettagli in M4, «Dopo la valutazione».
+  Convenzioni di stile, materiali e piano del cavaliere: `docs/GRAFICA_3D.md`.
 - Palette ispirata alla pergamena di `js/config.js` (`PALETTE`), adattata alla luce 3D.
 - Colore del terreno per vertice, in base ad altitudine e pendenza (prato → bosco → roccia).
 - Luce direzionale (sole) + luce emisferica + nebbia leggera per nascondere il bordo del mondo.
@@ -1112,6 +1113,24 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
    nel blocco; partenza davanti alla porta della rocca (provvisoria). *Prova:* come M4 (giro attorno, ingresso
    dalla porta, nessuna compenetrazione, camera mai coperta) su un sito di valle e uno d'altura; Tavullia
    invariata.
+   **Stato: fatto, da provare dall'utente.**
+   - `castle3d.js`: cinta rettangolare (`latoX` di traverso, `latoZ` lungo l'asse della porta; senza, quadrata
+     come a Tavullia), quota del cortile dal piano del terrapieno (`piano`, mai sotto il terreno interno),
+     `CLASSI_ROCCA`: rocca minore 34×30 m (mura 7,5 m, mastio 9 m di lato e 18 di altezza), casata 46×40 (9;
+     11/22), sede maggiore 58×50 (10; 13/26), dentro i piani di 40×36, 52×46, 64×56 m.
+   - `main.js` (`costruisciRocche`): una rocca per ogni luogo il cui piano tocca il blocco (o gli sta a meno di
+     150 m), in coordinate del blocco (i blocchi ora stanno su una griglia, `centroBlocco`: il sito di solito
+     non è al centro), porta verso il borgo (`verso`), rampa fino a 40 m. Il terreno sotto viene dal blocco e,
+     fuori, da `quotaFinale`: una rocca tagliata dal bordo si costruisce intera. Collisioni, luci delle torce,
+     pavimento costruito (`componiSuolo`) e raycast della camera come a Tavullia. Al posto delle aste.
+   - Un salvataggio che cade dentro le mura (partite di prima) riparte fuori dalla porta del borgo.
+   - *Misure* (Chromium headless, 3 semi: 12345 e 241996 di valle, 99454 di valle con salti grandi): 32
+     assalti da 70 m verso il centro per seme, di corsa per 40 s: si entra nel cortile solo nell'assalto
+     allineato alla porta (1 su 32), nessuna compenetrazione oltre 5 cm. Tavullia: stesso castello, cortile a
+     173,65 m, nessuna rocca del mondo.
+   Limiti: dove tra rocca e prima terrazza il salto è grande (seme 99454, ~12 m) la rampa è lunga e ripida e
+   attraversa le terrazze: va ridisegnata con la via del borgo (passo 4). Nessuna prova della camera
+   (stesso meccanismo di M4, già misurato).
 4. **Borgo murato.** Contorno secondo il carattere del sito, terrazze con muri di contenimento, porta del
    borgo, via in rampa, raccordo con la rocca; ancora senza edifici; partenza fuori dalla porta del borgo.
    *Prova:* da fuori si capisce dove si è (rocca sopra le mura, crinale dietro); si entra, si sale alla
@@ -1174,10 +1193,12 @@ siti validi su 30 semi su 30 (verifica automatica). Con il passo 9: dal borgo si
 8. **Valichi e forcelle distinti**; valichi tra 1000 e ~2500 m, quasi sempre con sentinella (GDD §2).
 9. **Castello di valle come partenza**, a ≤ 5 km da un crinale 800 m più alto (regione di 120×90 km).
 
+10. **Passo 9 in M7** (blocco che segue il cavaliere): approvato.
+11. **Vegetazione e oggetti sparsi in parallelo a M7** (deroga alla regola 4 decisa dall'utente): altra sessione,
+    sezione a sé in questo documento; esclude i terrapieni dei luoghi (`carta.luoghi[].piani`).
+
 ### Da decidere
 
-- **Uscire dal blocco in M7** (punto 6, passo 9)? Senza, il crinale del castello di valle si vede ma non si
-  raggiunge di persona.
 - **Torri di sentinella dei valichi**: in M7 o con la milestone dei luoghi (oggi fuori da M7)?
 
 ## Vegetazione e oggetti sparsi (in parallelo a M7)
@@ -1355,8 +1376,17 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      ~200 m); roccia su 6° di pendenza invece di 12°, affioramenti con soglia più stretta. Il clima resta continuo.
      Vale per colore e vegetazione insieme (bosco più netto ai margini). Effetto visibile ma modesto: la
      morbidezza che resta viene dal colore per vertice (7,8 m nel blocco, 62,5–2000 m negli anelli) e dalle
-     normali lisce; il dettaglio per pixel (più fitto vicino, meno lontano) richiede un materiale del terreno
-     con rumore nel fragment shader [proposto, da decidere].
+     normali lisce.
+   - *Colore per pixel* [chiesto dall'utente: «più vicino più definito, più lontano meno»; fatto nella sessione
+     M6]: `materialeSuolo` (terrain.js), usato dal blocco e dagli anelli dell'orizzonte. I vertici portano gli
+     strati di `coloreMondo` (base, peso di roccia e neve, variazione, tono della roccia: attributi `base` e
+     `strati`; `color` resta il colore completo per vertice). Nel fragment shader roccia e neve hanno una soglia
+     per pixel sul peso interpolato più un rumore del mondo (scale 2–512 m): bordi netti e frastagliati, morbidi
+     da lontano per anti-alias (`fwidth`); prato e roccia hanno un dettaglio di luminosità (2–128 m) che si
+     spegne con la distanza (scala s tra 60·s e 200·s m). Rumore periodico su 8192 m in coordinate del mondo:
+     blocchi diversi danno lo stesso disegno. `coperturaMondo` non cambia: la roccia piena dipinta sta dove il
+     peso di roccia supera ~0,5 (± il rumore), dove la vegetazione mette affioramenti e sassi. Da misurare gli
+     FPS su GPU vera (in headless nessun errore).
    - *Punti di controllo* (`js/3d/vegetazione3d.js`): un punto colorato per oggetto, 3 chiamate; tasto `V`.
      F3: oggetti per tipo, chiamate, ms di posizionamento (e dei campi), chiamate e triangoli totali.
    - *Misure* (Node, blocchi di 2×2 km): posizionamento 100–200 ms (campi sui vertici 55–100 ms; il blocco ne costa
@@ -1451,6 +1481,87 @@ Carta e `VERSIONE_GENERATORE` invariate.
 8. **Griglia del blocco allineata al mondo: fatta qui** (`centroBlocco` in `scena.js`).
 9. **Bordo del blocco** (stacco tra gli ultimi alberi e il colore piatto dell'orizzonte): **non affrontato**, si
    vedrà più avanti.
+
+## Strade e sentieri (proposta, da approvare)
+
+> Chiesto dall'utente (novembre 2026): «strade di terra battuta che colleghino gli elementi di colline e pianure,
+> e sentieri di montagna; un compromesso tra il tragitto più breve e pendenze non esagerate, a cavallo e a
+> piedi». Riferimenti: `docs/GDD.md` §2 («Strade, ponti e guadi», valichi e forcelle) e §3 «Viaggio».
+> **Stato: piano da approvare; nessun codice.**
+
+**Cosa c'è oggi** [Certo, dal codice]: rocche e borghi di M7 (3 per mondo), valichi (2 per mondo), gruppi
+montuosi con le forcelle, fiumi con bacino, profondità e guadabilità (fino a ~0,9 m, bacino ~150 km²). Il
+viottolo dalle porte del borgo è l'unica «strada». Il GDD prevede 30–40 castelli e 60–100 villaggi: **la rete
+vera ha bisogno di luoghi che ancora non ci sono** [Certo]. Con 3 rocche e 2 valichi una rete generata oggi è
+rada; il generatore deve quindi prendere i nodi come dati e funzionare uguale quando i luoghi arriveranno.
+
+### Decisioni tecniche (proposte)
+
+**1. Due scale, come i fiumi.** Sulla Carta la **rete** (celle di 1 km, ricerca A* a 16 direzioni, pochi ms per
+tutta la regione); nella Scena il **tracciato fine** di ogni tratto (griglia di ~10–20 m in un corridoio attorno
+al tracciato della Carta, come `tracciaPercorso` per i fiumi), dove nascono i **tornanti**. Su celle di 1 km i
+tornanti non esistono: lì la pendenza si misura sulla quota della Carta e il vincolo duro vale solo nella Scena.
+
+**2. Costo: corto ma non ripido.** Costo di un passo = lunghezza × (1 + (p / p₀)²) + attraversamenti, con p la
+pendenza lungo il passo; oltre p_max il passo è vietato (il percorso è costretto a girare: tornanti o
+traversi). Per classe [Ipotesi, da tarare guardando]:
+
+| Classe | Per chi | p₀ (comoda) | p_max | Larghezza nella Scena |
+|---|---|---|---|---|
+| strada maestra | carri, cavalli, a piedi | 5 % | 10 % | 4–5 m |
+| carrareccia | carri leggeri, cavalli | 7 % | 14 % | 3 m |
+| mulattiera | cavallo a mano, bestie da soma | 12 % | 25 % (tornanti) | 2 m |
+| sentiero di montagna | a piedi | 20 % | 45 % (tornanti stretti) | 1 m |
+
+Il quadrato fa sì che un po' di salita costi poco e molta salita molto: il tracciato allunga quanto serve, non
+di più (come le strade vere). Altri costi: guado (basso, solo dove si guada), **ponte** (alto, così i ponti sono
+pochi e le strade ci convergono), palude ed esposizione sulle creste (alti), bosco (lieve), neve e quota oltre il
+limite degli alberi (per le classi da carro), terrapieni di rocca e borgo vietati salvo le porte.
+
+**3. La rete.** Nodi: rocche e borghi (porte), valichi, e poi villaggi, porti e luoghi speciali quando ci
+saranno. Grafo: albero di copertura minimo sui costi di viaggio, più i collegamenti in cui il giro sull'albero
+supera ~1,5 volte il diretto (le reti vere hanno anelli). I tratti si tracciano dal più importante: i passi
+già su una strada costano meno, così le strade **si uniscono** in tronchi comuni invece di correre parallele, e
+gli incroci nascono da soli (crocevia, possibili luoghi). Gerarchia: maestre tra rocche e verso i valichi
+principali, carrarecce verso borghi e villaggi, mulattiere sui valichi alti.
+
+**4. Sentieri di montagna.** Dalle testate delle valli (e dagli alpeggi) ai valichi e alle **forcelle** dei
+gruppi montuosi (per il GDD scorciatoie rischiose, non strade), con la classe «sentiero»: ripidi, a tornanti
+stretti, segnati più deboli. Alcuni a vicolo cieco (a un panorama, a un alpeggio): i sentieri veri non vanno
+sempre da qualche parte.
+
+**5. Nella Scena.** Striscia spianata lungo il tracciato (in pendio taglio a monte e rilevato a valle, raccordati;
+la quota resta pura funzione del punto del mondo, quindi blocchi e orizzonte combaciano), colore di **terra
+battuta** come nuovo strato di `materialeSuolo` (bordi netti per pixel, solchi delle ruote vicino), niente
+alberi né cespugli sulla striscia e radi ai margini (la vegetazione legge una `distanzaStrada(x, z)` come oggi
+`distanzaPiano`: va concordato con la sessione della vegetazione), ponti da codice dove la strada passa un fiume
+non guadabile, guadi con sassi.
+
+**6. Carta e viaggio.** Strade disegnate per classe; il viaggio sulla Carta (A* sulle celle, GDD §3) preferisce
+le strade: costo per cella ridotto su strada, tempi e Forza per classe. A piedi e a cavallo nella Scena: su
+strada non si rallenta per il terreno [da decidere].
+
+**Moduli.** Nuovo `js/mondo/strade.js` (senza Three.js né DOM: rete sulla Carta e tracciato fine, gira nel
+Worker); strade nella cache della Carta (`VERSIONE_GENERATORE`); ponti in `js/3d/` (nome da decidere). Un file
+nuovo: serve la conferma (regola 2).
+
+### Passi (proposta)
+
+1. **Rete sulla Carta** con i nodi di oggi; disegno nella vista della Carta; verifiche in Node su 30 semi
+   (pendenza massima per classe sulle celle, numero di ponti, lunghezza rispetto alla linea d'aria).
+2. **Tracciato fine e tornanti** nella Scena, striscia spianata. *Prova:* salire a un valico a piedi e a cavallo.
+3. **Colore e vegetazione** (con la sessione della vegetazione).
+4. **Ponti e guadi.**
+5. **Viaggio sulla Carta** lungo le strade.
+
+### Da decidere
+
+1. Farla ora in parallelo a M7 e alla vegetazione (deroga alla regola 4), o dopo la milestone dei luoghi?
+   [Probabile] conviene fare ora i passi 1–2 sui nodi esistenti (il generatore non cambia quando i luoghi
+   arriveranno) e rinviare il resto.
+2. Le pendenze massime della tabella (strada maestra al 10 %, mulattiera al 25 %, sentiero al 45 %).
+3. Il nome del file nuovo `js/mondo/strade.js`.
+4. Su strada nella Scena si va più veloci (o non si rallenta in salita come fuori strada)?
 
 ## Fuori dal prototipo (non farlo ora)
 
