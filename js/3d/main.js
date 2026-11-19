@@ -21,6 +21,7 @@ import { creaOrizzonte } from './orizzonte.js';
 import { creaAcqueScena } from './acqua.js';
 import { generaCartaAsincrona, verificaSemi } from '../mondo/generatore.js';
 import { generaScena, centroBlocco, quotaFinale } from '../mondo/scena.js';
+import { distanzaStrada } from '../mondo/strade.js';
 import { posizionaVegetazione, coperturaMondo, coperturaTavullia } from '../mondo/vegetazione.js';
 import { creaVegetazione } from './vegetazione3d.js';
 import { semeDaTesto } from '../mondo/rumore.js';
@@ -252,6 +253,7 @@ let scostamento = { x: 0, z: 0 };
 // Suolo calpestabile della Scena attuale: terreno + superfici costruite (cortile, rampa). Cavaliere e
 // camera ricevono questi oggetti una volta sola; cambiando Scena cambia solo ciò a cui rimandano.
 let _suolo = null;
+const _sullaStrada = { d: Infinity, lato: 0, semi: 0, h: 0, classe: '' };
 const suolo = {
   getHeight: (x, z) => _suolo.getHeight(x, z),
   getSlope: (x, z) => _suolo.getSlope(x, z),
@@ -261,6 +263,13 @@ const suolo = {
     if (h <= -PROFONDITA_GUADO) return false;                    // mare
     const l = livelloAcquaIn(x, z);
     return Number.isNaN(l) || l - h <= PROFONDITA_GUADO;          // fiumi profondi e laghi
+  },
+  // Sulla carreggiata di una strada o di un sentiero (js/mondo/strade.js): in salita si rallenta meno.
+  suStrada: (x, z) => {
+    const m = _suolo?.meta?.centroMondo, c = carta;
+    if (!m || !c) return false;
+    distanzaStrada(c, m.x + x, m.z + z, _sullaStrada);
+    return _sullaStrada.d <= _sullaStrada.semi + 0.5;
   },
   get half() { return _suolo.half; },
   get size() { return _suolo.size; },

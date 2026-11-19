@@ -1663,7 +1663,7 @@ nuovo: serve la conferma (regola 2).
 ### Da decidere
 
 1. Passi 3–5 (colore e vegetazione con l'altra sessione, ponti e guadi, viaggio sulla Carta): quando.
-2. Su strada nella Scena si va più veloci (o non si rallenta in salita come fuori strada)?
+2. ~~Velocità su strada~~ [deciso con l'utente: su strada e sentiero in salita si rallenta meno che fuori; fatto: `terrain.suStrada` (main.js, carreggiata + 0,5 m) e in `knight3d.js` curva di salita dimezzata (K 0,35 invece di 0,7) con minimo 0,85 invece di 0,7: al 10 % 0,97 invece di 0,93, al 25 % 0,92 invece di 0,84. In piano e in discesa nessuna differenza].
 
 ## Fuori dal prototipo (non farlo ora)
 
