@@ -196,9 +196,10 @@ Regole **nuove** per il 3D e per la varietà ravvicinata:
   In montagna tra una cima e l'altra c'è quasi sempre un crinale più alto: lì la regola non vale.
 - **Limite delle nevi** calcolato da latitudine (temperatura) e stagione: d'inverno scende, d'estate
   sale. Neve e ghiaccio dipendono da quota e temperatura, non da un bioma dipinto.
-- **Vette aspre, valichi percorribili** [deciso con l'utente, novembre 2026]: in montagna creste, salti di
-  roccia e pareti invalicabili (oltre la pendenza che il cavaliere sale); tra le valli restano valichi
-  percorribili, che diventano luoghi di passaggio (e, con i luoghi, di strade, pedaggi e imboscate).
+- **Grandi creste e forcelle** [deciso con l'utente, novembre 2026]: poche grandi creste riconoscibili (3–7
+  per mondo), muraglie di roccia con cime e pareti invalicabili, che si aggirano; in ognuna una forcella ben
+  definita, una sella sotto le vette dove passare, che diventa luogo di passaggio (e, con i luoghi, di strade,
+  pedaggi e imboscate). Niente distese di guglie uguali: ci si perderebbe.
 - **Accostamenti vietati**: niente deserto caldo vicino a neve o ghiacciai, e niente palude in
   quota. La temperatura di fondo varia solo su grande scala: nella fascia calda le cime restano
   sotto il limite delle nevi con margine. Distanza minima deserto–neve [TBD, es. 80 km].
