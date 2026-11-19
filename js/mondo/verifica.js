@@ -159,3 +159,119 @@ export function verificaPanorami(carta) {
   return { ok: copertura >= P.soglia, punti, copertura, coperturaMontagna: terraM ? copertaM / terraM : 0,
     soglia: P.soglia, raggio: P.raggio, quotaMassima: P.quotaMassima, candidati };
 }
+
+// ─── Regole di varietà (passo 8, GDD §2 «Regole di generazione») ──────────
+
+export const VARIETA = {
+  finestra: 40, passoFinestra: 20, tipiMinimi: 3, parteTipo: 0.02, terraMinima: 0.5, estremi: 0.5,
+  uniforme: 15,          // km: diametro massimo di un'area uniforme senza interruzioni
+  desertoNeve: 80,       // km
+  paludeQuota: 300,      // m: nessuna palude sopra
+};
+
+/** Tipo di paesaggio di una cella (per le regole di varietà): i biomi del 2D raggruppati. */
+export const TIPI = ['pianura', 'collina', 'bosco', 'montagna', 'neve', 'deserto', 'palude', 'acqua'];
+export function tipoPaesaggio(bioma, acqua) {
+  if (acqua) return 7;
+  switch (bioma) {
+    case 1: case 11: case 12: return 0;     // pianure
+    case 3: return 1;                       // collina
+    case 2: return 2;                       // foresta
+    case 4: case 10: return 3;              // montagna, roccia
+    case 7: case 8: return 4;               // neve, ghiaccio
+    case 6: return 5;                       // sabbia
+    case 5: return 6;                       // palude
+    default: return 7;
+  }
+}
+
+/** Distanza (km, metrica a scacchiera smussata 1 / √2) di ogni cella dalla più vicina sorgente. */
+export function distanzaDa(cols, rows, sorgente) {
+  const n = cols * rows, d = new Float32Array(n).fill(1e9);
+  for (let i = 0; i < n; i++) if (sorgente(i)) d[i] = 0;
+  const D = Math.SQRT2;
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+    const i = y * cols + x;
+    if (x > 0) d[i] = Math.min(d[i], d[i - 1] + 1);
+    if (y > 0) {
+      d[i] = Math.min(d[i], d[i - cols] + 1);
+      if (x > 0) d[i] = Math.min(d[i], d[i - cols - 1] + D);
+      if (x < cols - 1) d[i] = Math.min(d[i], d[i - cols + 1] + D);
+    }
+  }
+  for (let y = rows - 1; y >= 0; y--) for (let x = cols - 1; x >= 0; x--) {
+    const i = y * cols + x;
+    if (x < cols - 1) d[i] = Math.min(d[i], d[i + 1] + 1);
+    if (y < rows - 1) {
+      d[i] = Math.min(d[i], d[i + cols] + 1);
+      if (x < cols - 1) d[i] = Math.min(d[i], d[i + cols + 1] + D);
+      if (x > 0) d[i] = Math.min(d[i], d[i + cols - 1] + D);
+    }
+  }
+  return d;
+}
+
+/**
+ * Tipi di paesaggio per cella e distanza di ogni cella dall'interruzione più vicina (un altro tipo, un fiume, un
+ * lago, il mare): due volte la distanza è il diametro dell'area uniforme che la contiene.
+ */
+export function uniformita(carta) {
+  const { cols, rows, bioma, mare, acque, bacino, sogliaFiume } = carta;
+  const n = cols * rows, tipo = new Uint8Array(n);
+  for (let i = 0; i < n; i++) tipo[i] = tipoPaesaggio(bioma[i], mare[i] || (acque && acque[i] !== 0));
+  const bordo = (i) => {
+    if (tipo[i] === 7 || (bacino && bacino[i] >= sogliaFiume)) return true;
+    const x = i % cols;
+    return (x > 0 && tipo[i - 1] !== tipo[i]) || (x < cols - 1 && tipo[i + 1] !== tipo[i])
+      || (i >= cols && tipo[i - cols] !== tipo[i]) || (i < n - cols && tipo[i + cols] !== tipo[i]);
+  };
+  return { tipo, distanza: distanzaDa(cols, rows, bordo) };
+}
+
+/**
+ * Verifica delle regole di varietà del GDD su una Carta con i biomi.
+ * @returns {{ ok: boolean, regole: {nome: string, ok: boolean, testo: string}[], peggiori: object }}
+ */
+export function verificaVarieta(carta) {
+  const V = VARIETA, { cols, rows, bioma, quota } = carta;
+  if (!bioma) return { ok: false, regole: [{ nome: 'biomi', ok: false, testo: 'Carta senza biomi' }] };
+  const { tipo, distanza } = uniformita(carta);
+  const regole = [];
+  // 1. Finestre di 40×40 km: almeno 3 tipi di paesaggio (fuori dalle zone estreme e dal mare aperto).
+  let finestre = 0, buone = 0;
+  const cattive = [];
+  const F = V.finestra, conta = new Int32Array(TIPI.length);
+  for (let y0 = 0; y0 + F <= rows; y0 += V.passoFinestra) {
+    for (let x0 = 0; x0 + F <= cols; x0 += V.passoFinestra) {
+      conta.fill(0);
+      for (let y = y0; y < y0 + F; y++) for (let x = x0; x < x0 + F; x++) conta[tipo[y * cols + x]]++;
+      const terra = F * F - conta[7];
+      if (terra < V.terraMinima * F * F || conta[4] + conta[5] > V.estremi * terra) continue;
+      finestre++;
+      let tipi = 0;
+      for (let t = 0; t < TIPI.length; t++) if (conta[t] >= V.parteTipo * F * F) tipi++;
+      if (tipi >= V.tipiMinimi) buone++; else cattive.push([x0 + F / 2, y0 + F / 2, tipi]);
+    }
+  }
+  regole.push({ nome: 'finestre', ok: buone === finestre,
+    testo: `finestre di ${F}×${F} km con almeno ${V.tipiMinimi} tipi di paesaggio: ${buone} su ${finestre}` });
+  // 2. Aree uniformi: diametro massimo senza interruzioni (zone estreme di neve e deserto escluse).
+  let dMax = 0, dove = null;
+  for (let i = 0; i < cols * rows; i++) {
+    if (tipo[i] === 4 || tipo[i] === 5 || tipo[i] === 7) continue;
+    if (distanza[i] > dMax) { dMax = distanza[i]; dove = [i % cols, (i / cols) | 0, TIPI[tipo[i]]]; }
+  }
+  regole.push({ nome: 'uniforme', ok: 2 * dMax <= V.uniforme,
+    testo: `area uniforme più ampia: ${(2 * dMax).toFixed(0)} km (${dove ? dove[2] : '-'}; regola ≤ ${V.uniforme} km)` });
+  // 3. Deserto lontano dalla neve.
+  const dNeve = distanzaDa(cols, rows, (i) => tipo[i] === 4);
+  let minDN = Infinity, deserto = 0;
+  for (let i = 0; i < cols * rows; i++) if (tipo[i] === 5) { deserto++; if (dNeve[i] < minDN) minDN = dNeve[i]; }
+  regole.push({ nome: 'desertoNeve', ok: minDN >= V.desertoNeve,
+    testo: deserto ? `deserto–neve: ${minDN > 1e8 ? 'niente neve' : minDN.toFixed(0) + ' km'} (regola ≥ ${V.desertoNeve} km)` : 'deserto–neve: niente deserto' });
+  // 4. Niente palude in quota.
+  let paludiAlte = 0;
+  for (let i = 0; i < cols * rows; i++) if (tipo[i] === 6 && quota[i] > V.paludeQuota) paludiAlte++;
+  regole.push({ nome: 'paludeQuota', ok: paludiAlte === 0, testo: `paludi sopra ${V.paludeQuota} m: ${paludiAlte}` });
+  return { ok: regole.every((r) => r.ok), regole, peggiori: { finestre: cattive, uniforme: dove } };
+}

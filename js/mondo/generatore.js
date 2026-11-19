@@ -3,7 +3,7 @@
 // Worker in moduli ES), genera qui, dopo aver lasciato disegnare la schermata di caricamento.
 
 import { generaCarta } from './carta.js';
-import { verificaFiumi, verificaPanorami } from './verifica.js';
+import { verificaFiumi, verificaPanorami, verificaVarieta } from './verifica.js';
 
 let lavoratore = null;
 let senzaWorker = false;
@@ -19,6 +19,7 @@ function avviaLavoratore() {
       if (!a) return;
       if (m.tipo === 'avanzamento') a.avanzamento?.(m.testo, m.frazione);
       else if (m.tipo === 'carta') { attese.delete(m.id); a.risolvi(m.carta); }
+      else if (m.tipo === 'semi') { attese.delete(m.id); a.risolvi(m.esiti); }
       else { attese.delete(m.id); a.rifiuta(new Error(m.messaggio)); }
     };
     lavoratore.onerror = (e) => {                     // il Worker non è partito: si genera nella pagina
@@ -40,7 +41,7 @@ async function generaQui(seme, avanzamento) {
   avanzamento?.('Generazione del mondo', 0);
   await new Promise((r) => setTimeout(r, 30));      // lascia disegnare la schermata
   const carta = generaCarta(seme, { avanzamento });
-  carta.verifiche = { fiumi: verificaFiumi(carta), panorami: verificaPanorami(carta) };
+  carta.verifiche = { fiumi: verificaFiumi(carta), panorami: verificaPanorami(carta), varieta: verificaVarieta(carta) };
   carta.daCache = false;
   return carta;
 }
@@ -58,5 +59,21 @@ export function generaCartaAsincrona(seme, opzioni = {}) {
     const id = prossimoId++;
     attese.set(id, { risolvi, rifiuta, avanzamento: opzioni.avanzamento, seme });
     w.postMessage({ id, seme, cache: opzioni.cache !== false });
+  });
+}
+
+/**
+ * Verifica automatica su più semi (passo 8), nel Worker: per ogni seme l'esito di ogni regola.
+ * @param {number[]} semi
+ * @param {(testo:string, frazione:number) => void} [avanzamento]
+ * @returns {Promise<{seme:number, ms:number, regole:{nome:string, ok:boolean, testo:string}[]}[]>}
+ */
+export function verificaSemi(semi, avanzamento) {
+  const w = avviaLavoratore();
+  if (!w) return Promise.reject(new Error('serve il Web Worker'));
+  return new Promise((risolvi, rifiuta) => {
+    const id = prossimoId++;
+    attese.set(id, { risolvi, rifiuta, avanzamento });
+    w.postMessage({ id, semi });
   });
 }

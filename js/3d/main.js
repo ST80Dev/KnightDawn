@@ -19,7 +19,7 @@ import { createCastle } from './castle3d.js';
 import { createCartaVista } from './cartaVista.js';
 import { creaOrizzonte } from './orizzonte.js';
 import { creaAcqueScena } from './acqua.js';
-import { generaCartaAsincrona } from '../mondo/generatore.js';
+import { generaCartaAsincrona, verificaSemi } from '../mondo/generatore.js';
 import { generaScena } from '../mondo/scena.js';
 import { semeDaTesto } from '../mondo/rumore.js';
 
@@ -652,6 +652,7 @@ const cartaVista = createCartaVista(document.body, {
   onCambio: () => tasti.clear(),
   cartaAttuale: () => carta,
   generaCarta: (seme, avanzamento) => generaCartaAsincrona(seme, { avanzamento, cache: !PARAMETRI.has('rigenera') }),
+  verificaSemi,
   posizione: () => (scenaAttuale?.tipo === 'mondo' && knight
     ? { x: (scenaAttuale.cx + knight.stato.x) / carta.cella, y: (scenaAttuale.cz + knight.stato.z) / carta.cella }
     : null),
