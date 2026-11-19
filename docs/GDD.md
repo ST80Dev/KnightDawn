@@ -210,7 +210,10 @@ Regole **nuove** per il 3D e per la varietà ravvicinata:
   per guardare lontano. Niente mosaico ripetuto pianura/colle: fitti o radi secondo zone ampie, misure
   e forme diverse, allineati in dorsali e gruppi. Non sui corsi d'acqua.
 - **Punti panoramici** [regola decisa con l'utente]: sotto i 1500 m, da quasi ogni punto (≥ 90 % della
-  terra) entro ~10 km c'è un'altura da cui si vede a 20–30 km in almeno una direzione (un settore di 90°).
+  terra) entro ~10 km c'è un'**altura** (almeno ~40 m sopra i dintorni) da cui si vede a 15–30 km in almeno una
+  direzione (un settore di 90°) **che dal piede non si vedeva**: salire deve servire. [Rivisto con l'utente,
+  novembre 2026: prima contavano anche punti di pianura che vedevano lontano già da terra; nel mondo di
+  120×90 km la vista parte da 15 km invece di 20.]
   In montagna tra una cima e l'altra c'è quasi sempre un crinale più alto: lì la regola non vale.
 - **Limite delle nevi** calcolato da latitudine (temperatura) e stagione: d'inverno scende, d'estate
   sale. Neve e ghiaccio dipendono da quota e temperatura, non da un bioma dipinto.
