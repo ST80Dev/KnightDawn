@@ -28,9 +28,30 @@ const DETTAGLIO = {
 // Rotazione tra un'ottava e l'altra (costanti esatte: 0,8 e 0,6), così le griglie non si allineano.
 const RC = 0.8, RS = 0.6;
 
+// Laghi in quota: nella B-spline il fondo del lago (anche 200 m sotto il livello) trascinava in basso le rive
+// fino a ~1 km, e l'acqua restava sospesa sopra una riva più bassa del livello. Si leviga una quota in cui le
+// celle di lago valgono il livello, poi si toglie la profondità del lago interpolata tra le celle: a riva il
+// terreno resta quello dei dintorni, al centro del lago torna il fondo.
+const _liscia = new WeakMap();
+function quoteLisce(carta) {
+  let q = _liscia.get(carta);
+  if (q) return q;
+  const { quota, acque, livelloAcqua } = carta;
+  const base = Float32Array.from(quota), fondo = new Float32Array(quota.length);
+  if (acque) {
+    for (let i = 0; i < quota.length; i++) {
+      if (acque[i] === ACQUA.LAGO) { base[i] = livelloAcqua[i]; fondo[i] = livelloAcqua[i] - quota[i]; }
+    }
+  }
+  q = { base, fondo };
+  _liscia.set(carta, q);
+  return q;
+}
+
 /** Quota della Carta interpolata con una B-spline cubica (m), nel punto (x, z) del mondo. */
 export function quotaCarta(carta, x, z) {
-  const { cols, rows, quota, cella } = carta;
+  const { cols, rows, cella } = carta;
+  const { base, fondo } = quoteLisce(carta);
   const u = x / cella - 0.5, v = z / cella - 0.5;
   const i0 = Math.floor(u), j0 = Math.floor(v);
   const tu = u - i0, tv = v - j0;
@@ -43,9 +64,18 @@ export function quotaCarta(carta, x, z) {
     for (let a = 0; a < 4; a++) {
       let i = i0 - 1 + a;
       i = i < 0 ? 0 : i >= cols ? cols - 1 : i;
-      riga += wu[a] * quota[j * cols + i];
+      riga += wu[a] * base[j * cols + i];
     }
     somma += wv[b] * riga;
+  }
+  // Profondità dei laghi, bilineare tra i centri delle celle (le stesse dell'indicatore «lago»).
+  for (let b = 0; b < 2; b++) {
+    const j = Math.min(rows - 1, Math.max(0, j0 + b));
+    for (let a = 0; a < 2; a++) {
+      const i = Math.min(cols - 1, Math.max(0, i0 + a));
+      const f = fondo[j * cols + i];
+      if (f > 0) somma -= f * (a ? tu : 1 - tu) * (b ? tv : 1 - tv);
+    }
   }
   return somma;
 }
@@ -107,14 +137,18 @@ export function quotaMondo(carta, x, z, seedDettaglio = derivaSeme(carta.seme, 1
 // sorgente alla foce, sempre in discesa e raccordato alle confluenze: dipende solo dalla posizione nel
 // mondo, quindi due Scene vicine (e l'orizzonte) combaciano. Attorno al tracciato: alveo (parabola fino al
 // pelo dell'acqua), sponde basse, poi versanti che risalgono fino al terreno, sempre più ripidi con la
-// distanza (raccordo continuo entro FIUMI_SCENA.raggio).
+// distanza. La fascia dei versanti è larga in proporzione al fiume (FIUMI_SCENA.valle) e il dettaglio del
+// rilievo vi torna man mano: la valle segue i rilievi attorno invece di essere un solco liscio e uniforme.
 
 const FIUMI_SCENA = {
   semilarghezza: { base: 3, perRadice: 0.6, max: 60 },   // m: base + perRadice·√bacino (km²)
   profondita: { base: 0.5, perRadice: 0.022 },           // m d'acqua: ~0,8 m a 150 km² (si guada), ~1,2 m a 1000 km², ~2,7 m a 10 000 km²
   sponda: { larghezza: 6, altezza: 0.8 },                // m: sponde basse oltre il pelo dell'acqua
   argine: 0.15,                                          // pendenza oltre le sponde dove il terreno è più basso
-  versante: 0.12, raggio: 1000,                          // pendenza iniziale dei versanti; raggio d'influenza (m)
+  versante: 0.12, curva: 2,                              // pendenza dei versanti: versante + curva·(fuori/R)²
+  valle: { base: 120, perSemilarghezza: 8 },             // R (m oltre le sponde): ~240 m a 15 m di semilarghezza
+  raggio: 1000,                                          // R massimo (m), per l'indice spaziale
+  riva: { soglia: 0.25, sopra: 0.5 },                    // laghi: indicatore oltre cui è lago; riva sopra il livello (m)
   scendi: 0.02,                                          // m: discesa minima del letto tra due punti (~0,2 km)
   cellaIndice: 1000,                                     // m: celle dell'indice spaziale dei tratti
 };
@@ -140,7 +174,9 @@ export function fiumiScena(carta) {
       w[i] = Math.min(F.semilarghezza.max, F.semilarghezza.base + F.semilarghezza.perRadice * r);
       prof[i] = F.profondita.base + F.profondita.perRadice * r;
       // Letto sotto la superficie liscia della Carta: pelo dell'acqua F.sponda.altezza sotto il terreno.
-      const grezzo = quotaCarta(carta, x[i], z[i]) - prof[i] - F.sponda.altezza;
+      // Vicino ai laghi conta la riva rialzata come nella Scena (scavaFiumi), dentro il livello del lago.
+      const suolo = conRiva(carta, x[i], z[i], quotaCarta(carta, x[i], z[i]));
+      const grezzo = suolo - prof[i] - F.sponda.altezza;
       letto[i] = i === 0 ? grezzo : Math.min(grezzo, letto[i - 1] - F.scendi);
     }
     // Confluenza: l'ultimo punto è un punto di un fiume più grande (già calcolato): stesso letto, e a monte
@@ -149,6 +185,16 @@ export function fiumiScena(carta) {
     if (valle !== undefined) {
       letto[m - 1] = valle;
       for (let i = m - 2; i >= 0; i--) if (letto[i] < letto[i + 1]) letto[i] = letto[i + 1];
+    }
+    // Immissario di un lago: arriva al livello del lago (la Carta levigata ne abbassa il fondovalle vicino
+    // al fondo del lago, e il fiume taglierebbe la riva in una gola). A monte risale quanto serve.
+    pesoLago(carta, x[m - 1], z[m - 1], _lago);
+    if (_lago.peso > 0) {
+      const minimo = _lago.livello - prof[m - 1] - F.sponda.altezza;
+      if (letto[m - 1] < minimo) {
+        letto[m - 1] = minimo;
+        for (let i = m - 2; i >= 0 && letto[i] < letto[i + 1] + F.scendi; i--) letto[i] = letto[i + 1] + F.scendi;
+      }
     }
     for (let i = 0; i < m; i++) {
       const k = chiave(f[i * 4], f[i * 4 + 1]);
@@ -187,12 +233,16 @@ const _esito = { quota: 0, livello: NaN };
 export function scavaFiumi(carta, x, z, h0, esito = _esito) {
   const F = FIUMI_SCENA, R = F.raggio;
   const { curve, indice } = fiumiScena(carta);
+  // Rive dei laghi in quota: la Carta levigata mescola la soglia del lago con il fondo e la riva scende sotto
+  // il livello (l'acqua resterebbe sospesa). Nella fascia attorno al lago il terreno sale fino al livello.
+  h0 = conRiva(carta, x, z, h0, false);
   esito.quota = h0; esito.livello = NaN;
   const lista = indice.get(Math.floor(x / F.cellaIndice) * 1000003 + Math.floor(z / F.cellaIndice));
   if (!lista) return h0;
   let migliore = Infinity, mL = 0, mW = 0, mB = 0, mProf = 0, mD = 0;   // tratto con l'alveo più vicino
   let cap = Infinity;                       // versanti: il più basso tra i tratti
-  let fuoriMin = Infinity, peloArgine = 0;  // tratto più vicino fuori dalle sponde (per l'argine)
+  let fuoriMin = Infinity, peloArgine = 0, Rargine = 1;   // tratto più vicino fuori dalle sponde (argine)
+  let dettaglio = NaN;                      // h0 − quota liscia della Carta: il rilievo fine del punto
   for (let k = 0; k < lista.length; k += 2) {
     const cv = curve[lista[k]], i = lista[k + 1];
     const ax = cv.x[i], az = cv.z[i], bx = cv.x[i + 1], bz = cv.z[i + 1];
@@ -203,6 +253,8 @@ export function scavaFiumi(carta, x, z, h0, esito = _esito) {
     const d = Math.sqrt(dx * dx + dz * dz);
     if (d >= R) continue;
     const w = cv.w[i] + (cv.w[i + 1] - cv.w[i]) * t;
+    const Rv = Math.min(R, F.valle.base + F.valle.perSemilarghezza * w);
+    if (d - w - F.sponda.larghezza >= Rv) continue;
     const prof = cv.prof[i] + (cv.prof[i + 1] - cv.prof[i]) * t;
     const letto = cv.letto[i] + (cv.letto[i + 1] - cv.letto[i]) * t;
     const pelo = letto + prof;
@@ -210,9 +262,11 @@ export function scavaFiumi(carta, x, z, h0, esito = _esito) {
     if (fuori <= 0) {
       if (d - w < migliore) { migliore = d - w; mL = pelo; mW = w; mB = letto; mProf = prof; mD = d; }
     } else {
-      const c = pelo + F.sponda.altezza + fuori * (F.versante + 1.5 * (fuori / R) * (fuori / R));
+      if (Number.isNaN(dettaglio)) dettaglio = h0 - quotaCarta(carta, x, z);
+      const c = pelo + F.sponda.altezza + fuori * (F.versante + F.curva * (fuori / Rv) * (fuori / Rv))
+        + dettaglio * smoothstep(0, 0.6 * Rv, fuori);
       if (c < cap) cap = c;
-      if (fuori < fuoriMin) { fuoriMin = fuori; peloArgine = pelo; }
+      if (fuori < fuoriMin) { fuoriMin = fuori; peloArgine = pelo; Rargine = Rv; }
     }
   }
   if (migliore !== Infinity) {                       // nell'alveo o sulle sponde: forma imposta
@@ -226,17 +280,40 @@ export function scavaFiumi(carta, x, z, h0, esito = _esito) {
   }
   if (cap === Infinity) return h0;
   // Versanti: mai sopra il terreno. Dove il terreno è più basso del fiume, un argine che scende piano dalla
-  // sponda (il fiume non resta sospeso sopra una conca).
-  const argine = Math.min(peloArgine + F.sponda.altezza - F.argine * fuoriMin, cap);
+  // sponda (il fiume non resta sospeso sopra una conca), che si raccorda al terreno entro la fascia dei versanti.
+  let argine = Math.min(peloArgine + F.sponda.altezza - F.argine * fuoriMin, cap);
+  if (argine > h0) argine = h0 + (argine - h0) * (1 - smoothstep(0.5 * Rargine, Rargine, fuoriMin));
   const h = Math.max(h0 < cap ? h0 : cap, argine);
   esito.quota = h;
   return h;
 }
 
+const _lago = { peso: 0, livello: NaN };
+
+/**
+ * Quota h con la riva dei laghi in quota: nella fascia attorno al lago (indicatore tra 0 e la soglia) sale
+ * fino al livello + riva.sopra; dentro il lago, se `dentro`, vale il livello (per il letto dei fiumi).
+ */
+function conRiva(carta, x, z, h, dentro = true) {
+  const R = FIUMI_SCENA.riva;
+  pesoLago(carta, x, z, _lago);
+  if (_lago.peso <= 0) return h;
+  if (_lago.peso >= R.soglia) return dentro ? _lago.livello : h;
+  const riva = _lago.livello + R.sopra;
+  return h < riva ? h + (riva - h) * smoothstep(0, R.soglia, _lago.peso) : h;
+}
+
 /** Livello dei laghi in quota (m) nel punto del mondo, o NaN: indicatore «lago» interpolato tra le celle. */
 export function livelloLago(carta, x, z) {
+  pesoLago(carta, x, z, _lago);
+  return _lago.peso >= FIUMI_SCENA.riva.soglia ? _lago.livello : NaN;
+}
+
+/** Indicatore «lago» interpolato (0–1) e livello della cella di lago più vicina: in out.peso, out.livello. */
+function pesoLago(carta, x, z, out) {
   const { cols, rows, acque, livelloAcqua, cella } = carta;
-  if (!acque) return NaN;
+  out.peso = 0; out.livello = NaN;
+  if (!acque) return out;
   const u = x / cella - 0.5, v = z / cella - 0.5;
   const i0 = Math.floor(u), j0 = Math.floor(v), fu = u - i0, fv = v - j0;
   let somma = 0, livello = NaN, peso = -1;
@@ -248,7 +325,8 @@ export function livelloLago(carta, x, z) {
       if (acque[c] === ACQUA.LAGO) { somma += w; if (w > peso) { peso = w; livello = livelloAcqua[c]; } }
     }
   }
-  return somma >= 0.25 ? livello : NaN;
+  out.peso = somma; out.livello = livello;
+  return out;
 }
 
 /**
