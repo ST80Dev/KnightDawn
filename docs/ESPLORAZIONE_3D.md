@@ -1003,6 +1003,10 @@ conoscenza sulla Carta. Tavullia resta la scena di prova con il castello di M4.
      montagna con mediana 2,2–6,4 km; 29 su 30 rispettano tutte le verifiche (fiumi, panorami, varietà, luoghi):
      nel seme 79190 la sola catena ha i fondovalle a 5–9 km dal crinale e nessun sito di valle. Un salvataggio
      del mondo di prima fuori dalla regione riparte dalla rocca.
+   - *Salita più rapida* (richiesta dell'utente: 100 m di dislivello in ~3 minuti di corsetta, crinale a 800 m in
+     20–25 minuti): in salita la curva della velocità è più dolce (`pendenzaKSalita` 0,7, minimo ×0,7 invece di
+     ×0,5); discese e piano invariati. Minuti di corsetta per 100 m di dislivello a 10°/15°/20°/30°: da
+     4,3/3,4/3,0/2,1 a 3,4/2,4/2,0/1,5 (un escursionista vero: ~10). Crinale a 800 m in ~12–16 minuti.
    - *Stadio 2:* il punto più alto della cella (griglia di 50 m, poi 10 m) deve essere **una cima vera**:
      nulla più alto entro 150, 300 e 450 m (16 direzioni). Senza questa regola il primo sito del seme 48213
      era un dosso a 469 m ai piedi di un rilievo di 522 m a 400 m di distanza, e il borgo cadeva nella sella.

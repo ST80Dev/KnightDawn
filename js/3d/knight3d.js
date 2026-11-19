@@ -24,6 +24,10 @@ export const KNIGHT_CFG = {
   // un po' più veloce sulle discese dolci (~3°), più lento in salita e sulle discese ripide.
   pendenzaK: 2.0,       // ripidità della curva (Tobler reale: 3,5)
   fattoreMin: 0.5,      // mai sotto metà della velocità in piano: il gioco resta giocabile
+  // In salita una curva più dolce (deciso con l'utente, mondo di 120×90 km): dal fondovalle al crinale (~800 m)
+  // in ~12–15 minuti di corsetta invece di 20–25. Il limite di pendenza e la fatica (Forza) restano.
+  pendenzaKSalita: 0.7,
+  fattoreMinSalita: 0.7,
   fattoreMax: 1.1,      // massimo, sulle discese dolci
   margineBordo: 2,      // m dal bordo dell'area
   raggio: 0.4,          // m: ingombro sul piano contro mura e torri (spalle + scudo)
@@ -320,8 +324,9 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
 
   /** Fattore di velocità per una pendenza g (tangente) nella direzione di marcia. */
   function fattorePendenza(g) {
-    const f = Math.exp(-cfg.pendenzaK * Math.abs(g + 0.05)) / Math.exp(-cfg.pendenzaK * 0.05);
-    return clamp(f, cfg.fattoreMin, cfg.fattoreMax);
+    const salita = g > 0, K = salita ? cfg.pendenzaKSalita : cfg.pendenzaK;
+    const f = Math.exp(-K * Math.abs(g + 0.05)) / Math.exp(-K * 0.05);
+    return clamp(f, salita ? cfg.fattoreMinSalita : cfg.fattoreMin, cfg.fattoreMax);
   }
 
   // Punto (x, z) spinto fuori da mura e torri: contro un muro il cavaliere ci scivola lungo.
