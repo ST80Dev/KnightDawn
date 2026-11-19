@@ -30,6 +30,10 @@ const DETTAGLIO = {
   // Montagna: oltre la rampa (quota della Carta) torna a crescere fino a `extra` m in più, piena sulle creste:
   // vette e crinali aspri, fondovalle percorribili.
   montagna: { rampa: [1200, 2200], extra: 220 },
+  // Versanti lunghi in montagna (come Alpi e Montagne Rocciose): salendo di quota le ottave fini (350, 175, 88,
+  // 44 m) si spengono di questa parte; la forma la fanno le scale grandi (1,4 km e 700 m). Con le ottave fini
+  // piene la montagna era un «mare di schiuma» di gobbe e conche ogni 100–200 m.
+  versanti: { quota: [600, 1500], spegni: [0, 0, 0.6, 0.88, 0.94, 0.97] },
   // Gruppi montuosi (Carta: massicci): torri con pareti sopra ghiaioni; pareti e cime un po' frastagliate.
   massicci: { frastaglio: 40, lunghezza: 260, ottave: 2, liscio: 0.7 },
   erosione: 1.0,                // quanto la pendenza accumulata smorza le ottave fini
@@ -203,9 +207,17 @@ export function quotaMondo(carta, x, z, seedDettaglio = derivaSeme(carta.seme, 1
       liscio = 1 - K.liscio * Math.max(p.forcella, smoothstep(1.9, 1.2, p.d) * (1 - roccia));
     }
   }
-  return h + liscio * ampiezza * fbmEroso(x, z, seedDettaglio, pesi) + gruppo;
+  // Pesi delle ottave: quelli del chiamante (orizzonte) per la distanza, e in montagna i versanti lunghi.
+  let p = pesi;
+  const V = DETTAGLIO.versanti, m = h > 0 ? smoothstep(V.quota[0], V.quota[1], h) : 0;
+  if (m > 0) {
+    p = _pesiMonte;
+    for (let o = 0; o < V.spegni.length; o++) p[o] = (pesi ? pesi[o] : 1) * (1 - m * V.spegni[o]);
+  }
+  return h + liscio * ampiezza * fbmEroso(x, z, seedDettaglio, p) + gruppo;
 }
 
+const _pesiMonte = new Float64Array(6);
 const _massiccio = { a: 0, altezza: 0, d: Infinity, forcella: 0, forma: '', gruppo: -1 };
 
 /** Campo per cella della Carta (Float32Array) interpolato bilineare tra i centri delle celle. */

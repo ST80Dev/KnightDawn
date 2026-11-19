@@ -636,6 +636,11 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
      20 semi su 20 rispettano tutte le regole. Limiti: le cime innevate sembrano un po' «panettoni» (manca il
      dettaglio verticale delle pareti, ~8 m di griglia); strade, pedaggi e luoghi alle forcelle con la
      milestone dei luoghi.
+   - *Versanti lunghi in montagna* (segnalato dall'utente: «un mare di schiuma», saliscendi continui). Le
+     ottave fini del rilievo (350, 175, 88, 44 m) salendo da 600 a 1500 m si spengono del 60–97 % (`DETTAGLIO.
+     versanti`); la forma la fanno le scale di 1,4 km e 700 m, come i versanti lunghi di Alpi e Montagne
+     Rocciose. Conche chiuse per km²: montagna da 3,4 a 0,8, pedemonte da 3,3 a 1,4 (Tavullia 1,6); pendenza
+     p50/p90 in montagna 15°/29° (prima 20°/34°). Collina e pianura invariate.
    Limiti noti: il limite delle nevi si calcola al caricamento della Scena (cambiando stagione dentro la
    Scena si aggiorna alla Scena successiva); niente alberi né rocce come oggetti (il bosco è un colore);
    paludi rare; le regole di varietà (deserto–neve, distese monotone) si verificano al passo 8.
