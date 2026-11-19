@@ -478,6 +478,78 @@ function materialeFili(opz) {
   return mat;
 }
 
+// ─── Visuale pulita (richiesta dell'utente: nel bosco tronchi e chiome si mettevano tra la camera e il cavaliere) ───
+// Ciò che sta tra la camera e il cavaliere si dirada «a retino»: ogni oggetto ha un grado di dissolvenza calcolato
+// nello shader dalla posizione dell'istanza (tutto l'albero insieme, non un buco nel mezzo) e perde pixel secondo
+// una trama 4×4 fissa sullo schermo; del tutto diradato non si disegna proprio. Niente trasparenze ordinate.
+//  - alberi, arbusti, rocce: spariti se più vicini alla camera del cavaliere di `prima` m (lungo la direzione di
+//    vista, sul piano); visibili da `dopo` m prima di lui in poi; vicino alla linea camera→cavaliere (entro
+//    `largo` m più il raggio della chioma) spariscono fino alla sua altezza: così sparisce anche l'abete col tronco
+//    di fianco al cavaliere ma la chioma davanti. Accanto e davanti al cavaliere il resto rimane.
+//  - erba e felci: solo quelle a ridosso della camera (entro `vicino` m).
+// Valori provabili dalla console: kd.vegetazione.cfgVisuale (x = prima, y = dopo, z = largo, w = vicino).
+
+const VISUALE = { prima: 1.8, dopo: 0.5, largo: 1.4, vicino: 1.6 };
+
+/** Raggio orizzontale massimo di una geometria (m, prima della scala dell'istanza). */
+function raggioOrizzontale(geo) {
+  const p = geo.attributes.position;
+  let r = 0;
+  for (let i = 0; i < p.count; i++) r = Math.max(r, Math.hypot(p.getX(i), p.getZ(i)));
+  return r;
+}
+
+/**
+ * Aggiunge al materiale il diradamento della visuale. modo: 'pieno' (alberi, arbusti, rocce) | 'vicino' (erba, felci).
+ * `raggio`: raggio orizzontale della geometria (solo 'pieno').
+ */
+function conVisuale(mat, uni, modo, raggio = 0) {
+  const prima = mat.onBeforeCompile.bind(mat);
+  mat.onBeforeCompile = (sh, renderer) => {
+    prima(sh, renderer);
+    sh.uniforms.uCav = uni.uCav;
+    sh.uniforms.uVisuale = uni.uVisuale;
+    sh.uniforms.uVisCfg = uni.uVisCfg;
+    sh.uniforms.uRaggio = { value: raggio };
+    const calcolo = modo === 'pieno' ? `
+      vec2 kdAsse = uCav.xz - cameraPosition.xz;
+      float kdL = length(kdAsse);
+      vec2 kdU = kdAsse / max(kdL, 1e-3);
+      vec2 kdRel = kdO.xz - cameraPosition.xz;
+      float kdT = dot(kdRel, kdU);                                   // profondità lungo la vista
+      float kdD = abs(dot(kdRel, vec2(-kdU.y, kdU.x)));               // distanza dalla linea camera→cavaliere
+      float kdProf = 1.0 - smoothstep(kdL - uVisCfg.x, kdL - uVisCfg.y, kdT);
+      float kdR = uRaggio * length(instanceMatrix[0].xyz);           // raggio della chioma dell'istanza
+      float kdLinea = (1.0 - smoothstep(kdL - 0.6, kdL, kdT)) * (1.0 - smoothstep(uVisCfg.z + kdR, uVisCfg.z + kdR + 1.0, kdD));
+      vKdDirada = max(kdProf, kdLinea) * uVisuale;` : `
+      vKdDirada = (1.0 - smoothstep(uVisCfg.w * 0.5, uVisCfg.w, distance(kdO, cameraPosition))) * uVisuale;`;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#include <common>
+uniform vec3 uCav;
+uniform float uVisuale;
+uniform vec4 uVisCfg;
+uniform float uRaggio;
+varying float vKdDirada;`)
+      .replace('#include <project_vertex>', `#include <project_vertex>
+    {
+      vec3 kdO = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;${calcolo}
+      if (vKdDirada > 0.999) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);   // tutto diradato: fuori dallo schermo
+    }`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying float vKdDirada;
+const float KD_RETINO[16] = float[16](0., 8., 2., 10., 12., 4., 14., 6., 3., 11., 1., 9., 15., 7., 13., 5.);`)
+      .replace('void main() {', `void main() {
+  if (vKdDirada > 0.0) {
+    ivec2 kdI = ivec2(mod(gl_FragCoord.xy, 4.0));
+    if (vKdDirada >= (KD_RETINO[kdI.y * 4 + kdI.x] + 0.5) / 16.0) discard;
+  }`);
+  };
+  const chiave = mat.customProgramCacheKey.bind(mat);
+  mat.customProgramCacheKey = () => `${chiave()}|kd-visuale-${modo}-1`;
+  return mat;
+}
+
 /**
  * Oggetto 3D della vegetazione del blocco.
  * @param {object} pos  esito di posizionaVegetazione (tipi, suolo, erbaAttorno, ms, msCampi)
@@ -596,6 +668,13 @@ export function creaVegetazione(pos, terrain = null) {
     coloriTerreno = superficie.geometry.attributes.color?.array || null;
   }
 
+  // Uniformi condivise da tutti i materiali della vegetazione (visuale pulita)
+  const uniVis = {
+    uCav: { value: new THREE.Vector3() },
+    uVisuale: { value: 0 },                   // 0 finché non arriva la posizione del cavaliere
+    uVisCfg: { value: new THREE.Vector4(VISUALE.prima, VISUALE.dopo, VISUALE.largo, VISUALE.vicino) },
+  };
+
   const tipi = [];
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), p = new THREE.Vector3();
   for (const [nome, t] of Object.entries(pos.tipi)) {
@@ -630,7 +709,8 @@ export function creaVegetazione(pos, terrain = null) {
     }
     const mesh = livelli.map((L) => L.varianti.map((geo, vi) => {
       const m = new THREE.InstancedMesh(geo,
-        new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: !!L.piatto }), t.n);
+        conVisuale(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: !!L.piatto }), uniVis, 'pieno',
+          raggioOrizzontale(geo)), t.n);
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(t.n * 3), 3);
       m.instanceColor.setUsage(THREE.DynamicDrawUsage);
@@ -670,7 +750,7 @@ export function creaVegetazione(pos, terrain = null) {
   };
   for (const [nome, V] of Object.entries(vicini)) {
     V.mesh = new THREE.InstancedMesh(V.geo, V.fili
-      ? materialeFili({ vertexColors: true })
+      ? conVisuale(materialeFili({ vertexColors: true }), uniVis, 'vicino')
       : new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: !!V.piatto }), V.max);
     V.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     V.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(V.max * 3), 3);
@@ -795,6 +875,16 @@ export function creaVegetazione(pos, terrain = null) {
   const conteggi = Object.fromEntries(Object.entries(pos.tipi).map(([k, t]) => [k, t.n]));
   return {
     oggetto, aggiorna, statistiche, conteggi,
+    /**
+     * Visuale pulita: posizione del cavaliere (x, y, z) da tenere libera dalla vegetazione, o null per spegnerla
+     * (camera libera di debug).
+     */
+    visuale(x, y, z) {
+      if (x === null || x === undefined) { uniVis.uVisuale.value = 0; return; }
+      uniVis.uCav.value.set(x, y, z);
+      uniVis.uVisuale.value = 1;
+    },
+    cfgVisuale: uniVis.uVisCfg.value,
     /** Con la vegetazione nascosta (tasto V) spariscono anche le sue ombre. */
     nascondiOmbre: () => { if (uniSuolo) uniSuolo.uOmbreForza.value.set(0, 0); },
     totale: Object.values(conteggi).reduce((s, v) => s + v, 0),

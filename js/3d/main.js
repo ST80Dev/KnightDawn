@@ -1048,7 +1048,12 @@ function frame(now) {
       aggiornaNebbia(controls.target);
     }
   }
-  if (vegetazione && vegetazioneVisibile) vegetazione.aggiorna(camera.position.x, camera.position.z, sole.position, _luceGiorno);
+  if (vegetazione && vegetazioneVisibile) {
+    vegetazione.aggiorna(camera.position.x, camera.position.z, sole.position, _luceGiorno);
+    // Visuale pulita: ciò che sta tra camera e cavaliere si dirada (solo con la camera alle spalle)
+    if (knight && modoCamera === 'segui') vegetazione.visuale(knight.stato.x, knight.stato.y, knight.stato.z);
+    else vegetazione.visuale(null);
+  }
   aggiornaPannello(now);
   renderer.render(scene, camera);
   infoFrame.calls = renderer.info.render.calls;          // letti subito: i riflessi del cavaliere disegnano anche loro

@@ -1333,6 +1333,15 @@ Deserto e steppa: arbusti secchi radi, sassi; niente piante esotiche (stile medi
   attraversano (domanda 5).
 - Camera: non urta la vegetazione (nel bosco salterebbe di continuo) [Probabile]; se una chioma si mette tra camera e
   cavaliere si accetta, o si rimpicciolisce l'albero più vicino alla camera (si decide guardando, passo 3).
+  **Deciso con l'utente (visuale pulita):** nel bosco tronchi e chiome coprivano quasi sempre il cavaliere; ora ciò che
+  sta tra camera e cavaliere si dirada «a retino» (`conVisuale` in `vegetazione3d.js`). Dissolvenza per istanza calcolata
+  nello shader dalla posizione dell'oggetto (sparisce tutto l'albero, non un buco): alberi, arbusti e rocce spariscono se
+  sono più vicini alla camera del cavaliere (oltre 1,8 m prima di lui, sul piano della vista) o se stanno sulla linea
+  camera→cavaliere, contando il raggio della chioma; accanto e davanti a lui resta tutto. Erba e felci solo a ridosso
+  della camera (1,6 m). Trama 4×4 fissa sullo schermo con `discard`, niente trasparenze ordinate; gli oggetti del tutto
+  diradati non si disegnano. Spento con la camera libera (C). Le ombre finte a terra restano. Valori provabili da
+  console: `kd.vegetazione.cfgVisuale`. [Probabile] il `discard` toglie al GPU il test di profondità anticipato sulla
+  vegetazione: costo da verificare con F3 nel bosco fitto.
 
 **8. Bordo del blocco e orizzonte.** Nell'orizzonte il bosco resta un colore (vincolo). [Probabile] con la nebbia
 solo dai 10 km, dal blocco il bosco «finisce» al bordo e oltre resta il colore piatto: si vedrà, soprattutto
