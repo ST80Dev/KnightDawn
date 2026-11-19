@@ -501,7 +501,16 @@ function posizionaCavaliere(x, z, direzione) {
 }
 
 const NOMI_CLASSI = { minore: 'rocca minore', casata: 'castello di casata', maggiore: 'sede maggiore' };
-const PARTENZA_DAL_SITO = 170;   // m dalla cima della rocca verso il borgo: fuori dalla porta del borgo (M7)
+const PARTENZA_DAL_SITO = 170;   // m dalla rocca verso il borgo, se il sito non ha ancora la porta (Carte di prima)
+const FUORI_DALLA_PORTA = 35;    // m fuori dalla porta del borgo (M7, passo 2: fine del terrapieno del borgo)
+
+/** Punto di partenza (locale alla Scena centrata sul sito) e direzione: fuori dalla porta del borgo, verso la rocca. */
+function partenzaDelSito(sito) {
+  const v = sito.verso, d = FUORI_DALLA_PORTA;
+  const p = sito.porta ? { x: sito.porta.x - sito.x + v.x * d, z: sito.porta.z - sito.z + v.z * d }
+    : { x: v.x * PARTENZA_DAL_SITO, z: v.z * PARTENZA_DAL_SITO };
+  return { ...p, direzione: Math.atan2(-v.x, -v.z) };
+}
 
 /** Centro della prima Scena se la Carta non ha rocche: collina (250–600 m) la più vicina al centro della Carta. */
 function puntoPartenza(c) {
@@ -550,8 +559,8 @@ async function entraDallaCarta(cartaScelta, x, y) {
 async function entraNelSito(cartaScelta, sito) {
   carta = cartaScelta;
   await caricaScena({ tipo: 'mondo', cx: sito.x, cz: sito.z });
-  const d = PARTENZA_DAL_SITO;
-  posizionaCavaliere(sito.verso.x * d, sito.verso.z * d, Math.atan2(-sito.verso.x, -sito.verso.z));
+  const p = partenzaDelSito(sito);
+  posizionaCavaliere(p.x, p.z, p.direzione);
   scriviIndirizzo();
   cartaVista.chiudi();
   messaggio(`Rocca ${sito.id + 1} (${NOMI_CLASSI[sito.classe]}), seme ${carta.seme}.`);
@@ -604,12 +613,12 @@ async function init() {
     } else {
       const sito = carta.luoghi?.find((l) => l.partenza);
       if (sito) {
-        // M7: Scena centrata sulla rocca di partenza; il garzone sta più in basso, dove sarà la porta del borgo,
-        // rivolto verso la rocca (provvisorio finché non ci sono rocca e borgo).
+        // M7: Scena centrata sulla rocca di partenza; il garzone sta fuori dalla porta del borgo (fine del
+        // terrapieno), rivolto verso la rocca.
         await caricaScena({ tipo: 'mondo', cx: sito.x, cz: sito.z });
-        const d = PARTENZA_DAL_SITO;
-        posizionaCavaliere(sito.verso.x * d, sito.verso.z * d, Math.atan2(-sito.verso.x, -sito.verso.z));
-        messaggio(`Rocca di partenza (${NOMI_CLASSI[sito.classe]}): per ora c'è solo il sito, rocca e borgo arrivano nei prossimi passi.`);
+        const p = partenzaDelSito(sito);
+        posizionaCavaliere(p.x, p.z, p.direzione);
+        messaggio(`Rocca di partenza (${NOMI_CLASSI[sito.classe]}): per ora ci sono il sito e il terrapieno; rocca e borgo arrivano nei prossimi passi.`);
       } else {
         await caricaScena({ tipo: 'mondo', ...puntoPartenza(carta) });
         posizionaCavaliere(0, 0, Math.PI);
@@ -863,6 +872,19 @@ function aggiornaPannello(now) {
     const pelo = livelloAcquaIn(k.x, k.z);
     if (!Number.isNaN(pelo)) testo += `\nacqua: pelo a ${fmt(pelo, 1)} m · profondità ${fmt(Math.max(0, pelo - k.y), 1)} m`;
     testo += `\ncamera: ${modoCamera === 'segui' ? 'alle spalle' : 'libera (C per tornare)'}`;
+    if (scenaAttuale?.tipo === 'mondo' && carta?.luoghi) {
+      // M7, passo 2: terrapieno della rocca più vicina (entro 1,5 km).
+      const X = scenaAttuale.cx + k.x, Z = scenaAttuale.cz + k.z;
+      for (const l of carta.luoghi) {
+        const d = Math.hypot(l.x - X, l.z - Z);
+        if (d > 1500 || !l.terrapieno) continue;
+        const t = l.terrapieno;
+        testo += `\nrocca ${l.id + 1} (${NOMI_CLASSI[l.classe]}, ${l.carattere}) a ${fmt(d)} m: ${l.piani.length} piani`
+          + ` (rocca ${fmt(l.piani[0].q, 1)} m, terrazze ${l.piani.slice(1).map((p) => fmt(p.q, 1)).join(' / ')} m),`
+          + ` salto massimo ${fmt(t.salto, 1)} m, scarpate ≤ ${fmt(t.pendenza)}°, lavoro medio ${fmt(t.lavoro, 1)} m`
+          + (t.pelo !== null ? `, acqua vicina a ${fmt(t.pelo, 1)} m` : '');
+      }
+    }
     if (castle) {
       testo += castle.dentro(k.x, k.z) ? '\ncastello: nel cortile'
         : `\ncastello: a ${fmt(Math.hypot(k.x - castle.cfg.x, k.z - castle.cfg.z))} m dal centro`;

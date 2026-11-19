@@ -18,7 +18,7 @@
 // forma del mondo (dal passo 2 il terrapieno), e deve essere identico in ogni browser.
 
 import { ACQUA, BIOMA } from './carta.js';
-import { quotaMondo } from './scena.js';
+import { quotaMondo, scavaFiumi, raffinaZona } from './scena.js';
 import { derivaSeme } from './rumore.js';
 
 export const LUOGHI = {
@@ -47,6 +47,23 @@ export const LUOGHI = {
   // Castello di valle (deciso con l'utente): a ≤ entro km da un crinale almeno sopra m più alto, così di persona
   // in 15–20 minuti si sale dal castello al crinale per guardare oltre. La partenza è di valle, se c'è.
   crinale: { entro: 5, sopra: 800 },
+  // Passo 2: terrapieni. Misure piene (m) del piano della rocca e del borgo secondo la classe (lungo il verso del
+  // borgo × di traverso) e numero di terrazze del borgo; il borgo comincia dove finisce il piano della rocca.
+  classi: {
+    minore: { rocca: [40, 36], borgo: [60, 80], terrazze: [1, 2] },
+    casata: { rocca: [52, 46], borgo: [90, 130], terrazze: [2, 3] },
+    maggiore: { rocca: [64, 56], borgo: [130, 200], terrazze: [3, 4] },
+  },
+  piani: {
+    passo: 6,                     // m tra i campioni del terreno sotto un piano
+    salto: 6,                     // m di dislivello per terrazza (ne decide il numero, entro i limiti della classe)
+    sopraRocca: 3,                // m: la rocca sta almeno così sopra la prima terrazza
+    // Larghezza della scarpata (m): quanto serve per riprendere il salto a 25° (salto / tan 25° ≈ 2,15 m per metro),
+    // più un margine; oltre si torna al terreno naturale (TERRAPIENO.ritorno in scena.js).
+    scarpa: { perMetro: 2.15, margine: 10, min: 15, max: 120 },
+    acqua: { sopra: 6, margine: 300, alzaMax: 12 }, // m: piano più basso sopra il pelo dell'acqua vicino
+    raggioCorner: { rocca: 6, borgo: 4 },
+  },
 };
 
 /** Distanza (km, a celle) dal punto più vicino della Carta almeno `sopra` m più alto di h, entro `raggio` km. */
@@ -378,6 +395,156 @@ function affina(carta, c, r, seed, fiumeVicino, valichi, L) {
   };
 }
 
+// ─── Passo 2: piani della rocca e del borgo (terrapieni) ─────────────────
+const _es = { quota: 0, livello: NaN };
+
+/**
+ * Campioni del terreno (senza luoghi) sotto un rettangolo: minimo, massimo, media; con `rif`, anche lo scarto
+ * medio |h − rif| (il lavoro di terra per un piano a quella quota).
+ */
+function sottoRettangolo(q, cx, cz, ux, uz, a, b, passo, rif = NaN) {
+  const na = Math.max(1, Math.ceil(2 * a / passo)), nb = Math.max(1, Math.ceil(2 * b / passo));
+  let mn = Infinity, mx = -Infinity, somma = 0, n = 0, scarto = 0;
+  for (let i = 0; i <= na; i++) {
+    const lu = -a + 2 * a * i / na;
+    for (let j = 0; j <= nb; j++) {
+      const lv = -b + 2 * b * j / nb;
+      const h = q(cx + ux * lu - uz * lv, cz + uz * lu + ux * lv);
+      if (h < mn) mn = h;
+      if (h > mx) mx = h;
+      somma += h; n++;
+      if (rif === rif) scarto += h > rif ? h - rif : rif - h;
+    }
+  }
+  return { min: mn, max: mx, media: somma / n, scarto: scarto / n };
+}
+
+/** Salto massimo (m) tra il piano e il terreno appena fuori dal contorno (anello a 4 m). */
+function saltoBordo(q, p, passo) {
+  const a = p.a + 4, b = p.b + 4;
+  const perimetro = 4 * (a + b), n = Math.max(8, Math.ceil(perimetro / passo));
+  let mx = 0;
+  for (let k = 0; k < n; k++) {
+    let t = (k / n) * perimetro, lu, lv;
+    if (t < 2 * a) { lu = -a + t; lv = -b; } else if ((t -= 2 * a) < 2 * b) { lu = a; lv = -b + t; }
+    else if ((t -= 2 * b) < 2 * a) { lu = a - t; lv = b; } else { t -= 2 * a; lu = -a; lv = b - t; }
+    const d = q(p.cx + p.ux * lu - p.uz * lv, p.cz + p.uz * lu + p.ux * lv) - p.q;
+    const e = d < 0 ? -d : d;
+    if (e > mx) mx = e;
+  }
+  return mx;
+}
+
+/**
+ * Piani (rocca + terrazze del borgo) per un sito, nella direzione `dir` del borgo. null se impossibile: il
+ * terrapieno toccherebbe la fascia di un fiume o di un torrente, o servirebbe alzare troppo per stare sopra
+ * l'acqua. Le quote vengono dal terreno senza luoghi (rilievo + fiumi).
+ */
+function pianiInDirezione(carta, sito, classe, dir, seed, L) {
+  const Pc = L.piani, K = L.classi[classe];
+  const q = (x, z) => scavaFiumi(carta, x, z, quotaMondo(carta, x, z, seed), _es);
+  const [ux, uz] = dir;
+  const ra = K.rocca[0] / 2, rb = K.rocca[1] / 2;
+  const rocca = { tipo: 'rocca', cx: sito.x, cz: sito.z, ux, uz, a: ra, b: rb, r: Pc.raggioCorner.rocca, q: 0, s: 0 };
+  const sr = sottoRettangolo(q, rocca.cx, rocca.cz, ux, uz, ra, rb, Pc.passo);
+  rocca.q = (sr.max + sr.media) / 2;                       // un po' di sterro in cima, il resto riporto
+  // Borgo: tutto il rettangolo, poi le terrazze lungo il verso.
+  const la = K.borgo[0] / 2, lb = K.borgo[1] / 2;
+  const bcx = sito.x + ux * (ra + la), bcz = sito.z + uz * (ra + la);
+  const sb = sottoRettangolo(q, bcx, bcz, ux, uz, la, lb, Pc.passo);
+  if (sb.media > rocca.q) return null;                     // il borgo deve stare sotto la rocca
+  let n = Math.ceil((sb.max - sb.min) / Pc.salto);
+  n = n < K.terrazze[0] ? K.terrazze[0] : n > K.terrazze[1] ? K.terrazze[1] : n;
+  const terrazze = [];
+  const lt = la / n;                                       // semilunghezza di una terrazza
+  for (let t = 0; t < n; t++) {
+    const off = ra + lt * (2 * t + 1);
+    const p = { tipo: 'borgo', cx: sito.x + ux * off, cz: sito.z + uz * off, ux, uz, a: lt, b: lb, r: Pc.raggioCorner.borgo, q: 0, s: 0 };
+    p.q = sottoRettangolo(q, p.cx, p.cz, ux, uz, lt, lb, Pc.passo).media;
+    if (t > 0 && p.q > terrazze[t - 1].q) p.q = terrazze[t - 1].q;   // le terrazze scendono allontanandosi
+    terrazze.push(p);
+  }
+  if (rocca.q < terrazze[0].q + Pc.sopraRocca) rocca.q = terrazze[0].q + Pc.sopraRocca;
+  const piani = [rocca, ...terrazze];
+  // Scarpate: larghe in proporzione al salto sul bordo.
+  let salto = 0, pendenza = 0;
+  for (const p of piani) {
+    const sp = saltoBordo(q, p, Pc.passo);
+    if (sp > salto) salto = sp;
+    const w = Pc.scarpa.perMetro * sp + Pc.scarpa.margine;
+    p.s = w < Pc.scarpa.min ? Pc.scarpa.min : w > Pc.scarpa.max ? Pc.scarpa.max : w;
+  }
+  pendenza = 25;                                           // per costruzione (scena.js, TERRAPIENO), sul terrapieno
+  // Fiumi: niente piano né scarpata nella fascia di un fiume o di un torrente (scavaFiumi cambia la quota o c'è
+  // acqua); intanto il pelo dell'acqua più alto nei dintorni.
+  let pelo = -Infinity, conflitto = false;
+  const passoAcqua = 12;
+  for (const p of piani) {
+    const A = p.a + p.s + Pc.acqua.margine, B = p.b + p.s + Pc.acqua.margine;
+    const na = Math.ceil(2 * A / (2 * passoAcqua)), nb = Math.ceil(2 * B / (2 * passoAcqua));
+    for (let i = 0; i <= na && !conflitto; i++) {
+      for (let j = 0; j <= nb; j++) {
+        const lu = -A + 2 * A * i / na, lv = -B + 2 * B * j / nb;
+        const x = p.cx + p.ux * lu - p.uz * lv, z = p.cz + p.uz * lu + p.ux * lv;
+        const h0 = quotaMondo(carta, x, z, seed), h = scavaFiumi(carta, x, z, h0, _es);
+        if (!Number.isNaN(_es.livello) && _es.livello > pelo) pelo = _es.livello;
+        // Dentro piano + scarpata: il fiume non deve toccare la quota.
+        const dentro = (lu < 0 ? -lu : lu) <= p.a + p.s && (lv < 0 ? -lv : lv) <= p.b + p.s;
+        if (dentro && (h - h0 > 0.01 || h0 - h > 0.01 || !Number.isNaN(_es.livello))) { conflitto = true; break; }
+      }
+    }
+    if (conflitto) return null;
+  }
+  // Sopra l'acqua: il piano più basso almeno Pc.acqua.sopra m sopra il pelo più alto vicino.
+  let alza = 0;
+  if (pelo > -Infinity) {
+    const basso = Math.min(...piani.map((p) => p.q));
+    alza = pelo + Pc.acqua.sopra - basso;
+    if (alza > Pc.acqua.alzaMax) return null;
+    if (alza > 0) for (const p of piani) if (p.q < pelo + Pc.acqua.sopra) p.q = pelo + Pc.acqua.sopra;
+  }
+  // Lavoro di terra: scarto medio tra piano e terreno (m), pesato sull'area.
+  let lavoro = 0, area = 0;
+  for (const p of piani) {
+    lavoro += sottoRettangolo(q, p.cx, p.cz, ux, uz, p.a, p.b, 2 * Pc.passo, p.q).scarto * p.a * p.b;
+    area += p.a * p.b;
+  }
+  return { piani, salto, pendenza, pelo: pelo > -Infinity ? pelo : null, alza: alza > 0 ? alza : 0, lavoro: lavoro / area };
+}
+
+/**
+ * Piani della rocca e del borgo per un sito: la direzione del borgo (tra le 8) col minor lavoro di terra che non
+ * tocca fiumi e sta sopra l'acqua; prima prova quella scelta dall'affinamento. null se nessuna va bene.
+ * Aggiunge al sito: piani, verso, porta (fuori dalla porta del borgo), raggioPiani, terrapieno (misure).
+ */
+function pianifica(carta, sito, classe, L) {
+  const seed = derivaSeme(carta.seme, 101);
+  raffinaZona(carta, sito.x, sito.z, 1500);                 // percorsi dei fiumi come nelle Scene
+  let migliore = null, dirMigliore = null;
+  for (const dir of DIR8) {
+    const r = pianiInDirezione(carta, sito, classe, dir, seed, L);
+    if (!r) continue;
+    const preferita = dir[0] === sito.verso.x && dir[1] === sito.verso.z;
+    const costo = r.lavoro * (preferita ? 0.8 : 1);
+    if (!migliore || costo < migliore.costo) { migliore = { ...r, costo }; dirMigliore = dir; }
+  }
+  if (!migliore) return null;
+  const [ux, uz] = dirMigliore;
+  let raggio = 0;
+  for (const p of migliore.piani) {
+    const ex = p.cx - sito.x, ez = p.cz - sito.z;
+    const e = Math.sqrt(ex * ex + ez * ez) + Math.sqrt(p.a * p.a + p.b * p.b) + p.s;
+    if (e > raggio) raggio = e;
+  }
+  const ultimo = migliore.piani[migliore.piani.length - 1];
+  return {
+    piani: migliore.piani, verso: { x: ux, z: uz }, raggioPiani: raggio + 1,
+    porta: { x: ultimo.cx + ux * ultimo.a, z: ultimo.cz + uz * ultimo.a },
+    terrapieno: { salto: migliore.salto, pendenza: migliore.pendenza, pelo: migliore.pelo, alza: migliore.alza,
+      lavoro: migliore.lavoro },
+  };
+}
+
 /**
  * Siti delle rocche con borgo per una Carta (generaCarta). Deterministico: stesso seme, stessi siti.
  * @returns {{ luoghi: object[], candidati: object[], info: object }}
@@ -455,49 +622,70 @@ export function scegliLuoghi(carta, L = LUOGHI) {
   validi.sort((a, b) => b.punteggio - a.punteggio || a.z - b.z || a.x - b.x);
 
   // ─── Scelta: 2–3 siti diversi e distanti, attorno al centro ───
+  // Ripetuta finché ogni sito scelto ha i suoi piani (passo 2): un sito il cui terrapieno toccherebbe un fiume
+  // o starebbe troppo basso sull'acqua si scarta e si sceglie di nuovo.
   const distanzaKm = (a, b) => Math.sqrt((a.x - b.x) * (a.x - b.x) + (a.z - b.z) * (a.z - b.z)) / carta.cella;
-  let luoghi = [], scalino = null;
-  for (let zi = 0; zi < L.zona.length && luoghi.length < 2; zi++) {
-    for (let di = 0; di < L.distanza.length && luoghi.length < 2; di++) {
-      const dmin = L.distanza[di];
-      const inZona = validi.filter((s) => s.zona <= zi);
-      if (!inZona.length) continue;
-      // La partenza è un castello di valle (crinale vicino), se nella zona ce n'è uno.
-      const presi = [inZona.find((s) => s.carattere === 'valle') ?? inZona[0]];
-      const lontano = (s) => presi.every((p) => distanzaKm(p, s) >= dmin);
-      // Prima un sito di carattere diverso (fiume, valico, altura), poi i migliori rimasti.
-      const diverso = inZona.find((s) => !presi.includes(s) && lontano(s) && !presi.some((p) => p.carattere === s.carattere));
-      if (diverso) presi.push(diverso);
-      for (const s of inZona) {
-        if (presi.length >= L.numero) break;
-        if (!presi.includes(s) && lontano(s)) presi.push(s);
-      }
-      if (presi.length >= 2) { luoghi = presi; scalino = { zona: L.zona[zi], distanza: dmin }; }
-    }
-  }
-  if (!luoghi.length && validi.length) { luoghi = [validi[0]]; scalino = { zona: Infinity, distanza: Infinity }; }
-  // Castello di valle (deciso con l'utente): se nessuno dei siti lo è, il miglior sito di valle (anche fuori zona,
-  // lontano dagli altri) diventa la partenza, al posto del sito più debole.
-  if (luoghi.length && !luoghi.some((l) => l.carattere === 'valle')) {
-    const dmin = scalino && Number.isFinite(scalino.distanza) ? scalino.distanza : L.distanza[L.distanza.length - 1];
-    for (const v of validi) {
-      if (v.carattere !== 'valle') continue;
-      const resto = luoghi.length >= L.numero ? luoghi.slice(0, -1) : luoghi;
-      if (!resto.every((p) => distanzaKm(p, v) >= dmin)) continue;
-      luoghi = [v, ...resto];
+  const esclusi = new Set(), piani = new Map();
+  let luoghi = [], scalino = null, giri = 0;
+  for (; giri < 12; giri++) {
+    const pool = validi.filter((s) => !esclusi.has(s));
+    ({ luoghi, scalino } = scegli(pool));
+    // Classi: la partenza (il primo, di valle se c'è) è un castello di casata; degli altri, quello col punteggio
+    // più alto è la sede maggiore se i siti sono tre, gli altri rocche minori.
+    const altri = luoghi.slice(1).sort((a, b) => b.punteggio - a.punteggio);
+    const maggiore = luoghi.length === 3 ? altri[0] : null;
+    luoghi = luoghi.length ? [luoghi[0], ...altri] : [];
+    const classi = luoghi.map((s, k) => (k === 0 ? 'casata' : s === maggiore ? 'maggiore' : 'minore'));
+    let tutti = true;
+    luoghi.forEach((s, k) => {
+      const chiave = classi[k];
+      if (!piani.has(s)) piani.set(s, new Map());
+      const m = piani.get(s);
+      if (!m.has(chiave)) m.set(chiave, pianifica(carta, s, chiave, L));
+      if (!m.get(chiave)) { esclusi.add(s); tutti = false; }
+    });
+    if (tutti) {
+      luoghi = luoghi.map((s, k) => ({ id: k, tipo: 'rocca', partenza: k === 0, classe: classi[k], ...s,
+        ...piani.get(s).get(classi[k]) }));
       break;
     }
   }
 
-  // Classi: la partenza (il primo, il migliore nella zona più vicina al centro) è un castello di casata;
-  // degli altri, quello col punteggio più alto è la sede maggiore se i siti sono tre, gli altri rocche minori.
-  const altri = luoghi.slice(1).sort((a, b) => b.punteggio - a.punteggio);
-  const maggiore = luoghi.length === 3 ? altri[0] : null;
-  luoghi = [luoghi[0], ...altri].map((s, k) => ({
-    id: k, tipo: 'rocca', partenza: k === 0,
-    classe: k === 0 ? 'casata' : s === maggiore ? 'maggiore' : 'minore',
-    ...s,
-  }));
+  function scegli(pool) {
+    let luoghi = [], scalino = null;
+    for (let zi = 0; zi < L.zona.length && luoghi.length < 2; zi++) {
+      for (let di = 0; di < L.distanza.length && luoghi.length < 2; di++) {
+        const dmin = L.distanza[di];
+        const inZona = pool.filter((s) => s.zona <= zi);
+        if (!inZona.length) continue;
+        // La partenza è un castello di valle (crinale vicino), se nella zona ce n'è uno.
+        const presi = [inZona.find((s) => s.carattere === 'valle') ?? inZona[0]];
+        const lontano = (s) => presi.every((p) => distanzaKm(p, s) >= dmin);
+        // Prima un sito di carattere diverso (fiume, valico, altura), poi i migliori rimasti.
+        const diverso = inZona.find((s) => !presi.includes(s) && lontano(s) && !presi.some((p) => p.carattere === s.carattere));
+        if (diverso) presi.push(diverso);
+        for (const s of inZona) {
+          if (presi.length >= L.numero) break;
+          if (!presi.includes(s) && lontano(s)) presi.push(s);
+        }
+        if (presi.length >= 2) { luoghi = presi; scalino = { zona: L.zona[zi], distanza: dmin }; }
+      }
+    }
+    if (!luoghi.length && pool.length) { luoghi = [pool[0]]; scalino = { zona: Infinity, distanza: Infinity }; }
+    // Castello di valle (deciso con l'utente): se nessuno dei siti lo è, il miglior sito di valle (anche fuori
+    // zona, lontano dagli altri) diventa la partenza, al posto del sito più debole.
+    if (luoghi.length && !luoghi.some((l) => l.carattere === 'valle')) {
+      const dmin = scalino && Number.isFinite(scalino.distanza) ? scalino.distanza : L.distanza[L.distanza.length - 1];
+      for (const v of pool) {
+        if (v.carattere !== 'valle') continue;
+        const resto = luoghi.length >= L.numero ? luoghi.slice(0, -1) : luoghi;
+        if (!resto.every((p) => distanzaKm(p, v) >= dmin)) continue;
+        luoghi = [v, ...resto];
+        break;
+      }
+    }
+    return { luoghi, scalino };
+  }
   const candidati = validi.filter((s) => !luoghi.some((l) => l.x === s.x && l.z === s.z))
     .map((s) => ({ x: s.x, z: s.z, punteggio: s.punteggio, carattere: s.carattere }));
   return {
@@ -505,7 +693,7 @@ export function scegliLuoghi(carta, L = LUOGHI) {
     info: { stime: stime.length, affinati: scelte.length, validi: validi.length, valichi: valichi.length,
       valle: { stime: stime.filter((x) => x.bc).length, affinati: scelte.filter((x) => x.bc).length,
         validi: validi.filter((x) => x.carattere === 'valle').length },
-      scalino, ms: performance.now() - t0 },
+      scalino, scartatiPerPiani: esclusi.size, giri: giri + 1, ms: performance.now() - t0 },
   };
 }
 

@@ -12,7 +12,7 @@
 import { ACQUA, BIOMA, NOMI_BIOMI, profiloMassicci } from '../mondo/carta.js';
 import { verificaFiumi, verificaPanorami, verificaVarieta, verificaLuoghi } from '../mondo/verifica.js';
 import { semeDaTesto, derivaSeme } from '../mondo/rumore.js';
-import { quotaMondo, scavaFiumi, livelloLago, raffinaZona, percorsiFiumi } from '../mondo/scena.js';
+import { quotaFinale, livelloLago, raffinaZona, percorsiFiumi } from '../mondo/scena.js';
 
 // Colori del rilievo: SOLO quota (metri), a un solo tono, più alto = più scuro. Niente verdi, ocra o
 // bianchi: si leggerebbero come biomi (prati, deserti, neve), che arrivano al passo 7 come livello a sé.
@@ -375,7 +375,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
       const Z = (y0 + (r + 0.5) * k) * C;
       for (let c = 0; c < nx; c++) {
         const X = (x0 + (c + 0.5) * k) * C, i = r * nx + c;
-        h[i] = scavaFiumi(c0, X, Z, quotaMondo(c0, X, Z, seme), esito);
+        h[i] = quotaFinale(c0, X, Z, seme, esito);
         let w = esito.livello;
         if (Number.isNaN(w)) { const l = livelloLago(c0, X, Z); if (l > h[i]) w = l; }
         acqua[i] = w;
@@ -748,7 +748,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
     const i = y * carta.cols + x;
     const q = carta.quota[i];
     const X = xf * carta.cella, Z = yf * carta.cella;
-    const esatta = carta.mare[i] ? '' : `quota nella Scena ${fmt(scavaFiumi(carta, X, Z, quotaMondo(carta, X, Z)))} m · `;
+    const esatta = carta.mare[i] ? '' : `quota nella Scena ${fmt(quotaFinale(carta, X, Z))} m · `;
     elCursore.textContent = `${fmt(xf, 2)}, ${fmt(yf, 2)} km (da ovest, da nord) · cella ${x}, ${y} · `
       + (carta.acque?.[i] === ACQUA.LAGO ? `lago, superficie a ${fmt(carta.livelloAcqua[i])} m, fondo a ${fmt(q)} m`
         : carta.acque?.[i] === ACQUA.LAGO_COSTIERO ? `lago costiero, fondo a ${fmt(-q)} m sotto il livello del mare`
