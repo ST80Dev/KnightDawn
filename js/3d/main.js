@@ -488,7 +488,7 @@ async function caricaScena(desc) {
     }
     vegetazione = creaVegetazione(posizionaVegetazione({
       heights, cols: meta.cols, cell: meta.cellSize, cx: desc.cx, cz: desc.cz, acqua: dati,
-      copertura: coperturaMondo(carta, Calendar.stagione), seme: carta.seme,
+      copertura: coperturaMondo(carta, Calendar.stagione), seme: carta.seme, carta,
       piani: (carta.luoghi || []).flatMap((l) => l.piani || []), mare: true,
     }), terrain);
   }
@@ -708,7 +708,7 @@ async function init() {
 
   // Per ispezione dalla console del browser (Knight, Calendar, Save sono comunque globali)
   window.kd = {
-    scene, camera, cam, controls, suolo, Knight, Calendar, Save,
+    scene, camera, cam, controls, suolo, Knight, Calendar, Save, renderer,
     get terrain() { return terrain; }, get knight() { return knight; }, get castle() { return castle; },
     get carta() { return carta; }, get scena() { return scenaAttuale; }, get orizzonte() { return orizzonte; },
     get rocche() { return rocche; },
@@ -866,8 +866,41 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'F3') {
     e.preventDefault();                    // in alcuni browser F3 apre la ricerca
     fpsEl.hidden = !fpsEl.hidden;
+  } else if (e.code === 'F4' && !fpsEl.hidden) {
+    e.preventDefault();
+    applicaProva((provaPrestazioni + 1) % PROVE_PRESTAZIONI.length);
   }
 });
+
+// ─── Prova prestazioni (F4 con il pannello F3 aperto) ───────────────────
+// Spegne un pezzo alla volta per vedere, sulla scheda video vera, dove si perdono gli FPS (in headless il rendering
+// è software e non fa testo). Solo diagnostica: non cambia nulla finché non si preme F4.
+const PROVE_PRESTAZIONI = ['normale', 'suolo semplice (senza colore per pixel)', 'senza vegetazione',
+  'senza orizzonte', 'senza rocche', 'risoluzione ×0,6'];
+let provaPrestazioni = 0;
+const _materialiSuolo = new Map();
+function applicaProva(n) {
+  for (const [m, mat] of _materialiSuolo) { m.material.dispose(); m.material = mat; }
+  _materialiSuolo.clear();
+  const rocchePresenti = [castle, ...rocche].filter(Boolean).map((r) => r.object);
+  for (const o of [vegetazione?.oggetto, orizzonte?.oggetto, ...rocchePresenti]) if (o) o.visible = true;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  provaPrestazioni = n;
+  switch (n) {
+    case 1:
+      scene.traverse((c) => {
+        if (c.isMesh && c.material?.customProgramCacheKey?.() === 'suolo-mondo') {
+          _materialiSuolo.set(c, c.material);
+          c.material = new THREE.MeshLambertMaterial({ vertexColors: true });
+        }
+      });
+      break;
+    case 2: if (vegetazione) vegetazione.oggetto.visible = false; break;
+    case 3: if (orizzonte) orizzonte.oggetto.visible = false; break;
+    case 4: for (const o of rocchePresenti) o.visible = false; break;
+    case 5: renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * 0.6); break;
+  }
+}
 
 const mouse = new THREE.Vector2();
 let mouseDentro = false;
@@ -906,6 +939,8 @@ function puntoSottoCursore() {
 
 const fmt = (n, d = 0) => n.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d });
 
+const _dimBuffer = new THREE.Vector2();
+const infoFrame = { calls: 0, triangles: 0 };
 function aggiornaPannello(now) {
   fpsFrame++;
   const dt = now - fpsT0;
@@ -916,6 +951,9 @@ function aggiornaPannello(now) {
   }
   if (fpsEl.hidden) return;
   let testo = rigaFps;
+  const ri = infoFrame, buf = renderer.getDrawingBufferSize(_dimBuffer);
+  testo += `\nprestazioni (F4 cambia): ${PROVE_PRESTAZIONI[provaPrestazioni]} · ${ri.calls} chiamate`
+    + ` · ${fmt(ri.triangles / 1000)} mila triangoli · ${buf.x}×${buf.y} pixel`;
   if (knight) {
     const k = knight.stato;
     testo += `\ncavaliere: x ${fmt(k.x)} · z ${fmt(k.z)} · quota ${fmt(k.y, 1)} m`
@@ -1011,6 +1049,8 @@ function frame(now) {
   if (vegetazione && vegetazioneVisibile) vegetazione.aggiorna(camera.position.x, camera.position.z, now / 1000);
   aggiornaPannello(now);
   renderer.render(scene, camera);
+  infoFrame.calls = renderer.info.render.calls;          // letti subito: i riflessi del cavaliere disegnano anche loro
+  infoFrame.triangles = renderer.info.render.triangles;
 }
 
 camera.position.set(0, 300, 900);          // vista provvisoria mentre il terreno si carica

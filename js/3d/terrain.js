@@ -251,8 +251,11 @@ export const SUOLO = {
   spegni: [60, 200],     // la scala s si spegne tra 60·s e 200·s m dalla camera (~8 → ~3 pixel per onda)
 };
 
+// Ogni ottava si calcola solo dove non è già spenta: lontano il rumore fine valeva zero ma costava lo stesso
+// (misurato: lo shader del suolo era circa metà del tempo di un frame). Il risultato visivo non cambia.
 const ottaveGLSL = (lista, varNome) => lista.map(([s, a]) =>
-  `  ${varNome} += (rumoreSuolo(p, ${s.toFixed(1)}) - 0.5) * ${a.toFixed(3)} * spegniSuolo(${s.toFixed(1)}, dist);`).join('\n');
+  `  if (dist < ${(s * SUOLO.spegni[1]).toFixed(1)}) ${varNome} += (rumoreSuolo(p, ${s.toFixed(1)}) - 0.5) * ${a.toFixed(3)}`
+  + ` * spegniSuolo(${s.toFixed(1)}, dist);`).join('\n');
 
 /**
  * Materiale del terreno del mondo generato a colore per pixel. La geometria deve avere gli attributi `base` (vec3)
@@ -263,6 +266,30 @@ const ottaveGLSL = (lista, varNome) => lista.map(([s, a]) =>
  * muschio) e fango vicino all'acqua; la terra nuda a chiazze nei prati c'è ovunque (anche negli anelli). `mezzo`:
  * metà lato del blocco, negli ultimi 120 m lettiera e fango sfumano (l'orizzonte non li ha).
  */
+// Rumore del suolo da texture (prestazioni, docs/GRAFICA_3D.md): una griglia 256×256 di valori casuali generata qui,
+// letta con un solo campionamento bilineare spostato con la curva smoothstep (i + u + 0.5) / 256. È lo stesso rumore
+// a valori di prima (valori diversi, stessa statistica) ma costa una lettura invece di 4 hash e 4 mod. Vale per le
+// scale finché 256 celle dividono il periodo di 8192 m (scale ≤ 32 m): oltre, la
+// texture si ripeterebbe prima del periodo e i blocchi non combacerebbero, quindi lì resta il calcolo con l'hash.
+const LATO_RUMORE = 256;
+let _texRumore = null;
+function textureRumore() {
+  if (_texRumore) return _texRumore;
+  const dati = new Uint8Array(LATO_RUMORE * LATO_RUMORE);
+  let x = 0x9e3779b9;                                   // xorshift32 con seme fisso: stesso disegno a ogni avvio
+  for (let i = 0; i < dati.length; i++) {
+    x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
+    dati[i] = (x >>> 24) & 255;
+  }
+  const t = new THREE.DataTexture(dati, LATO_RUMORE, LATO_RUMORE, THREE.RedFormat, THREE.UnsignedByteType);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.magFilter = t.minFilter = THREE.LinearFilter;
+  t.generateMipmaps = false;
+  t.needsUpdate = true;
+  _texRumore = t;
+  return t;
+}
+
 export function materialeSuolo(cx, cz, mezzo = 1e9) {
   const P = SUOLO.periodo;
   const mat = new THREE.MeshLambertMaterial();
@@ -277,6 +304,7 @@ export function materialeSuolo(cx, cz, mezzo = 1e9) {
     uDettaglioNeve: { value: new THREE.Vector3(...DETTAGLIO_NEVE) },
     uCentro: { value: new THREE.Vector2(((cx % P) + P) % P, ((cz % P) + P) % P) },
     uMezzo: { value: mezzo },
+    uRumore: { value: textureRumore() },
   };
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uniformi);
@@ -320,10 +348,13 @@ float hashSuolo(vec2 p) {
   p3 += dot(p3, p3.yzx + 33.33);
   return fract((p3.x + p3.y) * p3.z);
 }
-// Rumore a valori, periodico su ${P} m (la scala è una potenza di 2).
+uniform sampler2D uRumore;
+// Rumore a valori, periodico su ${P} m (la scala è una potenza di 2). Fino a ${P / LATO_RUMORE} m di scala: una lettura
+// della texture (vedi textureRumore); oltre, hash.
 float rumoreSuolo(vec2 p, float scala) {
   float per = ${P.toFixed(1)} / scala;
   vec2 q = p / scala, i = floor(q), f = fract(q), u = f * f * (3.0 - 2.0 * f);
+  if (scala <= ${(P / LATO_RUMORE).toFixed(1)}) return texture2D(uRumore, (i + u + 0.5) / ${LATO_RUMORE.toFixed(1)}).r;
   float a = hashSuolo(mod(i, per)), b = hashSuolo(mod(i + vec2(1.0, 0.0), per));
   float c = hashSuolo(mod(i + vec2(0.0, 1.0), per)), d = hashSuolo(mod(i + vec2(1.0, 1.0), per));
   return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
@@ -352,24 +383,34 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
       vec2 loc = abs(vMondo - uCentro);
       loc = min(loc, ${P.toFixed(1)} - loc);
       float blocco = 1.0 - smoothstep(uMezzo - 120.0, uMezzo, max(loc.x, loc.y));
-      float r1 = rumoreSuolo(p, 32.0), r2 = rumoreSuolo(p, 8.0), r3 = rumoreSuolo(p, 2.0), r4 = rumoreSuolo(p + 911.0, 16.0);
-      float terra = smoothstep(0.62, 0.78, r1 * 0.6 + r2 * 0.4) * prato;
-      cPrato = mix(cPrato, vec3(0.19, 0.125, 0.06) * (0.8 + 0.4 * r3), terra * 0.5);
-      vec3 lett = mix(vec3(0.011, 0.0065, 0.003), vec3(0.06, 0.036, 0.016), smoothstep(0.3, 0.8, r2));
-      lett = mix(lett, vec3(0.003, 0.003, 0.002), smoothstep(0.55, 0.8, r3 * 0.5 + r2 * 0.5) * 0.85);
-      lett = mix(lett, vec3(0.012, 0.03, 0.007), smoothstep(0.45, 0.68, r4) * 0.85);
-      lett *= 0.6 + 0.8 * r3;
-      cPrato = mix(cPrato, lett, vSuolo.x * 0.95 * prato * blocco);
-      cPrato = mix(cPrato, vec3(0.07, 0.055, 0.035) * (0.8 + 0.4 * r2), smoothstep(0.3, 1.0, vSuolo.y) * 0.6 * blocco);
+      // Prestazioni: niente rumori dove non servono. Terra nuda solo sul prato entro 3 km; lettiera e fango solo dove
+      // il blocco li porta (aSuolo, 0 negli anelli); la grana di 2 m solo vicino.
+      float suoloV = max(vSuolo.x, vSuolo.y) * blocco;
+      if (prato > 0.01 && dist < 3000.0 || suoloV > 0.01) {
+        float r1 = rumoreSuolo(p, 32.0), r2 = rumoreSuolo(p, 8.0);
+        float r3 = dist < 400.0 ? rumoreSuolo(p, 2.0) : 0.5, r4 = 1.0 - r1;
+        float terra = smoothstep(0.62, 0.78, r1 * 0.6 + r2 * 0.4) * prato;
+        cPrato = mix(cPrato, vec3(0.19, 0.125, 0.06) * (0.8 + 0.4 * r3), terra * 0.5);
+        if (suoloV > 0.01) {
+          vec3 lett = mix(vec3(0.011, 0.0065, 0.003), vec3(0.06, 0.036, 0.016), smoothstep(0.3, 0.8, r2));
+          lett = mix(lett, vec3(0.003, 0.003, 0.002), smoothstep(0.55, 0.8, r3 * 0.5 + r2 * 0.5) * 0.85);
+          lett = mix(lett, vec3(0.012, 0.03, 0.007), smoothstep(0.45, 0.68, r4) * 0.85);
+          lett *= 0.6 + 0.8 * r3;
+          cPrato = mix(cPrato, lett, vSuolo.x * 0.95 * prato * blocco);
+          cPrato = mix(cPrato, vec3(0.07, 0.055, 0.035) * (0.8 + 0.4 * r2), smoothstep(0.3, 1.0, vSuolo.y) * 0.6 * blocco);
+        }
+      }
     }
     vec3 c = mix(cPrato, cRoccia * (1.0 + 0.5 * dettaglio), roccia);
     // Strada di terra battuta (js/mondo/strade.js): bordo frastagliato di qualche decimetro, solchi delle ruote
     // ed erba al centro sulle strade da carro; si spegne con la distanza come il resto del dettaglio.
+    // fwidth fuori dal ramo: le derivate dentro un ramo non uniforme non sono definite.
+    float aS = abs(vStrada.x);
+    float bordoS = vStrada.y > 0.0 && dist < ${(2 * SUOLO.spegni[1]).toFixed(1)}
+      ? (rumoreSuolo(p + 91.0, 2.0) - 0.5) * 0.5 * spegniSuolo(2.0, dist) : 0.0;
+    float xS = (vStrada.y + bordoS - aS) / max(vStrada.y, 0.3);
+    float eS = max(fwidth(xS) * 0.75, 0.02);
     if (vStrada.y > 0.0) {
-      float aS = abs(vStrada.x);
-      float bordoS = (rumoreSuolo(p + 91.0, 2.0) - 0.5) * 0.5 * spegniSuolo(2.0, dist);
-      float xS = (vStrada.y + bordoS - aS) / max(vStrada.y, 0.3);
-      float eS = max(fwidth(xS) * 0.75, 0.02);
       // Alle estremità e nelle curve strette lo scostamento cambia segno tra due vertici e l'interpolazione
       // inventerebbe un cuneo di strada: la distanza senza segno (che interpolata sovrastima, mai sottostima) lo esclude.
       float suStrada = smoothstep(-eS, eS, xS) * (1.0 - smoothstep(vStrada.y + 5.0, vStrada.y + 7.0, vStrada.z));
@@ -380,7 +421,12 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
       c = mix(c, cS, suStrada);
     }
     // La neve ha un bordo suo (rumore spostato), non quello della roccia.
-    float neve = sogliaSuolo(vStrati.y + 0.8 * bordo + (rumoreSuolo(p + 517.0, 16.0) - 0.5) * 0.12 * spegniSuolo(16.0, dist));
+    // Rumore del bordo della neve solo dove la neve può esserci e non è già spento. fwidth (in sogliaSuolo)
+    // resta fuori dai rami: le derivate dentro un ramo non uniforme non sono definite.
+    float bordoNeve = 0.0;
+    if (vStrati.y > 0.05 && dist < ${(16 * SUOLO.spegni[1]).toFixed(1)})
+      bordoNeve = (rumoreSuolo(p + 517.0, 16.0) - 0.5) * 0.12 * spegniSuolo(16.0, dist);
+    float neve = sogliaSuolo(vStrati.y + 0.8 * bordo + bordoNeve);
     // Sui versanti la neve vira all'azzurro-grigio: pendenza dalla normale del pixel (vista → mondo).
     vec3 nMondo = normalize((vec4(normalize(vNormal), 0.0) * viewMatrix).xyz);
     float pendNeve = degrees(acos(clamp(nMondo.y, -1.0, 1.0)));
