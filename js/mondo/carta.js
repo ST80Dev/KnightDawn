@@ -17,13 +17,14 @@
 // Coordinate: colonna 0 = ovest, riga 0 = nord; una cella = 1 km. Le lunghezze d'onda sono in km.
 
 import { mulberry32, derivaSeme, hash2, fbm, ridged, smoothstep, codiceControllo } from './rumore.js';
+import { VARIETA, TIPI, uniformita, distanzaDa, tipoPaesaggio } from './verifica.js';
 
 export const CARTA_PREDEFINITA = { cols: 600, rows: 450, cella: 1000 };
 
 // Versione del generatore: entra nella chiave della cache delle Carte (IndexedDB, lavoratore.js).
 // VA CAMBIATA a ogni modifica che cambia le Carte generate, altrimenti il browser riusa Carte vecchie.
 // (In alternativa: ?rigenera nell'indirizzo ignora la cache.)
-export const VERSIONE_GENERATORE = 'm6-biomi-2';
+export const VERSIONE_GENERATORE = 'm6-varieta-1';
 
 // Parametri della forma (km dove non indicato). Valori di partenza, da tarare guardando le Carte.
 const FORMA = {
@@ -270,6 +271,9 @@ export function generaCarta(seme, opzioni = {}) {
   // ─── Fasi 6–7: clima e biomi ───
   avanzamento?.('Clima e biomi', 0.88);
   const clima = climaEBiomi(seme, cols, rows, quota, mare, dren.acque);
+  // ─── Fase 8: correzioni per le regole di varietà (solo la copertura, mai il rilievo) ───
+  avanzamento?.('Varietà del paesaggio', 0.9);
+  const correzioni = correggiVarieta(seme, cols, rows, quota, mare, dren, clima);
   const contaBiomi = new Array(NOMI_BIOMI.length).fill(0);
   let celleTerraB = 0;
   for (let i = 0; i < n; i++) if (!mare[i] && dren.acque[i] === ACQUA.TERRA) { contaBiomi[clima.bioma[i]]++; celleTerraB++; }
@@ -301,7 +305,7 @@ export function generaCarta(seme, opzioni = {}) {
     statistiche: {
       frazioneMare: celleMare / n, ms, cima, laghi: dren.laghi,
       biomi: Object.fromEntries(NOMI_BIOMI.map((nome, b) => [nome, contaBiomi[b] / (celleTerraB || 1)])),
-      copertura: clima.copertura,
+      copertura: clima.copertura, correzioni,
       fasce: { pianura: fasce[0] / celleTerra2, collina: fasce[1] / celleTerra2,
         pedemonte: fasce[2] / celleTerra2, montagna: fasce[3] / celleTerra2 },
     },
@@ -445,6 +449,130 @@ function climaEBiomi(seme, cols, rows, quota, mare, acque) {
     for (let i = 0; i < n; i++) if (punteggio[i] >= soglia) bioma[i] = BIOMA.FORESTA;
   }
   return { temperaturaMare, temperatura, umidita, bioma, copertura };
+}
+
+// ─── Fase 8: correzioni per le regole di varietà ─────────────────────────
+
+/**
+ * Corregge i biomi perché valgano le regole di varietà del GDD (verifica in verifica.js), toccando solo la
+ * copertura:
+ *   - deserto troppo vicino alla neve → pianura arida;
+ *   - distese uniformi più ampie di VARIETA.uniforme km → un grumo irregolare di 3–5 km di un paesaggio
+ *     compatibile al loro centro (radura nel bosco, bosco nella pianura o in collina, bosco o pascolo in montagna);
+ *   - finestre di 40×40 km con meno di 3 tipi di paesaggio → un grumo di un tipo plausibile che manca.
+ * @returns {{ deserto: number, grumi: number, finestre: number }}  quante correzioni
+ */
+function correggiVarieta(seme, cols, rows, quota, mare, dren, clima) {
+  const V = VARIETA, { bioma, temperatura, umidita } = clima, n = cols * rows;
+  const rng = mulberry32(derivaSeme(seme, 70));
+  const esito = { deserto: 0, grumi: 0, finestre: 0 };
+  const carta = { cols, rows, bioma, mare, acque: dren.acque, bacino: dren.bacino, sogliaFiume: DRENAGGIO.fiume, quota };
+
+  // Deserto lontano dalla neve.
+  const dNeve = distanzaDa(cols, rows, (i) => bioma[i] === BIOMA.NEVE || bioma[i] === BIOMA.GHIACCIO && !mare[i]);
+  for (let i = 0; i < n; i++) {
+    if (bioma[i] === BIOMA.SABBIA && dNeve[i] < V.desertoNeve) { bioma[i] = BIOMA.PIANURA_S; esito.deserto++; }
+  }
+
+  const pendenza = (i) => {
+    const x = i % cols, y = (i / cols) | 0;
+    const Q = (a, b) => Math.max(0, quota[Math.min(rows - 1, Math.max(0, b)) * cols + Math.min(cols - 1, Math.max(0, a))]);
+    return Math.hypot(Q(x + 1, y) - Q(x - 1, y), Q(x, y + 1) - Q(x, y - 1)) / 2000;
+  };
+  const pianuraPer = (T) => T < CLIMA.biomi.nord ? BIOMA.PIANURA_N : T > CLIMA.biomi.sud ? BIOMA.PIANURA_S : BIOMA.PIANURA;
+  const boscoAmmesso = (i) => temperatura[i] > CLIMA.bosco + 0.5 && temperatura[i] < CLIMA.biomi.boschi.caldo && umidita[i] > 0.25;
+  /** Un paesaggio compatibile e diverso da quello della cella, per rompere una distesa. */
+  function contrasto(i) {
+    const t = tipoPaesaggio(bioma[i], false);
+    if (t === 2) return pianuraPer(temperatura[i]);                       // bosco → radura
+    if (t === 3) return boscoAmmesso(i) ? BIOMA.FORESTA : BIOMA.COLLINA;  // montagna → bosco o pascolo
+    if (boscoAmmesso(i)) return BIOMA.FORESTA;                            // pianura, collina → bosco
+    if (pendenza(i) > 0.12) return BIOMA.ROCCIA;                          // affioramento di roccia
+    return t === 0 ? BIOMA.COLLINA : pianuraPer(temperatura[i]);
+  }
+  /** Dove un paesaggio aggiunto può stare (i grumi non lo portano oltre). */
+  const ammessa = (b, j) => b === BIOMA.PALUDE ? quota[j] < V.paludeQuota - 50
+    : b === BIOMA.FORESTA ? boscoAmmesso(j) : true;
+  /** Grumo organico: dalla cella, crescita casuale sulle celle dello stesso tipo, fino a `quante` celle. */
+  function grumo(i0, nuovo, quante) {
+    const t0 = tipoPaesaggio(bioma[i0], mare[i0] || dren.acque[i0] !== ACQUA.TERRA);
+    const fatto = new Set([i0]), frontiera = [i0];
+    let messe = 0;
+    while (frontiera.length && messe < quante) {
+      const k = Math.floor(rng() * frontiera.length);
+      const i = frontiera[k];
+      frontiera[k] = frontiera[frontiera.length - 1]; frontiera.pop();
+      bioma[i] = nuovo; messe++;
+      const x = i % cols;
+      for (const j of [i - 1, i + 1, i - cols, i + cols, i - cols - 1, i - cols + 1, i + cols - 1, i + cols + 1]) {
+        if (j < 0 || j >= n || fatto.has(j) || Math.abs((j % cols) - x) > 1) continue;
+        fatto.add(j);
+        if (mare[j] || dren.acque[j] !== ACQUA.TERRA || tipoPaesaggio(bioma[j], false) !== t0 || !ammessa(nuovo, j)) continue;
+        if (rng() < 0.6) frontiera.push(j);
+      }
+    }
+    return messe;
+  }
+
+  // Distese uniformi: a ogni giro, grumi ai centri delle distese troppo ampie (distanti tra loro), poi di nuovo.
+  for (let giro = 0; giro < 12; giro++) {
+    const { tipo, distanza } = uniformita(carta);
+    const centri = [];
+    for (let i = 0; i < n; i++) {
+      if (tipo[i] === 4 || tipo[i] === 5 || tipo[i] === 7 || 2 * distanza[i] <= V.uniforme) continue;
+      const x = i % cols, y = (i / cols) | 0;
+      let massimo = true;                                      // massimo locale della distanza (5×5)
+      for (let b = -2; b <= 2 && massimo; b++) for (let a = -2; a <= 2; a++) {
+        const xx = x + a, yy = y + b;
+        if ((a || b) && xx >= 0 && yy >= 0 && xx < cols && yy < rows && distanza[yy * cols + xx] > distanza[i]) { massimo = false; break; }
+      }
+      if (!massimo) continue;
+      if (centri.some((j) => Math.abs((j % cols) - x) < 10 && Math.abs(((j / cols) | 0) - y) < 10)) continue;
+      centri.push(i);
+    }
+    if (!centri.length) break;
+    for (const i of centri) { grumo(i, contrasto(i), 8 + Math.floor(rng() * 14)); esito.grumi++; }
+  }
+
+  // Finestre con meno di 3 tipi: un grumo del tipo plausibile che manca, vicino al centro della finestra.
+  const F = V.finestra, conta = new Int32Array(TIPI.length);
+  for (let giro = 0; giro < 3; giro++) {
+    let corrette = 0;
+    const { tipo } = uniformita(carta);
+    for (let y0 = 0; y0 + F <= rows; y0 += V.passoFinestra) {
+      for (let x0 = 0; x0 + F <= cols; x0 += V.passoFinestra) {
+        conta.fill(0);
+        for (let y = y0; y < y0 + F; y++) for (let x = x0; x < x0 + F; x++) conta[tipo[y * cols + x]]++;
+        const terra = F * F - conta[7];
+        if (terra < V.terraMinima * F * F || conta[4] + conta[5] > V.estremi * terra) continue;
+        let tipi = 0;
+        for (let t = 0; t < TIPI.length; t++) if (conta[t] >= V.parteTipo * F * F) tipi++;
+        if (tipi >= V.tipiMinimi) continue;
+        // Celle di terra vicine al centro, provate a caso: il primo paesaggio che manca e lì è plausibile.
+        const servono = Math.ceil(V.parteTipo * F * F) + 4;
+        for (let prova = 0; prova < 40; prova++) {
+          const x = x0 + 8 + Math.floor(rng() * (F - 16)), y = y0 + 8 + Math.floor(rng() * (F - 16)), i = y * cols + x;
+          if (tipo[i] === 7 || tipo[i] === 4 || tipo[i] === 5) continue;
+          const candidati = [];
+          if (boscoAmmesso(i)) candidati.push(BIOMA.FORESTA);
+          if (pendenza(i) > 0.08) candidati.push(BIOMA.ROCCIA);
+          // Tundra (sotto il limite degli alberi, in piano): torbiere e rocce levigate dai ghiacci.
+          if (temperatura[i] < CLIMA.bosco + 0.5) {
+            if (quota[i] < V.paludeQuota && umidita[i] > 0.35) candidati.push(BIOMA.PALUDE);
+            candidati.push(BIOMA.ROCCIA);
+          }
+          candidati.push(BIOMA.COLLINA, pianuraPer(temperatura[i]), BIOMA.ROCCIA);   // ultima: affioramenti (anche in steppa)
+          const nuovo = candidati.find((b) => conta[tipoPaesaggio(b, false)] < V.parteTipo * F * F && tipoPaesaggio(b, false) !== tipo[i]);
+          if (nuovo === undefined) continue;
+          const messe = grumo(i, nuovo, servono);
+          conta[tipoPaesaggio(nuovo, false)] += messe;
+          if (messe >= servono * 0.7) { corrette++; esito.finestre++; break; }
+        }
+      }
+    }
+    if (!corrette) break;
+  }
+  return esito;
 }
 
 /**

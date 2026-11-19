@@ -630,6 +630,27 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
    paludi rare; le regole di varietà (deserto–neve, distese monotone) si verificano al passo 8.
 8. **Regole di varietà e verifica automatica** (fase 8) su N semi, con esito per regola. Con i passi 3 e
    6 chiude l'accettazione.
+   **Stato: fatto, da provare dall'utente.**
+   - *Verifica* (`verifica.js`, `verificaVarieta`): tipi di paesaggio = biomi raggruppati (pianura, collina,
+     bosco, montagna e roccia, neve e ghiaccio, deserto, palude, acqua). Regole: (1) ogni finestra di 40×40 km
+     (passo 20 km; almeno metà terra; escluse quelle per più di metà neve o deserto) ha almeno 3 tipi, ognuno
+     ≥ 2 % della finestra; (2) nessuna area uniforme più larga di 15 km senza un'interruzione (altro tipo,
+     fiume, lago, mare; neve e deserto esclusi): diametro = 2 × distanza dall'interruzione più vicina;
+     (3) deserto ad almeno 80 km dalla neve; (4) niente paludi sopra 300 m.
+   - *Correzioni* (`carta.js`, fase 8, solo copertura, mai il rilievo; `VERSIONE_GENERATORE` =
+     `m6-varieta-1`): deserto troppo vicino alla neve → pianura arida; al centro delle distese troppo ampie
+     un grumo organico di 8–22 km² di un paesaggio compatibile (radura nel bosco, bosco in pianura e collina,
+     bosco o pascolo in montagna, affioramenti di roccia), ripetuto finché la regola vale; nelle finestre
+     con meno di 3 tipi un grumo del tipo plausibile che manca (bosco, roccia, collina, pianura; in tundra
+     torbiere e rocce levigate; ultima scelta affioramenti di roccia, anche in steppa). I grumi crescono solo
+     dove il paesaggio è ammesso (paludi sotto 250 m, boschi sotto il limite degli alberi).
+   - *Esiti*: 30 semi su 30 rispettano tutte le regole (prima delle correzioni: 6–13 % di finestre povere,
+     distese uniformi di 23–38 km, deserto–neve a 55–60 km in 2 semi su 6); generazione ≤ 2,7 s. Nella Carta
+     l'esito della varietà è nel piede; il pulsante «Verifica 10 semi» genera 10 semi a caso nel Worker
+     (~27 s) e riporta l'esito per regola (fiumi, punti panoramici, finestre, uniforme, deserto–neve,
+     paludi) e i semi non superati.
+   Limiti: i grumi sono solo copertura (un «bosco» o una «roccia» senza oggetti in scena); le soglie
+   (40 km, 3 tipi, 15 km, 80 km) sono quelle del GDD, da tarare giocando.
 
 ### Decisioni prese con il piano
 - **File:** `js/mondo/` con moduli ES **senza Three.js né DOM** (regola 9, e pronti per un Web Worker):

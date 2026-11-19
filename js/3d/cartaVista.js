@@ -10,7 +10,7 @@
 // fino a pochi metri per campione): ombreggiatura e curve di livello, per scegliere una cima o una conca.
 
 import { ACQUA, BIOMA, NOMI_BIOMI } from '../mondo/carta.js';
-import { verificaFiumi, verificaPanorami } from '../mondo/verifica.js';
+import { verificaFiumi, verificaPanorami, verificaVarieta } from '../mondo/verifica.js';
 import { semeDaTesto, derivaSeme } from '../mondo/rumore.js';
 import { quotaMondo, scavaFiumi, livelloLago, raffinaZona, percorsiFiumi } from '../mondo/scena.js';
 
@@ -141,6 +141,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
       </select>
       <button type="button" class="intera" title="Tutta la Carta">Vista intera</button>
       <button type="button" class="centra" title="Ingrandisci attorno al cavaliere">Centra sul cavaliere</button>
+      <button type="button" class="semi" title="Genera 10 semi a caso e verifica ogni regola (fiumi, punti panoramici, varietà)">Verifica 10 semi</button>
       <button type="button" class="tavullia" title="Terreno reale di Tavullia con il castello (scena di prova)">Tavullia (prova)</button>
       <span class="legenda"></span>
       <span class="info"></span>
@@ -185,6 +186,8 @@ export function createCartaVista(contenitore, opzioni = {}) {
   let tracciatiLaghi = null, tracciatiFiumi = null;   // Path2D in coordinate di cella, una volta per Carta
   let verifica = null;                           // esito di verificaFiumi
   let panorami = null;                           // esito di verificaPanorami
+  let varieta = null;                            // esito di verificaVarieta
+  let esitoSemi = '';                            // ultima verifica su più semi
   let mostraPanorami = false;                    // i triangoli sono tanti: si mostrano a richiesta
 
   // ─── Vista: centro (in celle = km) e zoom (1 = tutta la Carta nello spazio disponibile) ───
@@ -244,6 +247,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
     // Verifiche già fatte dal Worker; altrimenti qui (Carte di altra provenienza).
     verifica = carta.verifiche?.fiumi ?? verificaFiumi(carta);
     panorami = carta.verifiche?.panorami ?? verificaPanorami(carta);
+    varieta = carta.verifiche?.varieta ?? verificaVarieta(carta);
     if (nuova) vistaIntera();
     disegnaIstogramma();
     adatta();
@@ -514,7 +518,9 @@ export function createCartaVista(contenitore, opzioni = {}) {
       + (panorami ? ` · punti panoramici ${fmt(panorami.punti.length)}: ${fmt(panorami.copertura * 100, 1)} % della terra`
         + ` entro ${panorami.raggio} km da uno (regola ≥ ${fmt(panorami.soglia * 100)} %: ${panorami.ok ? 'rispettata' : 'NON rispettata'})` : '')
       + (carta.statistiche.biomi ? ' · biomi: ' + Object.entries(carta.statistiche.biomi).filter(([, v]) => v >= 0.0005)
-        .sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${fmt(v * 100, 1)} %`).join(', ') : '');
+        .sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${fmt(v * 100, 1)} %`).join(', ') : '')
+      + (varieta ? ` · varietà ${varieta.ok ? 'rispettata' : 'NON rispettata'}: ` + varieta.regole.map((r) => (r.ok ? '' : '✗ ') + r.testo).join('; ') : '')
+      + (esitoSemi ? ` · ${esitoSemi}` : '');
   }
 
   function apri() {
@@ -547,6 +553,26 @@ export function createCartaVista(contenitore, opzioni = {}) {
     vista.cx = p.x; vista.cy = p.y; vista.z = Math.max(vista.z, 12);
     limitaVista();
     ridisegna();
+  });
+  el.querySelector('.semi').addEventListener('click', async (e) => {
+    if (!opzioni.verificaSemi) return;
+    const b = e.currentTarget;
+    b.disabled = true;
+    const semi = Array.from({ length: 10 }, () => Math.floor(Math.random() * 1e6));
+    try {
+      const esiti = await opzioni.verificaSemi(semi, (testo, f) => { elInfo.textContent = `verifica: ${testo} · ${Math.round(f * 100)} %`; });
+      const nomi = esiti[0].regole.map((r) => r.nome);
+      const perRegola = nomi.map((nome) => `${nome} ${esiti.filter((x) => x.regole.find((r) => r.nome === nome)?.ok).length}/${esiti.length}`);
+      const falliti = esiti.filter((x) => x.regole.some((r) => !r.ok))
+        .map((x) => `${x.seme} (${x.regole.filter((r) => !r.ok).map((r) => r.testo).join('; ')})`);
+      esitoSemi = `verifica su ${esiti.length} semi: ${perRegola.join(', ')}` + (falliti.length ? ` · non superati: ${falliti.join(', ')}` : ' · tutti superati');
+      console.info('[verifica semi]', esiti);
+    } catch (err) {
+      esitoSemi = `verifica su più semi non riuscita: ${err.message}`;
+    } finally {
+      b.disabled = false;
+      if (carta) { disegnaIstogramma(); ridisegna(); }
+    }
   });
   const btnTavullia = el.querySelector('.tavullia');
   if (opzioni.onTavullia) btnTavullia.addEventListener('click', () => opzioni.onTavullia());
