@@ -19,35 +19,39 @@
 import { mulberry32, derivaSeme, hash2, fbm, ridged, smoothstep, codiceControllo } from './rumore.js';
 import { VARIETA, TIPI, uniformita, distanzaDa, tipoPaesaggio } from './verifica.js';
 
-export const CARTA_PREDEFINITA = { cols: 600, rows: 450, cella: 1000 };
+// Regione di 120×90 km (deciso con l'utente, novembre 2026: a 600×450 km il mondo era troppo grande per i
+// luoghi che contiene). Scala d'insieme (forma, catene, clima) ridotta; scala locale (valli, gruppi, poggi) uguale.
+export const CARTA_PREDEFINITA = { cols: 120, rows: 90, cella: 1000 };
 
 // Versione del generatore: entra nella chiave della cache delle Carte (IndexedDB, lavoratore.js).
 // VA CAMBIATA a ogni modifica che cambia le Carte generate, altrimenti il browser riusa Carte vecchie.
 // (In alternativa: ?rigenera nell'indirizzo ignora la cache.)
 // Comprende i luoghi (M7, js/mondo/luoghi.js), che si aggiungono alla Carta nel Worker e stanno nella stessa cache.
-export const VERSIONE_GENERATORE = 'm7-torrenti-1';
+export const VERSIONE_GENERATORE = 'regione-1';
 
 // Parametri della forma (km dove non indicato). Valori di partenza, da tarare guardando le Carte.
 const FORMA = {
-  deformazione: { lunghezza: 200, ampiezza: 55, ottave: 3 },   // deformazione del dominio
-  continente: { lunghezza: 240, ottave: 7, guadagno: 0.55 },   // forma d'insieme e dettaglio delle coste
-  scalaGrande: { lunghezza: 650, peso: 0.45 },                 // masse di terra, golfi e mari interni
+  deformazione: { lunghezza: 60, ampiezza: 14, ottave: 3 },   // deformazione del dominio
+  continente: { lunghezza: 70, ottave: 6, guadagno: 0.55 },   // forma d'insieme e dettaglio delle coste
+  scalaGrande: { lunghezza: 160, peso: 0.45 },                 // masse di terra, golfi e mari interni
   // Bordi: nessun anello di mare forzato (regola del 2D, docs/WORLD_GEN.md in 2c869fa). I bordi possono
   // essere terra o mare secondo il rumore; solo una leggera spinta verso il mare negli ultimi km.
-  bordo: { larghezza: 40, profondita: 0.15 },
+  bordo: { larghezza: 10, profondita: 0.15 },
   inclinazione: 0.30,                                          // quanto un lato può avere più mare
   mare: [0.10, 0.22],                                          // parte della superficie (GDD)
   montagna: [0.045, 0.10],                                     // parte della terra con catene alte (GDD)
   // Catene: lungo le linee di zero di un rumore su grande scala (linee lunghe e sinuose), solo dove una
   // maschera le ammette (tratti di lunghezza limitata). Contrafforti laterali da rumore ridged.
   catene: {
-    linea: 300, larghezza: 0.09, pedemonte: 0.26,
-    maschera: 360, rampaMaschera: 0.15, sogliaMontagna: 0.35,
-    dettaglio: 32, contrafforti: 0.7, creste: 14, altezza: 0.75,
+    linea: 110, larghezza: 0.2, pedemonte: 0.5,
+    maschera: 140, rampaMaschera: 0.15, sogliaMontagna: 0.35,
+    // dettaglio: lunghezza d'onda dei contrafforti (km). A 32 km creste e valli si alternavano ogni ~16 km
+    // (fondovalle→crinale ~9 km); la regola è ~3–5 km.
+    dettaglio: 7, contrafforti: 1.4, creste: 7, altezza: 0.75,
     // Zoccolo dei contrafforti (deciso con l'utente): parte del piede della catena che è una base continua e non
     // solo contrafforti. Senza (0) le valli tra i contrafforti scendevano alla quota delle colline fin sotto la
     // spina; con lo zoccolo i fondovalle salgono gradualmente addentrandosi nella catena.
-    zoccolo: 0.6,
+    zoccolo: 0.55,
   },
 };
 
@@ -65,7 +69,7 @@ const QUOTE = {
   // dalla pianura in modo graduale); dentro, rilievo ondulato (fBm) più qualche dorsale lunga (ridged).
   // Soglia bassa: le zone collinari coprono buona parte della terra (con la collina al 45–55 %, una soglia
   // alta lasciava altopiani lisci promossi a «collina» solo dalla curva delle quote).
-  colline: { lunghezza: 110, soglia: -0.5, rampa: 0.8, fianchi: 0.9, peso: 0.6, ondulato: 16, dorsali: 40 },
+  colline: { lunghezza: 40, soglia: -0.5, rampa: 0.8, fianchi: 0.9, peso: 0.6, ondulato: 12, dorsali: 22 },
   catene: { peso: 3.2 },
   // m sotto il livello del mare. Già 40 m nella prima cella di mare: con meno, l'interpolazione liscia
   // delle Scene (passo 3) spostava la costa verso il largo e il mare quasi spariva.
@@ -74,7 +78,7 @@ const QUOTE = {
 
 // Fase 3: poggi.
 const POGGI = {
-  densita: { lunghezza: 90, soglia: [-0.35, 0.45] },  // campo su grande scala: dove sono fitti e dove radi
+  densita: { lunghezza: 30, soglia: [-0.35, 0.45] },  // campo su grande scala: dove sono fitti e dove radi
   distanza: [4, 14],          // km: distanza minima tra poggi, da fitti a radi
   raggio: [1.6, 3.0],         // km: semiasse corto (molti piccoli, pochi grandi); sotto 1,6 km erano quadratini
   altezza: [80, 300],         // m sopra il terreno
@@ -360,20 +364,22 @@ export const NOMI_BIOMI = ['acqua', 'pianura', 'foresta', 'collina', 'montagna',
 export const CLIMA = {
   latitudine: [-4, 21],          // al livello del mare: nord, sud (riga 0 = nord)
   scostamento: 2,                // ± per seme (mondi più caldi o più freddi)
-  rumore: { lunghezza: 220, ampiezza: 3 },   // solo su grande scala (GDD: niente salti di clima)
+  rumore: { lunghezza: 60, ampiezza: 3 },   // solo su grande scala (GDD: niente salti di clima)
   gradiente: 0.0065,             // °C in meno per metro di quota
   stagioni: { inverno: -9, estate: 8 },      // scarto dalla media annua (per il limite delle nevi)
   neve: -5,                      // media annua sotto cui la neve resta tutto l'anno (Alpi: ~−5 °C a ~2900 m)
   neveSuolo: -3,                 // media della stagione sotto cui il manto di neve resta al suolo
   mareGhiacciato: -3,            // media annua del mare sotto cui il mare gela
   bosco: 1.5,                    // limite degli alberi: media annua minima
-  umidita: { mare: 80, lunghezza: 150, monti: [800, 2000] },
+  // sud: quanto il sud è più secco (nella regione di 120×90 km il mare è sempre vicino e l'aria sempre umida:
+  // senza, la zona arida c'era in 6 mondi su 30; deciso con l'utente: ogni mondo dal freddo all'arido)
+  umidita: { mare: 25, lunghezza: 45, monti: [800, 2000], sud: [0.6, 1, 0.25] },
   // Biomi (soglie): collina dove il dislivello nelle 3×3 celle supera `mosso` m; roccia dove la pendenza
   // della Carta supera `ripido` (o `ripidoAlto` sopra il limite degli alberi).
   biomi: { mosso: 110, ripido: 0.45, ripidoAlto: 0.25, nord: 5, sud: 16,
     deserto: { caldo: 16, secco: 0.32 }, palude: { quota: 40, umida: 0.68, caldo: 6, piatto: 45 },
-    boschi: { lunghezza: 28, copertura: [0.2, 0.42], umida: 0.3, caldo: 24 },
-    bordo: { lunghezza: 7, ampiezza: 1.5 } },   // soglie frastagliate: transizioni brevi e irregolari
+    boschi: { lunghezza: 14, copertura: [0.2, 0.42], umida: 0.3, caldo: 24 },
+    bordo: { lunghezza: 5, ampiezza: 1.5 } },   // soglie frastagliate: transizioni brevi e irregolari
 };
 
 /**
@@ -419,7 +425,8 @@ function climaEBiomi(seme, cols, rows, quota, mare, acque) {
       const vicino = 1 / (1 + dMare[i] / C.umidita.mare);
       const r = 0.5 + 0.5 * fbm(x, y, sU, C.umidita.lunghezza, 4);
       const monti = smoothstep(C.umidita.monti[0], C.umidita.monti[1], quota[i]);
-      umidita[i] = Math.min(1, Math.max(0, 0.45 * vicino + 0.45 * r + 0.15 * monti - aridita));
+      const sud = C.umidita.sud[2] * smoothstep(C.umidita.sud[0], C.umidita.sud[1], y / (rows - 1));
+      umidita[i] = Math.min(1, Math.max(0, 0.45 * vicino + 0.45 * r + 0.15 * monti - aridita - sud));
     }
   }
 
@@ -487,12 +494,13 @@ function climaEBiomi(seme, cols, rows, quota, mare, acque) {
  * ricalcolano sul rilievo finale. Al più un valico ogni `distanza` km. Lunghezze in km, quote in m.
  */
 export const VALICHI_CARTA = {
-  testata: { quota: [250, 2100], vicinoMonti: 15, monti: 1700 },   // testata di una grande valle, vicino ai monti
-  coppia: { distanza: [6, 32], giro: 25, corridoio: 3 },           // testate opposte; sistemi diversi
+  // bacino: km² della valle alla testata (nella regione di 120×90 km i corsi da 150 km² nascono lontano dai monti)
+  testata: { quota: [250, 2100], vicinoMonti: 10, monti: 1700, bacino: 40 },   // testata di una grande valle, vicino ai monti
+  coppia: { distanza: [5, 25], giro: 20, corridoio: 3 },           // testate opposte; sistemi diversi
   sella: { sopra: 250, massima: 3000 },        // il passo sta almeno così sopra entrambe le testate
   bersaglio: 2000, scavo: 500,                 // si scava fino a bersaglio, al più di scavo m (valichi alti fino a ~2500)
   intaglio: { lungo: 45, largo: 220, raggio: 5 },   // m per km lungo il passo, m per km² ai lati; km
-  distanza: 20,
+  distanza: 15,
   // Punteggio (più basso = meglio): quota del passo, salita dalla testata più bassa (le valli che salgono piano
   // fin sotto il passo sono le migliori), distanza tra le testate, grandezza delle due valli (bacino a `valle` km
   // sotto la testata: le valli grandi che si addentrano nella catena).
@@ -504,7 +512,7 @@ function valichiTraValli(seme, cols, rows, quota, mare) {
   const acque = classificaAcque(cols, rows, mare);
   const foce = foci(cols, rows, acque);
   const { ricevente, bacino, ordine } = flusso(cols, rows, riempi(cols, rows, quota, foce), foce, acque, derivaSeme(seme, 42));
-  const soglia = DRENAGGIO.fiume;
+  const soglia = V.testata.bacino;
   const terra = (i) => !mare[i] && acque[i] === ACQUA.TERRA;
   const vicinoMonti = distanzaDa(cols, rows, (i) => terra(i) && quota[i] >= V.testata.monti);
   // Foce di ogni cella (sistema del fiume).
@@ -632,9 +640,9 @@ function valichiTraValli(seme, cols, rows, quota, mare) {
  */
 export const MASSICCI = {
   quota: 1400,                  // m: cime da cui partono
-  distanza: 16,                 // km tra due gruppi (le valli in mezzo)
-  perArea: 900,                 // km² di terra oltre 1400 m per gruppo
-  numero: [4, 12],
+  distanza: 14,                 // km tra due gruppi (le valli in mezzo)
+  perArea: 300,                 // km² di terra oltre 1400 m per gruppo
+  numero: [2, 6],
   forme: ['torre', 'altopiano', 'piramide', 'cresta'],
   torri: [1, 4],
   raggio: [0.55, 1.15],         // km: semiasse della torre (alla base della parete)
@@ -819,7 +827,7 @@ function correggiVarieta(seme, cols, rows, quota, mare, dren, clima) {
   // Deserto lontano dalla neve.
   const dNeve = distanzaDa(cols, rows, (i) => bioma[i] === BIOMA.NEVE || bioma[i] === BIOMA.GHIACCIO && !mare[i]);
   for (let i = 0; i < n; i++) {
-    if (bioma[i] === BIOMA.SABBIA && dNeve[i] < V.desertoNeve) { bioma[i] = BIOMA.PIANURA_S; esito.deserto++; }
+    if (bioma[i] === BIOMA.SABBIA && dNeve[i] < V.sabbiaNeve) { bioma[i] = BIOMA.PIANURA_S; esito.deserto++; }
   }
 
   const pendenza = (i) => {

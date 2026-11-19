@@ -163,9 +163,9 @@ export function verificaPanorami(carta) {
 // ─── Regole di varietà (passo 8, GDD §2 «Regole di generazione») ──────────
 
 export const VARIETA = {
-  finestra: 40, passoFinestra: 20, tipiMinimi: 3, parteTipo: 0.02, terraMinima: 0.5, estremi: 0.5,
+  finestra: 25, passoFinestra: 12, tipiMinimi: 3, parteTipo: 0.02, terraMinima: 0.5, estremi: 0.5,
   uniforme: 15,          // km: diametro massimo di un'area uniforme senza interruzioni
-  desertoNeve: 80,       // km
+  sabbiaNeve: 4,         // km: sabbia e neve non si toccano (deciso con l'utente: niente più 80 km)
   paludeQuota: 300,      // m: nessuna palude sopra
 };
 
@@ -268,8 +268,8 @@ export function verificaVarieta(carta) {
   const dNeve = distanzaDa(cols, rows, (i) => tipo[i] === 4);
   let minDN = Infinity, deserto = 0;
   for (let i = 0; i < cols * rows; i++) if (tipo[i] === 5) { deserto++; if (dNeve[i] < minDN) minDN = dNeve[i]; }
-  regole.push({ nome: 'desertoNeve', ok: minDN >= V.desertoNeve,
-    testo: deserto ? `deserto–neve: ${minDN > 1e8 ? 'niente neve' : minDN.toFixed(0) + ' km'} (regola ≥ ${V.desertoNeve} km)` : 'deserto–neve: niente deserto' });
+  regole.push({ nome: 'sabbiaNeve', ok: minDN >= V.sabbiaNeve,
+    testo: deserto ? `sabbia–neve: ${minDN > 1e8 ? 'niente neve' : minDN.toFixed(0) + ' km'} (regola ≥ ${V.sabbiaNeve} km)` : 'sabbia–neve: niente sabbia' });
   // 4. Niente palude in quota.
   let paludiAlte = 0;
   for (let i = 0; i < cols * rows; i++) if (tipo[i] === 6 && quota[i] > V.paludeQuota) paludiAlte++;
@@ -325,7 +325,7 @@ function partiSeparate(carta) {
  * senza fidarsi delle misure del generatore, tranne quelle che richiedono la quota del mondo.
  * @returns {{ ok: boolean, testo: string, errori: string[] }}
  */
-export function verificaLuoghi(carta, limiti = { asprezza: 0.2, bordo: 25, fiume: 0.9, distanza: 10, rocca: 12, borgo: 30, pendenza: 15 }) {
+export function verificaLuoghi(carta, limiti = { asprezza: 0.2, bordo: 7, fiume: 0.9, distanza: 10, rocca: 12, borgo: 30, pendenza: 15 }) {
   const L = carta.luoghi, errori = [];
   if (!L) return { ok: false, testo: 'Carta senza luoghi', errori: ['Carta senza luoghi'] };
   if (L.length < 2) errori.push(`solo ${L.length} siti`);
@@ -335,7 +335,7 @@ export function verificaLuoghi(carta, limiti = { asprezza: 0.2, bordo: 25, fiume
     if (c < limiti.bordo || r < limiti.bordo || c >= cols - limiti.bordo || r >= rows - limiti.bordo) errori.push(`${nome} vicino al bordo`);
     else if (mare[i] || (acque && acque[i] !== ACQUA.TERRA)) errori.push(`${nome} in acqua`);
     else if (asprezza && asprezza[i] > limiti.asprezza) errori.push(`${nome} sulle pareti`);
-    if (!(l.fiume.distanza >= limiti.fiume)) errori.push(`${nome} a ${l.fiume.distanza.toFixed(2)} km da un fiume`);
+    if (!(l.fiume.distanza >= (l.carattere === 'valle' ? 0.35 : limiti.fiume))) errori.push(`${nome} a ${l.fiume.distanza.toFixed(2)} km da un fiume`);
     if (l.dislivelli.rocca > limiti.rocca || l.dislivelli.borgo > limiti.borgo) errori.push(`${nome}: troppo lavoro di terra`);
     if (l.pendenza > limiti.pendenza) errori.push(`${nome}: pendenza ${l.pendenza.toFixed(1)}°`);
   }
@@ -345,6 +345,9 @@ export function verificaLuoghi(carta, limiti = { asprezza: 0.2, bordo: 25, fiume
   }
   if (dMin < limiti.distanza) errori.push(`siti a ${dMin.toFixed(1)} km`);
   const caratteri = [...new Set(L.map((l) => l.carattere))].join(', ');
+  // Castello di valle (deciso con l'utente): se il mondo ha montagne, almeno un sito a ≤ 5 km da un crinale.
+  const montagne = carta.quota.some((q, i) => !carta.mare[i] && q >= 1500);
+  if (montagne && !L.some((l) => l.crinale <= 5)) errori.push('nessun castello a ≤ 5 km da un crinale');
   const V = carta.valichi ?? [];
   return {
     ok: errori.length === 0, errori,

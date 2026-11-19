@@ -53,8 +53,8 @@ const COLORE_ROCCA = '#8c1c13';
 const COLORE_VALICHI = '#d9822b';
 // Rilievo fine della parte visibile: da zoom DA, un campione ogni `passo` pixel (CSS) dello schermo,
 // calcolato a pezzi tra un fotogramma e l'altro (`budget` ms) dopo che la vista si è fermata (`attesa` ms).
-const DETTAGLIO = { da: 4, passo: 2, attesa: 120, budget: 12, esagerazione: 2, equidistanze: [5, 10, 20, 25, 50, 100, 200, 250, 500],
-  percorsi: 50 };   // km: finestra entro cui si cercano e si disegnano i percorsi dei fiumi sul terreno
+const DETTAGLIO = { da: 1, passo: 2, attesa: 120, budget: 12, esagerazione: 2, equidistanze: [5, 10, 20, 25, 50, 100, 200, 250, 500],
+  percorsi: 130 };  // km: finestra entro cui si cercano e si disegnano i percorsi dei fiumi sul terreno
 const fasciaDi = (m) => FASCE.find(([, a, b]) => m >= a && m < b)?.[0] ?? 'montagna';
 const LUCE = (() => {             // luce da nord-ovest, alta 45°
   const x = -1, y = -1, z = 1.4142135623730951;

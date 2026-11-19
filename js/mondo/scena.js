@@ -62,6 +62,16 @@ function quoteLisce(carta) {
   return q;
 }
 
+/**
+ * Indice di cella riflesso ai bordi della Carta: oltre il confine il terreno prosegue a specchio (terre
+ * selvagge, invalicabili), invece di ripetere all'infinito l'ultima cella (con il mondo di 120×90 km e
+ * l'orizzonte a 110 km il bordo si vede quasi sempre: ripetuto, era una striscia piatta e innaturale).
+ */
+export function specchio(i, n) {
+  const p = 2 * n, r = ((i % p) + p) % p;
+  return r < n ? r : p - 1 - r;
+}
+
 /** Quota della Carta interpolata con una B-spline cubica (m), nel punto (x, z) del mondo. */
 export function quotaCarta(carta, x, z) {
   const { cols, rows, cella } = carta;
@@ -72,21 +82,19 @@ export function quotaCarta(carta, x, z) {
   const wu = pesi(tu), wv = pesi(tv);
   let somma = 0;
   for (let b = 0; b < 4; b++) {
-    let j = j0 - 1 + b;
-    j = j < 0 ? 0 : j >= rows ? rows - 1 : j;
+    const j = specchio(j0 - 1 + b, rows);
     let riga = 0;
     for (let a = 0; a < 4; a++) {
-      let i = i0 - 1 + a;
-      i = i < 0 ? 0 : i >= cols ? cols - 1 : i;
+      const i = specchio(i0 - 1 + a, cols);
       riga += wu[a] * base[j * cols + i];
     }
     somma += wv[b] * riga;
   }
   // Profondità dei laghi, bilineare tra i centri delle celle (le stesse dell'indicatore «lago»).
   for (let b = 0; b < 2; b++) {
-    const j = Math.min(rows - 1, Math.max(0, j0 + b));
+    const j = specchio(j0 + b, rows);
     for (let a = 0; a < 2; a++) {
-      const i = Math.min(cols - 1, Math.max(0, i0 + a));
+      const i = specchio(i0 + a, cols);
       const f = fondo[j * cols + i];
       if (f > 0) somma -= f * (a ? tu : 1 - tu) * (b ? tv : 1 - tv);
     }
@@ -126,9 +134,9 @@ function formaCarta(carta, x, z) {
   const i0 = Math.floor(u), j0 = Math.floor(v), fu = u - i0, fv = v - j0;
   let r = 0, c = 0;
   for (let b = 0; b < 2; b++) {
-    const j = Math.min(rows - 1, Math.max(0, j0 + b));
+    const j = specchio(j0 + b, rows);
     for (let a = 0; a < 2; a++) {
-      const i = Math.min(cols - 1, Math.max(0, i0 + a));
+      const i = specchio(i0 + a, cols);
       const w = (a ? fu : 1 - fu) * (b ? fv : 1 - fv);
       r += w * F.ril[j * cols + i]; c += w * F.conv[j * cols + i];
     }
@@ -227,9 +235,9 @@ function campoCarta(carta, campo, x, z) {
   const i0 = Math.floor(u), j0 = Math.floor(v), fu = u - i0, fv = v - j0;
   let r = 0;
   for (let b = 0; b < 2; b++) {
-    const j = Math.min(rows - 1, Math.max(0, j0 + b));
+    const j = specchio(j0 + b, rows);
     for (let a = 0; a < 2; a++) {
-      const i = Math.min(cols - 1, Math.max(0, i0 + a));
+      const i = specchio(i0 + a, cols);
       r += (a ? fu : 1 - fu) * (b ? fv : 1 - fv) * campo[j * cols + i];
     }
   }

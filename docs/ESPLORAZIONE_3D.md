@@ -980,6 +980,29 @@ conoscenza sulla Carta. Tavullia resta la scena di prova con il castello di M4.
      forte (`PERCORSO.attrazione` 3).
    - *Carta, il cavaliere* (richiesta dell'utente): freccia della direzione in cui guarda e cerchi a 10 e 20 km
      con il tempo di marcia sulla Carta (~15 min/km, `docs/GDD.md` §3: 2,5 e 5 h).
+   - **Mondo regionale di 120×90 km** (deciso con l'utente, `docs/GDD.md` §2 «Dimensioni e densità»;
+     `VERSIONE_GENERATORE` = `regione-1`). A 600×450 km tra due luoghi d'interesse c'erano ore di cammino. Si
+     rimpicciolisce la scala d'insieme, non quella locale:
+     - *forma*: deformazione 60 km, continente 70, scala grande 160, bordo 10; catene: linea 110 km, maschera
+       140, spina e pedemonte più larghi in proporzione (0,2 / 0,5), contrafforti ogni ~7 km (`dettaglio` 7,
+       erano 32: creste e valli ogni ~16 km) più alti (1,4), zoccolo 0,55; colline 40 km, poggi 30 km;
+     - *clima*: latitudine completa (−4 → 21 °C) su 90 km, rumore 60 km, umidità con il mare a 25 km e il sud
+       più secco (con il mare sempre vicino la zona arida c'era in 6 mondi su 30; ora in 24); boschi a grumi
+       di 14 km;
+     - *varietà*: finestre di 25×25 km (passo 12); deserto–neve sostituita da «sabbia e neve non si toccano»
+       (≥ 4 km); distese ≤ 15 km come prima;
+     - *gruppi montuosi* 2–6 (uno ogni 300 km² oltre 1400 m), *valichi* testate da 40 km² entro 10 km dai monti,
+       coppie a 5–25 km, uno ogni 15 km; *rocche* zone a 25–80 km dal centro, distanza 15/12/8 km, bordo 8 km;
+     - *castello di valle* (regola dell'utente): carattere `valle` per i siti a ≤ 5 km da un punto 800 m più
+       alto (niente obbligo di cima né dominanza: terrazzo di fondovalle, fiume anche a 350 m); la partenza è
+       di valle, e la verifica dei luoghi lo chiede quando il mondo ha montagne;
+     - *bordo*: oltre il confine la Carta prosegue a specchio nelle Scene e nell'orizzonte (con l'orizzonte a
+       110 km il bordo si vede quasi sempre; ripetuta, l'ultima cella dava una striscia piatta);
+     - *Carta*: rilievo delle Scene e fiumi come nelle Scene già da zoom ×1 (la Carta intera è 120×90 celle).
+     Misure su 30 semi: generazione 0,2–0,6 s (era 3–4,7 s); 1–7 catene; fondovalle→crinale (+800 m) in
+     montagna con mediana 2,2–6,4 km; 29 su 30 rispettano tutte le verifiche (fiumi, panorami, varietà, luoghi):
+     nel seme 79190 la sola catena ha i fondovalle a 5–9 km dal crinale e nessun sito di valle. Un salvataggio
+     del mondo di prima fuori dalla regione riparte dalla rocca.
    - *Stadio 2:* il punto più alto della cella (griglia di 50 m, poi 10 m) deve essere **una cima vera**:
      nulla più alto entro 150, 300 e 450 m (16 direzioni). Senza questa regola il primo sito del seme 48213
      era un dosso a 469 m ai piedi di un rilievo di 522 m a 400 m di distanza, e il borgo cadeva nella sella.
