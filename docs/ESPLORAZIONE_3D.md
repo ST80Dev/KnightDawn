@@ -1162,6 +1162,222 @@ siti validi su 30 semi su 30 (verifica automatica). Con il passo 9: dal borgo si
   raggiunge di persona.
 - **Torri di sentinella dei valichi**: in M7 o con la milestone dei luoghi (oggi fuori da M7)?
 
+## Vegetazione e oggetti sparsi (in parallelo a M7) — piano da approvare
+
+> Autorizzata dall'utente in parallelo a M7 (deroga alla regola 4 di `CLAUDE.md`). Design di partenza: M4,
+> «Dopo la valutazione — realismo del terreno» (punto 2, oggetti sparsi a *instancing*) e «stile
+> simil-realistico da codice»; M6 passo 7 (`coloreMondo`); M7, terrapieni (passo 2) e blocco che segue il
+> cavaliere (punto 6, passo 9); `docs/GDD.md` §2 («Dentro le Scene», regole di varietà, «Dimensioni e densità»).
+> **Stato: piano scritto, da approvare. Nessun codice finché l'utente non risponde alle domande in fondo.**
+
+**Obiettivo.** Nelle Scene del mondo generato ci sono alberi, arbusti, erba, sassi, massi e affioramenti dove il
+colore del terreno già li promette: il bosco dipinto diventa bosco, la macchia sui pendii diventa cespugli, le
+chiazze di roccia diventano affioramenti e i ghiaioni sassi. Tutto è coerente con bioma, quota, pendenza e clima,
+deterministico dalle coordinate del mondo, e regge 60 FPS su PC medio. Fermarsi «nel nulla» deve offrire qualcosa
+da guardare (M4, «movimento e viaggio»).
+
+**Cosa c'è oggi** [Certo, dal codice]: il bosco è solo un colore (`coloreMondo` in `terrain.js`: biomi delle 4
+celle vicine letti in un punto spostato di ±350 m, radure, alpeggi sopra il limite degli alberi, macchia sui pendii
+14–28°, roccia oltre 32–44° o 18–30° in alto, affioramenti a chiazze, ghiaioni, neve); blocco di 2×2 km a griglia
+di 7,8 m; nebbia di giorno dai **10 km** (con l'orizzonte): il bordo del blocco si vede nitido; ombre proiettate solo
+per cavaliere e castello; collisioni con `ostacoli[].spingiFuori(x, z, r)` (`knight3d.js`).
+
+### Decisioni tecniche (proposte)
+
+**1. Due moduli** (regola 2: nomi da confermare, domanda 1).
+- `js/mondo/vegetazione.js` — **posizionamento**, senza Three.js né DOM (gira in Node e in un Worker): catalogo
+  dei tipi con densità per bioma, quota, pendenza e clima; funzione che, dato il blocco, restituisce per ogni tipo
+  un array compatto (`Float32Array`: x, z, quota, scala, rotazione, variante) più i conteggi e i ms.
+- `js/3d/vegetazione3d.js` — **mesh**: geometrie da codice per tipo e livello di dettaglio, materiali, una
+  `InstancedMesh` per tipo e livello, aggiornamento delle istanze vicine mentre il cavaliere si muove, collisioni
+  dei tronchi, contatori per F3.
+- `main.js`: solo agganci (creazione e rimozione in `caricaScena`, `ostacoli.push`, aggiornamento in `frame`,
+  righe in F3).
+- **Coerenza col colore** [Probabile, la parte più delicata]: alberi e colore devono dire la stessa cosa. Oggi il
+  «quanto bosco» (biomi spostati di ±350 m, radure, alpeggi) è calcolato dentro `coloreMondo`, in un modulo 3D.
+  Proposta: spostare quel calcolo in una funzione pura `coperturaMondo(carta)` in `js/mondo/vegetazione.js`
+  (bosco, radura, macchia, roccia, ghiaione, neve, temperatura) e farla usare **anche** da `coloreMondo`. [Certo]
+  se lo spostamento è esatto i colori non cambiano (si verifica confrontando i colori di un blocco prima e dopo).
+  Alternativa: copiare la formula (rischio di divergenza a ogni ritocco del colore).
+
+**2. Posizionamento deterministico.**
+- Per ogni tipo una **griglia del mondo** a passo proprio (alberi ~6 m, arbusti ~4 m, sassi ~5 m, massi ~20 m,
+  affioramenti ~40 m, erba ~1 m): per la cella intera (ix, iz) `hash2(ix, iz, semeTipo)` decide se c'è un oggetto
+  (confronto con la densità del punto), un secondo hash lo sposta dentro la cella, altri ne danno scala, rotazione
+  e variante. Un solo albero per cella (i tipi di albero si contendono la cella per peso): niente tronchi
+  compenetrati. Le celle sono del mondo, non del blocco: **due blocchi vicini producono gli stessi oggetti nella
+  zona comune** [Certo, se densità ed esclusioni dipendono solo dal punto del mondo; vedi punto 3].
+- Solo hash su interi e rumori esistenti (`rumore.js`); niente `Math.random`.
+- **Densità** = prodotto di fattori lisci (bioma e copertura, temperatura alla quota, umidità, pendenza), così un
+  bordo di bosco si dirada invece di finire a righello. Ai margini del bosco alberi più radi e più cespugli.
+
+**3. Quota ed esclusioni.**
+- **Decisione** (c'è o non c'è) da grandezze del mondo: bioma e clima dalla Carta, quota e pendenza da
+  `quotaFinale`, acqua da `scavaFiumi` (pelo nell'alveo) e `livelloLago`, terrapieni da `distanzaPiano`.
+- **Quota a cui si posa l'oggetto: quella della mesh del blocco** (`terrain.getHeight`, interpolazione dei
+  triangoli disegnati), non `quotaFinale` diretta (domanda 2). [Certo] la mesh è `quotaFinale` campionata ogni
+  7,8 m e interpolata a triangoli: ciò che si vede è la mesh, e tra un vertice e l'altro le due quote
+  differiscono. [Probabile] lo scarto è di centimetri–decimetri sul rilievo fine (ottava più corta ~44 m), di più
+  dove la quota piega di colpo (sponde e argini dei fiumi, bordi dei terrapieni): un tronco posato su `quotaFinale`
+  resterebbe lì sospeso o sepolto. Costa anche meno (punto seguente).
+- **Costo** [Probabile]: `quotaFinale` per ogni candidato (decine di migliaia, centinaia di migliaia per l'erba) è
+  troppo lenta. Proposta: le esclusioni di quota, pendenza e acqua si leggono dalla **griglia del blocco** (quote,
+  `fiume`, `lago` già calcolati da `generaScena`), che è `quotaFinale` campionata. Perché due blocchi diano gli stessi
+  oggetti serve che la griglia del blocco stia su punti fissi del mondo (centro del blocco multiplo di 7,8125 m):
+  oggi non è così (il blocco è centrato sul sito o sul punto scelto). È un dettaglio da concordare con la sessione
+  di M7 per il passo 9 (domanda 8); finché il blocco non segue il cavaliere la differenza non si vede.
+- **Esclusioni** (nessun oggetto, erba compresa salvo dove detto):
+  - acqua: punti con pelo del fiume, del torrente o del lago, più un margine di riva di 1–2 celle (8–16 m) dove
+    restano solo canne ed erba di riva;
+  - pareti: pendenza oltre ~48° (dove il cavaliere non entra); alberi radi già da ~32°, nessun albero oltre ~40°;
+    massi e sassi ammessi fino a 45° (ai piedi delle pareti sono i ghiaioni);
+  - terrapieni: dentro un piano o la sua scarpata (`distanzaPiano(p, x, z) < p.s`) niente; nella fascia di ritorno
+    (30 m) e in una **spianata** attorno alle mura (proposta 40 m, domanda 7) solo erba e sassi, niente alberi né
+    cespugli (le cinte medievali tenevano sgombro il terreno attorno alle mura; e non coprono la rocca dal basso);
+  - neve al suolo: niente erba né arbusti dove `coloreMondo` dipinge neve piena; conifere sì fino al limite degli
+    alberi.
+
+**4. Catalogo** (prima stesura, [Ipotesi] da tarare guardando):
+
+| Tipo | Dove | Note |
+|---|---|---|
+| latifoglia (2–3 chiome) | bosco e alberi isolati in pianura e collina temperate | quercia, castagno, faggio stilizzati |
+| conifera | bosco freddo e di montagna fino al limite degli alberi, nord | abete a palchi; più bassa e rada vicino al limite |
+| pino | sud secco, pianura arida, collina calda | fusto alto, chioma a ombrello |
+| albero di riva | lungo fiumi, torrenti e laghi | pioppo/salice |
+| albero secco | palude, tundra, margine della steppa | rado |
+| cespuglio | macchia sui pendii, margini del bosco, sottobosco | 2 varianti |
+| arbusto d'alta quota | sopra il limite degli alberi (ginepro, mugo) | basso, scuro |
+| canne | rive e palude | a ciuffi |
+| erba (ciuffi) | ovunque ci sia prato, vicino al cavaliere | colore dal terreno sotto |
+| fiori / felci | prati (fiori), sottobosco (felci) | punti di colore, pochi |
+| sassi | dove c'è roccia o ghiaione, radi ovunque | piccoli, molti |
+| massi | ai piedi delle pareti, alpeggi, erratici rari in collina | grandi, collisione |
+| affioramenti | dove `coloreMondo` dipinge chiazze di roccia | lastre basse e larghe, collisione |
+| tronchi caduti e ceppi | nel bosco | radi |
+
+Deserto e steppa: arbusti secchi radi, sassi; niente piante esotiche (stile medievale europeo-mediterraneo).
+
+**5. Mesh e stile** (regola 6).
+- Geometrie da primitive deformate a codice (cilindri, coni, icosaedri schiacciati e spostati per vertice), un
+  solo materiale per tipo con **colori per vertice** (tronco e chioma nella stessa geometria): una chiamata di
+  disegno per tipo e livello. Variazione per istanza con `instanceColor` (tono della chioma) e scala/rotazione.
+- `MeshLambertMaterial` o `MeshStandardMaterial` opaco (niente trasparenze ordinate: costano e sfarfallano);
+  chiome a più lobi per non sembrare palle. Vento: leggera oscillazione nello shader per erba e chiome vicine
+  (`onBeforeCompile`), costo trascurabile.
+- **Livelli di dettaglio**: alberi *vicino* (~200–400 triangoli) entro ~150–200 m, *lontano* (~10–20 triangoli,
+  stessa sagoma e colore medio) fino al bordo del blocco; arbusti e sassi in un solo livello con distanza propria.
+  Il passaggio non deve «saltare»: gli oggetti che entrano crescono di scala nei primi metri.
+- **Ombre**: nessuna ombra proiettata dalla vegetazione all'inizio; [Probabile] l'ombra dei soli alberi vicini
+  (entro ~60 m) raddoppia le loro chiamate nel passaggio delle ombre e si valuta al passo 7 (domanda 6).
+
+**6. Prestazioni.**
+- **Chiamate di disegno ≤ 40** per tutta la vegetazione (il borgo di M7 ne avrà fino a 80). Conto previsto:
+  alberi 5 tipi × 2 livelli = 10, arbusti 3, canne 1, erba 2, fiori/felci 1, sassi 1, massi 1, affioramenti 1,
+  tronchi 1 → **~21**, margine per ombre o varianti.
+- Una `InstancedMesh` grande non viene scartata per frustum (la sfera di contorno copre il blocco): la GPU elabora
+  tutte le istanze. Quindi le istanze **vicine** (alberi vicini, erba, arbusti) si riscrivono quando il cavaliere
+  si sposta di qualche metro, scegliendo dalla lista precalcolata solo quelle entro la distanza; le **lontane**
+  restano fisse. [Probabile] riscrivere ~5 000–20 000 matrici ogni ~5–10 m di cammino costa 1–3 ms: va misurato.
+- Distanze per tipo (proposte): erba 40–60 m, fiori/felci 40 m, sassi 120 m, arbusti 250 m, alberi vicini 180 m,
+  alberi lontani e massi fino al bordo del blocco. Di notte (nebbia a ~110 m) gli alberi lontani si possono
+  spegnere.
+- Numeri attesi [Ipotesi, si misurano al passo 1]: blocco in collina boscosa ~30 000–70 000 alberi, ~10 000–40 000
+  arbusti e sassi, ~10 000–30 000 ciuffi d'erba attivi; triangoli ~1–2 milioni. Costruzione < 300 ms (al cambio di
+  Scena c'è già la schermata); oltre, nel Worker (cambio architetturale: si chiede allora).
+- F3: istanze per tipo (attive/totali), chiamate di disegno della vegetazione e totali, triangoli, ms di
+  costruzione e di aggiornamento delle istanze vicine.
+
+**7. Collisioni e camera.**
+- Tronchi degli alberi, massi e affioramenti alti: cerchi in una **griglia di 16 m** (si controllano solo le celle
+  attorno al cavaliere), esposti come un ostacolo `spingiFuori` come il castello. Arbusti, erba, canne e sassi si
+  attraversano (domanda 5).
+- Camera: non urta la vegetazione (nel bosco salterebbe di continuo) [Probabile]; se una chioma si mette tra camera e
+  cavaliere si accetta, o si rimpicciolisce l'albero più vicino alla camera (si decide guardando, passo 3).
+
+**8. Bordo del blocco e orizzonte.** Nell'orizzonte il bosco resta un colore (vincolo). [Probabile] con la nebbia
+solo dai 10 km, dal blocco il bosco «finisce» al bordo e oltre resta il colore piatto: si vedrà, soprattutto
+dall'alto. Rimedi senza toccare l'orizzonte: alberi lontani fino all'ultimo metro del blocco, più radi e più bassi
+negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta, è una decisione dell'utente
+(domanda 9).
+
+**9. Tavullia, stagioni, M7.**
+- Tavullia: non ha Carta né biomi (domanda 3).
+- Stagioni (domanda 4): erba e latifoglie cambiano colore, d'inverno latifoglie spoglie e conifere con neve; calcolate
+  al caricamento della Scena come la neve oggi.
+- M7: nessuna modifica a `luoghi.js`, `castle3d.js`, `borgo3d.js`; i terrapieni si leggono da `carta.luoghi[].piani`.
+  Prima della PR si fa il merge di `main` e si riprova la spianata sul borgo nuovo. Il blocco che segue il cavaliere
+  (M7 passo 9) riuserà il modulo di posizionamento così com'è.
+
+### Passi (ciascuno provato nel browser)
+
+1. **Posizionamento e punti di controllo.** `js/mondo/vegetazione.js` con densità ed esclusioni; `coperturaMondo`
+   condivisa con `coloreMondo` (colori invariati); in scena ogni oggetto è un punto colorato per tipo (una sola
+   chiamata, `THREE.Points`), attivabile con un tasto di sviluppo. Script di prova in Node: due blocchi sovrapposti
+   danno gli stessi oggetti nella zona comune; nessun oggetto in acqua, in alveo, oltre 48° o sui terrapieni, su
+   30 semi. *Prova:* i punti verdi scuri coprono il bosco dipinto e lasciano le radure; niente punti in fiumi,
+   laghi, pareti, rocca e borgo; F3 mostra conteggi per tipo e ms di costruzione; colori del terreno uguali a prima.
+2. **Alberi.** Latifoglia e conifera, livelli vicino e lontano, aggiornamento delle istanze vicine, crescita
+   all'ingresso. *Prova:* il bosco si legge come bosco da vicino e da 1 km; nessun tronco sospeso o sepolto;
+   FPS in pieno bosco e da un'altura che guarda il blocco; chiamate e istanze in F3; giudizio dell'utente sullo stile.
+3. **Collisioni.** Tronchi, massi e affioramenti come ostacoli a griglia. *Prova:* si attraversa un bosco fitto
+   scivolando tra i tronchi senza incastrarsi; la camera resta usabile nel bosco.
+4. **Arbusti e rocce.** Cespugli (macchia, margini, sottobosco), arbusti d'alta quota, sassi, massi, affioramenti
+   e ghiaioni ai piedi delle pareti. *Prova:* in montagna e in collina sassi e massi stanno dove il terreno è
+   dipinto di roccia o ghiaione; FPS invariati.
+5. **Erba vicina.** Ciuffi entro 40–60 m che seguono il cavaliere, colore dal terreno sotto, vento, dissolvenza per
+   scala al limite. *Prova:* camminando non si vede il bordo dell'erba che avanza; FPS invariati.
+6. **Varietà per bioma e clima.** Pino e macchia del sud, steppa e deserto radi, conifere basse al limite degli
+   alberi, palude (canne, alberi secchi), rive (alberi di riva, canne), alberi isolati, fiori, felci, tronchi
+   caduti. *Prova:* su 3–4 semi, scene in pianura, collina, bosco, montagna, sud arido, nord freddo e lungo un
+   fiume si distinguono a colpo d'occhio.
+7. **Stagioni, ombre e rifiniture.** Colori per stagione, inverno spoglio, neve sulle conifere; ombre degli alberi
+   vicini se il budget regge; bordo del blocco (punto 8). *Prova:* le quattro stagioni a colpo d'occhio; FPS.
+8. **Misure e chiusura.** Caso peggiore (bosco fitto in collina accanto alla rocca di partenza, dopo il merge di
+   M7) di giorno e di notte; verifica su 30 semi delle esclusioni; aggiornare «Stile visivo» in testa al documento.
+   *Prova:* 60 FPS su PC medio dell'utente su Pages; vegetazione ≤ 40 chiamate.
+
+### Accettazione
+
+Nelle Scene del mondo generato il bosco dipinto è un bosco vero, con radure, margini radi e sottobosco; macchia,
+rocce, massi e ghiaioni stanno dove il colore li indica; erba vicina al cavaliere; tipi diversi per bioma, quota e
+clima; niente oggetti in acqua, negli alvei, sulle pareti, sui terrapieni di rocca e borgo; si cammina nel bosco
+senza attraversare i tronchi e senza incastrarsi; due blocchi vicini hanno gli stessi oggetti nella zona comune;
+60 FPS su PC medio; vegetazione ≤ 40 chiamate di disegno; F3 mostra istanze, chiamate e tempo di costruzione;
+Carta e `VERSIONE_GENERATORE` invariate.
+
+### Rischi e incertezze
+
+- [Probabile] Il rischio maggiore sono le **prestazioni nel bosco fitto**: decine di migliaia di alberi lontani più
+  le istanze vicine, sommati al borgo di M7 (80 chiamate). In headless il rendering è software e non fa testo: la
+  misura vera è dell'utente su Pages. Ripiego: alberi lontani più radi (si vede solo la sagoma del bosco) o una
+  distanza più corta per il livello lontano.
+- [Probabile] Lo **stacco al bordo del blocco** (punto 8) con la nebbia dai 10 km.
+- [Probabile] Con le sole primitive un albero resta riconoscibile ma stilizzato; la resa vera si giudica al passo 2
+  (le regole per eventuali apporti esterni sono già scritte in M4 e richiedono di cambiare la regola 6).
+- [Ipotesi] Il bosco fitto rende difficile orientarsi e inquadrare il cavaliere (camera); rimedio: radure e
+  sentieri naturali più frequenti, chiome trasparenti vicino alla camera.
+- [Certo] Lavorando in parallelo a M7, `main.js` e `terrain.js` saranno toccati da entrambe le sessioni: conflitti
+  al merge probabili ma piccoli (agganci). Si fa il merge di `main` prima di ogni PR.
+- [Probabile] Se la griglia del blocco non si allinea al mondo (domanda 8), al cambio di blocco qualche oggetto
+  vicino a una soglia (riva, 48°, bordo di un terrapieno) può comparire o sparire.
+
+### Domande per l'utente (da decidere prima del codice)
+
+1. **File nuovi**: `js/mondo/vegetazione.js` (posizionamento, senza grafica) e `js/3d/vegetazione3d.js` (mesh)?
+   E si sposta il calcolo della copertura (bosco, radure, roccia) da `coloreMondo` a una funzione pura condivisa?
+2. **Quota degli oggetti dalla mesh del blocco** invece che da `quotaFinale` diretta (motivo al punto 3)? Le
+   decisioni restano sulle grandezze del mondo.
+3. **Tavullia**: niente vegetazione (invariata, come deciso in M7) oppure un profilo fisso «collina temperata»?
+4. **Stagioni** in questa milestone (passo 7) o rinviate?
+5. **Collisioni**: solo tronchi, massi e affioramenti; arbusti, erba e sassi si attraversano?
+6. **Ombre degli alberi vicini**: da provare al passo 7 se il budget regge, o niente ombre?
+7. **Spianata attorno alle mura**: 40 m senza alberi né cespugli fuori dalla scarpata del terrapieno?
+8. **Griglia del blocco allineata al mondo** (centro multiplo di 7,8125 m): la propongo alla sessione di M7 per il
+   passo 9, o la faccio qui in `generaScena` (piccolo spostamento del blocco, ≤ 4 m)?
+9. **Bordo del blocco**: se si vede lo stacco tra alberi e colore piatto dell'orizzonte, si accetta o si valuta una
+   fascia di alberi semplificati nel primo anello dell'orizzonte (oggi esclusa dai vincoli)?
+
 ## Fuori dal prototipo (non farlo ora)
 
 Multiplayer, server/VPS, NPC con IA, mobile/touch, modelli esterni, combattimento in 3D, ombre di
