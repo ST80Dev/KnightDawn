@@ -185,8 +185,9 @@ export function coloreMondo(carta, stagione = 0) {
   const K = COLORI_MONDO;
   const copertura = coperturaMondo(carta, stagione), cp = nuovaCopertura();
   const c = new THREE.Color();
-  return (out, x, z, h, pendenza, pendenzaFine = pendenza) => {
+  const colore = (out, x, z, h, pendenza, pendenzaFine = pendenza) => {
     copertura(cp, x, z, h, pendenza);
+    colore.neve = cp.neve;
     out.setRGB(0, 0, 0);
     for (let k = 0; k < 4; k++) {
       const col = COLORI_SCENA[cp.bi[k]] || COLORI_SCENA[BIOMA.PIANURA], w = cp.w[k];
@@ -218,6 +219,56 @@ export function coloreMondo(carta, stagione = 0) {
     }
     return out;
   };
+  colore.neve = 0;   // copertura di neve (0–1) dell'ultimo punto colorato: la usa il dettaglio della superficie
+  return colore;
+}
+
+// ─── Dettaglio fine della neve (nello shader) ───────────────────────────
+// La griglia del terreno ha un punto ogni 7,8 m: vicino al cavaliere la neve era una distesa liscia, senza nulla
+// che la luce potesse mettere in ombra. Lo shader aggiunge cumuli e increspature (scale 1–9 m) inclinando la
+// normale dove c'è neve: solo luce, la geometria non cambia (i piedi restano sulla superficie di getHeight).
+// Si dissolve con la distanza (oltre ~150 m non serve e farebbe tremolare l'immagine).
+const DETTAGLIO_NEVE = { forza: 1.4, vicino: 50, lontano: 150 };
+
+function conDettaglioNeve(mat) {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uDettaglioNeve = { value: new THREE.Vector3(DETTAGLIO_NEVE.forza, DETTAGLIO_NEVE.vicino,
+      DETTAGLIO_NEVE.lontano) };
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', `#include <common>
+attribute float aNeve;
+varying float vNeve;
+varying vec2 vPosSuolo;`)
+      .replace('#include <project_vertex>', `#include <project_vertex>
+vNeve = aNeve;
+vPosSuolo = (modelMatrix * vec4(transformed, 1.0)).xz;`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+uniform vec3 uDettaglioNeve;
+varying float vNeve;
+varying vec2 vPosSuolo;
+float kdHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float kdRumore(vec2 p) {
+  vec2 i = floor(p), f = fract(p), u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(kdHash(i), kdHash(i + vec2(1.0, 0.0)), u.x), mix(kdHash(i + vec2(0.0, 1.0)), kdHash(i + vec2(1.0)), u.x), u.y);
+}
+// quota (m) delle increspature: cumuli larghi, onde del vento allungate, grana fine
+float kdNeve(vec2 p) {
+  return kdRumore(p / 9.0) * 0.9 + kdRumore(vec2(p.x / 4.5, p.y / 2.2)) * 0.3 + kdRumore(p / 1.1) * 0.06;
+}`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+{
+  float wNeve = vNeve * uDettaglioNeve.x * (1.0 - smoothstep(uDettaglioNeve.y, uDettaglioNeve.z, length(vViewPosition)));
+  if (wNeve > 0.001) {
+    const float e = 0.12;
+    float gx = (kdNeve(vPosSuolo + vec2(e, 0.0)) - kdNeve(vPosSuolo - vec2(e, 0.0))) / (2.0 * e);
+    float gz = (kdNeve(vPosSuolo + vec2(0.0, e)) - kdNeve(vPosSuolo - vec2(0.0, e))) / (2.0 * e);
+    normal = normalize(normal - (viewMatrix * vec4(gx, 0.0, gz, 0.0)).xyz * wNeve);
+  }
+}`);
+  };
+  mat.customProgramCacheKey = () => 'dettaglio-neve-1';
+  return mat;
 }
 
 /**
@@ -227,7 +278,7 @@ export function coloreMondo(carta, stagione = 0) {
 function buildSurfaceMondo(heights, cols, rows, cell, half, colore, centro) {
   const n = cols * rows;
   const H = (c, r) => heights[Math.min(Math.max(r, 0), rows - 1) * cols + Math.min(Math.max(c, 0), cols - 1)];
-  const nor = new Float32Array(n * 3), col = new Float32Array(n * 3);
+  const nor = new Float32Array(n * 3), col = new Float32Array(n * 3), neve = new Float32Array(n);
   const tmp = new THREE.Color();
   const cx = centro ? centro.x : 0, cz = centro ? centro.z : 0;
   // Il colore usa la pendenza su ~60 m (come l'orizzonte vicino): con quella fine il blocco veniva più roccioso
@@ -247,6 +298,7 @@ function buildSurfaceMondo(heights, cols, rows, cell, half, colore, centro) {
       const pendFine = Math.atan(Math.hypot(gx, gz)) * 180 / Math.PI;
       colore(tmp, cx - half + c * cell, cz - half + r * cell, heights[i], pend, pendFine);
       col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
+      neve[i] = colore.neve || 0;
     }
   }
   const pos = new Float32Array(n * 3);
@@ -269,10 +321,11 @@ function buildSurfaceMondo(heights, cols, rows, cell, half, colore, centro) {
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setAttribute('aNeve', new THREE.BufferAttribute(neve, 1));
   geo.setIndex(new THREE.BufferAttribute(indici, 1));
   geo.computeBoundingSphere();
   geo.computeBoundingBox();
-  const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  const m = new THREE.Mesh(geo, conDettaglioNeve(new THREE.MeshLambertMaterial({ vertexColors: true })));
   m.name = 'terreno-superficie';
   return m;
 }
