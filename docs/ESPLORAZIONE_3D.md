@@ -749,6 +749,225 @@ con copertura, fiumi mostrati, clima, luoghi, nomi e fazioni generati dalle stes
 - Copernicus e Terrarium includono edifici e alberi (modelli di superficie): i paesi veri lasciano
   piccoli rilievi dove nel gioco non ci sono.
 
+## M7 — Rocca e borgo (piano approvato, da iniziare dopo la prova di M6)
+
+> **Prerequisito (regola 4):** M6 va provata dall'utente prima di iniziare. Se la prova cambia il
+> generatore (quote, fiumi, gruppi montuosi), i criteri del passo 1 vanno ritarati, non riscritti.
+> Design già deciso: M4, «Dopo la valutazione — rocca, borgo ed edifici» e «stile simil-realistico da
+> codice»; `docs/GDD.md` §2 *Il mondo* e §3 *Interazione con luoghi*; `docs/EARLY_GAME.md` §1 e §3.
+
+**Obiettivo.** Nel mondo generato ci sono **2–3 rocche** con il loro borgo murato, su siti credibili e
+diversi tra loro, di importanza e quindi di grandezza diversa; il garzone parte fuori dalla porta del
+borgo di una di esse. Ci si cammina attorno e dentro le due cinte, gli edifici hanno porte che aprono la
+Carta del cronista (segnaposto), di notte le finestre e le torce si vedono da lontano, qualche persona
+sta al suo posto. Da lontano (orizzonte) e sulla Carta la rocca si riconosce.
+
+**Cosa offre oggi il mondo** (M6) e cosa serve: quota del mondo come funzione pura (`quotaMondo` +
+`scavaFiumi` in `scena.js`, usata da blocco, orizzonte e Carta zoomata), biomi e clima per cella, tracciati
+dei fiumi (`carta.fiumi`) e laghi, gruppi montuosi con pareti e forcelle (`carta.massicci`,
+`carta.asprezza`, `carta.valico`), poggi (solo il numero: non la lista). Il castello di M4
+(`castle3d.js`) misura il terreno sotto di sé e si adatta; `componiSuolo` unisce terreno e superfici
+costruite. Manca: un modo di scegliere il sito, di modellare il terreno in modo coerente fuori dal blocco,
+e tutto ciò che è borgo.
+
+### Decisioni tecniche proposte
+
+**1. Sito.** [Probabile] una fase 9 ridotta del generatore, nel Worker, che scrive `carta.luoghi`
+(2–3 elementi: `{ tipo: 'rocca', x, z, importanza, orientamento, piani, contorni, punteggio }`, metri
+del mondo). Due stadi:
+- *Candidati sulla Carta* (celle da 1 km): terra, non lago né mare, quota 120–900 m (collina e
+  pedemonte; niente pianura piatta, niente montagna), biomi ammessi pianura, collina, foresta (no
+  neve, palude, sabbia, roccia), `asprezza` < 0,2 (lontano dalle pareti dei gruppi), ≥ 25 km dal bordo
+  della Carta, ≥ 1 km dai tracciati dei fiumi della Carta (il percorso nelle Scene si sposta fino a
+  400 m dal tracciato e la valle ha versanti fino a ~600 m) e ≥ 0,5 km dai laghi.
+- *Affinamento alla scala della Scena* (campioni della quota del mondo ogni 10–20 m nei ~300×300 m del
+  sito): punteggio = **dominanza** (quanto il punto sta sopra l'anello a 1–2 km: un'altura, un poggio,
+  uno sperone) + **vicinanza a un fiume** (0,9–4 km: valle da controllare) o a una **forcella** (≤ 8 km:
+  valico da presidiare) − **lavoro di terra** (dislivello sotto la rocca e sotto il borgo) − pendenza
+  media del sito. Scarti netti: rocca con dislivello > 12 m sotto la cinta, borgo > 30 m, pendenza media
+  > 15°. **2–3 siti** (deciso con l'utente), scelti tra i migliori in modo che differiscano: almeno
+  uno su un fiume e, se c'è un gruppo montuoso abbastanza vicino, uno a guardia di una forcella;
+  distanza tra loro ≥ 20 km (come i ≥ 22–26 tra castelli del 2D, `world.js` in `2c869fa`), tutti nella
+  zona temperata attorno al centro della Carta (prima area culturale, mattoni).
+- La funzione di punteggio si scrive generica: la milestone dei luoghi la riuserà per tutti i castelli,
+  villaggi e torri di valico, con le distanze minime e i vincoli di validità.
+- *Partenza del garzone* (deciso con l'utente): **fuori dalla porta del borgo** della rocca più vicina
+  al centro, a ~40–60 m, rivolto verso la porta, con la rocca visibile sopra le mura: deve capire dov'è
+  guardandolo da fuori. La Scena iniziale è centrata sul sito.
+- Cambia le Carte → nuova `VERSIONE_GENERATORE`. Verifica automatica (`verifica.js`): su 30 semi c'è
+  sempre un sito valido, e rispetta tutti gli scarti; altrimenti il seme lo segnala (e si allentano i
+  criteri a scalini, come fa `puntoPartenza` con le fasce di quota).
+
+**2. Terreno sotto: due livelli.**
+- *Grosso, nel mondo* (terrapieni e terrazze, ~10–30 m di scala): `spianaLuoghi(carta, x, z, h)`
+  dopo `scavaFiumi`, funzione **pura** delle coordinate e dei soli dati di `carta.luoghi` (quote dei
+  piani calcolate una volta nel Worker, non al caricamento della Scena). Dentro ogni contorno (rocca,
+  terrazze del borgo) la quota è quella del piano; fuori si raccorda al terreno con una scarpata
+  morbida (smoothstep) larga in proporzione al salto, così da restare sotto ~25° (percorribile) tranne
+  dove c'è un muro di contenimento. Tutti i chiamanti (blocco, orizzonte, Carta zoomata, verifiche)
+  passano da **un solo** punto, per esempio `quotaFinale(carta, x, z)`: oggi lo stesso calcolo è
+  ripetuto in tre file, e dimenticarne uno darebbe proprio una giuntura. [Certo] se la modifica è pura,
+  blocchi vicini e orizzonte combaciano come oggi (giuntura 0 m); [Probabile] i fiumi non ne risentono,
+  perché il sito ne sta lontano oltre la larghezza della scarpata.
+- Solo operazioni esatte (`+ − × ÷`, `sqrt`, `floor`), come le altre parti che decidono la forma del
+  mondo.
+- *Fine, costruito* (cortili, passaggi, rampe, scalini, sotto il metro): `quotaSuolo` di rocca e borgo
+  tramite `componiSuolo`, come in M4. La griglia del terreno (7,8 m) non può fare muri né scalini: lo
+  stacco verticale lo fanno i **muri di contenimento** (mesh), il terreno sotto resta appena più basso e
+  coperto, come il cortile di M4.
+- Terrazze del borgo: 2–3 piani lungo le curve di livello, collegati dalla via principale in rampa
+  (≤ 12 %) e da scalinate; la rocca sul piano più alto.
+
+**3. Cinte ed edifici.**
+- *Importanza e grandezza* (richiesta dell'utente: variabilità coerente con l'importanza del luogo).
+  Nelle note del 2D l'importanza non è una scala scritta: ci sono i tipi (castello, torre, villaggio
+  in `world.js`) e le «corti minori» e «maggiori» dei ranghi (`docs/EARLY_GAME.md` §2). Proposta: tre
+  classi, decise per ora dal sito (punteggio, bacino del fiume, valico) e più avanti dalla fazione con
+  la milestone dei luoghi:
+
+  | Classe | Rocca | Borgo | Case | Edifici |
+  |---|---|---|---|---|
+  | *rocca minore* | ~36×32 m, mastio, niente sala d'armi | ~80×60 m, 1–2 terrazze | 8–14 | stalla, taverna, fabbro; cappella nella rocca |
+  | *castello di casata* (corte minore) | ~48×40 m | ~130×90 m, 2–3 terrazze | 20–30 | tutti quelli sotto |
+  | *sede maggiore* (corte maggiore) | ~60×50 m, doppio mastio o palazzo | ~200×130 m, 3–4 terrazze, seconda piazza | 40–60 | tutti, più chiesa nel borgo e loggia grande |
+
+  In M7 i 2–3 siti hanno classi diverse (almeno una minore e una di casata); la sede maggiore si
+  costruisce solo se il budget di prestazioni regge (passo 5), altrimenti con la milestone dei luoghi.
+  [Ipotesi] misure e numeri delle case da tarare a occhio. Città più grandi di così restano fuori.
+- *Disposizione* (dal sito, con l'orientamento verso il pendio più dolce e verso il fiume o il valico),
+  per il castello di casata: rocca in cima, ~48×40 m (il cortile attuale, 36×36 m mastio compreso, non ne contiene gli edifici);
+  borgo addossato più in basso, contorno poligonale irregolare di ~130×90 m che segue le terrazze, che
+  condivide un tratto di cinta con la rocca. Due porte: **porta del borgo** verso valle (torre-porta) e
+  **porta della rocca** che si apre nel borgo. Via principale dalla porta del borgo alla piazza del
+  mercato e su fino alla rocca.
+- *Rocca*: mastio, sala d'armi (palazzo a due piani), armeria, cappella con campaniletto, pozzo; torri
+  angolari tonde come in M4. *Borgo*: stalla (lunga e bassa, vicino alla porta, con recinto), taverna
+  (con insegna), mercato (piazza con banchi e loggia), fabbro (bottega con forgia), guaritore; più
+  **20–30 case** a schiera che riempiono i lotti lungo la via. Mura del borgo più basse (~7 m) con torri
+  quadrate ogni ~35 m. Le altre classi scalano misure e numeri secondo la tabella.
+- *Codice*: `castle3d.js` si generalizza (sito e quota del piano ricevuti, non misurati; misure dal
+  sito), un nuovo modulo per borgo ed edifici [richiede conferma, regola 2]. Gli edifici nominati sono
+  pezzi da codice con dettagli; le case nascono da pochi tipi (corpo, tetto a capanna o a padiglione,
+  porta, finestre) variati per lotto.
+- *Prestazioni* (60 FPS su PC medio, regola 8): [Probabile] il limite vero sono le chiamate di disegno,
+  non i triangoli. Obiettivo per un castello di casata: ≤ 80 chiamate, ≤ 80 000 triangoli; la sede
+  maggiore deve starci con lo stesso numero di chiamate (più istanze, non più mesh). Mezzi: *instancing*
+  per merli, finestre, coppi, banchi, case dello stesso tipo; geometrie fuse per materiale per mura e
+  edifici (richiede l'addon `BufferGeometryUtils` di r187 in `lib/three/addons/`: è un file nuovo,
+  conferma); collisioni in una griglia (oggi `spingiFuori` scorre tutti i rettangoli: con centinaia di
+  edifici va diviso per zone); la camera usa sagome semplici, non le mesh dettagliate, per il raycast.
+  F3 mostra chiamate, triangoli e luci attive.
+- *Stile*: simil-realistico da codice (M4, «Dopo la valutazione»): mattoni per la rocca e le mura,
+  intonaco chiaro e mattoni per le case, coppi, legno scuro; texture generate a runtime (canvas) per
+  mattoni, intonaco e coppi; `MeshStandardMaterial` dove rende (ferro, legno). Un'unica area culturale.
+
+**4. Porte, luci, persone.**
+- *Porte*: ogni edificio nominato ha una soglia; entro ~1,5 m e rivolti verso la porta compare
+  «E: entra — Taverna»; `E` apre la **Carta del cronista segnaposto** (overlay HTML in stile
+  manoscritto: nome dell'edificio, una riga di testo, «Esci»). Il tempo si ferma mentre è aperta. Nessun
+  interno 3D. Le case generiche non si aprono. Le azioni vere (EARLY_GAME §3, eventi `loc.*`) arrivano
+  con la Veglia e S3.
+- *Luci notturne* (estende le torce di M4): torce alle due porte e su alcune torri, finestre accese
+  (una parte delle case, che cala dopo Compieta), taverna e forgia più luminose; materiali emissivi con
+  `fog: false`, a istanze. `PointLight` vere solo per le **4–6 sorgenti più vicine** al cavaliere,
+  scelte ogni mezzo secondo [Probabile: abbastanza per il borgo, da misurare].
+- *Persone segnaposto*: figure semplici (corpo, testa, braccia; colori per ruolo) ferme ai loro posti:
+  stalliere, oste, fabbro, mercante ai banchi, guaritore, due guardie per porta; in più **alcuni
+  popolani che camminano** (deciso con l'utente) su percorsi fissi lungo la via e in piazza (2–3 nel
+  borgo minore, fino a 6–8 nella sede maggiore), che girano attorno al cavaliere invece di attraversarlo. Di notte restano solo le guardie. Simbolo sopra la testa entro 8–10 m
+  (sprite: incarico, informazione, commercio), «E: parla — Oste» vicinissimo; stesso overlay
+  segnaposto. Collisione a cerchio.
+
+**5. Da lontano e sulla Carta.**
+- Il terrapieno è nel mondo: l'orizzonte lo mostra da sé. Oltre il blocco (anelli fino a 6 km) una
+  **sagoma semplificata** (mastio, torri, cinta, tetti come pochi solidi; < 1 000 triangoli, 2–3
+  chiamate) posata sulla superficie degli anelli; oltre 6 km solo il mastio, se sporge. Di notte le luci
+  lontane come punti che ignorano la nebbia: dal borgo a qualche km si vede la rocca accesa.
+- Se il blocco taglia il sito (Scena scelta dalla Carta poco lontano): il modello completo si
+  costruisce se il suo ingombro tocca il blocco, la sagoma altrimenti; le basi dei muri fuori dal
+  blocco scendono fino alla superficie degli anelli.
+- *Carta*: segno di ogni rocca (più grande secondo la classe), classe e quote dei piani sotto il
+  puntatore, pulsante «Vai alla rocca» (alla successiva, a ogni clic). Con lo zoom il terrapieno si vede nelle curve di livello. Niente nome (milestone luoghi).
+
+**6. Fuori da M7** (milestone «luoghi, fazioni e nomi»): altri castelli, villaggi, città, porti,
+torri di valico; strade, ponti e guadi (resta solo il viottolo dalle porte, come in M4); nomi e
+fazioni; azioni della Veglia e catalogo eventi degli edifici; interni; cavallo; vegetazione e
+oggetti sparsi (milestone successiva); altre aree culturali; borghi e città grandi; nebbia della
+conoscenza sulla Carta. Tavullia resta la scena di prova con il castello di M4.
+
+### Passi (ciascuno provato nel browser)
+
+1. **Siti sulla Carta.** Fase 9 ridotta, `carta.luoghi` con 2–3 siti e la loro classe, segni e «Vai
+   alla rocca» nella vista della Carta; pulsante di sviluppo che mostra i candidati con il punteggio.
+   *Prova:* su più semi i segni stanno su alture, vicino a un fiume o a un valico, mai in acqua né sulle
+   pareti, a ≥ 20 km tra loro; verifica su 30 semi.
+2. **Terrapieno nel mondo.** `spianaLuoghi` e il punto unico `quotaFinale`; per ora i contorni sono
+   rettangoli arrotondati. *Prova:* la Scena sul sito mostra piani e scarpate; nessuna giuntura con il
+   blocco accanto e con l'orizzonte (misura come in M6); la Carta zoomata mostra il terrapieno; F3: salto
+   e pendenza massima delle scarpate.
+3. **Rocca sul mondo generato.** `castle3d.js` generalizzato, misure dalla classe, partenza davanti
+   alla porta della rocca (provvisoria: dal passo 4 fuori dalla porta del borgo). *Prova:* come M4 (giro attorno, ingresso dalla porta, nessuna compenetrazione,
+   camera mai coperta) sul sito generato di 3 semi diversi; Tavullia invariata.
+4. **Borgo murato.** Contorno, terrazze con muri di contenimento, porta del borgo, via in rampa,
+   raccordo con la rocca; ancora senza edifici; partenza fuori dalla porta del borgo. *Prova:* da
+   fuori si capisce dove si è (rocca visibile sopra le mura); si entra dalla porta del borgo, si sale alla
+   rocca, nessun punto in cui si cade tra muro e terreno o si resta incastrati.
+5. **Edifici e case.** Edifici nominati, case per lotto secondo la classe, instancing, geometrie fuse,
+   collisioni a griglia, texture da codice. *Prova:* le classi si distinguono a colpo d'occhio; FPS su
+   PC medio dall'interno del borgo e dalla rocca, anche nel borgo più grande; chiamate e triangoli in F3
+   entro il budget; giudizio dell'utente sullo stile.
+6. **Porte → Carta del cronista.** Soglie, «E: entra», overlay segnaposto, tempo fermo. *Prova:* ogni edificio nominato si apre e si chiude; il tempo non scorre.
+7. **Luci notturne e persone.** Torce, finestre, forgia, gruppo di luci vicine; figure ai loro posti e
+   popolani che camminano, simbolo e «E: parla». *Prova:* di notte il borgo si vede acceso da qualche centinaio di metri; FPS di
+   notte dentro il borgo; le persone non si attraversano.
+8. **Da lontano.** Sagoma negli anelli, luci lontane, blocco che taglia il sito. *Prova:* dal
+   fondovalle a 2–5 km la rocca si riconosce di giorno e di notte; nessuna rocca «doppia» al passaggio
+   blocco/sagoma; FPS invariati fuori dal sito.
+
+### Accettazione
+
+Su un mondo generato ci sono 2–3 rocche con borgo, di classi diverse e riconoscibili; il garzone parte
+fuori dalla porta di un borgo e da lì capisce dove si trova; rocche e borghi stanno su siti
+credibili (altura, vicino a un fiume o a un valico, mai in acqua né su una parete), su terrazze senza
+giunture con il terreno, le Scene vicine e l'orizzonte; si gira attorno e dentro le due cinte senza
+attraversare muri né incastrarsi; ogni edificio nominato apre la sua Carta del cronista segnaposto; di
+notte le luci si vedono da lontano; 60 FPS su PC medio dentro il borgo, di giorno e di notte; Tavullia
+invariata. I siti sono validi su 30 semi su 30 (verifica automatica).
+
+### Rischi e incertezze
+
+- [Certo] Scegliere il sito cambia le Carte: cache da invalidare (`VERSIONE_GENERATORE`) e le partite
+  salvate nel mondo generato ripartono con lo stesso seme ma con la rocca: una posizione salvata può
+  cadere dentro un muro → se il punto salvato è dentro un solido, si riparte fuori dalla porta del borgo.
+- [Probabile] Il costo maggiore è il borgo (passi 4–5): terrazze, muri di contenimento e lotti su un
+  pendio irregolare sono la parte più fragile, come lo erano le rampe in M4. Se il passo 4 si impantana,
+  ripiego: borgo su un solo piano, con il terrapieno che fa più lavoro di terra.
+- [Probabile] Le prestazioni dipendono da chiamate di disegno, luci e raycast della camera più che dai
+  triangoli; in headless il rendering è software e non fa testo: la misura vera è dell'utente su Pages.
+- [Probabile] Con i criteri proposti alcuni semi avranno pochi siti buoni vicino al centro (centro
+  in pianura, o tutto in montagna), e trovarne 2–3 diversi a ≥ 20 km è più difficile che trovarne
+  uno: da qui gli scalini di allentamento (prima la distanza, poi la diversità); [Ipotesi] il punteggio andrà
+  ritarato a occhio sui primi semi.
+- [Ipotesi] Una scarpata di terra larga fino a ~100 m attorno al sito può sembrare artificiale (un
+  «panettone» spianato); il rimedio è far fare più lavoro ai muri di contenimento e meno alla terra.
+- [Probabile] La sede maggiore è il caso più a rischio per i 60 FPS: per questo è condizionata al
+  budget del passo 5.
+- [Probabile] Un sito tagliato dal bordo del blocco (Scena aperta dalla Carta vicino alla rocca) è il
+  caso più difficile da rendere senza stacchi; finché ci si sposta tra Scene solo dalla Carta resta raro.
+- [Certo] Con le sole primitive le persone restano fantocci (limite già noto per il cavaliere).
+
+### Decisioni prese con l'utente (novembre 2026)
+
+1. **File nuovi approvati:** `js/mondo/luoghi.js` (siti e terrapieno, senza grafica), `js/3d/borgo3d.js`
+   (borgo ed edifici), addon `BufferGeometryUtils.js` di r187 in `lib/three/addons/`.
+2. **2–3 siti diversi** in M7, non uno solo.
+3. **Partenza fuori dalla porta del borgo**: il garzone deve rendersi conto da fuori di dove si trova.
+4. **Carta del cronista segnaposto**: le azioni vere arrivano con la Veglia.
+5. **Grandezza variabile secondo l'importanza** del luogo: proposta delle tre classi sopra (da
+   confermare guardando il risultato: nelle note del 2D non c'era una scala scritta).
+6. **Persone ferme ai loro posti più alcune che camminano.**
+7. **Tavullia invariata**, con il castello di M4.
+
 ## Fuori dal prototipo (non farlo ora)
 
 Multiplayer, server/VPS, NPC con IA, mobile/touch, modelli esterni, combattimento in 3D, ombre di
