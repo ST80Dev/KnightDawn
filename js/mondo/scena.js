@@ -760,15 +760,26 @@ export function tracciatiFiumi(carta, cx, cz, half, dentro, raggio = Infinity, v
 }
 
 /**
+ * Coordinata (m) del centro di un blocco sulla griglia fissa del mondo (multiplo del passo dei vertici, 7,8125 m):
+ * i vertici di blocchi diversi cadono sugli stessi punti del mondo, quindi hanno le stesse quote e la vegetazione
+ * (js/mondo/vegetazione.js) che legge i vertici dà gli stessi oggetti. Sposta il centro al più di 3,9 m.
+ */
+export function centroBlocco(v) {
+  const passo = SCENA.lato / SCENA.celle;
+  return Math.round(v / passo) * passo;
+}
+
+/**
  * Blocco di terreno di una Scena, nello stesso formato del terreno reale (griglia di quote + metadati):
  * terrain.js lo usa senza sapere da dove viene.
  * @param {object} carta  dalla generaCarta
- * @param {number} cx  centro del blocco, x del mondo (m)
+ * @param {number} cx  centro del blocco, x del mondo (m); si allinea alla griglia del mondo (centroBlocco)
  * @param {number} cz  centro del blocco, z del mondo (m)
  * @returns {{ meta: object, heights: Float32Array }}
  */
 export function generaScena(carta, cx, cz) {
   const t0 = performance.now();
+  cx = centroBlocco(cx); cz = centroBlocco(cz);
   const msFiumi = raffinaZona(carta, cx, cz);
   const n = SCENA.celle + 1, cell = SCENA.lato / SCENA.celle, half = SCENA.lato / 2;
   const heights = new Float32Array(n * n);

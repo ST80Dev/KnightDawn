@@ -15,9 +15,9 @@
 // triangoli: la stessa funzione colora il blocco e l'orizzonte (coloreMondo). Tavullia resta com'era.
 
 import * as THREE from 'three';
-import { BIOMA, CLIMA, limiteNevi } from '../mondo/carta.js';
-import { fbm, derivaSeme, smoothstep } from '../mondo/rumore.js';
-import { specchio } from '../mondo/scena.js';
+import { BIOMA, CLIMA } from '../mondo/carta.js';
+import { smoothstep } from '../mondo/rumore.js';
+import { COPERTURA, coperturaMondo, nuovaCopertura } from '../mondo/vegetazione.js';
 
 const PAL = (typeof PALETTE !== 'undefined') ? PALETTE : {};
 
@@ -138,7 +138,7 @@ export function createTerrain(meta, heights, isFallback = false, colore = null) 
     : buildSurface(heights, cols, rows, cell, half, minElev, maxElev));
   mesh.add(buildSkirt(heights, cols, rows, cell, half, minElev - PROFONDITA_BORDO));
 
-  return { mesh, meta, isFallback, size, half, minElev, maxElev, getHeight, getSlope, contains };
+  return { mesh, meta, heights, isFallback, size, half, minElev, maxElev, getHeight, getSlope, contains };
 }
 
 // ─── Colori del mondo generato (passo 7) ────────────────────────────────
@@ -165,92 +165,47 @@ const COLORE_NEVE = new THREE.Color('#f1f3f6');
 const COLORE_RADURA = new THREE.Color('#7f9f4c');
 const COLORE_ALPEGGIO = new THREE.Color('#8a985c');
 
-export const COLORI_MONDO = {
-  bordo: { spostamento: 350, lunghezza: 1600 },   // m: i confini tra biomi ondeggiano di ±350 m
-  roccia: [32, 44],                               // gradi: dal prato (o bosco) alla roccia
-  rocciaBosco: [38, 50],
-  rocciaAlta: [18, 30],                           // gradi, sopra il limite degli alberi e nei biomi di montagna
-  affioramenti: { lunghezza: 90, soglia: [0.2, 0.42], pendenza: [15, 26] },   // chiazze di roccia sui pendii medi
-  ghiaioni: { sotto: [3, 6], quanto: 0.25 },      // °C sotto il limite degli alberi: detriti anche sui pendii dolci
-  scalaPendenza: 62.5,                            // m: pendenza per il colore su questa scala (come l'orizzonte vicino)
-  toni: { lunghezza: 140 },                       // roccia chiara e scura
-  neve: { fascia: 30, ondeggia: 90, lunghezza: 500, pendenza: [30, 42] },   // m, gradi
-  variazione: { lunghezza: 180, ampiezza: 0.08 },
-  tono: { lunghezza: 700, ampiezza: 0.45 },        // macchie ampie più verdi o più secche
-  macchia: [14, 28, 0.35],                          // gradi, quanto: sui pendii cespugli più scuri
-  radure: { lunghezza: 260, soglia: -0.3 },        // nel bosco, dove il rumore è basso
-};
-
-const STAGIONI = ['primavera', 'estate', 'autunno', 'inverno'];
+// Parametri del colore: sono quelli della copertura (js/mondo/vegetazione.js), condivisi con la vegetazione.
+export const COLORI_MONDO = COPERTURA;
 
 /**
  * Colore del terreno del mondo generato in un punto del mondo (x, z in metri, quota h, pendenza in gradi).
+ * La copertura (bosco, radure, roccia, neve…) viene da coperturaMondo, la stessa da cui la vegetazione decide dove
+ * stanno alberi, cespugli e rocce: alberi e colore dicono la stessa cosa.
  * @param {object} carta  @param {number} stagione  indice del calendario (0 primavera … 3 inverno)
  * @returns {(out: THREE.Color, x: number, z: number, h: number, pendenza: number) => THREE.Color}
  */
 export function coloreMondo(carta, stagione = 0) {
-  const K = COLORI_MONDO, { cols, rows, cella, bioma, temperaturaMare } = carta;
-  const nomeStagione = STAGIONI[stagione] ?? 'primavera';
-  const s1 = derivaSeme(carta.seme, 301), s2 = derivaSeme(carta.seme, 302), s3 = derivaSeme(carta.seme, 303);
-  const s4 = derivaSeme(carta.seme, 304), s5 = derivaSeme(carta.seme, 305);
+  const K = COLORI_MONDO;
+  const copertura = coperturaMondo(carta, stagione), cp = nuovaCopertura();
   const c = new THREE.Color();
   return (out, x, z, h, pendenza) => {
-    // Confini irregolari: si legge la Carta in un punto spostato da un rumore.
-    const bx = x + K.bordo.spostamento * fbm(x, z, s1, K.bordo.lunghezza, 2);
-    const bz = z + K.bordo.spostamento * fbm(x, z, s2, K.bordo.lunghezza, 2);
-    const u = bx / cella - 0.5, v = bz / cella - 0.5;
-    const i0 = Math.floor(u), j0 = Math.floor(v), fu = u - i0, fv = v - j0;
+    copertura(cp, x, z, h, pendenza);
     out.setRGB(0, 0, 0);
-    let t0 = 0, bosco = 0, neveFissa = 0, monte = 0;
-    for (let b = 0; b < 2; b++) {
-      const j = specchio(j0 + b, rows);
-      for (let a = 0; a < 2; a++) {
-        const i = specchio(i0 + a, cols), k = j * cols + i;
-        const w = (a ? fu : 1 - fu) * (b ? fv : 1 - fv);
-        const bi = bioma ? bioma[k] : BIOMA.PIANURA;
-        const col = COLORI_SCENA[bi] || COLORI_SCENA[BIOMA.PIANURA];
-        out.r += col.r * w; out.g += col.g * w; out.b += col.b * w;
-        t0 += (temperaturaMare ? temperaturaMare[k] : 10) * w;
-        if (bi === BIOMA.FORESTA) bosco += w;
-        if (bi === BIOMA.NEVE || bi === BIOMA.GHIACCIO) neveFissa += w;
-        if (bi === BIOMA.ROCCIA) monte += w; else if (bi === BIOMA.MONTAGNA) monte += 0.5 * w;
-      }
+    for (let k = 0; k < 4; k++) {
+      const col = COLORI_SCENA[cp.bi[k]] || COLORI_SCENA[BIOMA.PIANURA], w = cp.w[k];
+      out.r += col.r * w; out.g += col.g * w; out.b += col.b * w;
     }
+    const { bosco, neveFissa } = cp;
     // Radure nel bosco; sopra il limite degli alberi il bosco lascia il posto agli alpeggi.
     if (bosco > 0) {
-      const r = smoothstep(K.radure.soglia, K.radure.soglia - 0.2, fbm(x, z, s4, K.radure.lunghezza, 2));
-      if (r > 0) out.lerp(COLORE_RADURA, r * bosco * 0.8);
-      const T = t0 - CLIMA.gradiente * h;
-      if (T < CLIMA.bosco + 1) out.lerp(COLORE_ALPEGGIO, bosco * smoothstep(CLIMA.bosco + 1, CLIMA.bosco - 1, T));
+      if (cp.radura > 0) out.lerp(COLORE_RADURA, cp.radura * bosco * 0.8);
+      if (cp.T < CLIMA.bosco + 1) out.lerp(COLORE_ALPEGGIO, bosco * cp.alpeggio);
     }
     // Toni ampi (più verde o più secco) e macchia più scura sui pendii: il rilievo si legge anche da lontano.
-    const tono = K.tono.ampiezza * fbm(x, z, s3 ^ 0x5bd1, K.tono.lunghezza, 2);
+    const tono = cp.tono;
     if (tono > 0) out.lerp(COLORE_RADURA, tono * (1 - bosco)); else out.lerp(COLORI_SCENA[BIOMA.PIANURA_S], -tono * 0.6 * (1 - bosco));
-    out.lerp(COLORI_SCENA[BIOMA.FORESTA], K.macchia[2] * (1 - bosco) * (1 - neveFissa) * smoothstep(K.macchia[0], K.macchia[1], pendenza));
-    // Roccia: pareti e pendii ripidi (nel bosco un po' più tardi); sopra il limite degli alberi e nei biomi di
-    // montagna già dai pendii medi, con affioramenti a chiazze e, più in alto, ghiaioni anche sul dolce.
-    const T = t0 - CLIMA.gradiente * h;
-    const alto = Math.max(smoothstep(CLIMA.bosco + 2, CLIMA.bosco - 2, T), monte);
-    const R = bosco > 0.5 ? K.rocciaBosco : K.roccia;
-    const r0 = R[0] + (K.rocciaAlta[0] - R[0]) * alto, r1 = R[1] + (K.rocciaAlta[1] - R[1]) * alto;
-    let roccia = smoothstep(r0, r1, pendenza);
-    const A = K.affioramenti;
-    const chiazze = smoothstep(A.soglia[0], A.soglia[1], fbm(x, z, s1 ^ 0x2c1b, A.lunghezza, 3))
-      * smoothstep(A.pendenza[0], A.pendenza[1], pendenza) * (0.35 + 0.65 * alto);
-    roccia = Math.max(roccia, chiazze);
-    const ghiaia = K.ghiaioni.quanto * smoothstep(CLIMA.bosco - K.ghiaioni.sotto[0], CLIMA.bosco - K.ghiaioni.sotto[1], T);
-    if (ghiaia > 0) out.lerp(COLORE_GHIAIONE, ghiaia);
-    if (roccia > 0) {
-      c.copy(COLORE_ROCCIA).lerp(COLORE_ROCCIA_SCURA, 0.5 + 0.5 * fbm(x, z, s2 ^ 0x77e1, K.toni.lunghezza, 2));
-      out.lerp(c, roccia);
+    out.lerp(COLORI_SCENA[BIOMA.FORESTA], K.macchia[2] * (1 - bosco) * (1 - neveFissa) * cp.macchia);
+    // Roccia, affioramenti e ghiaioni.
+    if (cp.ghiaia > 0) out.lerp(COLORE_GHIAIONE, cp.ghiaia);
+    if (cp.roccia > 0) {
+      c.copy(COLORE_ROCCIA).lerp(COLORE_ROCCIA_SCURA, cp.tonoRoccia);
+      out.lerp(c, cp.roccia);
     }
     // Variazione lenta di luminosità (niente distese piatte, niente chiazze a triangoli).
-    out.multiplyScalar(1 + K.variazione.ampiezza * fbm(x, z, s3, K.variazione.lunghezza, 2));
-    // Neve: sopra il limite della stagione (ondeggiante), non sui pendii più ripidi; sempre sulla neve perenne.
-    const limite = limiteNevi(t0, nomeStagione) + K.neve.ondeggia * fbm(x, z, s5, K.neve.lunghezza, 2);
-    let neve = smoothstep(limite - K.neve.fascia, limite + K.neve.fascia, h);
-    neve = Math.max(neve, neveFissa) * (1 - smoothstep(K.neve.pendenza[0], K.neve.pendenza[1], pendenza));
-    if (neve > 0) out.lerp(COLORE_NEVE, neve);
+    out.multiplyScalar(cp.variazione);
+    // Neve: sopra il limite della stagione, non sui pendii più ripidi; sempre sulla neve perenne.
+    if (cp.neve > 0) out.lerp(COLORE_NEVE, cp.neve);
     return out;
   };
 }
