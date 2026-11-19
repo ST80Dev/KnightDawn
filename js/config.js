@@ -79,10 +79,10 @@ const PIXEL = 2;
 // la distanza consuma solo Forza, mentre il tempo segue il tempo reale (TEMPO_SCENA).
 const VIAGGIO = {
   // Carta allineata alla Scena (deciso con l'utente, novembre 2026): 1 km costa lo stesso tempo di gioco di
-  // persona e sulla Carta. Un Passo (3 h) è quanto si corre di persona in 18 minuti reali (corsetta 3,2 m/s,
-  // TEMPO_SCENA ×10): ~3,5 km, ~52 minuti di gioco per km, ~10 km in una giornata di marcia.
-  METRI_PER_PASSO:        3456,   // 3,2 m/s × 10 800 s / 10
-  METRI_PER_PASSO_CAVALLO: 6900,  // a cavallo ~2× a piedi (~20 km al giorno; il galoppo consuma il vigore)
+  // persona e sulla Carta. Un Passo (3 h) è quanto si corre di persona in 18 minuti reali (corsetta 4,5 m/s,
+  // TEMPO_SCENA ×10): ~4,9 km, ~37 minuti di gioco per km, ~14 km in una giornata di marcia.
+  METRI_PER_PASSO:        4860,   // 4,5 m/s × 10 800 s / 10 (velCorsetta in knight3d.js: cambiarli insieme)
+  METRI_PER_PASSO_CAVALLO: 9700,  // a cavallo ~2× a piedi (~20 km al giorno; il galoppo consuma il vigore)
   METRI_PER_METRO_SALITA: 6.7,    // regola tipo Naismith: 600 m di salita ≈ 1 ora ≈ 4 km in piano
   METRI_PER_FORZA_PIENA:  30000,  // 100 di Forza ≈ 30 km in piano camminando
   FORZA_ANDATURA: { camminata: 1, corsetta: 1.5, scatto: 3 },  // moltiplicatori di Forza al metro

@@ -1015,6 +1015,10 @@ conoscenza sulla Carta. Tavullia resta la scena di prova con il castello di M4.
      `METRI_PER_PASSO_CAVALLO`, il cavallo è una milestone futura). Forza invariata (100 ≈ 30 km camminando: una
      giornata di marcia ne consuma ~metà–tre quarti). Cerchi della Carta con ore e giorni di marcia. Tasto T
      (Avanza) solo per i test, tolto dall'aiuto a schermo: il tempo passa muovendosi, agendo o riposando.
+   - *Prova: andature più veloci* (richiesta dell'utente: di persona 1 km costava ~5 minuti reali di corsetta, e
+     tra un luogo e l'altro non c'è ancora nulla): corsetta 4,5 m/s (era 3,2), scatto 8 (era 6); 1 km in ~3,7 e
+     ~2,1 minuti reali. Carta riallineata: `METRI_PER_PASSO` 4860 (~37 minuti di gioco per km, ~14 km al giorno).
+     La cura vera resta la densità (cose della campagna ogni 0,5–1,5 km, dettagli ogni 100–300 m).
    - *Stadio 2:* il punto più alto della cella (griglia di 50 m, poi 10 m) deve essere **una cima vera**:
      nulla più alto entro 150, 300 e 450 m (16 direzioni). Senza questa regola il primo sito del seme 48213
      era un dosso a 469 m ai piedi di un rilievo di 522 m a 400 m di distanza, e il borgo cadeva nella sella.

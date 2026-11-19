@@ -14,8 +14,9 @@ export const KNIGHT_CFG = {
   // Tre andature: la corsetta è quella normale (con W da sola), la camminata si attiva con un interruttore.
   // Il tempo di gioco seguirà la distanza (M5), non la velocità: queste cambiano solo l'attesa reale.
   velCammino: 1.5,      // m/s, camminata (interruttore)
-  velCorsetta: 3.2,     // m/s, andatura normale
-  velScatto: 6.0,       // m/s, scatto (Shift)
+  // Prova (richiesta dell'utente): andature più veloci, 1 km di corsetta in ~3,7 minuti reali (era 3,2 e 6,0 m/s).
+  velCorsetta: 4.5,     // m/s, andatura normale
+  velScatto: 8.0,       // m/s, scatto (Shift)
   velIndietro: 0.9,     // m/s, passo all'indietro (senza corsa)
   velRotazione: 2.0,    // rad/s con A/D (circa 115°/s); in corsa un po' meno
   pendenzaMax: 35,      // gradi: oltre questa pendenza, nella direzione di marcia, il cavaliere non sale
