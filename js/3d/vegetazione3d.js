@@ -501,78 +501,81 @@ const FORMA_OMBRA = {
   masso: { h: 0.4, r: 1.3, v: 0.8, a: 0.7, p: 1.6 }, affioramento: { h: 0.2, r: 3.0, v: 0.6, a: 0.6, p: 3.2 },
   tronco: { h: 0.25, r: 1.6, v: 0.3, a: 0.5, p: 1.8 },
 };
-const OMBRE = { lato: 1024, latoPiede: 2048, rifaiGradi: 5, perFotogramma: 6000, forza: 0.5, piede: 0.42 };
+const OMBRE = { lato: 1024, latoPiede: 2048, rifaiGradi: 5, perFotogramma: 8000, forza: 0.5, piede: 0.42 };
 
-/** Macchia sfumata bianca (64×64) da stampare scalata. */
-function macchia() {
-  const c = document.createElement('canvas');
-  c.width = c.height = 64;
-  const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.55, 'rgba(255,255,255,0.75)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
-  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
-  return c;
+// Le ombre si calcolano in JavaScript su un array di byte (texture a un canale), NON con una tela 2D: con la tela e
+// il modo «lighten» il browser lavora sulla GPU e copia l'immagine intera per ogni oggetto; con ~78 000 oggetti un
+// fotogramma superava i 2 s e Windows resettava la GPU (WebGL CONTEXT_LOST, seme 570549, dopo la PR #116).
+
+/** Texture a un canale (rosso) da un array di byte, senza mipmap. */
+function texturaCanale(dati, lato) {
+  const t = new THREE.DataTexture(dati, lato, lato, THREE.RedFormat, THREE.UnsignedByteType);
+  t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter; t.generateMipmaps = false;
+  t.needsUpdate = true;
+  return t;
 }
 
-function nuovaTela(lato) {
-  const c = document.createElement('canvas');
-  c.width = c.height = lato;
-  const g = c.getContext('2d');
-  g.fillStyle = '#000'; g.fillRect(0, 0, lato, lato);
-  return { c, g };
+/**
+ * Stampa un'ellisse sfumata (massimo con il contenuto) in `buf` (lato × lato byte). Centro (cx, cz) e semiassi
+ * a (lungo la direzione ux, uz) e b in pixel; `forza` 0–1.
+ */
+function stampa(buf, lato, cx, cz, a, b, ux, uz, forza) {
+  const R = Math.max(a, b), x0 = Math.max(0, Math.floor(cx - R)), x1 = Math.min(lato - 1, Math.ceil(cx + R));
+  const z0 = Math.max(0, Math.floor(cz - R)), z1 = Math.min(lato - 1, Math.ceil(cz + R));
+  if (x0 > x1 || z0 > z1) return;
+  const ia = 1 / Math.max(a, 0.5), ib = 1 / Math.max(b, 0.5), f = forza * 255;
+  for (let z = z0; z <= z1; z++) {
+    const dz = z + 0.5 - cz, riga = z * lato;
+    for (let x = x0; x <= x1; x++) {
+      const dx = x + 0.5 - cx;
+      const u = (dx * ux + dz * uz) * ia, w = (-dx * uz + dz * ux) * ib, t = u * u + w * w;
+      if (t >= 1) continue;
+      const v = f * (t < 0.3 ? 1 : (1 - t) / 0.7);
+      if (v > buf[riga + x]) buf[riga + x] = v;
+    }
+  }
 }
 
 /**
  * Ombre del blocco. `oggetti`: Float32Array [x, z, s, tipo…] (coordinate locali). Restituisce le due texture e
- * `passo(sole)`: avanza il disegno delle ombre del sole (a pezzi) e, quando ha finito, scambia la texture.
+ * `passo(sole)`: avanza il calcolo delle ombre del sole (a pezzi) e, quando ha finito, aggiorna la texture.
  */
 function creaOmbre(oggetti, forme, half) {
-  const M = macchia(), n = oggetti.length / 4;
-  const k = (L) => L / (2 * half);
-  // Piede: fisso, disegnato subito.
-  const P = nuovaTela(OMBRE.latoPiede), kp = k(OMBRE.latoPiede);
-  P.g.globalCompositeOperation = 'lighten';
+  const n = oggetti.length / 4;
+  // Piede: fisso, calcolato subito.
+  const LP = OMBRE.latoPiede, kp = LP / (2 * half), bp = new Uint8Array(LP * LP);
   for (let i = 0; i < n; i++) {
-    const f = forme[oggetti[i * 4 + 3]], s = oggetti[i * 4 + 2], r = f.p * s * kp;
-    P.g.globalAlpha = 0.85;
-    P.g.drawImage(M, (oggetti[i * 4] + half) * kp - r, (oggetti[i * 4 + 1] + half) * kp - r, 2 * r, 2 * r);
+    const f = forme[oggetti[i * 4 + 3]], r = f.p * oggetti[i * 4 + 2] * kp;
+    stampa(bp, LP, (oggetti[i * 4] + half) * kp, (oggetti[i * 4 + 1] + half) * kp, r, r, 1, 0, 0.85);
   }
-  const piede = new THREE.CanvasTexture(P.c);
-  piede.flipY = false; piede.generateMipmaps = false; piede.minFilter = THREE.LinearFilter;
-  // Sole: due tele, una mostrata e una in lavorazione.
-  const tele = [nuovaTela(OMBRE.lato), nuovaTela(OMBRE.lato)];
-  const sole = new THREE.CanvasTexture(tele[0].c);
-  sole.flipY = false; sole.generateMipmaps = false; sole.minFilter = THREE.LinearFilter;
-  let mostrata = 0, lavoro = null, disegnato = null;
-  const ko = k(OMBRE.lato);
+  const piede = texturaCanale(bp, LP);
+  // Sole: due array, uno mostrato e uno in lavorazione.
+  const L = OMBRE.lato, ko = L / (2 * half);
+  const buf = [new Uint8Array(L * L), new Uint8Array(L * L)];
+  const sole = texturaCanale(buf[0], L);
+  let mostrato = 0, lavoro = null, disegnato = null;
   function passo(dir) {
-    // dir: direzione verso il sole (normalizzata). Sotto l'orizzonte niente da fare.
     if (!lavoro) {
       if (dir.y < 0.03) return;
       if (disegnato && disegnato.angleTo(dir) < OMBRE.rifaiGradi * Math.PI / 180) return;
-      const t = tele[1 - mostrata];
-      t.g.setTransform(1, 0, 0, 1, 0, 0);
-      t.g.globalAlpha = 1; t.g.globalCompositeOperation = 'source-over';
-      t.g.fillStyle = '#000'; t.g.fillRect(0, 0, OMBRE.lato, OMBRE.lato);
-      t.g.globalCompositeOperation = 'lighten';
-      // Sistema ruotato: l'asse u va dalla parte opposta al sole.
+      const b = buf[1 - mostrato];
+      b.fill(0);
       const dx = -dir.x, dz = -dir.z, l = Math.hypot(dx, dz) || 1;
-      const ca = dx / l, sa = dz / l, cot = Math.min(4, Math.sqrt(1 - dir.y * dir.y) / Math.max(dir.y, 0.05));
-      t.g.setTransform(ca * ko, sa * ko, -sa * ko, ca * ko, OMBRE.lato / 2, OMBRE.lato / 2);
-      lavoro = { t, i: 0, ca, sa, cot, dir: dir.clone() };
+      const cot = Math.min(4, Math.sqrt(1 - dir.y * dir.y) / Math.max(dir.y, 0.05));
+      lavoro = { b, i: 0, ux: dx / l, uz: dz / l, cot, dir: dir.clone() };
     }
     // La prima volta tutto subito (si è appena caricata la Scena); poi a pezzi, per non dare scatti.
-    const { t, ca, sa, cot } = lavoro, fine = disegnato ? Math.min(n, lavoro.i + OMBRE.perFotogramma) : n;
+    const { b, ux, uz, cot } = lavoro, fine = disegnato ? Math.min(n, lavoro.i + OMBRE.perFotogramma) : n;
     for (let i = lavoro.i; i < fine; i++) {
-      const f = forme[oggetti[i * 4 + 3]], s = oggetti[i * 4 + 2], x = oggetti[i * 4], z = oggetti[i * 4 + 1];
-      const u = x * ca + z * sa, w = -x * sa + z * ca;
-      const lungo = 2 * f.r * s + 2 * f.v * s * cot, largo = 2 * f.r * s, centro = u + f.h * s * cot;
-      t.g.globalAlpha = f.a;
-      t.g.drawImage(M, centro - lungo / 2, w - largo / 2, lungo, largo);
+      const f = forme[oggetti[i * 4 + 3]], s = oggetti[i * 4 + 2];
+      const sposta = f.h * s * cot, a = (f.r * s + f.v * s * cot) * ko, r = f.r * s * ko;
+      const cx = (oggetti[i * 4] + ux * sposta + half) * ko, cz = (oggetti[i * 4 + 1] + uz * sposta + half) * ko;
+      stampa(b, L, cx, cz, a, r, ux, uz, f.a);
     }
     lavoro.i = fine;
-    if (fine >= n) {                         // finito: si mostra la tela nuova
-      mostrata = 1 - mostrata;
-      sole.image = tele[mostrata].c;
+    if (fine >= n) {                         // finito: si mostra l'array nuovo
+      mostrato = 1 - mostrato;
+      sole.image.data = buf[mostrato];
       sole.needsUpdate = true;
       disegnato = lavoro.dir;
       lavoro = null;
