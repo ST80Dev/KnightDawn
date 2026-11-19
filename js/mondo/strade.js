@@ -47,6 +47,8 @@ export const STRADE = {
     oltre: 6,                   // oltre pmax il costo cresce di × (1 + oltre·(p − pmax)/pmax): gli strappi brevi si
                                 // accettano, le salite lunghe e ripide si girano (tornanti)
     fisso: { raggio: 150, passo: 50 },   // m: il punto fisso tra due tratti si sposta sul terreno più dolce vicino
+    svolta: 60,                 // m equivalenti per un'inversione (180°), in proporzione per angoli minori: lati
+                                // dei tornanti lunghi, niente denti di sega su un pendio uniforme
     acqua: 40,                  // attraversare acqua non guadabile: × questo per metro (il ponte più corto)
     guado: 4,
     passo: 5,                   // m tra i punti del tracciato finale
@@ -565,6 +567,10 @@ function tracciaTratto(carta, tr, W = STRADE.scena.corridoio) {
     if (d > dist[k]) continue;
     if (k === sB) break;
     const r = (k / nx) | 0, c = k - r * nx;
+    // Direzione d'arrivo (dal predecessore): le svolte costano (approssimazione: lo stato non ha la direzione).
+    const pk = da[k];
+    let ux = 0, uz = 0;
+    if (pk >= 0) { ux = c - (pk % nx); uz = r - ((pk / nx) | 0); const lu = Math.hypot(ux, uz); ux /= lu; uz /= lu; }
     for (let v = 0; v < 16; v++) {
       const cc = c + DX[v], rr = r + DY[v];
       if (cc < 0 || rr < 0 || cc >= nx || rr >= nz) continue;
@@ -579,6 +585,7 @@ function tracciaTratto(carta, tr, W = STRADE.scena.corridoio) {
       if (w > 0) costo *= w > 0.9 ? S.acqua : S.guado;
       const via = Math.sqrt(d2[kk]) / W;
       costo += L * S.attrazione * via * via;
+      if (pk >= 0) costo += S.svolta * (1 - (ux * DX[v] + uz * DY[v]) / LUNGO[v]) / 2;
       const nd = d + costo;
       if (nd < dist[kk]) { dist[kk] = nd; da[kk] = k; coda.spingi(kk, nd); }
     }
