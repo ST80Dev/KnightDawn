@@ -12,7 +12,7 @@
 import { ACQUA } from '../mondo/carta.js';
 import { verificaFiumi, verificaPanorami } from '../mondo/verifica.js';
 import { semeDaTesto, derivaSeme } from '../mondo/rumore.js';
-import { quotaMondo, scavaFiumi, livelloLago } from '../mondo/scena.js';
+import { quotaMondo, scavaFiumi, livelloLago, raffinaZona, percorsiFiumi } from '../mondo/scena.js';
 
 // Colori del rilievo: SOLO quota (metri), a un solo tono, più alto = più scuro. Niente verdi, ocra o
 // bianchi: si leggerebbero come biomi (prati, deserti, neve), che arrivano al passo 7 come livello a sé.
@@ -34,7 +34,8 @@ const COLORE_PANORAMA = 'rgba(150, 40, 30, 0.9)';
 const COLORE_CAVALIERE = '#e8402a';
 // Rilievo fine della parte visibile: da zoom DA, un campione ogni `passo` pixel (CSS) dello schermo,
 // calcolato a pezzi tra un fotogramma e l'altro (`budget` ms) dopo che la vista si è fermata (`attesa` ms).
-const DETTAGLIO = { da: 4, passo: 2, attesa: 120, budget: 12, esagerazione: 2, equidistanze: [5, 10, 20, 25, 50, 100, 200, 250, 500] };
+const DETTAGLIO = { da: 4, passo: 2, attesa: 120, budget: 12, esagerazione: 2, equidistanze: [5, 10, 20, 25, 50, 100, 200, 250, 500],
+  percorsi: 50 };   // km: finestra entro cui si cercano e si disegnano i percorsi dei fiumi sul terreno
 const fasciaDi = (m) => FASCE.find(([, a, b]) => m >= a && m < b)?.[0] ?? 'montagna';
 const LUCE = (() => {             // luce da nord-ovest, alta 45°
   const x = -1, y = -1, z = 1.4142135623730951;
@@ -296,6 +297,14 @@ export function createCartaVista(contenitore, opzioni = {}) {
     const x0 = Math.max(0, -tx / s), y0 = Math.max(0, -ty / s);
     const x1 = Math.min(c0.cols, (larghezza - tx) / s), y1 = Math.min(c0.rows, (altezza - ty) / s);
     const nx = Math.max(1, Math.ceil((x1 - x0) / k)), ny = Math.max(1, Math.ceil((y1 - y0) / k));
+    // Finestra piccola: prima i percorsi dei fiumi sul terreno (le quote li usano), poi si disegnano quelli.
+    let percorsi = null;
+    if (x1 - x0 <= DETTAGLIO.percorsi && y1 - y0 <= DETTAGLIO.percorsi) {
+      const C = c0.cella, mx = (x0 + x1) / 2 * C, mz = (y0 + y1) / 2 * C;
+      raffinaZona(c0, mx, mz, Math.max(x1 - x0, y1 - y0) / 2 * C + 1000);
+      if (mio !== lavoro || carta !== c0) return;
+      percorsi = percorsiFiumi(c0, x0 * C - 1000, y0 * C - 1000, x1 * C + 1000, y1 * C + 1000);
+    }
     const h = new Float32Array(nx * ny), acqua = new Float32Array(nx * ny);
     const seme = derivaSeme(c0.seme, 101), C = c0.cella, esito = { quota: 0, livello: NaN };
     let t = performance.now();
@@ -342,7 +351,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
       }
     }
     g.putImageData(dati, 0, 0);
-    dettaglio = { img, x0, y0, w: nx * k, h: ny * k, eq, chiave };
+    dettaglio = { img, x0, y0, w: nx * k, h: ny * k, eq, chiave, percorsi };
     if (chiaveInCorso === chiave) chiaveInCorso = '';
     ridisegna();
   }
@@ -368,7 +377,18 @@ export function createCartaVista(contenitore, opzioni = {}) {
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     const spessore = (1 + 0.25 * Math.log2(vista.z)) * dpr / s;   // pixel sullo schermo, crescono poco con lo zoom
-    CLASSI_FIUMI.forEach(([, w], k) => { ctx.lineWidth = w * spessore; ctx.stroke(tracciatiFiumi[k]); });
+    const fini = dettaglio?.percorsi && dettaglio.chiave === chiaveVista() ? dettaglio.percorsi : null;
+    if (fini) {
+      // I fiumi dove corrono davvero nelle Scene: larghi quanto l'alveo, almeno ~1,5 pixel.
+      const C = carta.cella;
+      for (const f of fini) {
+        ctx.lineWidth = Math.max(1.5 * dpr / s, (2 * f.w[0]) / C);
+        ctx.beginPath();
+        ctx.moveTo(f.x[0] / C, f.z[0] / C);
+        for (let i = 1; i < f.x.length; i++) ctx.lineTo(f.x[i] / C, f.z[i] / C);
+        ctx.stroke();
+      }
+    } else CLASSI_FIUMI.forEach(([, w], k) => { ctx.lineWidth = w * spessore; ctx.stroke(tracciatiFiumi[k]); });
     // Segni in pixel dello schermo, indipendenti dallo zoom.
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const P = (x, y) => [x * s + tx, y * s + ty];
@@ -397,7 +417,8 @@ export function createCartaVista(contenitore, opzioni = {}) {
       + ` · mare ${fmt(st.frazioneMare * 100, 1)} % · ${carta.daCache ? 'dalla cache' : `${fmt(st.ms)} ms`}`
       + ` · controllo ${carta.controllo} · zoom ×${fmt(vista.z, 1)}`
       + (vista.z < DETTAGLIO.da ? '' : dettaglio?.chiave === chiaveVista()
-        ? ` · rilievo delle Scene, curve ogni ${dettaglio.eq} m` : ' · calcolo del rilievo delle Scene…');
+        ? ` · rilievo delle Scene, curve ogni ${dettaglio.eq} m${dettaglio.percorsi ? ' · fiumi come nelle Scene' : ''}`
+        : ' · calcolo del rilievo delle Scene…');
     chiediDettaglio();
   }
 
