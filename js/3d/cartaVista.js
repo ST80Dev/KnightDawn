@@ -45,6 +45,8 @@ const COSTA = [70, 52, 30];
 const ESAGERAZIONE = 6;           // quanto il rilievo pesa nell'ombreggiatura
 const COLORE_PANORAMA = 'rgba(150, 40, 30, 0.9)';
 const COLORE_CAVALIERE = '#e8402a';
+const DISTANZE_CAVALIERE = [10, 20];   // km: cerchi attorno al cavaliere
+const MINUTI_PER_KM = 15;              // tempo di marcia sulla Carta (docs/GDD.md §3 Viaggio: ~15 min per km)
 // Rocche (M7): segno più grande secondo la classe; candidati scartati come puntini (pulsante «Candidati»).
 const CLASSI_ROCCA = { minore: ['rocca minore', 5], casata: ['castello di casata', 6.5], maggiore: ['sede maggiore', 8] };
 const COLORE_ROCCA = '#8c1c13';
@@ -269,7 +271,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
   }
 
   // Classi di larghezza dei fiumi: multipli della soglia del bacino → pixel sullo schermo.
-  const CLASSI_FIUMI = [[1, 0.8], [4, 1.2], [16, 1.7], [64, 2.4], [256, 3.2]];
+  const CLASSI_FIUMI = [[0.13, 0.45], [1, 0.8], [4, 1.2], [16, 1.7], [64, 2.4], [256, 3.2]];   // la prima: torrenti
 
   /** Fiumi: i tracciati curvi della Carta (tracciaFiumi), un Path2D per classe di larghezza. */
   function costruisciFiumi() {
@@ -526,6 +528,33 @@ export function createCartaVista(contenitore, opzioni = {}) {
     const p = diPartita() ? opzioni.posizione?.() : null;
     if (p) {
       const [px, py] = P(p.x, p.y);
+      // Distanze dal cavaliere: cerchi leggeri a 10 e 20 km con il tempo di marcia sulla Carta (~15 min/km,
+      // docs/GDD.md §3 Viaggio), così si valuta l'estensione del mondo. Solo se il cerchio è leggibile.
+      ctx.font = `${Math.round(10.5 * dpr)}px Georgia, serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      for (const km of DISTANZE_CAVALIERE) {
+        const r = km * s;
+        if (r < 18 * dpr || r > 3 * Math.max(larghezza, altezza)) continue;
+        ctx.strokeStyle = 'rgba(232, 64, 42, 0.45)'; ctx.lineWidth = 1.2 * dpr;
+        ctx.setLineDash([6 * dpr, 5 * dpr]);
+        ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.stroke();
+        ctx.setLineDash([]);
+        const ore = km * MINUTI_PER_KM / 60;
+        ctx.fillStyle = 'rgba(120, 30, 20, 0.85)';
+        ctx.fillText(`${km} km · ~${fmt(ore, ore < 10 ? 1 : 0)} h di marcia`, px, py - r - 2 * dpr);
+      }
+      // Direzione in cui guarda il cavaliere (x verso est, z verso sud: in avanti è (sin, cos)).
+      if (p.direzione !== undefined) {
+        const dx = Math.sin(p.direzione), dy = Math.cos(p.direzione), L = 22 * dpr, w = 6 * dpr;
+        const tx = px + dx * L, ty = py + dy * L;
+        ctx.fillStyle = COLORE_CAVALIERE; ctx.strokeStyle = '#fff6e0'; ctx.lineWidth = 1.2 * dpr;
+        ctx.beginPath();
+        ctx.moveTo(tx, ty);
+        ctx.lineTo(px + dx * 8 * dpr - dy * w, py + dy * 8 * dpr + dx * w);
+        ctx.lineTo(px + dx * 12 * dpr, py + dy * 12 * dpr);
+        ctx.lineTo(px + dx * 8 * dpr + dy * w, py + dy * 8 * dpr - dx * w);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+      }
       ctx.lineWidth = 1.5 * dpr;
       ctx.strokeStyle = '#fff6e0';
       ctx.beginPath(); ctx.arc(px, py, 6 * dpr, 0, Math.PI * 2); ctx.stroke();

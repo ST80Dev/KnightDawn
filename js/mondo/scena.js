@@ -245,7 +245,7 @@ function campoCarta(carta, campo, x, z) {
 // rilievo vi torna man mano: la valle segue i rilievi attorno invece di essere un solco liscio e uniforme.
 
 const FIUMI_SCENA = {
-  semilarghezza: { base: 3, perRadice: 0.6, max: 60 },   // m: base + perRadice·√bacino (km²)
+  semilarghezza: { base: 1.5, perRadice: 0.6, max: 60 }, // m: base + perRadice·√bacino (km²): torrente da 20 km² ~8 m
   profondita: { base: 0.5, perRadice: 0.022 },           // m d'acqua: ~0,8 m a 150 km² (si guada), ~1,2 m a 1000 km², ~2,7 m a 10 000 km²
   sponda: { larghezza: 6, altezza: 0.8 },                // m: sponde basse oltre il pelo dell'acqua
   argine: 0.15,                                          // pendenza oltre le sponde dove il terreno è più basso
@@ -257,7 +257,7 @@ const FIUMI_SCENA = {
   cellaIndice: 1000,                                     // m: celle dell'indice spaziale dei tratti
   // Tratti tra punti fissi (js/mondo/fiumi.js): sorgente, foce e confluenze. Alla confluenza il punto fisso
   // sta nel punto più basso del terreno in una griglia di 7×7 punti a `scosta` m attorno al tracciato.
-  tratti: { scosta: 80, zona: 6000 },
+  tratti: { scosta: 80, zona: 6000, tieni: 6 },
 };
 
 const _fiumi = new WeakMap();
@@ -460,6 +460,11 @@ function raffina(carta, pronto, id) {
   // Quota attesa del terreno accanto all'acqua: il letto della Carta, tra quelli dei due punti fissi.
   const pref = new Float64Array(n);
   for (let j = 0; j < n; j++) pref[j] = Math.min(tr.A.L, Math.max(tr.B.L, cv.letto[tr.ka + j])) + cv.prof[tr.ka + j] + F.sponda.altezza;
+  // Se il tracciato della Carta passa già in basso (mai più di F.tratti.tieni m sopra il livello atteso), lo si
+  // tiene com'è: in pianura il terreno non decide, e il percorso cercato perdeva le anse.
+  let peggio = -Infinity;
+  for (let j = 0; j < n; j++) peggio = Math.max(peggio, quota(px[j], pz[j]) - pref[j]);
+  if (peggio <= F.tratti.tieni) { pronto.raffinati.set(id, polilinea(carta, pronto, id)); return; }
   const via = tracciaPercorso(px, pz, pref, tr.A, tr.B, quota);
   if (!via) { pronto.raffinati.set(id, polilinea(carta, pronto, id)); return; }
   const m = via.x.length;

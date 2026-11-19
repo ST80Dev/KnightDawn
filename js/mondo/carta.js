@@ -25,7 +25,7 @@ export const CARTA_PREDEFINITA = { cols: 600, rows: 450, cella: 1000 };
 // VA CAMBIATA a ogni modifica che cambia le Carte generate, altrimenti il browser riusa Carte vecchie.
 // (In alternativa: ?rigenera nell'indirizzo ignora la cache.)
 // Comprende i luoghi (M7, js/mondo/luoghi.js), che si aggiungono alla Carta nel Worker e stanno nella stessa cache.
-export const VERSIONE_GENERATORE = 'm7-valichi-3';
+export const VERSIONE_GENERATORE = 'm7-torrenti-1';
 
 // Parametri della forma (km dove non indicato). Valori di partenza, da tarare guardando le Carte.
 const FORMA = {
@@ -47,7 +47,7 @@ const FORMA = {
     // Zoccolo dei contrafforti (deciso con l'utente): parte del piede della catena che è una base continua e non
     // solo contrafforti. Senza (0) le valli tra i contrafforti scendevano alla quota delle colline fin sotto la
     // spina; con lo zoccolo i fondovalle salgono gradualmente addentrandosi nella catena.
-    zoccolo: 0.3,
+    zoccolo: 0.6,
   },
 };
 
@@ -319,6 +319,7 @@ export function generaCarta(seme, opzioni = {}) {
     ricevente: dren.ricevente,     // cella a valle (-1 = foce: mare, lago costiero, bordo)
     bacino: dren.bacino,           // km² drenati dalla cella
     sogliaFiume: DRENAGGIO.fiume,
+    sogliaTorrente: DRENAGGIO.torrente,       // carta.fiumi comprende anche i torrenti (bacino da qui a sogliaFiume)
     temperaturaMare: clima.temperaturaMare,   // °C, media annua al livello del mare (limite delle nevi)
     temperatura: clima.temperatura,           // °C, media annua alla quota della cella
     umidita: clima.umidita,                   // 0…1
@@ -486,9 +487,9 @@ function climaEBiomi(seme, cols, rows, quota, mare, acque) {
  * ricalcolano sul rilievo finale. Al più un valico ogni `distanza` km. Lunghezze in km, quote in m.
  */
 export const VALICHI_CARTA = {
-  testata: { quota: [250, 1600], vicinoMonti: 15, monti: 1700 },   // testata di una grande valle, vicino ai monti
+  testata: { quota: [250, 2100], vicinoMonti: 15, monti: 1700 },   // testata di una grande valle, vicino ai monti
   coppia: { distanza: [6, 32], giro: 25, corridoio: 3 },           // testate opposte; sistemi diversi
-  sella: { sopra: 400, massima: 3000 },        // il passo sta almeno così sopra entrambe le testate
+  sella: { sopra: 250, massima: 3000 },        // il passo sta almeno così sopra entrambe le testate
   bersaglio: 2000, scavo: 500,                 // si scava fino a bersaglio, al più di scavo m (valichi alti fino a ~2500)
   intaglio: { lungo: 45, largo: 220, raggio: 5 },   // m per km lungo il passo, m per km² ai lati; km
   distanza: 20,
@@ -1121,6 +1122,10 @@ const DRENAGGIO = {
   // svuotarla (come fa un fiume vero); le conche più profonde restano laghi.
   valli: { k: 5, frazione: 0.45, areaMinima: 15, raggioBase: 1.5, raggioPer: 0.12, raggioMax: 8, breccia: 60 },
   fiume: 150,              // km² di bacino: da qui una cella porta un fiume
+  // Torrenti (deciso con l'utente): da `torrente` km² si disegnano anche i corsi minori, che nascono in alto
+  // sotto le cime, e confluiscono nei fiumi; non cambiano il drenaggio (le loro valli sono già scavate per cella).
+  torrente: 20,
+  spostaTorrenti: { ampiezza: 0.42, lunghezze: [3, 8] },   // km: i punti delle celle ondeggiano (niente righe a griglia)
   // Conche più profonde (m) e più ampie (km²) diventano laghi; le altre si colmano. Con la collina al
   // 45–55 % il rilievo a rumore ha molte conche: soglie basse davano 100–200 laghi.
   lago: { profondita: 20, area: 10 },
@@ -1584,7 +1589,8 @@ export function drenaggio(cols, rows, quota, mare, seme = 0) {
     }
     if (pezzo.length >= 2 * PASSO_PUNTO) fiumi.push(Float32Array.from(pezzo));
   }
-  return { acque, livello, ricevente, bacino, laghi, fiumi };
+  const torrenti = tracciaTorrenti(cols, rows, quota, acque, ricevente, bacino, fiumi, seme);
+  return { acque, livello, ricevente, bacino, laghi, fiumi: fiumi.concat(torrenti), torrenti: torrenti.length };
 }
 
 // ─── Tracciati dei fiumi ────────────────────────────────────────────────
@@ -1653,6 +1659,82 @@ function ricampiona(p, passo) {
   const u = p.length - S;
   if (q[q.length - S] !== p[u] || q[q.length - S + 1] !== p[u + 1]) for (let c = 0; c < S; c++) q.push(p[u + c]);
   return q;
+}
+
+/**
+ * Torrenti: corsi con bacino tra DRENAGGIO.torrente e DRENAGGIO.fiume km², dalle loro sorgenti fino al fiume (o al
+ * torrente) in cui confluiscono, come i fiumi: Float32Array di punti (x, y, bacino, letto = NaN), dalla sorgente
+ * a valle. L'ultimo punto è esattamente un punto del corso in cui confluiscono (le Scene raccordano lì il letto).
+ * Prima i più lunghi, così ogni affluente trova già il suo corso.
+ */
+function tracciaTorrenti(cols, rows, quota, acque, ricevente, bacino, fiumi, seme) {
+  const D = DRENAGGIO, n = cols * rows, S = PASSO_PUNTO, SP = D.spostaTorrenti;
+  const sX = derivaSeme(seme, 54), sY = derivaSeme(seme, 55);
+  /** Punto di una cella: centro più uno spostamento dolce (lo stesso per chi ci passa). */
+  const punto = (c, r) => [
+    c + 0.5 + SP.ampiezza * (0.65 * fbm(c, r, sX, SP.lunghezze[0], 2) + 0.35 * fbm(c, r, sX ^ 0x9e3779b9, SP.lunghezze[1], 2)),
+    r + 0.5 + SP.ampiezza * (0.65 * fbm(c, r, sY, SP.lunghezze[0], 2) + 0.35 * fbm(c, r, sY ^ 0x9e3779b9, SP.lunghezze[1], 2))];
+  const torrente = (i) => i >= 0 && acque[i] === ACQUA.TERRA && bacino[i] >= D.torrente && bacino[i] < D.fiume;
+  // Indice dei punti dei corsi già tracciati (celle di 1 km → [curva, punto]).
+  const corsi = fiumi.slice(), indice = new Map();
+  const indicizza = (ci) => {
+    const f = corsi[ci];
+    for (let k = 0; k < f.length; k += S) {
+      const key = Math.floor(f[k + 1]) * cols + Math.floor(f[k]);
+      let l = indice.get(key);
+      if (!l) indice.set(key, (l = []));
+      l.push(ci, k);
+    }
+  };
+  corsi.forEach((_, ci) => indicizza(ci));
+  /** Punto (x, y) esatto del corso più vicino alla cella (entro 1 cella), o null. */
+  const aggancio = (i, x, y) => {
+    let best = null, bd = Infinity;
+    const c = i % cols, r = (i - c) / cols;
+    for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) {
+      const l = indice.get((r + b) * cols + c + a);
+      if (!l) continue;
+      for (let t = 0; t < l.length; t += 2) {
+        const f = corsi[l[t]], k = l[t + 1], d = (f[k] - x) * (f[k] - x) + (f[k + 1] - y) * (f[k + 1] - y);
+        if (d < bd) { bd = d; best = [f[k], f[k + 1], f[k + 2]]; }
+      }
+    }
+    return best;
+  };
+  // Sorgenti: torrenti senza affluenti torrente; lunghezza del percorso fino alla confluenza.
+  const affluente = new Uint8Array(n);
+  for (let i = 0; i < n; i++) if (torrente(i) && ricevente[i] >= 0) affluente[ricevente[i]] = 1;
+  const sorgenti = [];
+  for (let i = 0; i < n; i++) {
+    if (!torrente(i) || affluente[i]) continue;
+    let l = 0, j = i;
+    while (torrente(j) && l < 500) { j = ricevente[j]; l++; }
+    sorgenti.push([l, i]);
+  }
+  sorgenti.sort((a, b) => b[0] - a[0] || a[1] - b[1]);
+  const fatto = new Uint8Array(n);
+  const out = [];
+  for (const [, i0] of sorgenti) {
+    const p = [];
+    let i = i0, fine = null;
+    while (torrente(i) && !fatto[i]) {
+      fatto[i] = 1;
+      const [px, py] = punto(i % cols, (i / cols) | 0);
+      p.push(px, py, bacino[i], NaN);
+      i = ricevente[i];
+    }
+    if (p.length < 2 * S) continue;
+    // Fine: il corso in cui confluisce (fiume o torrente già tracciato), se c'è; altrimenti (mare, lago) com'è.
+    if (i >= 0) fine = aggancio(i, p[p.length - S], p[p.length - S + 1]);
+    let q = ricampiona(chaikin(p, 3), TRACCIATI.passo);
+    if (fine) { q = q.concat([fine[0], fine[1], Math.max(fine[2], q[q.length - 2]), NaN]); }
+    const f = Float32Array.from(q);
+    if (fine) { f[f.length - S] = fine[0]; f[f.length - S + 1] = fine[1]; }   // esatto (Float32 come il corso)
+    out.push(f);
+    corsi.push(f);
+    indicizza(corsi.length - 1);
+  }
+  return out;
 }
 
 /**

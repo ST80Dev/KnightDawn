@@ -960,6 +960,26 @@ conoscenza sulla Carta. Tavullia resta la scena di prova con il castello di M4.
         1799 m verso (362, 104), vicino alla seconda. Con lo zoccolo il rilievo cambia, quindi le sorgenti
         indicate sullo screenshot non sono più le stesse. Limite: le testate di questi due valichi restano
         basse (265–404 m e 219–869 m), quindi la salita all'ultimo tratto è ancora ripida.
+   - *Valli più alte e torrenti* (richiesta dell'utente: fondovalle a 400 m sotto montagne di 2000 m sono rari;
+     le sorgenti partono quasi dalle cime). Misurato: le «sorgenti» visibili erano solo i punti dove il bacino
+     arriva a 150 km² (già un fiume); i torrenti esistevano nel drenaggio ma non si disegnavano. Due cambi
+     (`VERSIONE_GENERATORE` = `m7-torrenti-1`):
+     1. Zoccolo dei contrafforti a 0,6: fiumi a 3-6 / 6-10 km dalla terra sopra i 2000 m a 1534/1250 m (seme
+        171289; erano 1062/675 senza zoccolo) e 1523/1326 m (48213); laghi 71 e 55, fasce invariate.
+     2. **Torrenti** (`tracciaTorrenti`, `DRENAGGIO.torrente` = 20 km²): corsi da 20 a 150 km² dalle sorgenti
+        al fiume (o torrente) in cui confluiscono, punti delle celle spostati da un rumore (niente righe a
+        griglia), ultimo punto esattamente sul corso ricevente (le Scene raccordano lì il letto). Sono in
+        `carta.fiumi` dopo i fiumi (`carta.sogliaTorrente`); nelle Scene alvei più stretti (semilarghezza 1,5 +
+        0,6·√bacino m: ~8 m a 20 km²); nella Carta una classe sottile. Le rocche contano solo i fiumi. In
+        montagna i torrenti nascono a ~1700 m, 750–1000 m sotto la cima vicina (come nelle Alpi). Costo:
+        ~2250 corsi in più, `fiumiScena` ~0,9 s alla prima Scena (prima ~0,6). Valichi: testate fino a 2100 m e
+        250 m sotto il passo (con le valli più alte i 400 m ne lasciavano 2–11 per mondo): 5–18 per mondo.
+   - *Fiumi diritti nella Carta zoomata* (segnalato dall'utente): in pianura il percorso a costo minimo era una
+     retta che perdeva le anse della Carta. Ora il tratto tiene il tracciato della Carta se questo non sale mai
+     più di 6 m sopra il livello atteso (`FIUMI_SCENA.tratti.tieni`), e altrove il richiamo verso le anse è più
+     forte (`PERCORSO.attrazione` 3).
+   - *Carta, il cavaliere* (richiesta dell'utente): freccia della direzione in cui guarda e cerchi a 10 e 20 km
+     con il tempo di marcia sulla Carta (~15 min/km, `docs/GDD.md` §3: 2,5 e 5 h).
    - *Stadio 2:* il punto più alto della cella (griglia di 50 m, poi 10 m) deve essere **una cima vera**:
      nulla più alto entro 150, 300 e 450 m (16 direzioni). Senza questa regola il primo sito del seme 48213
      era un dosso a 469 m ai piedi di un rilievo di 522 m a 400 m di distanza, e il borgo cadeva nella sella.

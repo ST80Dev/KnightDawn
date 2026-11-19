@@ -84,7 +84,9 @@ function distanzaCelle(cols, rows, sorgente) {
 function indiceFiumi(carta) {
   const lato = 2, gc = Math.ceil(carta.cols / lato), gr = Math.ceil(carta.rows / lato);
   const secchi = Array.from({ length: gc * gr }, () => []);
+  const soglia = carta.sogliaFiume ?? 0;
   for (const f of carta.fiumi || []) {
+    if (f[2] < soglia && f[f.length - 2] < soglia) continue;          // torrente: non conta come fiume
     for (let i = 4; i < f.length; i += 4) {
       const ax = f[i - 4], ay = f[i - 3], bx = f[i], by = f[i + 1];
       const x0 = Math.max(0, Math.floor(Math.min(ax, bx) / lato)), x1 = Math.min(gc - 1, Math.floor(Math.max(ax, bx) / lato));
