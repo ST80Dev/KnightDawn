@@ -613,6 +613,13 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
      ~45°) e sempre sulla neve perenne. Normali lisce (niente più chiazze a triangoli né facce staccate dalla
      luce); l'orizzonte usa la stessa funzione con normali dai triangoli attorno a ogni vertice. Tavullia
      resta con i colori di prima.
+   - *Roccia in montagna* (richiesta dall'utente): sopra il limite degli alberi e nel bioma roccia la roccia
+     compare già dai 18–30° (altrove 32–44°), con affioramenti a chiazze sui pendii medi (più frequenti in
+     alto, rari in collina), ghiaioni anche sul dolce 3–6 °C sotto il limite degli alberi, roccia chiara e
+     scura; sulle pareti oltre ~30–42° la neve non tiene e affiora la roccia. Il colore usa la pendenza su
+     ~60 m (come l'orizzonte vicino; con quella fine il blocco veniva più roccioso dei dintorni e si vedeva
+     il riquadro); la luce del blocco passa dalle normali fini a quelle su ~60 m negli ultimi 600 m verso il
+     bordo. Limite: pareti davvero verticali richiedono rilievo apposito (oggi le pendenze arrivano a ~45°).
    Limiti noti: il limite delle nevi si calcola al caricamento della Scena (cambiando stagione dentro la
    Scena si aggiorna alla Scena successiva); niente alberi né rocce come oggetti (il bosco è un colore);
    paludi rare; le regole di varietà (deserto–neve, distese monotone) si verificano al passo 8.

@@ -150,7 +150,7 @@ COLORI_SCENA[BIOMA.PIANURA_N] = new THREE.Color('#9a9566');      // steppa, prat
 COLORI_SCENA[BIOMA.PIANURA_S] = new THREE.Color('#b5a868');      // prati secchi del sud
 COLORI_SCENA[BIOMA.COLLINA] = new THREE.Color('#9aa65a');
 COLORI_SCENA[BIOMA.FORESTA] = new THREE.Color('#41652c');
-COLORI_SCENA[BIOMA.MONTAGNA] = new THREE.Color('#8b8f62');       // pascoli d'alta quota
+COLORI_SCENA[BIOMA.MONTAGNA] = new THREE.Color('#87975a');       // pascoli d'alta quota
 COLORI_SCENA[BIOMA.ROCCIA] = new THREE.Color('#8e8678');
 COLORI_SCENA[BIOMA.NEVE] = new THREE.Color('#eef1f4');
 COLORI_SCENA[BIOMA.GHIACCIO] = new THREE.Color('#d6e6f0');
@@ -158,15 +158,22 @@ COLORI_SCENA[BIOMA.SABBIA] = new THREE.Color('#d6bf8a');
 COLORI_SCENA[BIOMA.PALUDE] = new THREE.Color('#5f7048');
 COLORI_SCENA[BIOMA.FIUME] = COLORI_SCENA[BIOMA.PIANURA];
 const COLORE_ROCCIA = new THREE.Color('#8f877a');
+const COLORE_ROCCIA_SCURA = new THREE.Color('#6c665e');
+const COLORE_GHIAIONE = new THREE.Color('#9d978b');
 const COLORE_NEVE = new THREE.Color('#f1f3f6');
 const COLORE_RADURA = new THREE.Color('#7f9f4c');
-const COLORE_ALPEGGIO = new THREE.Color('#8f9463');
+const COLORE_ALPEGGIO = new THREE.Color('#8a985c');
 
 export const COLORI_MONDO = {
   bordo: { spostamento: 350, lunghezza: 1600 },   // m: i confini tra biomi ondeggiano di ±350 m
   roccia: [32, 44],                               // gradi: dal prato (o bosco) alla roccia
   rocciaBosco: [38, 50],
-  neve: { fascia: 30, ondeggia: 90, lunghezza: 500, pendenza: [38, 52] },   // m, gradi
+  rocciaAlta: [18, 30],                           // gradi, sopra il limite degli alberi e nei biomi di montagna
+  affioramenti: { lunghezza: 90, soglia: [0.2, 0.42], pendenza: [15, 26] },   // chiazze di roccia sui pendii medi
+  ghiaioni: { sotto: [3, 6], quanto: 0.25 },      // °C sotto il limite degli alberi: detriti anche sui pendii dolci
+  scalaPendenza: 62.5,                            // m: pendenza per il colore su questa scala (come l'orizzonte vicino)
+  toni: { lunghezza: 140 },                       // roccia chiara e scura
+  neve: { fascia: 30, ondeggia: 90, lunghezza: 500, pendenza: [30, 42] },   // m, gradi
   variazione: { lunghezza: 180, ampiezza: 0.08 },
   tono: { lunghezza: 700, ampiezza: 0.45 },        // macchie ampie più verdi o più secche
   macchia: [14, 28, 0.35],                          // gradi, quanto: sui pendii cespugli più scuri
@@ -193,7 +200,7 @@ export function coloreMondo(carta, stagione = 0) {
     const u = bx / cella - 0.5, v = bz / cella - 0.5;
     const i0 = Math.floor(u), j0 = Math.floor(v), fu = u - i0, fv = v - j0;
     out.setRGB(0, 0, 0);
-    let t0 = 0, bosco = 0, neveFissa = 0;
+    let t0 = 0, bosco = 0, neveFissa = 0, monte = 0;
     for (let b = 0; b < 2; b++) {
       const j = Math.min(rows - 1, Math.max(0, j0 + b));
       for (let a = 0; a < 2; a++) {
@@ -205,6 +212,7 @@ export function coloreMondo(carta, stagione = 0) {
         t0 += (temperaturaMare ? temperaturaMare[k] : 10) * w;
         if (bi === BIOMA.FORESTA) bosco += w;
         if (bi === BIOMA.NEVE || bi === BIOMA.GHIACCIO) neveFissa += w;
+        if (bi === BIOMA.ROCCIA) monte += w; else if (bi === BIOMA.MONTAGNA) monte += 0.5 * w;
       }
     }
     // Radure nel bosco; sopra il limite degli alberi il bosco lascia il posto agli alpeggi.
@@ -218,9 +226,23 @@ export function coloreMondo(carta, stagione = 0) {
     const tono = K.tono.ampiezza * fbm(x, z, s3 ^ 0x5bd1, K.tono.lunghezza, 2);
     if (tono > 0) out.lerp(COLORE_RADURA, tono * (1 - bosco)); else out.lerp(COLORI_SCENA[BIOMA.PIANURA_S], -tono * 0.6 * (1 - bosco));
     out.lerp(COLORI_SCENA[BIOMA.FORESTA], K.macchia[2] * (1 - bosco) * (1 - neveFissa) * smoothstep(K.macchia[0], K.macchia[1], pendenza));
-    // Pendii ripidi: roccia (nel bosco un po' più tardi).
+    // Roccia: pareti e pendii ripidi (nel bosco un po' più tardi); sopra il limite degli alberi e nei biomi di
+    // montagna già dai pendii medi, con affioramenti a chiazze e, più in alto, ghiaioni anche sul dolce.
+    const T = t0 - CLIMA.gradiente * h;
+    const alto = Math.max(smoothstep(CLIMA.bosco + 2, CLIMA.bosco - 2, T), monte);
     const R = bosco > 0.5 ? K.rocciaBosco : K.roccia;
-    out.lerp(COLORE_ROCCIA, smoothstep(R[0], R[1], pendenza));
+    const r0 = R[0] + (K.rocciaAlta[0] - R[0]) * alto, r1 = R[1] + (K.rocciaAlta[1] - R[1]) * alto;
+    let roccia = smoothstep(r0, r1, pendenza);
+    const A = K.affioramenti;
+    const chiazze = smoothstep(A.soglia[0], A.soglia[1], fbm(x, z, s1 ^ 0x2c1b, A.lunghezza, 3))
+      * smoothstep(A.pendenza[0], A.pendenza[1], pendenza) * (0.35 + 0.65 * alto);
+    roccia = Math.max(roccia, chiazze);
+    const ghiaia = K.ghiaioni.quanto * smoothstep(CLIMA.bosco - K.ghiaioni.sotto[0], CLIMA.bosco - K.ghiaioni.sotto[1], T);
+    if (ghiaia > 0) out.lerp(COLORE_GHIAIONE, ghiaia);
+    if (roccia > 0) {
+      c.copy(COLORE_ROCCIA).lerp(COLORE_ROCCIA_SCURA, 0.5 + 0.5 * fbm(x, z, s2 ^ 0x77e1, K.toni.lunghezza, 2));
+      out.lerp(c, roccia);
+    }
     // Variazione lenta di luminosità (niente distese piatte, niente chiazze a triangoli).
     out.multiplyScalar(1 + K.variazione.ampiezza * fbm(x, z, s3, K.variazione.lunghezza, 2));
     // Neve: sopra il limite della stagione (ondeggiante), non sui pendii più ripidi; sempre sulla neve perenne.
@@ -242,13 +264,20 @@ function buildSurfaceMondo(heights, cols, rows, cell, half, colore, centro) {
   const nor = new Float32Array(n * 3), col = new Float32Array(n * 3);
   const tmp = new THREE.Color();
   const cx = centro ? centro.x : 0, cz = centro ? centro.z : 0;
+  // Il colore usa la pendenza su ~60 m (come l'orizzonte vicino): con quella fine il blocco veniva più roccioso
+  // dei dintorni e si vedeva il riquadro. La luce usa le normali fini.
+  const k = Math.max(1, Math.round(COLORI_MONDO.scalaPendenza / (2 * cell)));
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const i = r * cols + c;
-      const gx = (H(c + 1, r) - H(c - 1, r)) / (2 * cell), gz = (H(c, r + 1) - H(c, r - 1)) / (2 * cell);
+      const sx = (H(c + k, r) - H(c - k, r)) / (2 * k * cell), sz = (H(c, r + k) - H(c, r - k)) / (2 * k * cell);
+      // Luce: normali fini, che verso il bordo del blocco passano a quelle su ~60 m dell'orizzonte (niente riquadro).
+      const bordo = smoothstep(half - 600, half, Math.max(Math.abs(c * cell - half), Math.abs(r * cell - half)));
+      const gx = ((H(c + 1, r) - H(c - 1, r)) / (2 * cell)) * (1 - bordo) + sx * bordo;
+      const gz = ((H(c, r + 1) - H(c, r - 1)) / (2 * cell)) * (1 - bordo) + sz * bordo;
       const l = Math.hypot(gx, 1, gz);
       nor[i * 3] = -gx / l; nor[i * 3 + 1] = 1 / l; nor[i * 3 + 2] = -gz / l;
-      const pend = Math.atan(Math.hypot(gx, gz)) * 180 / Math.PI;
+      const pend = Math.atan(Math.hypot(sx, sz)) * 180 / Math.PI;
       colore(tmp, cx - half + c * cell, cz - half + r * cell, heights[i], pend);
       col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
     }
