@@ -278,7 +278,7 @@ export function verificaVarieta(carta) {
   if (carta.asprezza) {
     const separate = partiSeparate(carta);
     regole.push({ nome: 'valichi', ok: separate === 0,
-      testo: `creste invalicabili: ${carta.statistiche?.valichi ?? '?'} valichi aperti, parti di terra separate ${separate}` });
+      testo: `gruppi montuosi ${carta.massicci?.length ?? '?'} con ${carta.statistiche?.valichi ?? '?'} forcelle, parti di terra chiuse dalle pareti ${separate}` });
   }
   return { ok: regole.every((r) => r.ok), regole, peggiori: { finestre: cattive, uniforme: dove } };
 }

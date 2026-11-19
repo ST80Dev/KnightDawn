@@ -620,21 +620,22 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
      ~60 m (come l'orizzonte vicino; con quella fine il blocco veniva più roccioso dei dintorni e si vedeva
      il riquadro); la luce del blocco passa dalle normali fini a quelle su ~60 m negli ultimi 600 m verso il
      bordo. Limite: pareti davvero verticali richiedono rilievo apposito (oggi le pendenze arrivano a ~45°).
-   - **Vette aspre e valichi** (deciso con l'utente; fatto dopo il passo 8, da provare). *Carta*
-     (`carta.js`, `asprezzaEValichi`, `VERSIONE_GENERATORE` = `m6-vette-1`): asprezza 0…1 = fascia di
-     montagna (1300–2000 m) × cresta (convessità rispetto al rilievo locale) × gruppi (rumore su ~22 km: massicci
-     di guglie, non un muro continuo); oltre 0,5 la cella è invalicabile e diventa roccia (~2–3 % della terra,
-     35–45 % della montagna). Se una parte della terra percorribile resta separata dal resto della sua
-     terraferma, si apre un valico (percorso a costo minimo dalla parte principale, che attraversa le creste
-     dove sono più basse e meno aspre; asprezza ≤ 0,2 nelle celle attorno): 20–40 valichi per seme, segnati in
-     `carta.valico` (gialli nella Carta dei biomi). *Scene* (`scena.js`): sulle celle aspre un rumore *ridged*
-     (creste affilate, ~700 m, fino a 450 m) pesato dall'asprezza: pendenza p50/p90 45°/63°, 43 % oltre 48°;
-     valichi p50 21°, 1,7 % oltre 48° (montagna normale 3,3 %). *Cavaliere* (`knight3d.js`): oltre 48° di
-     pendenza del terreno non si entra in nessuna direzione (prima si saliva qualsiasi versante di traverso):
-     le pareti sono invalicabili, si cercano i passaggi. *Verifica*: regola «valichi» (nessuna parte di terra
-     separata dalle creste) e la roccia è un tipo di paesaggio a sé (esclusa dalla regola delle distese, come
-     neve e deserto): 30 semi su 30 rispettano tutte le regole. I percorsi della Carta (viaggio, fase S2)
-     passeranno dai valichi; strade, pedaggi e luoghi ai valichi con la milestone dei luoghi.
+   - **Gruppi montuosi e forcelle** (deciso con l'utente sul modello di Dolomiti e Alpi, da provare). Prima
+     distese di guglie tutte uguali (ci si perdeva), poi poche muraglie lunghe (troppo poche, tutte uguali).
+     Ora (`carta.js`, `massicciEForcelle`, `VERSIONE_GENERATORE` = `m6-massicci-1`): **4–12 gruppi** (uno ogni
+     ~900 km² di terra oltre 1400 m), su cime alte ad almeno 16 km l'uno dall'altro (con le valli in mezzo, dove
+     si cammina), ognuno con una **forma** sua — torre (cima a punta), altopiano (cima piatta), piramide,
+     cresta (allungata) — e 1–4 torri: pareti invalicabili (60–70°) sopra un piede di ghiaioni percorribili
+     (15–25°), contorno irregolare (speroni e canaloni), torri di 0,55–1,15 km di semiasse e 480–880 m sopra il
+     terreno. Tra le torri dello stesso gruppo i ghiaioni si toccano: le **forcelle**, selle ~400 m sotto le
+     vette con pendii di 3–13°. Sulla Carta: `carta.massicci` (id, forma, torri, forcelle), segno e numero di
+     ogni gruppo (il nome arriverà con i luoghi), forcelle gialle da zoom ×4, gruppo e forma sotto il
+     puntatore. Nelle Scene i ghiaioni e le forcelle hanno il rilievo fine smorzato, le pareti un frastaglio.
+     *Cavaliere* (`knight3d.js`): oltre 48° di pendenza del terreno non si entra in nessuna direzione.
+     *Verifica*: regola «valichi» (nessuna parte di terra chiusa dalle pareti) e roccia tipo di paesaggio a sé:
+     20 semi su 20 rispettano tutte le regole. Limiti: le cime innevate sembrano un po' «panettoni» (manca il
+     dettaglio verticale delle pareti, ~8 m di griglia); strade, pedaggi e luoghi alle forcelle con la
+     milestone dei luoghi.
    Limiti noti: il limite delle nevi si calcola al caricamento della Scena (cambiando stagione dentro la
    Scena si aggiorna alla Scena successiva); niente alberi né rocce come oggetti (il bosco è un colore);
    paludi rare; le regole di varietà (deserto–neve, distese monotone) si verificano al passo 8.
