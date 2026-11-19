@@ -81,11 +81,16 @@ export function verificaFiumi(carta) {
 // l'altra c'è quasi sempre un crinale più alto, ed è giusto così. «In una direzione»: basta un quarto delle
 // direzioni (un settore di 90°).
 export const PANORAMI = {
-  raggio: 10, vista: 20, oltre: 10, direzioni: 0.25, soglia: 0.9, quotaMassima: 1500,
+  raggio: 10, vista: 15, oltre: 15, direzioni: 0.25, soglia: 0.9, quotaMassima: 1500,
   // Punti di osservazione: le cime locali (finestra 3×3 km) e un punto ogni `griglia` km anche sui versanti
   // (da un costone a metà versante si guarda a valle lontano; contando solo le cime, i fianchi delle catene
   // risultavano scoperti).
   occhio: 2, finestra: 1, griglia: 3, passo: 0.5, raggi: 16,
+  // Solo alture (segnalato dall'utente: con la griglia ogni 3 km la pianura aperta si riempiva di «punti
+  // panoramici» da cui si vedeva lontano già da terra). L'altura sta almeno `sopra` m sulla media dei dintorni a
+  // `piede` km, e la vista è guadagnata salendo: conta una direzione solo se dal piede non si vedeva.
+  sopra: 40, piede: 2,
+  segni: 10,                    // km: sulla Carta il miglior punto ogni tanto
 };
 
 /**
@@ -119,19 +124,25 @@ export function verificaPanorami(carta) {
         }
       }
       if (!cima) continue;
+      // Altura: sopra la media dei dintorni (anello a P.piede km).
+      let anello = 0;
+      for (const [ux, uy] of dir) anello += q(x + 0.5 + ux * P.piede, y + 0.5 + uy * P.piede);
+      const piede = anello / P.raggi;
+      const dominanza = quota[i] - piede;
+      if (dominanza < P.sopra) continue;
       candidati++;
-      const occhio = quota[i] + P.occhio;
-      let visibili = 0;
-      for (const [ux, uy] of dir) {
+      const vede = (occhio, ux, uy) => {
         let davanti = -Infinity, lontano = -Infinity;
         for (let s = P.passo; s <= P.vista + P.oltre + 1e-9; s += P.passo) {
           const h = q(x + 0.5 + ux * s, y + 0.5 + uy * s) - s * s / (2 * R) * 1000;
           const pendenza = (h - occhio) / (s * 1000);
           if (s < P.vista) { if (pendenza > davanti) davanti = pendenza; } else if (pendenza > lontano) lontano = pendenza;
         }
-        if (lontano > davanti) visibili++;
-      }
-      if (visibili >= P.direzioni * P.raggi) { panoramica[i] = 1; punti.push([x, y]); }
+        return lontano > davanti;
+      };
+      let visibili = 0;
+      for (const [ux, uy] of dir) if (vede(quota[i] + P.occhio, ux, uy) && !vede(piede + P.occhio, ux, uy)) visibili++;
+      if (visibili >= P.direzioni * P.raggi) { panoramica[i] = 1; punti.push([x, y, dominanza + 20 * visibili]); }
     }
   }
   // Copertura: terra entro P.raggio km (8 vicini) da una cella panoramica.
@@ -156,7 +167,11 @@ export function verificaPanorami(carta) {
     if (quota[i] < P.quotaMassima) { terra++; if (d[i] >= 0) coperta++; } else { terraM++; if (d[i] >= 0) copertaM++; }
   }
   const copertura = terra ? coperta / terra : 0;
-  return { ok: copertura >= P.soglia, punti, copertura, coperturaMontagna: terraM ? copertaM / terraM : 0,
+  // Segni sulla Carta: il punto migliore (più dominante, più vista) ogni P.segni km.
+  const ordinati = punti.slice().sort((a, b) => b[2] - a[2]);
+  const segni = [];
+  for (const p of ordinati) if (!segni.some((s) => Math.abs(s[0] - p[0]) < P.segni && Math.abs(s[1] - p[1]) < P.segni)) segni.push(p);
+  return { ok: copertura >= P.soglia, punti: segni, tutti: punti.length, copertura, coperturaMontagna: terraM ? copertaM / terraM : 0,
     soglia: P.soglia, raggio: P.raggio, quotaMassima: P.quotaMassima, candidati };
 }
 
