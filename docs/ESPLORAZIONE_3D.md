@@ -1615,7 +1615,7 @@ nuovo: serve la conferma (regola 2).
 ### Da decidere
 
 1. Passi 3–5 (colore e vegetazione con l'altra sessione, ponti e guadi, viaggio sulla Carta): quando.
-4. Su strada nella Scena si va più veloci (o non si rallenta in salita come fuori strada)?
+2. Su strada nella Scena si va più veloci (o non si rallenta in salita come fuori strada)?
 
 ## Fuori dal prototipo (non farlo ora)
 
