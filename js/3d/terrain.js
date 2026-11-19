@@ -252,7 +252,7 @@ const ottaveGLSL = (lista, varNome) => lista.map(([s, a]) =>
   + ` * spegniSuolo(${s.toFixed(1)}, dist);`).join('\n');
 
 /** Texture nera 1×1: ombre spente (anelli dell'orizzonte, prima che la vegetazione le disegni). */
-const TEXTURE_NERA = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
+const TEXTURE_NERA = new THREE.DataTexture(new Uint8Array([0]), 1, 1, THREE.RedFormat, THREE.UnsignedByteType);
 TEXTURE_NERA.needsUpdate = true;
 
 /**
@@ -462,13 +462,15 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
     }
     // Vegetazione: micro-rilievo del prato e del sottobosco (gobbe ~4 m, zolle ~2 m, ciuffi ~1 m) entro ~150 m. La luce
     // del sole fa da sé il chiaroscuro anche dove il terreno è piano; al tramonto e di notte cambia con lei.
-    float wPrato = kdPrato * 1.1 * (1.0 - smoothstep(50.0, 150.0, length(vViewPosition)));
+    // Prestazioni (dopo il CONTEXT_LOST segnalato): solo entro 80 m, differenze in avanti (3 valutazioni, non 4).
+    float wPrato = kdPrato * 1.1 * (1.0 - smoothstep(40.0, 80.0, length(vViewPosition)));
     if (wPrato > 0.001) {
       const float e = 0.15;
       vec2 p = vMondo;
       #define KD_PRATO(q) (rumoreSuolo(q, 4.0) * 0.55 + rumoreSuolo(q + 13.0, 2.0) * 0.3 + rumoreSuolo(q + 29.0, 1.0) * 0.12)
-      float gx = (KD_PRATO(p + vec2(e, 0.0)) - KD_PRATO(p - vec2(e, 0.0))) / (2.0 * e);
-      float gz = (KD_PRATO(p + vec2(0.0, e)) - KD_PRATO(p - vec2(0.0, e))) / (2.0 * e);
+      float h0 = KD_PRATO(p);
+      float gx = (KD_PRATO(p + vec2(e, 0.0)) - h0) / e;
+      float gz = (KD_PRATO(p + vec2(0.0, e)) - h0) / e;
       #undef KD_PRATO
       normal = normalize(normal - (viewMatrix * vec4(gx, 0.0, gz, 0.0)).xyz * wPrato);
     }

@@ -1491,6 +1491,12 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      tutta subito). Una texture di 2048² (~1 m) con il **piede**: alone scuro fisso attorno al punto di contatto. Lo
      shader del suolo (`uOmbre`, `uPiede`, `uOmbreForza` in `materialeSuolo`) scurisce il colore del massimo dei due;
      le ombre del sole si spengono di notte e con il tasto V. Più scura anche la base delle rocce e dei ciuffi d'erba.
+     **Correzione (WebGL CONTEXT_LOST sul PC dell'utente, seme 570549, dopo la PR #116; segnalato dalla sessione M6):**
+     le ombre erano disegnate su una tela 2D in modo «lighten», che sulla GPU copia l'immagine intera a ogni oggetto;
+     con ~78 000 oggetti il fotogramma superava i 2 s e Windows resettava la GPU (in headless la tela è sul processore e
+     non succedeva). Ora le ombre si calcolano in JavaScript su array di byte (ellissi sfumate, massimo), caricati come
+     texture a un canale (`DataTexture` R8): nessuna operazione di tela. Il micro-rilievo del prato si ferma a 80 m
+     (prima 150) e usa differenze in avanti (9 letture di texture invece di 12).
 3. **Collisioni.** Tronchi, massi e affioramenti come ostacoli a griglia. *Prova:* si attraversa un bosco fitto
    scivolando tra i tronchi senza incastrarsi; la camera resta usabile nel bosco.
 4. **Arbusti e rocce.** Cespugli (macchia, margini, sottobosco), arbusti d'alta quota, sassi, massi, affioramenti
