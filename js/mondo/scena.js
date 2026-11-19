@@ -25,7 +25,10 @@ const DETTAGLIO = {
   // Forma della Carta (passo 6, dopo la prova): l'ampiezza non cresce più con la sola quota oltre `tetto` m
   // (in pedemonte era ~415 m, un labirinto di gobbe uguale ovunque); cresce con il rilievo locale della Carta
   // (dislivello nelle 3×3 celle attorno, × perRilievo) ed è piena sulle creste, ridotta a `valle` nei fondovalle.
-  forma: { tetto: 600, perRilievo: 0.2, valle: 0.5, cresta: 0.5 },
+  forma: { tetto: 600, perRilievo: 0.3, valle: 0.65, cresta: 0.5 },
+  // Montagna: oltre la rampa (quota della Carta) torna a crescere fino a `extra` m in più, piena sulle creste:
+  // vette e crinali aspri, fondovalle percorribili.
+  montagna: { rampa: [1200, 2200], extra: 220 },
   erosione: 1.0,                // quanto la pendenza accumulata smorza le ottave fini
 };
 
@@ -180,7 +183,8 @@ export function quotaMondo(carta, x, z, seedDettaglio = derivaSeme(carta.seme, 1
     // Cresta o fondovalle: quanto la Carta sta sopra la media dei dintorni, rispetto al rilievo locale.
     const cresta = smoothstep(-Fo.cresta, Fo.cresta, convesso / (rilievo + 20));
     ampiezza = Math.min(A.massimo, A.base + A.perMetro * hq + A.collina * hq * smoothstep(A.rampa[0], A.rampa[1], hq)
-      + Fo.perRilievo * rilievo) * (Fo.valle + (1 - Fo.valle) * cresta);
+      + Fo.perRilievo * rilievo + DETTAGLIO.montagna.extra * smoothstep(DETTAGLIO.montagna.rampa[0], DETTAGLIO.montagna.rampa[1], h))
+      * (Fo.valle + (1 - Fo.valle) * cresta);
   } else ampiezza = A.fondale + (A.base - A.fondale) * smoothstep(-60, 0, h);
   return h + ampiezza * fbmEroso(x, z, seedDettaglio, pesi);
 }
