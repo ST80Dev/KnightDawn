@@ -21,7 +21,7 @@ import * as THREE from 'three';
 import { quotaMondo, quotaCarta, scavaFiumi, spianaLuoghi, livelloLago, tracciatiFiumi, SCENA, OTTAVE_DETTAGLIO } from '../mondo/scena.js';
 import { creaNastro, materialeAcqua, SOPRA_PELO } from './acqua.js';
 import { derivaSeme } from '../mondo/rumore.js';
-import { coloreMondo } from './terrain.js';
+import { coloreMondo, materialeSuolo, nuoviStrati } from './terrain.js';
 
 export const ORIZZONTE = {
   anelli: [                                // passo e bordo esterno (m); il bordo interno è il precedente
@@ -123,6 +123,7 @@ function anello(celle, colore, cx, cz) {
   for (let r = 0; r < celle.n; r++) for (let c = 0; c < celle.n; c++) celle.cella(r, c, faccia);
   const m = px.length;
   const pos = new Float32Array(m * 3), nor = new Float32Array(m * 3), col = new Float32Array(m * 3);
+  const bas = new Float32Array(m * 3), str = new Float32Array(m * 4), S = nuoviStrati();
   const tmp = new THREE.Color();
   for (let i = 0; i < m; i++) {
     const l = Math.hypot(nx[i], ny[i], nz[i]) || 1;
@@ -130,13 +131,17 @@ function anello(celle, colore, cx, cz) {
     pos[i * 3] = px[i]; pos[i * 3 + 1] = py[i]; pos[i * 3 + 2] = pz[i];
     nor[i * 3] = a; nor[i * 3 + 1] = b; nor[i * 3 + 2] = c;
     const pendenza = Math.acos(Math.min(1, b)) * 180 / Math.PI;
-    colore(tmp, cx + px[i], cz + pz[i], py[i] + abbassamento(Math.hypot(px[i], pz[i])), pendenza);
+    colore(tmp, cx + px[i], cz + pz[i], py[i] + abbassamento(Math.hypot(px[i], pz[i])), pendenza, S);
     col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
+    bas[i * 3] = S.base.r; bas[i * 3 + 1] = S.base.g; bas[i * 3 + 2] = S.base.b;
+    str[i * 4] = S.roccia; str[i * 4 + 1] = S.neve; str[i * 4 + 2] = S.variazione; str[i * 4 + 3] = S.tono;
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setAttribute('base', new THREE.BufferAttribute(bas, 3));
+  geo.setAttribute('strati', new THREE.BufferAttribute(str, 4));
   geo.setIndex(tri.length > 65535 ? new THREE.Uint32BufferAttribute(tri, 1) : new THREE.Uint16BufferAttribute(tri, 1));
   geo.computeBoundingSphere();
   return geo;
@@ -269,7 +274,7 @@ export function creaOrizzonte(carta, cx, cz, terrain, coloreAcqua, stagione = 0)
   }
   const geometrie = anelli.map((a) => anello(a, colore, cx, cz));
 
-  const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  const mat = materialeSuolo(cx, cz);   // colore per pixel come il blocco (terrain.js)
   const oggetto = new THREE.Group();
   oggetto.name = 'orizzonte';
   for (const g of geometrie) oggetto.add(new THREE.Mesh(g, mat));

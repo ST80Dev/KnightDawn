@@ -15,12 +15,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { loadTerrain, componiSuolo, createTerrain, coloreMondo } from './terrain.js';
 import { createKnight } from './knight3d.js';
 import { createFollowCamera } from './camera.js';
-import { createCastle } from './castle3d.js';
+import { createCastle, CLASSI_ROCCA } from './castle3d.js';
 import { createCartaVista } from './cartaVista.js';
 import { creaOrizzonte } from './orizzonte.js';
 import { creaAcqueScena } from './acqua.js';
 import { generaCartaAsincrona, verificaSemi } from '../mondo/generatore.js';
-import { generaScena, centroBlocco } from '../mondo/scena.js';
+import { generaScena, centroBlocco, quotaFinale } from '../mondo/scena.js';
 import { posizionaVegetazione, coperturaMondo, coperturaTavullia } from '../mondo/vegetazione.js';
 import { creaVegetazione } from './vegetazione3d.js';
 import { semeDaTesto } from '../mondo/rumore.js';
@@ -234,7 +234,7 @@ function aggiornaStato() {
 let terrain = null;                       // terreno della Scena attuale
 let knight = null;
 let castle = null;                        // solo a Tavullia (fino a «rocca e borgo»)
-let segnaposti = null;                    // M7, passo 1: aste sulle cime delle rocche
+let rocche = [];                          // M7, passo 3: rocche del mondo generato nel blocco (o vicine)
 let acqua = null;                         // superficie del mare a quota 0, se la Scena ne ha
 let orizzonte = null;                     // terreno lontano attorno alla Scena (solo mondo generato)
 let acqueScena = null;                    // fiumi e laghi in quota della Scena (mesh)
@@ -413,24 +413,29 @@ function misuraPendenze(t) {
 }
 
 /**
- * M7, passo 1 (provvisorio): un'asta con bandiera sulla cima di ogni rocca dentro il blocco, finché rocca e
- * borgo non ci sono. Colore della bandiera secondo la classe.
+ * M7, passo 3: le rocche dei luoghi il cui piano tocca il blocco (o gli sta a meno di 150 m), costruite in
+ * coordinate del blocco. Il terreno sotto viene dal blocco e, fuori, dalla stessa quota del mondo (quotaFinale):
+ * una rocca tagliata dal bordo del blocco si costruisce intera.
  */
-function segnapostiLuoghi(cx, cz, ter) {
-  const half = ter.size / 2, g = new THREE.Group();
-  const colori = { minore: '#c8a030', casata: '#a01c14', maggiore: '#3a2a8c' };
+function costruisciRocche(cx, cz, ter) {
+  const half = ter.size / 2, out = [];
+  const suoloMondo = {
+    getHeight: (x, z) => (Math.abs(x) <= half && Math.abs(z) <= half ? ter.getHeight(x, z) : quotaFinale(carta, x + cx, z + cz)),
+  };
   for (const l of carta?.luoghi ?? []) {
-    const x = l.x - cx, z = l.z - cz;
-    if (Math.abs(x) > half || Math.abs(z) > half) continue;
-    const y = ter.getHeight(x, z);
-    const asta = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 14, 6), new THREE.MeshLambertMaterial({ color: '#5b3b20' }));
-    asta.position.set(x, y + 7, z);
-    const bandiera = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2, 0.06), new THREE.MeshLambertMaterial({ color: colori[l.classe] }));
-    bandiera.position.set(x + 1.7, y + 12.8, z);
-    g.add(asta, bandiera);
+    if (!l.piani) continue;
+    const x = l.x - cx, z = l.z - cz, m = Math.max(l.piani[0].a, l.piani[0].b) + 150;
+    if (Math.abs(x) > half + m || Math.abs(z) > half + m) continue;
+    const K = CLASSI_ROCCA[l.classe] ?? CLASSI_ROCCA.casata;
+    const rocca = createCastle(suoloMondo, {
+      ...K, x, z, piano: l.piani[0].q,
+      rotazione: Math.atan2(-l.verso.x, -l.verso.z),        // la porta (lato −Z locale) verso il borgo
+      rampa: { pendenzaMax: 0.25, lunghezzaMin: 3, lunghezzaMax: 40, parapetto: 0.5 },
+    });
+    rocca.luogo = l;
+    out.push(rocca);
   }
-  g.name = 'segnaposti-luoghi';
-  return g.children.length ? g : null;
+  return out;
 }
 
 /**
@@ -438,9 +443,11 @@ function segnapostiLuoghi(cx, cz, ter) {
  * @param {{tipo:'tavullia'} | {tipo:'mondo', cx:number, cz:number}} desc
  */
 async function caricaScena(desc) {
-  for (const o of [terrain?.mesh, acqua, castle?.object, orizzonte?.oggetto, acqueScena, segnaposti, vegetazione?.oggetto]) {
+  for (const o of [terrain?.mesh, acqua, castle?.object, orizzonte?.oggetto, acqueScena, vegetazione?.oggetto,
+    ...rocche.map((r) => r.object)]) {
     if (o) { scene.remove(o); libera(o); }
   }
+  rocche = [];
   vegetazione = null;
   scostamento = { x: 0, z: 0 };
   if (desc.tipo === 'mondo') {
@@ -449,7 +456,6 @@ async function caricaScena(desc) {
     desc = { ...desc, cx, cz };
   }
   castle = null;
-  segnaposti = null;
   acqua = null;
   orizzonte = null;
   acqueScena = null;
@@ -472,13 +478,18 @@ async function caricaScena(desc) {
     acqueScena = creaAcqueScena(dati, meta, COLORE_ACQUA);
     if (acqueScena) scene.add(acqueScena);
     livelliAcqua = { fiume: dati.fiume, lago: dati.lago, cols: meta.cols, cell: meta.cellSize, half: meta.sizeMeters / 2 };
-    segnaposti = segnapostiLuoghi(desc.cx, desc.cz, terrain);
-    if (segnaposti) scene.add(segnaposti);
+    rocche = costruisciRocche(desc.cx, desc.cz, terrain);
+    for (const r of rocche) {
+      scene.add(r.object);
+      raccogliEmissivi(r.object);
+      ostacoli.push(r);
+      occlusori.push(...r.solidi);
+    }
     vegetazione = creaVegetazione(posizionaVegetazione({
       heights, cols: meta.cols, cell: meta.cellSize, cx: desc.cx, cz: desc.cz, acqua: dati,
       copertura: coperturaMondo(carta, Calendar.stagione), seme: carta.seme,
       piani: (carta.luoghi || []).flatMap((l) => l.piani || []), mare: true,
-    }));
+    }), terrain);
   }
   if (desc.tipo === 'tavullia') {
     // Profilo fisso di collina temperata; niente vegetazione sul colle del castello e sulla rampa.
@@ -488,7 +499,7 @@ async function caricaScena(desc) {
       copertura: coperturaTavullia(), seme: 7,
       piani: [{ cx: C.x, cz: C.z, ux: 1, uz: 0, a: C.lato / 2 + 9, b: C.lato / 2 + 9, r: 4, s: 10 }],
       mare: terrain.minElev < 0,
-    }));
+    }), terrain);
   }
   vegetazione.oggetto.visible = vegetazioneVisibile;
   scene.add(vegetazione.oggetto);
@@ -509,7 +520,7 @@ async function caricaScena(desc) {
     acqua.name = 'acqua';
     scene.add(acqua);
   }
-  _suolo = componiSuolo(terrain, castle ? [castle] : []);
+  _suolo = componiSuolo(terrain, castle ? [castle] : rocche);
   scenaAttuale = desc;
   statPendenze = misuraPendenze(terrain);
   _oraCielo = -1;                          // ricalcola le luci (anche quelle proprie del castello)
@@ -642,6 +653,15 @@ async function init() {
     if (sc && sc.terreno === 'mondo' && sc.seme === seme && finiti(sc.cx, sc.cz, sc.x, sc.z) && dentro(sc.cx, sc.cz)) {
       await caricaScena({ tipo: 'mondo', cx: sc.cx, cz: sc.cz });
       posizionaCavaliere(sc.x, sc.z, Number.isFinite(sc.direzione) ? sc.direzione : Math.PI);
+      // Un salvataggio di prima delle rocche può cadere dentro un muro: si riparte fuori dalla porta del borgo.
+      const k = knight.stato, sito = carta.luoghi?.find((l) => l.partenza);
+      const murato = rocche.some((r) => { const p = r.spingiFuori(k.x, k.z, 0.45); return p && Math.hypot(p.x - k.x, p.z - k.z) > 0.05; });
+      if (murato && sito) {
+        await caricaScena({ tipo: 'mondo', cx: sito.x, cz: sito.z });
+        const p = partenzaDelSito(sito);
+        posizionaCavaliere(p.x, p.z, p.direzione);
+        messaggio('Il punto salvato era dentro le mura di una rocca: si riparte fuori dalla porta del borgo.');
+      }
     } else {
       const sito = carta.luoghi?.find((l) => l.partenza);
       if (sito) {
@@ -650,7 +670,7 @@ async function init() {
         await caricaScena({ tipo: 'mondo', cx: sito.x, cz: sito.z });
         const p = partenzaDelSito(sito);
         posizionaCavaliere(p.x, p.z, p.direzione);
-        messaggio(`Rocca di partenza (${NOMI_CLASSI[sito.classe]}): per ora ci sono il sito e il terrapieno; rocca e borgo arrivano nei prossimi passi.`);
+        messaggio(`Rocca di partenza (${NOMI_CLASSI[sito.classe]}): il borgo murato arriva nei prossimi passi.`);
       } else {
         await caricaScena({ tipo: 'mondo', ...puntoPartenza(carta) });
         posizionaCavaliere(0, 0, Math.PI);
@@ -689,6 +709,7 @@ async function init() {
     scene, camera, cam, controls, suolo, Knight, Calendar, Save,
     get terrain() { return terrain; }, get knight() { return knight; }, get castle() { return castle; },
     get carta() { return carta; }, get scena() { return scenaAttuale; }, get orizzonte() { return orizzonte; },
+    get rocche() { return rocche; },
     get vegetazione() { return vegetazione; },
     caricaScena, posizionaCavaliere,
   };
@@ -921,6 +942,7 @@ function aggiornaPannello(now) {
           + ` salto massimo ${fmt(t.salto, 1)} m, scarpate ≤ ${fmt(t.pendenza)}°, lavoro medio ${fmt(t.lavoro, 1)} m`
           + (t.pelo !== null ? `, acqua vicina a ${fmt(t.pelo, 1)} m` : '');
       }
+      for (const r of rocche) if (r.dentro(k.x, k.z)) testo += `\nnel cortile della rocca ${r.luogo.id + 1}`;
     }
     if (castle) {
       testo += castle.dentro(k.x, k.z) ? '\ncastello: nel cortile'
@@ -935,6 +957,7 @@ function aggiornaPannello(now) {
       testo += `\nvegetazione (V): ${fmt(v.totale)} oggetti, ${fmt(st.istanze)} disegnati · ${st.chiamate} chiamate`
         + ` · ${fmt(st.triangoli)} triangoli · posizionamento ${fmt(v.msPosiziona)} ms (campi ${fmt(v.msCampi)})`
         + ` · costruzione ${fmt(v.msCostruzione)} ms · livelli ${fmt(st.msAggiorna, 1)} ms${vegetazioneVisibile ? '' : ' · nascosta'}`
+        + `\n  vicino: erba ${fmt(st.erba)} ciuffi · felci ${fmt(st.felci)} · ciottoli ${fmt(st.ciottoli)} · ${fmt(st.msVicino, 1)} ms`
         + `\n  ${Object.entries(v.conteggi).filter(([, n]) => n).map(([k, n]) => `${k} ${fmt(n)}`).join(' · ')}`
         + `\ndisegno: ${fmt(renderer.info.render.calls)} chiamate · ${fmt(renderer.info.render.triangles)} triangoli`;
     }
@@ -971,6 +994,7 @@ function frame(now) {
     }
     aggiornaCielo();
     castle?.aggiornaLuci(now / 1000, 1 - _luceGiorno);
+    for (const r of rocche) r.aggiornaLuci(now / 1000, 1 - _luceGiorno);
     aggiornaStato();
     aggiornaIndicatoreAndatura();
     if (modoCamera === 'segui') {
@@ -982,7 +1006,7 @@ function frame(now) {
       aggiornaNebbia(controls.target);
     }
   }
-  if (vegetazione && vegetazioneVisibile) vegetazione.aggiorna(camera.position.x, camera.position.z);
+  if (vegetazione && vegetazioneVisibile) vegetazione.aggiorna(camera.position.x, camera.position.z, now / 1000);
   aggiornaPannello(now);
   renderer.render(scene, camera);
 }
