@@ -29,13 +29,15 @@
 ## Cavaliere (`js/3d/knight3d.js`)
 
 Attività parallela a M7, autorizzata dall'utente (deroga alla regola 4 di `CLAUDE.md`, come la vegetazione).
+**Sospesa dopo il passo 1 (novembre 2026):** l'utente ha detto «il cavaliere per adesso va bene così». I passi 2–4
+restano qui come piano: non riprenderli senza una sua richiesta.
 Vincolo: stessi punti di snodo e misure del corpo (anca, ginocchio, caviglia, spalla, gomito, busto, testa,
 mantello), così movimento, animazione, collisioni e camera non cambiano.
 
 Limite noto [Certo]: con le sole primitive una figura umana resta un manichino ben fatto. Il cavaliere in
 armatura completa con elmo chiuso è il caso più favorevole: niente volto, mani nude o capelli.
 
-1. **Forme e metallo vero — fatto, da provare dall'utente.** Grande elmo con fessure, fori di respirazione e
+1. **Forme e metallo vero — fatto, accettato dall'utente.** Grande elmo con fessure, fori di respirazione e
    rinforzi in ottone; spallacci a lamine; cosciali, ginocchiere, schinieri, scarpe a lamine; bracciali,
    cubitiere, guanti; sopraveste con falda e cintura; scudo curvo con bordo di ferro e umbone; spada con
    guardia, pomolo a disco e fodero. Materiali fisici + riflessi dal cielo (`knight.aggiornaRiflessi`, chiamata
