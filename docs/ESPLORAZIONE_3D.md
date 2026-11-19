@@ -1023,6 +1023,14 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
      una direzione conta solo se dall'altura si vede qualcosa tra 15 e 30 km che dal piede non si vedeva; sulla
      Carta il punto migliore ogni 10 km. Con 20–30 km la copertura scendeva a 85–89 % in 5 semi su 30 (le colline
      si coprono tra loro); con 15–30 km: 95,7–98+ %, tutti i 30 semi oltre il 90 %.
+   - *Fiumi su terrapieni nel mondo regionale* (segnalato dall'utente). Misurato (seme 48213): nel 23 % dei punti
+     il pelo dell'acqua stava più di 5 m sopra il terreno a lato (p99 48 m), e l'argine lo reggeva su un terrazzo
+     con una scarpata. Cause: il letto dei tratti tenuti dalla Carta veniva dalla Carta levigata (più alta del fondo
+     vero), la sorgente pure, e la media monotona lasciava il fiume sospeso sulle conche lungo la via. Ora il letto
+     segue sempre il terreno della Scena e non sta mai sopra quello incontrato (dove serve scende, poi non risale);
+     sorgente al terreno vero; il percorso preferisce il fondovalle (costo se a 80 m di lato il terreno scende);
+     il tracciato della Carta si tiene solo se corre sul fondo; argine più ripido (0,4) e media mobile più corta.
+     Terrapieni oltre 5 m: 23 → 10 % (48213), 21 → 8,5 % (855588); p99 48 → 24 m; risalite 0, giuntura 0 m.
    - *Stadio 2:* il punto più alto della cella (griglia di 50 m, poi 10 m) deve essere **una cima vera**:
      nulla più alto entro 150, 300 e 450 m (16 direzioni). Senza questa regola il primo sito del seme 48213
      era un dosso a 469 m ai piedi di un rilievo di 522 m a 400 m di distanza, e il borgo cadeva nella sella.
