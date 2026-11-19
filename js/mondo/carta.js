@@ -25,7 +25,7 @@ export const CARTA_PREDEFINITA = { cols: 600, rows: 450, cella: 1000 };
 // VA CAMBIATA a ogni modifica che cambia le Carte generate, altrimenti il browser riusa Carte vecchie.
 // (In alternativa: ?rigenera nell'indirizzo ignora la cache.)
 // Comprende i luoghi (M7, js/mondo/luoghi.js), che si aggiungono alla Carta nel Worker e stanno nella stessa cache.
-export const VERSIONE_GENERATORE = 'm7-siti-1';
+export const VERSIONE_GENERATORE = 'm7-valichi-1';
 
 // Parametri della forma (km dove non indicato). Valori di partenza, da tarare guardando le Carte.
 const FORMA = {
@@ -313,7 +313,8 @@ export function generaCarta(seme, opzioni = {}) {
     bioma: clima.bioma,                       // BIOMA.*
     massicci: vette.massicci,                 // gruppi montuosi: { id, x, y (km), forma, altezza, torri, raggio }
     asprezza: vette.asprezza,                 // 0…1; > 0,5: pareti di un gruppo
-    valico: vette.valico,                     // 1 = cella di una forcella tra le torri di un gruppo
+    valico: vette.valico,                     // 1 = cella di una forcella tra le torri di un gruppo (non un valico:
+                                              // i valichi veri sono carta.valichi, js/mondo/luoghi.js)
     statistiche: {
       frazioneMare: celleMare / n, ms, cima, laghi: dren.laghi,
       biomi: Object.fromEntries(NOMI_BIOMI.map((nome, b) => [nome, contaBiomi[b] / (celleTerraB || 1)])),

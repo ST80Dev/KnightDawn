@@ -345,8 +345,10 @@ export function verificaLuoghi(carta, limiti = { asprezza: 0.2, bordo: 25, fiume
   }
   if (dMin < limiti.distanza) errori.push(`siti a ${dMin.toFixed(1)} km`);
   const caratteri = [...new Set(L.map((l) => l.carattere))].join(', ');
+  const V = carta.valichi ?? [];
   return {
     ok: errori.length === 0, errori,
-    testo: errori.length ? errori[0] : `rocche ${L.length} (${caratteri}), distanza minima ${dMin === Infinity ? '-' : dMin.toFixed(0) + ' km'}`,
+    testo: errori.length ? errori[0] : `rocche ${L.length} (${caratteri}), distanza minima ${dMin === Infinity ? '-' : dMin.toFixed(0) + ' km'}`
+      + ` · valichi ${V.length}, con sentinella ${V.filter((v) => v.presidio).length}`,
   };
 }

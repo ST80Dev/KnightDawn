@@ -199,9 +199,15 @@ Regole **nuove** per il 3D e per la varietà ravvicinata:
 - **Gruppi montuosi riconoscibili** [deciso con l'utente, novembre 2026, sul modello di Dolomiti e Alpi]:
   4–12 gruppi per mondo, ognuno con una forma sua (torre, altopiano, piramide, cresta), separati da valli
   dove si cammina; pareti invalicabili, ghiaioni percorribili alla base, forcelle tra le torri dello stesso
-  gruppo. Ogni gruppo è un luogo («il monte X», con un nome quando arriveranno i luoghi) a cui andare; le
-  forcelle sono luoghi di passaggio (strade, pedaggi, imboscate). Niente distese di guglie uguali né creste
-  tutte identiche: ci si perderebbe.
+  gruppo. Ogni gruppo è un luogo («il monte X», con un nome quando arriveranno i luoghi) a cui andare.
+  Niente distese di guglie uguali né creste tutte identiche: ci si perderebbe.
+- **Valichi e forcelle: due cose diverse** [deciso con l'utente, novembre 2026].
+  - *Valico*: passaggio ampio tra **due valli diverse**, ben più in alto dei fondovalle ma comodo; è la via
+    normale per passare da una valle all'altra (strade, pedaggi, imboscate). **Quasi sempre presidiato** da
+    una costruzione di sentinella (torre, posto di guardia). Una rocca «di valico» sta più in basso, allo
+    sbocco di una delle due valli.
+  - *Forcella*: sella tra le torri di un gruppo montuoso, spesso molto più alta; passarci è **azzardato e
+    faticoso**, spesso è nella neve, e **raramente qualcuno la sorveglia**: scorciatoia rischiosa, non strada.
 - **Accostamenti vietati**: niente deserto caldo vicino a neve o ghiacciai, e niente palude in
   quota. La temperatura di fondo varia solo su grande scala: nella fascia calda le cime restano
   sotto il limite delle nevi con margine. Distanza minima deserto–neve [TBD, es. 80 km].

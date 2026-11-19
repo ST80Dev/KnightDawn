@@ -907,12 +907,26 @@ conoscenza sulla Carta. Tavullia resta la scena di prova con il castello di M4.
    nel Worker dopo `generaCarta` e salvato nella cache con la Carta (`VERSIONE_GENERATORE` = `m7-siti-1`).
    - *Stadio 1:* ~55 000–65 000 celle ammesse; si affinano le 260 stime migliori, 65 per ognuna delle zone
      a 90, 140, 220 e 400 km dal centro.
+   - *Valichi* (`trovaValichi`, deciso con l'utente: vedi `docs/GDD.md` §2, «Valichi e forcelle»): selle
+     della Carta (≥ 4 cambi di segno attorno alla cella) i cui due lati bassi scendono, seguendo il flusso,
+     a due fiumi diversi almeno 250 m più in basso, che lungo i fiumi si raggiungono solo con un giro
+     ≥ 25 km (o mai: foci diverse); ai due lati alti il crinale sale di ≥ 100 m entro 5 km; niente pareti
+     dei gruppi montuosi nel raggio di 2 km (lì sono forcelle). Dei valichi entro 10 km il più basso.
+     L'85 % ha una **sentinella** (`presidio`; la costruzione arriva con la milestone dei luoghi).
+     30 semi: 74–157 valichi per mondo, quota mediana 600–1400 m (10° percentile ~450 m, passi di
+     collina; 90° fino a ~2900 m), 1–22 entro 90 km dal centro; 35–145 ms. `carta.valico` resta il nome
+     delle celle di forcella (legenda corretta: «forcella»).
+     *Correzione:* la prima versione del passo misurava la vicinanza alle **forcelle** (8–12 km): sono a
+     2300–3400 m e la terra sotto i 900 m sta a 5–17 km, quindi in 30 semi nessun sito «di valico».
+     L'utente ha fatto notare che il criterio era sbagliato in sé (le forcelle raramente si presidiano).
    - *Stadio 2:* il punto più alto della cella (griglia di 50 m, poi 10 m) deve essere **una cima vera**:
      nulla più alto entro 150, 300 e 450 m (16 direzioni). Senza questa regola il primo sito del seme 48213
      era un dosso a 469 m ai piedi di un rilievo di 522 m a 400 m di distanza, e il borgo cadeva nella sella.
      Poi lavoro di terra su 52×52 m (rocca) e 90×130 m (borgo, nella migliore delle 8 direzioni in discesa),
      pendenza media del borgo, dominanza sull'anello a 1,5 km, distanza esatta dal segmento di fiume più
-     vicino e dalla forcella più vicina. Direzioni e gradi senza trigonometria (costanti scritte e
+     vicino e dal valico più vicino (conta solo se il sito sta più in basso del valico: 15 km pieno, 25 km
+     nullo). Vicino a un valico il sito può salire fino a 1300 m (altrimenti 900); per zona 20 posti
+     riservati ai candidati vicino a un valico. Direzioni e gradi senza trigonometria (costanti scritte e
      arcotangente approssimata).
    - *Scelta:* il migliore nella zona più vicina al centro (partenza, castello di casata), poi uno di
      carattere diverso (fiume, valico, altura) e il migliore rimasto, a ≥ 20 km (scalini 15 e 10 km, zone più
@@ -920,16 +934,18 @@ conoscenza sulla Carta. Tavullia resta la scena di prova con il castello di M4.
    - *Verifica* (`verificaLuoghi` in `verifica.js`, regola «rocche» anche in «Verifica 10 semi»): almeno 2
      siti su terra, non sulle pareti né vicino al bordo, ≥ 0,9 km dai fiumi, lavoro di terra e pendenza nei
      limiti, ≥ 10 km tra loro. **30 semi su 30: 3 siti, sempre allo scalino migliore** (zona 90 km,
-     distanza 20 km); 400–550 ms per Carta nel Worker.
-   - *Carta:* torre rossa più grande secondo la classe, partenza cerchiata, verso del borgo da zoom ×8;
+     distanza 20 km), **in 30 su 30 almeno uno di valico** (a 8–19 km dal valico, 300–1340 m);
+     400–600 ms per Carta nel Worker, valichi compresi. `VERSIONE_GENERATORE` = `m7-valichi-1`.
+   - *Carta:* valichi come «)(» arancio, con un quadratino se hanno la sentinella; sotto il puntatore quota,
+     altezza sui fondovalle, giro per le valli. Torre rossa più grande secondo la classe, partenza cerchiata, verso del borgo da zoom ×8;
      sotto il puntatore classe, carattere, quote, dominanza, lavoro di terra, pendenza, distanze; pulsanti
      «Vai alla rocca» (alla successiva, a ogni clic) e «Candidati» (siti validi non scelti, più chiari col
      punteggio più alto). Esito nel piede.
    - *Partenza:* nuova partita nella Scena centrata sulla rocca di partenza, 170 m più in basso verso il
      borgo, rivolti alla cima. Provvisorio: un'asta con bandiera (colore della classe) sulla cima di ogni
      rocca nel blocco.
-   Limiti: entro 90 km dal centro raramente c'è un gruppo montuoso, quindi nessun sito «valico» nei 30 semi
-   (resta possibile più lontano); le partite salvate nel mondo generato riprendono dove erano (il terreno
+   Limiti: la rocca di valico è vicina al valico e più bassa, ma non si controlla ancora che stia proprio
+   nella valle che sale al passo; le partite salvate nel mondo generato riprendono dove erano (il terreno
    non cambia fino al passo 2).
 2. **Terrapieno nel mondo.** `spianaLuoghi` e il punto unico `quotaFinale`; per ora i contorni sono
    rettangoli arrotondati. *Prova:* la Scena sul sito mostra piani e scarpate; nessuna giuntura con il

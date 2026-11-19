@@ -7,8 +7,13 @@
 //      dalle pareti dei gruppi montuosi, dai bordi, dai fiumi e dai laghi; un'altura rispetto ai dintorni;
 //   2. affinamento alla scala della Scena (quota del mondo, la stessa del terreno 3D): punto più alto della
 //      cella, lavoro di terra sotto la rocca e sotto il borgo (nella direzione migliore), pendenza, dominanza
-//      sui dintorni, distanza esatta dal tracciato del fiume più vicino e dalla forcella più vicina.
+//      sui dintorni, distanza esatta dal tracciato del fiume più vicino e dal valico più vicino.
 // Poi si scelgono 2–3 siti diversi e distanti tra loro, nella zona attorno al centro della Carta.
+//
+// Valichi (deciso con l'utente): passaggi ampi tra due valli diverse, ben sopra i fondovalle ma più bassi e
+// più facili delle forcelle; quasi sempre presidiati da una costruzione di sentinella. Le forcelle (tra le
+// torri di un gruppo montuoso, carta.massicci) sono un'altra cosa: più alte, faticose, spesso nella neve,
+// raramente sorvegliate. Una rocca «di valico» sta più in basso, allo sbocco di una delle due valli.
 // Solo operazioni dal risultato esatto (+ − × ÷, sqrt, floor) e costanti scritte a mano: il sito decide la
 // forma del mondo (dal passo 2 il terrapieno), e deve essere identico in ogni browser.
 
@@ -18,12 +23,14 @@ import { derivaSeme } from './rumore.js';
 
 export const LUOGHI = {
   quota: [120, 900],              // m, quota della cella: collina e pedemonte
+  quotaValico: 1300,              // m: quota massima per i siti vicino a un valico (sbocco di valle in pedemonte)
   biomi: [BIOMA.PIANURA, BIOMA.PIANURA_N, BIOMA.PIANURA_S, BIOMA.FORESTA, BIOMA.COLLINA],
   asprezza: 0.2,                  // oltre: vicino alle pareti dei gruppi montuosi
   bordo: 25,                      // km dal bordo della Carta
   lago: 1.5,                      // km (a celle) dai laghi
   fiume: { minimo: 0.9, buono: [0.9, 4], fino: 6 },   // km dall'asse del tracciato della Carta
-  valico: { buono: 8, fino: 12 }, // km dalla forcella più vicina
+  valico: { buono: 15, fino: 25 },// km dal valico più vicino (il sito sta più in basso)
+  riservati: 20,                  // per zona: celle affinate scelte tra quelle vicine a un valico
   candidati: 260,                 // celle affinate (le migliori secondo la stima sulla Carta)
   // Misure del sito (castello di casata, docs/ESPLORAZIONE_3D.md, M7): la classe ne cambierà la grandezza
   // dal passo 3; qui servono a giudicare il terreno.
@@ -105,16 +112,141 @@ function indiceFiumi(carta) {
   };
 }
 
-/** Forcella più vicina (km) al punto (km). */
-function distanzaValico(carta, px, py) {
-  let d = Infinity;
-  for (const g of carta.massicci || []) {
-    for (const f of g.forcelle) {
-      const ex = f.x - px, ey = f.y - py, e = Math.sqrt(ex * ex + ey * ey);
-      if (e < d) d = e;
+// ─── Valichi ────────────────────────────────────────────────────────────
+export const VALICHI = {
+  sopraFondovalle: 250,           // m: il valico sta almeno così sopra il fondovalle di entrambe le valli
+  discesa: 30,                    // km: al più tanti passi di flusso per arrivare al fiume della valle
+  deviazione: 25,                 // km: fuori dal valico, le due valli si raggiungono solo con un giro più lungo
+  cresta: { sopra: 100, raggio: 5 }, // m, km: ai due lati il crinale sale almeno così (è un varco nel crinale)
+  asprezza: 0.2,                  // niente pareti dei gruppi montuosi attorno (quelle sono forcelle)
+  distanza: 10,                   // km tra due valichi (si tiene il più basso)
+  presidio: 0.85,                 // parte dei valichi con una costruzione di sentinella
+};
+
+// 8 vicine in ordine attorno alla cella (per contare i cambi di segno: una sella ne ha almeno 4).
+const ANELLO_X = [1, 1, 0, -1, -1, -1, 0, 1], ANELLO_Y = [0, 1, 1, 1, 0, -1, -1, -1];
+const ANELLO_D = [1, Math.SQRT2, 1, Math.SQRT2, 1, Math.SQRT2, 1, Math.SQRT2];
+
+/**
+ * Valichi della Carta: selle del rilievo (celle con due lati più bassi e due più alti) i cui lati bassi
+ * scendono, seguendo il flusso, a due fiumi diversi ben più in basso, che si raggiungono tra loro solo con
+ * un lungo giro lungo i fiumi (o mai: foci diverse); ai due lati alti il crinale sale davvero. Lontano dalle
+ * pareti dei gruppi montuosi. Dei valichi vicini si tiene il più basso.
+ * @returns {{ id, x, y (km), quota, valli: [{x, y, quota}, {x, y, quota}], sopra (m), deviazione (km), presidio }[]}
+ */
+export function trovaValichi(carta, V = VALICHI) {
+  const { cols, rows, quota, mare, acque, asprezza, ricevente, bacino, sogliaFiume } = carta;
+  if (!ricevente || !bacino) return [];
+  const terra = (i) => !mare[i] && (!acque || acque[i] === ACQUA.TERRA);
+  const nasce = [];
+  const dentro = (x, y) => x >= 1 && y >= 1 && x < cols - 1 && y < rows - 1;
+  /** Primo fiume a valle della cella, seguendo il flusso (−1 se non c'è entro V.discesa passi). */
+  const fiumeDi = (i) => {
+    for (let k = 0; k < V.discesa && i >= 0; k++) {
+      if (bacino[i] >= sogliaFiume) return i;
+      i = ricevente[i];
+    }
+    return -1;
+  };
+  /** Passo lungo il flusso (km): 1 o √2. */
+  const passo = (i, j) => ((i % cols) !== (j % cols) && ((i / cols) | 0) !== ((j / cols) | 0) ? Math.SQRT2 : 1);
+  const valle = new Map();                           // per il giro tra le due valli: cella → km dal fiume 1
+  for (let y = 1; y < rows - 1; y++) {
+    for (let x = 1; x < cols - 1; x++) {
+      const i = y * cols + x, h = quota[i];
+      if (!terra(i) || bacino[i] >= sogliaFiume) continue;
+      // Sella: almeno 4 cambi di segno attorno (sopra / non sopra).
+      let cambi = 0;
+      const sopra = new Array(8);
+      for (let k = 0; k < 8; k++) sopra[k] = quota[(y + ANELLO_Y[k]) * cols + x + ANELLO_X[k]] > h;
+      for (let k = 0; k < 8; k++) if (sopra[k] !== sopra[(k + 1) % 8]) cambi++;
+      if (cambi < 4) continue;
+      let aspro = false;
+      for (let dy = -2; dy <= 2 && !aspro; dy++) for (let dx = -2; dx <= 2; dx++) {
+        if (dentro(x + dx, y + dy) && asprezza && asprezza[(y + dy) * cols + x + dx] > V.asprezza) { aspro = true; break; }
+      }
+      if (aspro) continue;
+      // Archi bassi e alti: il punto più basso (o più alto) di ciascun arco.
+      const archi = [];
+      let k0 = 0;
+      while (sopra[k0] === sopra[(k0 + 7) % 8]) k0++;      // inizio di un arco (esiste: cambi ≥ 4)
+      for (let t = 0; t < 8;) {
+        const k = (k0 + t) % 8, tipo = sopra[k];
+        let best = k;
+        while (t < 8 && sopra[(k0 + t) % 8] === tipo) {
+          const kk = (k0 + t) % 8, v = quota[(y + ANELLO_Y[kk]) * cols + x + ANELLO_X[kk]];
+          const vb = quota[(y + ANELLO_Y[best]) * cols + x + ANELLO_X[best]];
+          if (tipo ? v > vb : v < vb) best = kk;
+          t++;
+        }
+        archi.push({ sopra: tipo, k: best });
+      }
+      const bassi = archi.filter((a) => !a.sopra), alti = archi.filter((a) => a.sopra);
+      if (bassi.length < 2 || alti.length < 2) continue;
+      const qv = (a) => quota[(y + ANELLO_Y[a.k]) * cols + x + ANELLO_X[a.k]];
+      bassi.sort((a, b) => qv(a) - qv(b));
+      // Il crinale sale ai due lati alti (i due più alti), lungo la loro direzione.
+      alti.sort((a, b) => qv(b) - qv(a));
+      let crinale = true;
+      for (const a of alti.slice(0, 2)) {
+        let mx = -Infinity;
+        for (let d = 1; d <= V.cresta.raggio; d++) {
+          const xx = x + ANELLO_X[a.k] * d, yy = y + ANELLO_Y[a.k] * d;
+          if (!dentro(xx, yy)) break;
+          mx = Math.max(mx, quota[yy * cols + xx]);
+        }
+        if (mx < h + V.cresta.sopra) { crinale = false; break; }
+      }
+      if (!crinale) continue;
+      // Le due valli: i fiumi a valle dei due lati bassi.
+      const la = (y + ANELLO_Y[bassi[0].k]) * cols + x + ANELLO_X[bassi[0].k];
+      const lb = (y + ANELLO_Y[bassi[1].k]) * cols + x + ANELLO_X[bassi[1].k];
+      const fa = fiumeDi(la), fb = fiumeDi(lb);
+      if (fa < 0 || fb < 0 || fa === fb) continue;
+      const sopraFondo = Math.min(h - quota[fa], h - quota[fb]);
+      if (sopraFondo < V.sopraFondovalle) continue;
+      // Giro lungo i fiumi tra le due valli: da fa a valle (km), poi da fb a valle fino a incontrare quel percorso.
+      valle.clear();
+      let d = 0, j = fa;
+      for (let k = 0; j >= 0 && k < 5000; k++) { valle.set(j, d); const r = ricevente[j]; if (r >= 0) d += passo(j, r); j = r; }
+      let giro = Infinity;
+      d = 0; j = fb;
+      for (let k = 0; j >= 0 && k < 5000; k++) {
+        if (valle.has(j)) { giro = d + valle.get(j); break; }
+        const r = ricevente[j]; if (r >= 0) d += passo(j, r); j = r;
+      }
+      if (giro < V.deviazione) continue;
+      nasce.push({ x: x + 0.5, y: y + 0.5, quota: h, sopra: sopraFondo, deviazione: giro,
+        valli: [fa, fb].map((f) => ({ x: (f % cols) + 0.5, y: ((f / cols) | 0) + 0.5, quota: quota[f] })) });
     }
   }
-  return d;
+  // Dei valichi vicini il più basso (a parità, quello col giro più lungo).
+  nasce.sort((a, b) => a.quota - b.quota || b.deviazione - a.deviazione || a.y - b.y || a.x - b.x);
+  const tenuti = [];
+  for (const v of nasce) {
+    if (tenuti.some((t) => (t.x - v.x) * (t.x - v.x) + (t.y - v.y) * (t.y - v.y) < V.distanza * V.distanza)) continue;
+    tenuti.push(v);
+  }
+  const seme = derivaSeme(carta.seme, 950);
+  return tenuti.map((v, id) => ({ id, ...v, presidio: hashUnita(Math.floor(v.x), Math.floor(v.y), seme) < V.presidio }));
+}
+
+/** Numero in [0, 1) da due interi e un seme (hash su interi: uguale in ogni motore JS). */
+function hashUnita(a, b, seme) {
+  let h = Math.imul(a, 0x27d4eb2d) ^ Math.imul(b, 0x165667b1) ^ seme;
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+/** Valico più vicino (km) al punto (km) e la sua quota. */
+function valicoVicino(valichi, px, py, out = { d: Infinity, quota: 0 }) {
+  out.d = Infinity; out.quota = 0;
+  for (const v of valichi) {
+    const ex = v.x - px, ey = v.y - py, e = Math.sqrt(ex * ex + ey * ey);
+    if (e < out.d) { out.d = e; out.quota = v.quota; }
+  }
+  return out;
 }
 
 /** Rampa lineare da 1 (fino ad a) a 0 (da b in poi). */
@@ -124,7 +256,7 @@ const cala = (v, a, b) => (v <= a ? 1 : v >= b ? 0 : (b - v) / (b - a));
  * Giudica un sito attorno alla cella (c, r). null se scartato; altrimenti le misure e il punteggio.
  * Coordinate del mondo in metri.
  */
-function affina(carta, c, r, seed, fiumeVicino, L) {
+function affina(carta, c, r, seed, fiumeVicino, valichi, L) {
   const C = carta.cella;
   const q = (x, z) => quotaMondo(carta, x, z, seed);
   // Punto più alto della cella (griglia di 50 m), poi ritocco a 10 m attorno.
@@ -202,9 +334,12 @@ function affina(carta, c, r, seed, fiumeVicino, L) {
   // Fiume e valico (km).
   const fv = fiumeVicino(bx / C, bz / C, L.fiume.fino);
   if (fv.d < L.fiume.minimo) return null;
-  const dValico = distanzaValico(carta, bx / C, bz / C);
+  // Il valico conta solo se il sito sta più in basso (allo sbocco della valle, non sopra il passo).
+  const vv = valicoVicino(valichi, bx / C, bz / C);
+  const dValico = vv.d;
   const bonusFiume = fv.d === Infinity ? 0 : cala(fv.d, L.fiume.buono[1], L.fiume.fino);
-  const bonusValico = cala(dValico, L.valico.buono, L.valico.fino);
+  const bonusValico = bh < vv.quota ? cala(dValico, L.valico.buono, L.valico.fino) : 0;
+  if (bonusValico < 0.5 && bh > L.quota[1] + 60) return null;   // sopra i 900 m solo vicino a un valico
   const P = L.pesi;
   const punteggio = Math.min(dominanza, D.tetto) + P.fiume * bonusFiume + P.valico * bonusValico
     - P.rocca * dRocca - P.borgo * migliore.dBorgo - P.pendenza * pendenza;
@@ -232,6 +367,8 @@ export function scegliLuoghi(carta, L = LUOGHI) {
   const dLago = distanzaCelle(cols, rows, (i) => acque && (acque[i] === ACQUA.LAGO || acque[i] === ACQUA.LAGO_COSTIERO));
   const ammesso = new Uint8Array(32);
   for (const b of L.biomi) ammesso[b] = 1;
+  const valichi = carta.valichi ?? trovaValichi(carta);
+  const vv = { d: 0, quota: 0 };
 
   // ─── Stadio 1: stima sulle celle ───
   const stime = [];
@@ -240,7 +377,10 @@ export function scegliLuoghi(carta, L = LUOGHI) {
   for (let r = L.bordo; r < rows - L.bordo; r++) {
     for (let c = L.bordo; c < cols - L.bordo; c++) {
       const i = r * cols + c, h = quota[i];
-      if (mare[i] || (acque && acque[i] !== ACQUA.TERRA) || h < L.quota[0] || h > L.quota[1]) continue;
+      if (mare[i] || (acque && acque[i] !== ACQUA.TERRA) || h < L.quota[0] || h > L.quotaValico) continue;
+      valicoVicino(valichi, c + 0.5, r + 0.5, vv);
+      const bv = h < vv.quota ? cala(vv.d, L.valico.buono, L.valico.fino) : 0;
+      if (h > L.quota[1] && bv < 0.5) continue;
       if (bioma && !ammesso[bioma[i]]) continue;
       if (asprezza && asprezza[i] > L.asprezza) continue;
       if (dLago[i] < L.lago) continue;
@@ -251,8 +391,7 @@ export function scegliLuoghi(carta, L = LUOGHI) {
       vicino(c + 0.5, r + 0.5, L.fiume.fino, fv);
       if (fv.d < 0.5) continue;                            // la cella è sul fiume
       const bf = fv.d === Infinity ? 0 : cala(fv.d, L.fiume.buono[1], L.fiume.fino);
-      const bv = cala(distanzaValico(carta, c + 0.5, r + 0.5), L.valico.buono, L.valico.fino);
-      stime.push({ c, r, s: Math.min(dom, L.dominanza.tetto) + L.pesi.fiume * bf + L.pesi.valico * bv });
+      stime.push({ c, r, bv, s: Math.min(dom, L.dominanza.tetto) + L.pesi.fiume * bf + L.pesi.valico * bv });
     }
   }
   // Le migliori stime per zona (anelli attorno al centro), così ogni scalino della scelta ha candidati.
@@ -264,11 +403,14 @@ export function scegliLuoghi(carta, L = LUOGHI) {
   };
   stime.sort((a, b) => b.s - a.s || a.r - b.r || a.c - b.c);
   const perZona = Math.ceil(L.candidati / L.zona.length);
-  const contaZona = new Array(L.zona.length + 1).fill(0);
+  const contaZona = new Array(L.zona.length + 1).fill(0), contaValico = new Array(L.zona.length + 1).fill(0);
   const scelte = [];
   for (const st of stime) {
     const z = zonaDi(st.c, st.r);
-    if (z >= L.zona.length || contaZona[z] >= perZona) continue;
+    if (z >= L.zona.length) continue;
+    // Posti riservati ai siti vicino a un valico: con la sola stima entrerebbero di rado.
+    if (st.bv >= 0.5 && contaValico[z] < L.riservati) { contaValico[z]++; scelte.push(st); continue; }
+    if (contaZona[z] >= perZona) continue;
     contaZona[z]++;
     scelte.push(st);
   }
@@ -276,7 +418,7 @@ export function scegliLuoghi(carta, L = LUOGHI) {
   // ─── Stadio 2: affinamento ───
   const validi = [];
   for (const st of scelte) {
-    const sito = affina(carta, st.c, st.r, seed, vicino, L);
+    const sito = affina(carta, st.c, st.r, seed, vicino, valichi, L);
     if (sito) { sito.zona = zonaDi(sito.x / carta.cella, sito.z / carta.cella); validi.push(sito); }
   }
   validi.sort((a, b) => b.punteggio - a.punteggio || a.z - b.z || a.x - b.x);
@@ -316,12 +458,14 @@ export function scegliLuoghi(carta, L = LUOGHI) {
     .map((s) => ({ x: s.x, z: s.z, punteggio: s.punteggio, carattere: s.carattere }));
   return {
     luoghi, candidati,
-    info: { stime: stime.length, affinati: scelte.length, validi: validi.length, scalino, ms: performance.now() - t0 },
+    info: { stime: stime.length, affinati: scelte.length, validi: validi.length, valichi: valichi.length,
+      scalino, ms: performance.now() - t0 },
   };
 }
 
-/** Aggiunge `carta.luoghi`, `carta.candidatiLuoghi` e le statistiche alla Carta. */
+/** Aggiunge `carta.valichi`, `carta.luoghi`, `carta.candidatiLuoghi` e le statistiche alla Carta. */
 export function aggiungiLuoghi(carta) {
+  carta.valichi = trovaValichi(carta);
   const { luoghi, candidati, info } = scegliLuoghi(carta);
   carta.luoghi = luoghi;
   carta.candidatiLuoghi = candidati;

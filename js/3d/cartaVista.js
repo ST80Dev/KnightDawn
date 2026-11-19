@@ -48,6 +48,7 @@ const COLORE_CAVALIERE = '#e8402a';
 // Rocche (M7): segno più grande secondo la classe; candidati scartati come puntini (pulsante «Candidati»).
 const CLASSI_ROCCA = { minore: ['rocca minore', 5], casata: ['castello di casata', 6.5], maggiore: ['sede maggiore', 8] };
 const COLORE_ROCCA = '#8c1c13';
+const COLORE_VALICHI = '#d9822b';
 // Rilievo fine della parte visibile: da zoom DA, un campione ogni `passo` pixel (CSS) dello schermo,
 // calcolato a pezzi tra un fotogramma e l'altro (`budget` ms) dopo che la vista si è fermata (`attesa` ms).
 const DETTAGLIO = { da: 4, passo: 2, attesa: 120, budget: 12, esagerazione: 2, equidistanze: [5, 10, 20, 25, 50, 100, 200, 250, 500],
@@ -168,14 +169,15 @@ export function createCartaVista(contenitore, opzioni = {}) {
   const pallino = (c) => `<i style="width:10px;background:rgb(${c.join(',')})"></i>`;
   function legenda() {
     const pan = ` · <b style="color:${COLORE_PANORAMA}">▴</b> punti panoramici`;
-    if (livello === 'temperatura') elLegenda.innerHTML = `media annua −15 <i style="background:${sfumatura(SCALA_T)}"></i> 24 °C` + pan;
-    else if (livello === 'umidita') elLegenda.innerHTML = `umidità secco <i style="background:${sfumatura(SCALA_U)}"></i> umido` + pan;
+    const valichiLeg = ` · <b style="color:${COLORE_VALICHI}">)(</b> valico (pieno: con sentinella)`;
+    if (livello === 'temperatura') elLegenda.innerHTML = `media annua −15 <i style="background:${sfumatura(SCALA_T)}"></i> 24 °C` + pan + valichiLeg;
+    else if (livello === 'umidita') elLegenda.innerHTML = `umidità secco <i style="background:${sfumatura(SCALA_U)}"></i> umido` + pan + valichiLeg;
     else if (livello === 'biomi') {
       // (i valichi della Carta dei biomi sono le forcelle dei gruppi montuosi)
       elLegenda.innerHTML = [BIOMA.PIANURA_N, BIOMA.PIANURA, BIOMA.PIANURA_S, BIOMA.COLLINA, BIOMA.FORESTA,
         BIOMA.MONTAGNA, BIOMA.ROCCIA, BIOMA.NEVE, BIOMA.GHIACCIO, BIOMA.SABBIA, BIOMA.PALUDE]
-        .map((b) => `${pallino(COLORI_BIOMI[b])} ${NOMI_BIOMI[b]}`).join(' ') + ` ${pallino(COLORE_VALICO)} valico` + pan;
-    } else elLegenda.innerHTML = `quota 0 <i style="background:${sfumatura(TERRA)}"></i> 3500 m · non biomi` + pan;
+        .map((b) => `${pallino(COLORI_BIOMI[b])} ${NOMI_BIOMI[b]}`).join(' ') + ` ${pallino(COLORE_VALICO)} forcella` + pan + valichiLeg;
+    } else elLegenda.innerHTML = `quota 0 <i style="background:${sfumatura(TERRA)}"></i> 3500 m · non biomi` + pan + valichiLeg;
   }
   legenda();
   selLivello.addEventListener('change', () => { livello = selLivello.value; legenda(); if (carta) mostra(carta); });
@@ -477,6 +479,19 @@ export function createCartaVista(contenitore, opzioni = {}) {
       }
       ctx.fill();
     }
+    // Valichi (M7): due archi contrapposti «)(»; pieni se presidiati da una sentinella.
+    if (carta.valichi) {
+      const m = 4.5 * dpr;
+      ctx.lineWidth = 1.6 * dpr;
+      for (const v of carta.valichi) {
+        const [px, py] = P(v.x, v.y);
+        if (px < -m || py < -m || px > larghezza + m || py > altezza + m) continue;
+        ctx.strokeStyle = COLORE_VALICHI;
+        ctx.beginPath(); ctx.arc(px - m * 1.6, py, m * 1.2, -0.75, 0.75); ctx.stroke();
+        ctx.beginPath(); ctx.arc(px + m * 1.6, py, m * 1.2, Math.PI - 0.75, Math.PI + 0.75); ctx.stroke();
+        if (v.presidio) { ctx.fillStyle = COLORE_VALICHI; ctx.fillRect(px - m * 0.35, py - m * 0.35, m * 0.7, m * 0.7); }
+      }
+    }
     // Rocche (M7): torre stilizzata, più grande secondo la classe; la partenza cerchiata.
     if (mostraCandidati && carta.candidatiLuoghi?.length) {
       const C = carta.cella, ps = carta.candidatiLuoghi.map((k) => k.punteggio);
@@ -715,6 +730,13 @@ export function createCartaVista(contenitore, opzioni = {}) {
   function roccaSotto(x, y) {
     if (!carta.luoghi) return '';
     const raggio = Math.max(1.5, 8 * dpr / scala());
+    for (const v of carta.valichi ?? []) {
+      const dx = v.x - x, dy = v.y - y;
+      if (dx * dx + dy * dy > raggio * raggio) continue;
+      return `valico ${v.id + 1} a ${fmt(v.quota)} m, ${fmt(v.sopra)} m sopra i fondovalle (${fmt(v.valli[0].quota)} e ${fmt(v.valli[1].quota)} m),`
+        + ` giro per le valli ${v.deviazione === Infinity ? 'nessuno (foci diverse)' : fmt(v.deviazione) + ' km'},`
+        + ` ${v.presidio ? 'con sentinella' : 'senza sentinella'} · `;
+    }
     for (const l of carta.luoghi) {
       const dx = l.x / carta.cella - x, dy = l.z / carta.cella - y;
       if (dx * dx + dy * dy > raggio * raggio) continue;
