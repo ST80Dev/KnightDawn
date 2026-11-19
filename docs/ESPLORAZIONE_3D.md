@@ -1528,7 +1528,8 @@ Carta e `VERSIONE_GENERATORE` invariate.
 > Chiesto dall'utente (novembre 2026): «strade di terra battuta che colleghino gli elementi di colline e pianure,
 > e sentieri di montagna; un compromesso tra il tragitto più breve e pendenze non esagerate, a cavallo e a
 > piedi». Riferimenti: `docs/GDD.md` §2 («Strade, ponti e guadi», valichi e forcelle) e §3 «Viaggio».
-> **Stato: piano da approvare; nessun codice.**
+> **Stato: passi 1–2 fatti (approvati dall'utente: «procedi con le strade passi 1-2»), da provare. Pendenze della
+> tabella, file `js/mondo/strade.js`: confermati.** Passi 3–5 da fare.
 
 **Cosa c'è oggi** [Certo, dal codice]: rocche e borghi di M7 (3 per mondo), valichi (2 per mondo), gruppi
 montuosi con le forcelle, fiumi con bacino, profondità e guadabilità (fino a ~0,9 m, bacino ~150 km²). Il
@@ -1595,14 +1596,39 @@ nuovo: serve la conferma (regola 2).
 4. **Ponti e guadi.**
 5. **Viaggio sulla Carta** lungo le strade.
 
+### Fatto (passi 1–2)
+
+- **Rete** (`aggiungiStrade`, nel Worker con i luoghi; `VERSIONE_GENERATORE` `…+strade-1`): nodi = porte dei borghi,
+  valichi e le loro due valli, **16 abitati provvisori** (i siti candidati non usati per le rocche, a ≥ 12 km dagli
+  altri nodi: tengono il posto dei villaggi), poi sentieri dalla rete a cime panoramiche (≤ 4, ≥ 1100 m, massimi
+  locali su 6 km) e forcelle. Albero minimo sui costi + anelli dove il giro supera 1,6× il diretto (entro 25 km).
+  Mosse a 24 direzioni (anche salti di 2 celle: scavalcano un fiume). Le celle dei fiumi grandi (≥ 150 km²) non si
+  calpestano: si passano solo scavalcandole, cioè con un **ponte**; i torrenti si guadano.
+- **Ponti** [misurato]: anche con ponti gratuiti la rete attraversa i fiumi grandi solo 4–11 volte per mondo e si
+  accorcia dell'1–2 % (in 120×90 km le sorgenti sono vicine: aggirare costa poco). Costo del ponte 600 m
+  equivalenti: **2–4 ponti per mondo**, 4–15 guadi. Le strade si fondono in tronchi comuni: la rete si salva
+  come **rami** unici tra incroci (classe = la più importante tra le strade che li usano).
+- Misure su 3 semi: 250–600 ms nel Worker; 400–600 km di strade (soprattutto carrarecce: i nodi provvisori sono
+  abitati), 1–7 strade maestre, mulattiere e sentieri in quota.
+- **Tracciato fine** (`raffinaStrade`, nella pagina con i fiumi della zona): tratti di ~4 km tra punti fissi (spostati
+  entro 150 m sul terreno più dolce), griglia di 20 m in un corridoio di 450 m (1125 m se chiuso), 16 direzioni,
+  pendenze sul terreno lisciato su ~60 m, costo oltre pmax che cresce con l'eccesso (gli strappi brevi si accettano,
+  le salite lunghe si girano), **svolta** che costa fino a 60 m equivalenti (tornanti a lati lunghi, niente denti di
+  sega). Su 4 semi: oltre 1,1·pmax lo 0,5–2 % della lunghezza; nessun tratto senza percorso. Scena di partenza
+  +160–300 ms (una volta per tratto, poi in cache).
+- **Nella Scena** (`spianaStrade` in `quotaFinale`, dopo i fiumi e prima dei terrapieni): carreggiata alla quota della
+  strada (profilo lisciato su 25 m, l'acqua saltata), scarpate di taglio e di riporto al più 0,6, ritorno al terreno
+  in 18 + 10 m; nell'alveo niente (il guado è il fiume; il ponte arriverà al passo 4). Giuntura tra blocchi 0 m.
+- **Colore**: strato `strada` di `materialeSuolo` (scostamento con segno dall'asse, semilarghezza, distanza):
+  terra battuta per pixel con bordo frastagliato, solchi delle ruote ed erba al centro sulle strade da carro; solo
+  nel blocco. **Carta**: rami per classe (mulattiere e sentieri tratteggiati).
+- **Vegetazione**: `distanzaStrada(carta, x, z)` è pronta; l'esclusione degli alberi dalla carreggiata è della
+  sessione della vegetazione (passo 3 di questo piano).
+
 ### Da decidere
 
-1. Farla ora in parallelo a M7 e alla vegetazione (deroga alla regola 4), o dopo la milestone dei luoghi?
-   [Probabile] conviene fare ora i passi 1–2 sui nodi esistenti (il generatore non cambia quando i luoghi
-   arriveranno) e rinviare il resto.
-2. Le pendenze massime della tabella (strada maestra al 10 %, mulattiera al 25 %, sentiero al 45 %).
-3. Il nome del file nuovo `js/mondo/strade.js`.
-4. Su strada nella Scena si va più veloci (o non si rallenta in salita come fuori strada)?
+1. Passi 3–5 (colore e vegetazione con l'altra sessione, ponti e guadi, viaggio sulla Carta): quando.
+2. Su strada nella Scena si va più veloci (o non si rallenta in salita come fuori strada)?
 
 ## Fuori dal prototipo (non farlo ora)
 
