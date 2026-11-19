@@ -153,15 +153,23 @@ COLORI_SCENA[BIOMA.COLLINA] = new THREE.Color('#9aa65a');
 COLORI_SCENA[BIOMA.FORESTA] = new THREE.Color('#41652c');
 COLORI_SCENA[BIOMA.MONTAGNA] = new THREE.Color('#87975a');       // pascoli d'alta quota
 COLORI_SCENA[BIOMA.ROCCIA] = new THREE.Color('#8e8678');
-COLORI_SCENA[BIOMA.NEVE] = new THREE.Color('#eef1f4');
-COLORI_SCENA[BIOMA.GHIACCIO] = new THREE.Color('#d6e6f0');
+COLORI_SCENA[BIOMA.NEVE] = new THREE.Color('#dde3ea');
+COLORI_SCENA[BIOMA.GHIACCIO] = new THREE.Color('#c3d3df');
 COLORI_SCENA[BIOMA.SABBIA] = new THREE.Color('#d6bf8a');
 COLORI_SCENA[BIOMA.PALUDE] = new THREE.Color('#5f7048');
 COLORI_SCENA[BIOMA.FIUME] = COLORI_SCENA[BIOMA.PIANURA];
 const COLORE_ROCCIA = new THREE.Color('#8f877a');
 const COLORE_ROCCIA_SCURA = new THREE.Color('#6c665e');
 const COLORE_GHIAIONE = new THREE.Color('#9d978b');
-const COLORE_NEVE = new THREE.Color('#f1f3f6');
+// Neve (docs/GRAFICA_3D.md): un bianco freddo che al sole pieno NON satura. Con '#f1f3f6' ogni faccia rivolta al sole
+// usciva a 255 (misurato): salita e discesa avevano lo stesso colore, e la luce calda la rendeva color crema.
+// Nel materiale per pixel (materialeSuolo) la neve vira all'azzurro-grigio delle ombre sui versanti (pendenza della
+// normale del pixel) e, vicino alla camera, cumuli e onde del vento inclinano la normale: il rilievo si legge
+// anche vicino al cavaliere, dove la griglia da 7,8 m è liscia. Solo luce: geometria e getHeight non cambiano.
+const COLORE_NEVE = new THREE.Color('#dde3ea');
+const COLORE_NEVE_VERSANTE = new THREE.Color('#9fadc2');
+const NEVE_VERSANTE = [2, 24, 0.85];       // gradi di pendenza (inizio, pieno) e quanto vira al massimo
+const DETTAGLIO_NEVE = [1.4, 50, 150];     // forza; pieno fino a (m dalla camera); spento a (m)
 const COLORE_RADURA = new THREE.Color('#7f9f4c');
 const COLORE_ALPEGGIO = new THREE.Color('#8a985c');
 
@@ -257,6 +265,9 @@ export function materialeSuolo(cx, cz, mezzo = 1e9) {
     uRoccia: { value: COLORE_ROCCIA.clone() },
     uRocciaScura: { value: COLORE_ROCCIA_SCURA.clone() },
     uNeve: { value: COLORE_NEVE.clone() },
+    uNeveVersante: { value: COLORE_NEVE_VERSANTE.clone() },
+    uNeveV: { value: new THREE.Vector3(...NEVE_VERSANTE) },
+    uDettaglioNeve: { value: new THREE.Vector3(...DETTAGLIO_NEVE) },
     uCentro: { value: new THREE.Vector2(((cx % P) + P) % P, ((cz % P) + P) % P) },
     uMezzo: { value: mezzo },
   };
@@ -282,6 +293,10 @@ varying vec2 vMondo;`)
 uniform vec3 uRoccia;
 uniform vec3 uRocciaScura;
 uniform vec3 uNeve;
+uniform vec3 uNeveVersante;
+uniform vec3 uNeveV;
+uniform vec3 uDettaglioNeve;
+float kdNeve = 0.0;   // quanta neve c'è in questo pixel (la usa il dettaglio della normale)
 uniform vec2 uCentro;
 uniform float uMezzo;
 varying vec3 vBase;
@@ -338,8 +353,28 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
     vec3 c = mix(cPrato, cRoccia * (1.0 + 0.5 * dettaglio), roccia);
     // La neve ha un bordo suo (rumore spostato), non quello della roccia.
     float neve = sogliaSuolo(vStrati.y + 0.8 * bordo + (rumoreSuolo(p + 517.0, 16.0) - 0.5) * 0.12 * spegniSuolo(16.0, dist));
-    c = mix(c, uNeve * (1.0 + 0.3 * dettaglio), neve);
+    // Sui versanti la neve vira all'azzurro-grigio: pendenza dalla normale del pixel (vista → mondo).
+    vec3 nMondo = normalize((vec4(normalize(vNormal), 0.0) * viewMatrix).xyz);
+    float pendNeve = degrees(acos(clamp(nMondo.y, -1.0, 1.0)));
+    vec3 cNeve = mix(uNeve, uNeveVersante, smoothstep(uNeveV.x, uNeveV.y, pendNeve) * uNeveV.z);
+    c = mix(c, cNeve * (1.0 + 0.3 * dettaglio), neve);
+    kdNeve = neve;
     diffuseColor.rgb = c;
+  }`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+  {
+    // Cumuli larghi (~8 m), onde del vento allungate, grana fine (~1 m): inclinano la normale dove c'è neve.
+    float wNeve = kdNeve * uDettaglioNeve.x
+      * (1.0 - smoothstep(uDettaglioNeve.y, uDettaglioNeve.z, length(vViewPosition)));
+    if (wNeve > 0.001) {
+      const float e = 0.12;
+      vec2 p = vMondo;
+      #define KD_NEVE(q) (rumoreSuolo(q, 8.0) * 0.8 + rumoreSuolo(vec2((q).x, (q).y * 2.0), 4.0) * 0.3 + rumoreSuolo(q, 1.0) * 0.06)
+      float gx = (KD_NEVE(p + vec2(e, 0.0)) - KD_NEVE(p - vec2(e, 0.0))) / (2.0 * e);
+      float gz = (KD_NEVE(p + vec2(0.0, e)) - KD_NEVE(p - vec2(0.0, e))) / (2.0 * e);
+      #undef KD_NEVE
+      normal = normalize(normal - (viewMatrix * vec4(gx, 0.0, gz, 0.0)).xyz * wNeve);
+    }
   }`);
   };
   mat.customProgramCacheKey = () => 'suolo-mondo';

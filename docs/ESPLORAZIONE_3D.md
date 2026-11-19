@@ -20,6 +20,7 @@ persona che ci cammina sopra seguendo il terreno, e un castello low-poly in cui 
 - Low-poly, *flat shading*, colori pieni: niente texture fotografiche.
   **Direzione decisa per dopo M4: simil-realistico, non iper-realistico**, per terreno, cavaliere e
   castello, spinto **al massimo con il solo codice**. Dettagli in M4, «Dopo la valutazione».
+  Convenzioni di stile, materiali e piano del cavaliere: `docs/GRAFICA_3D.md`.
 - Palette ispirata alla pergamena di `js/config.js` (`PALETTE`), adattata alla luce 3D.
 - Colore del terreno per vertice, in base ad altitudine e pendenza (prato → bosco → roccia).
 - Luce direzionale (sole) + luce emisferica + nebbia leggera per nascondere il bordo del mondo.
