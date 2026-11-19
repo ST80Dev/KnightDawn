@@ -620,6 +620,11 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
      ~60 m (come l'orizzonte vicino; con quella fine il blocco veniva più roccioso dei dintorni e si vedeva
      il riquadro); la luce del blocco passa dalle normali fini a quelle su ~60 m negli ultimi 600 m verso il
      bordo. Limite: pareti davvero verticali richiedono rilievo apposito (oggi le pendenze arrivano a ~45°).
+   - **Da fare (deciso con l'utente): vette aspre e pendenze invalicabili.** Creste nette, salti di roccia e
+     pareti oltre il limite del cavaliere (35°) in montagna; il cavaliere cerca i passaggi più dolci, come
+     nella realtà. Condizione: tra le valli di una catena restano **valichi** percorribili (pendenza entro il
+     limite), verificati automaticamente, e i percorsi della Carta passano da lì; la regola dei punti
+     panoramici e i fiumi (percorso sul terreno) vanno ricontrollati dopo il cambio del rilievo.
    Limiti noti: il limite delle nevi si calcola al caricamento della Scena (cambiando stagione dentro la
    Scena si aggiorna alla Scena successiva); niente alberi né rocce come oggetti (il bosco è un colore);
    paludi rare; le regole di varietà (deserto–neve, distese monotone) si verificano al passo 8.
