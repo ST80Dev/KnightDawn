@@ -641,6 +641,12 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
      versanti`); la forma la fanno le scale di 1,4 km e 700 m, come i versanti lunghi di Alpi e Montagne
      Rocciose. Conche chiuse per km²: montagna da 3,4 a 0,8, pedemonte da 3,3 a 1,4 (Tavullia 1,6); pendenza
      p50/p90 in montagna 15°/29° (prima 20°/34°). Collina e pianura invariate.
+   - *Montagne lontane per orientarsi* (richiesta dell'utente): orizzonte esteso a 110 km (quarto anello, passo
+     2 km, solo Carta più i gruppi montuosi; ~187 000 triangoli, 350–400 ms), camera fino a 130 km, foschia da 10
+     a 170 km (a 100 km ~55 % del contrasto perso). Per il gioco, non per il realismo: curvatura con raggio 4
+     volte quello vero (a 100 km −200 m invece di −680 m) ed esagerazione verticale che cresce con la distanza
+     (nessuna fino a 20 km, ×1,4 oltre 100 km; applicata anche ai laghi dell'orizzonte). Seme 855588: dalla
+     pianura a 91 km la catena principale (3370 m) si vede innevata; prima non si vedeva niente.
    Limiti noti: il limite delle nevi si calcola al caricamento della Scena (cambiando stagione dentro la
    Scena si aggiorna alla Scena successiva); niente alberi né rocce come oggetti (il bosco è un colore);
    paludi rare; le regole di varietà (deserto–neve, distese monotone) si verificano al passo 8.

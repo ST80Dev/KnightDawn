@@ -1,16 +1,17 @@
 // Knight Dawn — orizzonte attorno a una Scena del mondo generato (M6, passo 5).
 // Terreno lontano solo da guardare (non calpestabile), costruito dalla Carta già in memoria: dal bordo del
-// blocco di 2×2 km si vedono le montagne fino a ~50 km.
+// blocco di 2×2 km si vedono le montagne fino a ~110 km (per orientarsi: curvatura attenuata, foschia leggera).
 //
 //   anello vicino:  dal bordo del blocco a 6 km, passo 62,5 m;
 //   anello medio:   da 6 a 18 km, passo 187,5 m;
-//   anello lontano: da 18 a 48 km, passo 750 m.
+//   anello lontano: da 18 a 48 km, passo 750 m;
+//   anello estremo: da 48 a 110 km, passo 2 km.
 // Una sola funzione di quota per tutti: la quota del mondo (Carta + dettaglio della Scena) in cui ogni ottava
 // del dettaglio si spegne alla distanza in cui la griglia non la rappresenta più (al bordo del blocco c'è
 // tutto, a 18 km resta la sola Carta). Cuciture senza fessure: le celle che toccano il bordo interno sono a
 // ventaglio sui vertici più fitti dentro, e i vertici in comune hanno la stessa quota (stessa funzione,
-// stesse coordinate). Oltre 1,5 km dal centro la superficie scende con la curvatura della Terra (con la
-// rifrazione dell'aria: raggio efficace 7/6 di quello vero).
+// stesse coordinate). Oltre 1,5 km dal centro la superficie scende con la curvatura della Terra, attenuata per
+// il gioco (raggio 4 volte quello vero). I gruppi montuosi ci sono a ogni distanza (sono riferimenti).
 // Passo 6: valli dei fiumi scavate come nel blocco; i fiumi continuano come nastri posati sugli anelli e i
 // laghi in quota come celle al livello del lago.
 //
@@ -27,12 +28,18 @@ export const ORIZZONTE = {
     { passo: 62.5, raggio: 6000 },
     { passo: 187.5, raggio: 18000 },
     { passo: 750, raggio: 48000 },
+    { passo: 2000, raggio: 110000 },       // sola Carta: grandi catene e gruppi montuosi fino a ~110 km
   ],
   // Distanza (m, dal centro, in quadrato come gli anelli) a cui si spegne ciascuna ottava del dettaglio,
   // dalla più ampia (1400 m) alla più fine (~44 m). Tutte piene al bordo del blocco (1 km).
   spegnimento: [[15000, 18000], [12000, 17000], [6000, 9000], [4000, 6000], [1500, 3500], [1200, 2500]],
-  curvatura: { da: 1500, raggioTerra: 6371000 * 7 / 6 },
-  passoAcqua: 1000,
+  // Curvatura attenuata per il gioco (richiesta dell'utente): raggio 4 volte quello vero, così una catena a
+  // 100 km si abbassa di ~200 m invece di ~680 m (con la rifrazione) e resta un riferimento per orientarsi.
+  curvatura: { da: 1500, raggioTerra: 6371000 * 4 },
+  // Esagerazione verticale con la distanza (per il gioco): le montagne lontane un po' più alte del vero, per
+  // orientarsi. Nessuna fino a `da` m, × (1 + quanto) oltre `a` m; cresce piano, così avvicinandosi non si nota.
+  esagera: { da: 20000, a: 100000, quanto: 0.4 },
+  passoAcqua: 1500,
   // Fiumi lontani: fino a `raggio` (m, in quadrato), e ciascun punto finché è largo almeno ~1 pixel
   // (vista = metri di distanza per metro di semilarghezza). Si posano sulla superficie degli anelli, più
   // grossolana del blocco, appena sopra (sopra: m + per metro di distanza); il raccordo dal pelo dell'acqua
@@ -191,7 +198,8 @@ function acqueOrizzonte(carta, cx, cz, anelli, colore) {
           if (!Number.isNaN(livello)) break;
         }
         if (Number.isNaN(livello)) continue;
-        const v = (x, z) => [x, livello - abbassamento(Math.hypot(x, z)), z];
+        const v = (x, z) => { const r = Math.hypot(x, z), E = ORIZZONTE.esagera;   // come il terreno
+          return [x, livello * (1 + E.quanto * smooth(E.da, E.a, r)) - abbassamento(r), z]; };
         pos.push(...v(x0, z0), ...v(x0, z1), ...v(x1, z0), ...v(x1, z0), ...v(x0, z1), ...v(x1, z1));
       }
     }
@@ -235,12 +243,14 @@ export function creaOrizzonte(carta, cx, cz, terrain, coloreAcqua, stagione = 0)
       if (p > 0) nessuno = false;
     }
     // Al bordo del blocco tutte le ottave sono piene: stesso calcolo del blocco (null = senza pesi).
-    const base = nessuno ? quotaCarta(carta, cx + x, cz + z)
+    // Anche senza dettaglio i gruppi montuosi restano (quotaMondo con tutte le ottave spente).
+    const base = nessuno && !carta.massicci?.length ? quotaCarta(carta, cx + x, cz + z)
       : quotaMondo(carta, cx + x, cz + z, seme, tutti ? null : pesi);
     // Le valli dei fiumi anche nell'orizzonte: stessa funzione del blocco (al bordo le quote coincidono).
     const h = scavaFiumi(carta, cx + x, cz + z, base);
     if (h < minimo) minimo = h;
-    return h - abbassamento(Math.hypot(x, z));
+    const r = Math.hypot(x, z), E = O.esagera;
+    return (h > 0 ? h * (1 + E.quanto * smooth(E.da, E.a, r)) : h) - abbassamento(r);
   };
   const cache = new Map();                   // quota dei vertici, calcolata una volta sola
   const P = (x, z) => {

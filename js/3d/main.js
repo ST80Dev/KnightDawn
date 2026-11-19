@@ -30,9 +30,10 @@ THREE.ShaderChunk.fog_vertex = '#ifdef USE_FOG\n\tvFogDepth = length( mvPosition
 const COLORE_CIELO = '#c4d4d6';           // azzurro-pergamena, uguale alla nebbia
 const NEBBIA = [900, 4000];               // m: inizio e fine della nebbia lineare (foschia leggera)
 // m: con l'orizzonte (mondo generato). Più trasparente da quando salire per guardare lontano è un'azione
-// di gioco: a 15 km si perde ~8 % del contrasto, a 25 km ~35 %. Più avanti dipenderà dal tempo atmosferico.
-const NEBBIA_ORIZZONTE = [8000, 50000];
-const LONTANO = 60000;                    // m: distanza massima disegnata dalla camera
+// di gioco, e le grandi montagne servono a orientarsi fino a ~100 km: a 25 km si perde ~10 % del contrasto,
+// a 50 km ~25 %, a 100 km ~55 %. Più avanti dipenderà dal tempo atmosferico.
+const NEBBIA_ORIZZONTE = [10000, 170000];
+const LONTANO = 130000;                   // m: distanza massima disegnata dalla camera
 const PARAMETRI = new URL(window.location.href).searchParams;
 const TAVULLIA = PARAMETRI.get('terreno') === 'tavullia';   // scena di prova (terreno reale, castello)
 const COLORE_ACQUA = '#4d7282';
@@ -40,7 +41,7 @@ const PROFONDITA_GUADO = 0.9;             // m d'acqua oltre i quali il cavalier
 
 // ─── Renderer, scena, camera ────────────────────────────────────────────
 const canvas = document.getElementById('scena');
-// Buffer di profondità logaritmico: dal cavaliere a pochi metri fino all'orizzonte a ~50 km senza che le
+// Buffer di profondità logaritmico: dal cavaliere a pochi metri fino all'orizzonte a ~110 km senza che le
 // superfici lontane (costa e mare, versanti vicini) si contendano i pixel.
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -463,7 +464,7 @@ async function caricaScena(desc) {
   scene.add(terrain.mesh);
 
   if (desc.tipo === 'mondo') {
-    // Orizzonte: terreno lontano fino a ~50 km. Le pareti laterali del blocco si vedrebbero dall'esterno.
+    // Orizzonte: terreno lontano fino a ~110 km. Le pareti laterali del blocco si vedrebbero dall'esterno.
     orizzonte = creaOrizzonte(carta, desc.cx, desc.cz, terrain, COLORE_ACQUA, Calendar.stagione);
     scene.add(orizzonte.oggetto);
     const pareti = terrain.mesh.getObjectByName('terreno-bordo');
@@ -866,7 +867,7 @@ function aggiornaPannello(now) {
   }
   if (terrain) {
     testo += `\nterreno: ${terrain.meta.source} · ${fmt(terrain.minElev)}–${fmt(terrain.maxElev)} m · ${statPendenze}`;
-    if (orizzonte) testo += `\norizzonte: fino a ${fmt(48)} km · ${fmt(orizzonte.triangoli)} triangoli · ${fmt(orizzonte.ms)} ms`;
+    if (orizzonte) testo += `\norizzonte: fino a ${fmt(110)} km · ${fmt(orizzonte.triangoli)} triangoli · ${fmt(orizzonte.ms)} ms`;
     if (scenaAttuale?.tipo === 'mondo' && knight) {
       testo += `\nmondo: cavaliere a ${fmt((scenaAttuale.cx + knight.stato.x) / 1000, 2)},`
         + ` ${fmt((scenaAttuale.cz + knight.stato.z) / 1000, 2)} km`;
