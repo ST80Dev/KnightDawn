@@ -258,6 +258,10 @@ const ottaveGLSL = (lista, varNome) => lista.map(([s, a]) =>
   `  if (dist < ${(s * SUOLO.spegni[1]).toFixed(1)}) ${varNome} += (rumoreSuolo(p, ${s.toFixed(1)}) - 0.5) * ${a.toFixed(3)}`
   + ` * spegniSuolo(${s.toFixed(1)}, dist);`).join('\n');
 
+/** Texture nera 1×1: ombre spente (anelli dell'orizzonte, prima che la vegetazione le disegni). */
+const TEXTURE_NERA = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
+TEXTURE_NERA.needsUpdate = true;
+
 /**
  * Materiale del terreno del mondo generato a colore per pixel. La geometria deve avere gli attributi `base` (vec3)
  * e `strati` (vec4: roccia, neve, variazione, tono della roccia), oltre a `color` (colore per vertice completo, per
@@ -306,7 +310,14 @@ export function materialeSuolo(cx, cz, mezzo = 1e9) {
     uCentro: { value: new THREE.Vector2(((cx % P) + P) % P, ((cz % P) + P) % P) },
     uMezzo: { value: mezzo },
     uRumore: { value: textureRumore() },
+    // Vegetazione: ombre finte degli oggetti (r: ombra del sole, ridisegnata quando il sole si sposta) e piede scuro
+    // attorno al punto di contatto (r, fisso), in coordinate del blocco; forza (sole, piede). Le imposta
+    // vegetazione3d.js tramite mat.userData.uniformi; negli anelli restano spente.
+    uOmbre: { value: TEXTURE_NERA },
+    uPiede: { value: TEXTURE_NERA },
+    uOmbreForza: { value: new THREE.Vector2(0, 0) },
   };
+  mat.userData.uniformi = uniformi;
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uniformi);
     sh.vertexShader = sh.vertexShader
@@ -341,6 +352,9 @@ float kdNeve = 0.0;   // quanta neve c'è in questo pixel (la usa il dettaglio d
 float kdPrato = 0.0;  // quanto prato o sottobosco (vegetazione: micro-rilievo della normale)
 uniform vec2 uCentro;
 uniform float uMezzo;
+uniform sampler2D uOmbre;
+uniform sampler2D uPiede;
+uniform vec2 uOmbreForza;
 varying vec3 vBase;
 varying vec4 vStrati;
 varying vec2 vMondo;
@@ -449,6 +463,17 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
     c = mix(c, cNeve * (1.0 + 0.3 * dettaglio), neve);
     kdNeve = neve;
     kdPrato *= 1.0 - neve;
+    // Vegetazione: ombre finte di alberi, cespugli e rocce, e piede scuro attorno al punto di contatto (solo nel blocco).
+    if (uOmbreForza.x + uOmbreForza.y > 0.0) {
+      vec2 dB = vMondo - uCentro;
+      dB -= ${P.toFixed(1)} * floor(dB / ${P.toFixed(1)} + 0.5);
+      vec2 uvO = dB / (2.0 * uMezzo) + 0.5;
+      if (uvO.x > 0.0 && uvO.y > 0.0 && uvO.x < 1.0 && uvO.y < 1.0) {
+        float om = texture2D(uOmbre, uvO).r * uOmbreForza.x;
+        float pi = texture2D(uPiede, uvO).r * uOmbreForza.y;
+        c *= 1.0 - max(om, pi);
+      }
+    }
     diffuseColor.rgb = c;
   }`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>

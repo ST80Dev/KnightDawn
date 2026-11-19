@@ -827,6 +827,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyV' && !e.repeat && vegetazione) {
     vegetazioneVisibile = !vegetazioneVisibile;
     vegetazione.oggetto.visible = vegetazioneVisibile;
+    if (!vegetazioneVisibile) vegetazione.nascondiOmbre();
   }
   if (e.code === 'F8' && !e.repeat) {
     e.preventDefault();
@@ -998,6 +999,7 @@ function aggiornaPannello(now) {
         + ` · ${fmt(st.triangoli)} triangoli · posizionamento ${fmt(v.msPosiziona)} ms (campi ${fmt(v.msCampi)})`
         + ` · costruzione ${fmt(v.msCostruzione)} ms · livelli ${fmt(st.msAggiorna, 1)} ms${vegetazioneVisibile ? '' : ' · nascosta'}`
         + `\n  vicino: erba ${fmt(st.erba)} ciuffi · felci ${fmt(st.felci)} · ciottoli ${fmt(st.ciottoli)} · ${fmt(st.msVicino, 1)} ms`
+        + ` · ombre di ${fmt(st.ombre)} oggetti · ${fmt(st.msOmbre, 1)} ms`
         + `\n  ${Object.entries(v.conteggi).filter(([, n]) => n).map(([k, n]) => `${k} ${fmt(n)}`).join(' · ')}`
         + `\ndisegno: ${fmt(renderer.info.render.calls)} chiamate · ${fmt(renderer.info.render.triangles)} triangoli`;
     }
@@ -1046,7 +1048,7 @@ function frame(now) {
       aggiornaNebbia(controls.target);
     }
   }
-  if (vegetazione && vegetazioneVisibile) vegetazione.aggiorna(camera.position.x, camera.position.z);
+  if (vegetazione && vegetazioneVisibile) vegetazione.aggiorna(camera.position.x, camera.position.z, sole.position, _luceGiorno);
   aggiornaPannello(now);
   renderer.render(scene, camera);
   infoFrame.calls = renderer.info.render.calls;          // letti subito: i riflessi del cavaliere disegnano anche loro
