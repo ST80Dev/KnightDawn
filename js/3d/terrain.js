@@ -215,9 +215,8 @@ export function coloreMondo(carta, stagione = 0) {
       strati.roccia = cp.roccia; strati.neve = cp.neve; strati.variazione = cp.variazione; strati.tono = cp.tonoRoccia;
       // Strada: scostamento con segno dall'asse (lineare lungo un tratto dritto: interpolato tra i vertici resta
       // esatto) e semilarghezza; lontano dalle strade 99 m.
-      distanzaStrada(carta, x, z, strada);
-      if (strada.d < 40) { strati.lato = strada.lato; strati.semi = strada.semi; strati.distanza = strada.d; }
-      else { strati.lato = 99; strati.semi = 0; strati.distanza = 99; }
+      // Strade: ora un nastro a parte (js/3d/acqua.js, creaNastroStrada); lo strato del suolo resta spento.
+      strati.lato = 99; strati.semi = 0; strati.distanza = 99;
     }
     if (cp.roccia > 0) {
       c.copy(COLORE_ROCCIA).lerp(COLORE_ROCCIA_SCURA, cp.tonoRoccia);

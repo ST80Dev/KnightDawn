@@ -30,6 +30,11 @@ export const STRADE = {
     tornanti: 1.2,              // un dislivello oltre pmax costa come la strada a tornanti (× questo)
     biomi: { [BIOMA.PALUDE]: 3, [BIOMA.FORESTA]: 1.15, [BIOMA.ROCCIA]: 1.6, [BIOMA.NEVE]: 3, [BIOMA.GHIACCIO]: 4, [BIOMA.SABBIA]: 1.3 },
     asprezza: 3,                // gruppi montuosi: costo × (1 + asprezza·a); pareti (a > 0,5) vietate
+    // Rilievo dentro la cella [segnalato dall'utente: una strada restava su un altopiano tutto gobbe invece di
+    // scendere a fondovalle]: la quota della Carta è una per km, il rilievo vero no. `ruvido`: pendenza media del
+    // rilievo delle Scene (quotaMondo) su campioni a `passo` m nella cella; costo × (1 + peso·(ruvido/p0)²), al più
+    // `massimo`. Nei fondovalle ~1–3 %, sugli altopiani aspri 20–40 %.
+    ruvido: { campioni: 6, peso: 0.5, massimo: 25 },
     guado: 300,                 // m equivalenti per attraversare un corso d'acqua che si guada
     ponte: 600,                 // m equivalenti per un ponte nuovo: 2–4 ponti per mondo (aggirare un fiume costa poco)
     ponteEsistente: 150,
@@ -145,9 +150,11 @@ function attraversamento(carta, i, j, v) {
  * Costi della Carta per una classe: funzione (da, a, mossa) → m equivalenti, o Infinity. Le celle dei fiumi grandi
  * non si calpestano (tranne quelle in `permesse`, i nodi): la strada li costeggia e li passa su un ponte.
  */
-function costiCarta(carta, classe, stato, permesse = null) {
+function costiCarta(carta, classe, stato, permesse = null, ruvido = null) {
   const { cols, quota, mare, acque, bioma, bacino, sogliaFiume, asprezza, cella } = carta;
   const C = STRADE.carta, K = STRADE.classi[classe];
+  const fr = ruvido && new Float32Array(ruvido.length);
+  if (fr) for (let i = 0; i < fr.length; i++) { const r = ruvido[i] / K.p0; fr[i] = Math.min(C.ruvido.massimo, 1 + C.ruvido.peso * r * r); }
   const vietata = (i) => mare[i] || (acque && acque[i] !== ACQUA.TERRA) || (asprezza && asprezza[i] > 0.5);
   return (i, j, v) => {
     if (vietata(j) || (bacino[j] >= sogliaFiume && !(permesse && permesse.has(j)))) return Infinity;
@@ -157,12 +164,30 @@ function costiCarta(carta, classe, stato, permesse = null) {
     const Leff = p > K.pmax ? dh / K.pmax * C.tornanti : L;
     const pp = Math.min(p, K.pmax) / K.p0;
     let c = Leff * (1 + pp * pp) * (C.biomi[bioma[j]] ?? 1) * (1 + C.asprezza * (asprezza ? asprezza[j] : 0));
+    if (fr) c *= 0.5 * (fr[i] + fr[j]);
     if (stato && stato.strada[i] && stato.strada[j]) c *= C.riuso;
     // Attraversare un corso d'acqua: guado o ponte.
     const f = attraversamento(carta, i, j, v);
     if (f >= 0) c += bacino[f] < sogliaFiume ? C.guado : stato && stato.ponti.has(f) ? C.ponteEsistente : C.ponte;
     return c;
   };
+}
+
+/** Pendenza media del rilievo delle Scene dentro ogni cella (campioni a griglia, differenze tra vicini). */
+function ruvidezza(carta) {
+  const { cols, rows, cella, mare } = carta, m = STRADE.carta.ruvido.campioni, passo = cella / (m - 1);
+  const out = new Float32Array(cols * rows), h = new Float64Array(m * m);
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const i = y * cols + x;
+      if (mare[i]) continue;
+      for (let b = 0; b < m; b++) for (let a = 0; a < m; a++) h[b * m + a] = quotaMondo(carta, x * cella + a * passo, y * cella + b * passo);
+      let s = 0;
+      for (let b = 0; b < m; b++) for (let a = 0; a < m - 1; a++) s += Math.abs(h[b * m + a + 1] - h[b * m + a]) + Math.abs(h[(a + 1) * m + b] - h[a * m + b]);
+      out[i] = s / (2 * m * (m - 1) * passo);
+    }
+  }
+  return out;
 }
 
 /** Dijkstra sulle celle della Carta da più sorgenti; si ferma al bersaglio se c'è. */
@@ -269,7 +294,8 @@ export function aggiungiStrade(carta) {
   const N = nodi.length;
   // Costi diretti tra tutti i nodi (carrareccia, senza riuso).
   const permesse = new Set(nodi.map((k) => cellaDi(k.x, k.y)));   // i nodi si raggiungono anche sui fiumi
-  const base = costiCarta(carta, 'carrareccia', null, permesse);
+  const ruvido = ruvidezza(carta);
+  const base = costiCarta(carta, 'carrareccia', null, permesse, ruvido);
   const diretti = Array.from({ length: N }, () => new Float64Array(N).fill(Infinity));
   for (let a = 0; a < N; a++) {
     const { dist } = cammini(carta, [cellaDi(nodi[a].x, nodi[a].y)], base);
@@ -329,7 +355,7 @@ export function aggiungiStrade(carta) {
     archi.push({ id: archi.length, classe, da, a, x, y, quotaMassima: qMax });
   };
   const traccia = (classe, sorgenti, bersaglio) => {
-    const { dist, da } = cammini(carta, sorgenti, costiCarta(carta, classe, stato, permesse), bersaglio);
+    const { dist, da } = cammini(carta, sorgenti, costiCarta(carta, classe, stato, permesse, ruvido), bersaglio);
     return Number.isFinite(dist[bersaglio]) ? percorsoDa(da, bersaglio) : null;
   };
   for (const e of ordine) {
@@ -715,3 +741,47 @@ export function spianaStrade(carta, x, z, h, esito) {
 
 /** Solo per gli script di prova in Node: i tratti con il tracciato fine (se cercato). */
 export function _trattiPerProve(carta) { return stradeScena(carta).tratti; }
+
+/**
+ * Percorsi delle strade (m del mondo) nel riquadro, per la vista della Carta: per ogni tratto che lo tocca il
+ * tracciato fine se già cercato, altrimenti la rete. { x, z, classe }.
+ */
+export function percorsiStrade(carta, x0, z0, x1, z1) {
+  if (!carta.strade) return [];
+  const out = [];
+  for (const tr of stradeScena(carta).tratti) {
+    const [a0, b0, a1, b1] = tr.riquadro;
+    if (a1 < x0 || a0 > x1 || b1 < z0 || b0 > z1) continue;
+    out.push(tr.fine ? { x: tr.fine.x, z: tr.fine.z, classe: tr.classe } : { x: tr.px, z: tr.pz, classe: tr.classe });
+  }
+  return out;
+}
+
+/**
+ * Strade nel blocco (coordinate locali, centro (cx, cz), lato 2·half): per ogni tratto raffinato i pezzi dentro il
+ * blocco come Float32Array [x, z, semilarghezza, …], un punto ogni ~`passo` m. Per il nastro della carreggiata.
+ */
+export function stradeBlocco(carta, cx, cz, half, passo = 2) {
+  if (!carta.strade) return [];
+  const out = [];
+  for (const tr of stradeScena(carta).tratti) {
+    const f = tr.fine;
+    if (!f) continue;
+    const [a0, b0, a1, b1] = tr.riquadro;
+    if (a1 < cx - half || a0 > cx + half || b1 < cz - half || b0 > cz + half) continue;
+    let pezzo = [];
+    const chiudi = () => { if (pezzo.length >= 6) out.push(Float32Array.from(pezzo)); pezzo = []; };
+    for (let i = 0; i < f.x.length; i++) {
+      const n = i === 0 ? 1 : Math.max(1, Math.round(Math.hypot(f.x[i] - f.x[i - 1], f.z[i] - f.z[i - 1]) / passo));
+      for (let k = 1; k <= n; k++) {
+        const t = i === 0 ? 1 : k / n;
+        const x = (i === 0 ? f.x[0] : f.x[i - 1] + (f.x[i] - f.x[i - 1]) * t) - cx;
+        const z = (i === 0 ? f.z[0] : f.z[i - 1] + (f.z[i] - f.z[i - 1]) * t) - cz;
+        if (Math.abs(x) > half - 1 || Math.abs(z) > half - 1) { chiudi(); continue; }
+        pezzo.push(x, z, f.semi);
+      }
+    }
+    chiudi();
+  }
+  return out;
+}

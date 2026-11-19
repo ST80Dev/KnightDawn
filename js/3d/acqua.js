@@ -99,5 +99,69 @@ export function creaAcqueScena(acqua, meta, colore) {
     mesh.name = 'laghi';
     gruppo.add(mesh);
   }
+  // Strade (js/mondo/strade.js): nastro della carreggiata sul terreno disegnato.
+  if (acqua.strade?.length && acqua.altezza) {
+    const ms = materialeStrada();
+    for (const t of acqua.strade) gruppo.add(creaNastroStrada(t, ms, acqua.altezza));
+  }
   return gruppo.children.length ? gruppo : null;
+}
+
+// ─── Strade ────────────────────────────────────────────────────────────────
+// Il colore del terreno per vertice (7,8 m) non disegna bene una carreggiata di 1–4,5 m (curve e incroci a
+// cunei, segnalato dall'utente): la strada è un nastro suo, largo esatto, appoggiato sul terreno disegnato.
+const STRADA = {
+  colore: '#9a8260', solchi: 0.82, centro: '#7f8a4c', sopra: 0.25,
+  sezione: [-1, -0.45, 0, 0.45, 1],            // vertici attraverso la carreggiata (× semilarghezza)
+};
+
+function materialeStrada() {
+  // polygonOffset: il nastro vince sul terreno senza alzarlo (niente strada sospesa vista di taglio).
+  return new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+}
+
+/**
+ * Nastro di una strada lungo [x, z, semilarghezza, …] (coordinate locali): 5 vertici per sezione (bordi, solchi delle
+ * ruote, centro), ciascuno alla quota del terreno disegnato `altezza(x, z)` più STRADA.sopra.
+ */
+export function creaNastroStrada(t, mat, altezza) {
+  const m = t.length / 3, S = STRADA.sezione, k = S.length;
+  const pos = new Float32Array(m * k * 3), col = new Float32Array(m * k * 3);
+  const base = new THREE.Color(STRADA.colore), erba = new THREE.Color(STRADA.centro), c = new THREE.Color();
+  for (let i = 0; i < m; i++) {
+    const a = Math.max(0, i - 1), b = Math.min(m - 1, i + 1);
+    let tx = t[b * 3] - t[a * 3], tz = t[b * 3 + 1] - t[a * 3 + 1];
+    const l = Math.hypot(tx, tz) || 1;
+    tx /= l; tz /= l;
+    const x = t[i * 3], z = t[i * 3 + 1], w = t[i * 3 + 2];
+    const variazione = 0.92 + 0.16 * (Math.sin(x * 0.37 + z * 0.23) * 0.5 + 0.5);
+    for (let j = 0; j < k; j++) {
+      const px = x - tz * w * S[j], pz = z + tx * w * S[j];
+      pos.set([px, altezza(px, pz) + STRADA.sopra, pz], (i * k + j) * 3);
+      c.copy(base);
+      if (w > 1.2 && Math.abs(S[j]) === 0.45) c.multiplyScalar(STRADA.solchi);     // solchi delle ruote
+      if (w > 1.2 && S[j] === 0) c.lerp(erba, 0.35);                               // erba al centro
+      c.multiplyScalar(variazione);
+      col.set([c.r, c.g, c.b], (i * k + j) * 3);
+    }
+  }
+  const indici = [];
+  for (let i = 0; i < m - 1; i++) {
+    for (let j = 0; j < k - 1; j++) {
+      const p = i * k + j, q = p + k;
+      indici.push(p, q, p + 1, p + 1, q, q + 1);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setIndex(indici);
+  geo.computeVertexNormals();
+  // Il verso dei triangoli dipende dalla direzione della strada: normali verso l'alto.
+  const n = geo.attributes.normal;
+  for (let i = 0; i < n.count; i++) if (n.getY(i) < 0) n.setXYZ(i, -n.getX(i), -n.getY(i), -n.getZ(i));
+  mat.side = THREE.DoubleSide;
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.name = 'strada';
+  return mesh;
 }
