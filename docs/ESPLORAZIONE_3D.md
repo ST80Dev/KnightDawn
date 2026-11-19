@@ -535,8 +535,12 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
      0,2 km, alle confluenze lo stesso letto del fiume principale e a monte mai più basso. Verificato: 0
      risalite su 421 tracciati (seme 48213).
    - *Sezione* (`scavaFiumi`, funzione del solo punto del mondo, quindi blocchi accanto e orizzonte
-     combaciano): alveo a parabola largo 2·(3 + 0,6·√bacino) m (max 120 m), profondo 0,5 + 0,022·√bacino m
-     (~0,8 m a 150 km², si guada; ~2,7 m a 10 000 km²), sponde basse di 6 m, poi versanti che risalgono
+     combaciano): alveo a parabola largo 2·0,3·bacino^0,6 m (max 140 m; come nei fiumi veri, larghezza ∝
+     portata^0,5–0,6), profondo 0,3 + 0,045·√bacino m. Il fiume cresce lungo il corso [richiesto
+     dall'utente: torrenti piccoli alla sorgente, grandi alle foci e dopo gli affluenti]: ~3,5 m e ~0,5 m
+     d'acqua a 20 km², ~12 m e ~0,85 m a 150 (si guada ancora), ~35 m e ~1,7 m a 1000, ~65 m e ~2,5 m a
+     2500 km² (prima 8 m → 17 m → 65 m: i torrenti erano già larghi). Seme 48213: larghezze p5/p50/p95
+     4/16/63 m; il fiume più lungo va da 12 a 67 m. Sponde basse di 6 m, poi versanti che risalgono
      fino al terreno sempre più ripidi entro 1 km; dove il terreno è più basso del fiume un argine che
      scende piano (il fiume non resta sospeso).
    - *Acqua:* nastro lungo il tracciato al pelo dell'acqua; laghi in quota come quadrati da ~31 m al livello
