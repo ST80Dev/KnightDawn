@@ -14,6 +14,7 @@
 import { generaCarta, VERSIONE_GENERATORE } from './carta.js';
 import { verificaFiumi, verificaPanorami, verificaVarieta, verificaLuoghi } from './verifica.js';
 import { aggiungiLuoghi } from './luoghi.js';
+import { aggiungiStrade } from './strade.js';
 
 const CACHE_MASSIMO = 3;
 
@@ -76,7 +77,7 @@ function verificaSemi(id, semi) {
   semi.forEach((seme, k) => {
     self.postMessage({ id, tipo: 'avanzamento', testo: `seme ${seme} (${k + 1} di ${semi.length})`, frazione: k / semi.length });
     const t0 = performance.now();
-    const carta = aggiungiLuoghi(generaCarta(seme));
+    const carta = aggiungiStrade(aggiungiLuoghi(generaCarta(seme)));
     const f = verificaFiumi(carta), p = verificaPanorami(carta), v = verificaVarieta(carta), l = verificaLuoghi(carta);
     esiti.push({ seme, ms: performance.now() - t0, regole: [
       { nome: 'fiumi', ok: f.ok, testo: f.ok ? 'fiumi in discesa, con foce' : f.errori[0] },
@@ -104,6 +105,8 @@ self.onmessage = async (e) => {
       carta = generaCarta(seme, { avanzamento });
       avanzamento('Rocche e borghi', 0.95);
       aggiungiLuoghi(carta);
+      avanzamento('Strade e sentieri', 0.97);
+      aggiungiStrade(carta);
       const t0 = performance.now();
       carta.verifiche = { fiumi: verificaFiumi(carta), panorami: verificaPanorami(carta), varieta: verificaVarieta(carta),
         luoghi: verificaLuoghi(carta) };
