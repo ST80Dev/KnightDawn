@@ -169,8 +169,8 @@ function chioma({ x = 0, y, z = 0, a, b, c = a, ciuffi, raggio, dettaglio = 1, s
 }
 
 /** Palco di conifera: cono a 12 lati con il bordo che ricade a punte e normali morbide verso l'esterno. */
-function palco(r, h, y, scuro, chiaro, rnd, { lati = 12, punte = 0.22 } = {}) {
-  const geo = new THREE.ConeGeometry(r, h, lati, 2, true);
+function palco(r, h, y, scuro, chiaro, rnd, { lati = 16, punte = 0.22, segmenti = 2 } = {}) {
+  const geo = new THREE.ConeGeometry(r, h, lati, segmenti, true);
   const p = geo.attributes.position, seme = rnd() * 10;
   for (let i = 0; i < p.count; i++) {
     const vx = p.getX(i), vz = p.getZ(i), vy = p.getY(i);
@@ -319,26 +319,29 @@ function creaModelli() {
   // Latifoglie: quercia (larga e bassa), faggio (ovale e alto), castagno (irregolare, a due masse).
   const quercia = () => unisci([
     fusto(0.46, 0.3, 5.0, 8, COL.corteccia), ...rami(4, 3.6, 3.4, COL.corteccia, rnd),
-    ...chioma({ y: 7.6, a: 4.6, b: 3.1, ciuffi: 20, raggio: [1.0, 1.7], scuro: F[0], chiaro: F[1], rnd }),
+    ...chioma({ y: 7.6, a: 4.6, b: 3.1, ciuffi: 30, raggio: [0.8, 1.45], scuro: F[0], chiaro: F[1], rnd }),
   ]);
   const faggio = () => unisci([
     fusto(0.36, 0.22, 6.5, 8, COL.cortecciaChiara), ...rami(3, 4.8, 3.0, COL.cortecciaChiara, rnd),
-    ...chioma({ y: 9.4, a: 3.2, b: 4.4, ciuffi: 20, raggio: [0.9, 1.5], scuro: FF[0], chiaro: FF[1], rnd }),
+    ...chioma({ y: 9.4, a: 3.2, b: 4.4, ciuffi: 28, raggio: [0.75, 1.3], scuro: FF[0], chiaro: FF[1], rnd }),
   ]);
   const castagno = () => unisci([
     fusto(0.42, 0.26, 5.2, 8, COL.corteccia, { inclinaZ: -0.05 }), ...rami(3, 3.8, 3.2, COL.corteccia, rnd),
-    ...chioma({ x: 0.8, y: 8.0, a: 3.4, b: 2.9, ciuffi: 14, raggio: [0.9, 1.5], scuro: F[0], chiaro: F[1], rnd }),
-    ...chioma({ x: -2.4, y: 6.5, z: 0.6, a: 2.2, b: 1.9, ciuffi: 7, raggio: [0.8, 1.3], scuro: F[0], chiaro: F[1], rnd }),
+    ...chioma({ x: 0.8, y: 8.0, a: 3.4, b: 2.9, ciuffi: 20, raggio: [0.75, 1.3], scuro: F[0], chiaro: F[1], rnd }),
+    ...chioma({ x: -2.4, y: 6.5, z: 0.6, a: 2.2, b: 1.9, ciuffi: 10, raggio: [0.7, 1.1], scuro: F[0], chiaro: F[1], rnd }),
   ]);
+  // Livelli (prestazioni, dopo la misura dell'utente: 28–30 FPS nel bosco; «meno definizione a centinaia di metri a
+  // favore del realismo entro i 50 m»): vicino fino a 60 m, più ricco; medio fino a 300 m
+  // con 3 ciuffi semplici (~70 triangoli); lontano un ciuffo solo e un fusto a 3 lati (~26).
   const latMedio = (a, b, y) => unisci([
-    fusto(0.4, 0.26, y - b * 0.6, 5, COL.corteccia),
-    ...chioma({ y, a, b, ciuffi: 7, raggio: [1.6, 2.4], dettaglio: 0, scuro: F[0], chiaro: F[1], rnd, morbido: 0.85 }),
+    fusto(0.4, 0.26, y - b * 0.6, 4, COL.corteccia),
+    ...chioma({ y, a, b, ciuffi: 3, raggio: [2.2, 2.8], dettaglio: 0, scuro: F[0], chiaro: F[1], rnd, morbido: 0.85, pieno: 0.3 }),
   ]);
   M.latifoglia = [
-    { fino: 110, varianti: [quercia(), faggio(), castagno()] },
-    { fino: 450, varianti: [latMedio(4.2, 3.1, 7.6), latMedio(3.2, 4.2, 9.2)] },
+    { fino: 60, varianti: [quercia(), faggio(), castagno()] },
+    { fino: 300, varianti: [latMedio(4.2, 3.1, 7.6), latMedio(3.2, 4.2, 9.2)] },
     { fino: Infinity, varianti: [unisci([fusto(0.42, 0.3, 5.5, 3, COL.corteccia),
-      ...chioma({ y: 8, a: 3.8, b: 3.4, ciuffi: 3, raggio: [2.2, 2.8], dettaglio: 0, scuro: F[0], chiaro: F[1], rnd, morbido: 0.9, pieno: 0.2 })])] },
+      ...chioma({ y: 7.8, a: 3.8, b: 3.3, ciuffi: 1, raggio: [3.4, 3.4], dettaglio: 0, scuro: F[0], chiaro: F[1], rnd, morbido: 0.95, pieno: 0 })])] },
   ];
 
   // Conifere: abete (largo, a palchi) e abete slanciato.
@@ -350,68 +353,67 @@ function creaModelli() {
     }),
   ]);
   M.conifera = [
-    { fino: 110, varianti: [abete(6, 3.2, 14), abete(8, 2.3, 17)] },
-    { fino: 450, varianti: [unisci([fusto(0.3, 0.15, 4, 4, COL.corteccia),
-      palco(3.0, 6.5, 1.8, COL.ago[0], COL.ago[1], rnd, { lati: 8 }), palco(2.1, 6.0, 6.0, COL.ago[0], COL.ago[1], rnd, { lati: 8 }),
-      palco(1.2, 5.0, 10.0, COL.ago[0], COL.ago[1], rnd, { lati: 8 })])] },
-    { fino: Infinity, varianti: [unisci([fusto(0.35, 0.2, 3, 3, COL.corteccia),
-      palco(2.8, 12.5, 1.8, COL.ago[0], COL.ago[1], rnd, { lati: 6, punte: 0 })])] },
+    { fino: 60, varianti: [abete(8, 3.2, 14), abete(10, 2.3, 17)] },
+    { fino: 300, varianti: [unisci([fusto(0.3, 0.15, 3, 3, COL.corteccia),
+      palco(3.0, 7.5, 1.4, COL.ago[0], COL.ago[1], rnd, { lati: 6, segmenti: 1, punte: 0.15 }),
+      palco(1.8, 7.0, 6.5, COL.ago[0], COL.ago[1], rnd, { lati: 6, segmenti: 1, punte: 0.15 })])] },
+    { fino: Infinity, varianti: [unisci([palco(2.8, 13.5, 0.6, COL.ago[0], COL.ago[1], rnd, { lati: 5, segmenti: 1, punte: 0 })])] },
   ];
 
   // Pino domestico: ombrello piatto, o a due ripiani.
   const P = COL.fogliaPino;
   M.pino = [
-    { fino: 110, varianti: [
+    { fino: 60, varianti: [
       unisci([fusto(0.36, 0.2, 9.4, 8, COL.cortecciaPino, { inclinaZ: 0.06 }), ...rami(4, 7.6, 3.2, COL.cortecciaPino, rnd),
         ...chioma({ x: 0.55, y: 10.3, a: 4.6, b: 1.4, ciuffi: 18, raggio: [0.9, 1.4], scuro: P[0], chiaro: P[1], rnd, pieno: 0.4 })]),
       unisci([fusto(0.34, 0.2, 8.4, 8, COL.cortecciaPino, { inclinaZ: -0.08 }), ...rami(3, 6.6, 3.0, COL.cortecciaPino, rnd),
         ...chioma({ x: -0.6, y: 9.6, a: 3.6, b: 1.3, ciuffi: 12, raggio: [0.9, 1.3], scuro: P[0], chiaro: P[1], rnd, pieno: 0.4 }),
         ...chioma({ x: 1.6, y: 8.1, z: 0.8, a: 2.2, b: 0.9, ciuffi: 6, raggio: [0.8, 1.1], scuro: P[0], chiaro: P[1], rnd, pieno: 0.4 })]),
     ] },
-    { fino: 450, varianti: [unisci([fusto(0.34, 0.22, 9.2, 5, COL.cortecciaPino, { inclinaZ: 0.06 }),
-      ...chioma({ x: 0.5, y: 10.2, a: 4.2, b: 1.3, ciuffi: 6, raggio: [1.4, 1.9], dettaglio: 0, scuro: P[0], chiaro: P[1], rnd, morbido: 0.85 })])] },
+    { fino: 300, varianti: [unisci([fusto(0.34, 0.22, 9.2, 4, COL.cortecciaPino, { inclinaZ: 0.06 }),
+      ...chioma({ x: 0.5, y: 10.2, a: 4.2, b: 1.3, ciuffi: 3, raggio: [1.8, 2.3], dettaglio: 0, scuro: P[0], chiaro: P[1], rnd, morbido: 0.85 })])] },
     { fino: Infinity, varianti: [unisci([fusto(0.36, 0.26, 9, 3, COL.cortecciaPino),
-      ...chioma({ x: 0.5, y: 10.2, a: 4.0, b: 1.2, ciuffi: 2, raggio: [2.2, 2.6], dettaglio: 0, scuro: P[0], chiaro: P[1], rnd, morbido: 0.9, pieno: 0.2 })])] },
+      ...chioma({ x: 0.5, y: 10.2, a: 4.0, b: 1.2, ciuffi: 1, raggio: [3.6, 3.6], dettaglio: 0, scuro: P[0], chiaro: P[1], rnd, morbido: 0.95, pieno: 0 })])] },
   ];
 
   // Albero di riva (pioppo): colonna alta e stretta, verde più chiaro, corteccia chiara.
   const R = COL.fogliaRiva;
   M.riva = [
-    { fino: 110, varianti: [unisci([fusto(0.38, 0.14, 14, 8, COL.cortecciaBetulla), ...rami(3, 5, 3.0, COL.cortecciaBetulla, rnd),
-      ...chioma({ y: 10.5, a: 2.0, b: 5.4, ciuffi: 20, raggio: [0.8, 1.2], scuro: R[0], chiaro: R[1], rnd })])] },
-    { fino: 450, varianti: [unisci([fusto(0.34, 0.2, 6, 5, COL.cortecciaBetulla),
-      ...chioma({ y: 10.5, a: 1.9, b: 5.2, ciuffi: 6, raggio: [1.3, 1.8], dettaglio: 0, scuro: R[0], chiaro: R[1], rnd, morbido: 0.85 })])] },
+    { fino: 60, varianti: [unisci([fusto(0.38, 0.14, 14, 8, COL.cortecciaBetulla), ...rami(3, 5, 3.0, COL.cortecciaBetulla, rnd),
+      ...chioma({ y: 10.5, a: 2.0, b: 5.4, ciuffi: 28, raggio: [0.65, 1.05], scuro: R[0], chiaro: R[1], rnd })])] },
+    { fino: 300, varianti: [unisci([fusto(0.34, 0.2, 6, 4, COL.cortecciaBetulla),
+      ...chioma({ y: 10.5, a: 1.9, b: 5.2, ciuffi: 3, raggio: [1.6, 2.0], dettaglio: 0, scuro: R[0], chiaro: R[1], rnd, morbido: 0.85, pieno: 0.4 })])] },
     { fino: Infinity, varianti: [unisci([fusto(0.35, 0.25, 6, 3, COL.cortecciaBetulla),
-      ...chioma({ y: 10.5, a: 1.8, b: 5.0, ciuffi: 2, raggio: [1.8, 2.2], dettaglio: 0, scuro: R[0], chiaro: R[1], rnd, morbido: 0.9, pieno: 0.3 })])] },
+      ...chioma({ y: 10.5, a: 1.8, b: 5.0, ciuffi: 1, raggio: [2.0, 2.0], dettaglio: 0, scuro: R[0], chiaro: R[1], rnd, morbido: 0.95, pieno: 0 })])] },
   ];
 
   // Albero secco: fusto e rami spogli.
   M.secco = [
-    { fino: 110, varianti: [unisci([fusto(0.3, 0.1, 7.5, 7, COL.cortecciaChiara), ...rami(6, 2.8, 3.0, COL.cortecciaChiara, rnd)])] },
-    { fino: 450, varianti: [unisci([fusto(0.3, 0.12, 7, 4, COL.cortecciaChiara), ...rami(2, 3.5, 2.8, COL.cortecciaChiara, rnd)])] },
+    { fino: 60, varianti: [unisci([fusto(0.3, 0.1, 7.5, 7, COL.cortecciaChiara), ...rami(6, 2.8, 3.0, COL.cortecciaChiara, rnd)])] },
+    { fino: 300, varianti: [unisci([fusto(0.3, 0.12, 7, 4, COL.cortecciaChiara), ...rami(2, 3.5, 2.8, COL.cortecciaChiara, rnd)])] },
     { fino: Infinity, varianti: [unisci([fusto(0.32, 0.15, 7, 3, COL.cortecciaChiara)])] },
   ];
 
   // Cespugli: ciuffi su una cupola bassa (due forme da vicino).
   const C = COL.cespuglio, MG = COL.mugo;
   M.cespuglio = [
-    { fino: 70, varianti: [
-      unisci(chioma({ y: 0.55, a: 1.0, b: 0.65, ciuffi: 9, raggio: [0.35, 0.55], scuro: C[0], chiaro: C[1], rnd, sotto: 0, pieno: 0.3 })),
-      unisci(chioma({ y: 0.7, a: 0.8, b: 0.85, ciuffi: 9, raggio: [0.3, 0.5], scuro: C[0], chiaro: C[1], rnd, sotto: 0, pieno: 0.3 })),
+    { fino: 35, varianti: [
+      unisci(chioma({ y: 0.55, a: 1.0, b: 0.65, ciuffi: 7, raggio: [0.4, 0.6], scuro: C[0], chiaro: C[1], rnd, sotto: 0, pieno: 0.3 })),
+      unisci(chioma({ y: 0.7, a: 0.8, b: 0.85, ciuffi: 7, raggio: [0.35, 0.55], scuro: C[0], chiaro: C[1], rnd, sotto: 0, pieno: 0.3 })),
     ] },
-    { fino: 300, varianti: [unisci(chioma({ y: 0.55, a: 0.9, b: 0.65, ciuffi: 3, raggio: [0.5, 0.7], dettaglio: 0, scuro: C[0], chiaro: C[1], rnd, sotto: 0, morbido: 0.85 }))] },
+    { fino: 160, varianti: [unisci(chioma({ y: 0.55, a: 0.9, b: 0.65, ciuffi: 3, raggio: [0.5, 0.7], dettaglio: 0, scuro: C[0], chiaro: C[1], rnd, sotto: 0, morbido: 0.85 }))] },
   ];
   M['arbusto alto'] = [
-    { fino: 70, varianti: [unisci(chioma({ y: 0.35, a: 1.4, b: 0.45, ciuffi: 10, raggio: [0.35, 0.55], scuro: MG[0], chiaro: MG[1], rnd, sotto: 0, pieno: 0.3 }))] },
-    { fino: 300, varianti: [unisci(chioma({ y: 0.35, a: 1.3, b: 0.45, ciuffi: 3, raggio: [0.5, 0.7], dettaglio: 0, scuro: MG[0], chiaro: MG[1], rnd, sotto: 0, morbido: 0.85 }))] },
+    { fino: 35, varianti: [unisci(chioma({ y: 0.35, a: 1.4, b: 0.45, ciuffi: 8, raggio: [0.4, 0.6], scuro: MG[0], chiaro: MG[1], rnd, sotto: 0, pieno: 0.3 }))] },
+    { fino: 160, varianti: [unisci(chioma({ y: 0.35, a: 1.3, b: 0.45, ciuffi: 3, raggio: [0.5, 0.7], dettaglio: 0, scuro: MG[0], chiaro: MG[1], rnd, sotto: 0, morbido: 0.85 }))] },
   ];
 
   // Sterpo: ramaglie secche a raggiera.
-  M.sterpo = [{ fino: 200, varianti: [unisci(Array.from({ length: 7 }, (_, k) =>
+  M.sterpo = [{ fino: 130, varianti: [unisci(Array.from({ length: 7 }, (_, k) =>
     fusto(0.04, 0.01, 0.9 + 0.3 * (k % 3), 3, COL.sterpo, { inclinaZ: 0.6 * Math.cos(k * 0.9), inclinaX: 0.6 * Math.sin(k * 0.9), sotto: 0.1 })))] }];
 
   // Canne: ciuffo di steli sottili con la punta chiara.
-  M.canne = [{ fino: 150, varianti: [unisci(Array.from({ length: 11 }, (_, k) => {
+  M.canne = [{ fino: 110, varianti: [unisci(Array.from({ length: 11 }, (_, k) => {
     const a = k * 2.4, d = 0.15 + 0.25 * ((k * 7) % 5) / 5;
     return cono(0.035, 1.6 + 0.6 * ((k * 3) % 4) / 4, 3, 0, COL.canna[0], COL.canna[1],
       { x: d * Math.cos(a), z: d * Math.sin(a), inclinaX: 0.12 * Math.sin(a), inclinaZ: 0.12 * Math.cos(a), frastaglio: 0, rnd });
@@ -420,13 +422,13 @@ function creaModelli() {
   // Rocce spigolose (richiesta dell'utente): più forme, proporzioni per istanza, grigi diversi. Sasso, masso (anche
   // enorme, nelle frane), affioramento largo e basso fatto di lastre.
   const R1 = (r, o) => rocciaSpigolosa(r, rnd, o);
-  M.sasso = [{ fino: 130, piatto: true, varianti: [
+  M.sasso = [{ fino: 100, piatto: true, varianti: [
     unisci([R1(0.32, { dettaglio: 0, tagli: 5, y: 0.06, sy: 0.6 })]),
-    unisci([R1(0.3, { dettaglio: 1, tagli: 7, y: 0.05, sx: 1.4, sy: 0.45 })]),
+    unisci([R1(0.3, { dettaglio: 0, tagli: 6, y: 0.05, sx: 1.4, sy: 0.45 })]),
     unisci([R1(0.3, { dettaglio: 0, tagli: 6, y: 0.1, sy: 0.9, sz: 0.7 })]),
   ] }];
   M.masso = [
-    { fino: 220, piatto: true, varianti: [
+    { fino: 160, piatto: true, varianti: [
       unisci([R1(1.2, { tagli: 9, y: 0.3, sy: 0.72 })]),
       unisci([R1(1.1, { tagli: 8, y: 0.25, sx: 1.45, sy: 0.55 }), R1(0.6, { dettaglio: 0, tagli: 5, x: 1.2, y: 0.15, z: 0.6, sy: 0.7 })]),
       unisci([R1(1.15, { tagli: 10, y: 0.45, sx: 0.85, sy: 1.05, sz: 0.9, profondita: [0.45, 0.75] })]),
@@ -520,7 +522,8 @@ export function creaVegetazione(pos, terrain = null) {
       e.set(roccia ? (v - 0.5) * 0.5 : (v2 - 0.5) * 0.06, rot, roccia ? (v3 - 0.5) * 0.4 : (v3 - 0.5) * 0.06);
       q.setFromEuler(e);
       const largo = roccia ? 0.7 + 0.8 * v3 : 0.8 + 0.45 * v3;
-      const alto = roccia ? 0.55 + 0.7 * v : (albero ? 0.8 + 0.4 * v : 0.85 + 0.3 * v);
+      const v4 = (v * 17.31) % 1;              // altezza indipendente dalla larghezza (richiesta dell'utente)
+      const alto = roccia ? 0.55 + 0.7 * v : (albero ? 0.72 + 0.56 * v4 : 0.85 + 0.3 * v4);
       sc.set(s * largo, s * alto, s * (roccia ? 0.7 + 0.7 * v2 : largo * (0.9 + 0.2 * v2)));
       m4.compose(p, q, sc).toArray(matrici, k * 16);
       xz[k * 2] = d[o]; xz[k * 2 + 1] = d[o + 2];

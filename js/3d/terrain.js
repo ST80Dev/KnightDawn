@@ -384,15 +384,23 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
       vec2 loc = abs(vMondo - uCentro);
       loc = min(loc, ${P.toFixed(1)} - loc);
       float blocco = 1.0 - smoothstep(uMezzo - 120.0, uMezzo, max(loc.x, loc.y));
-      float r1 = rumoreSuolo(p, 32.0), r2 = rumoreSuolo(p, 8.0), r3 = rumoreSuolo(p, 2.0), r4 = rumoreSuolo(p + 911.0, 16.0);
-      float terra = smoothstep(0.62, 0.78, r1 * 0.6 + r2 * 0.4) * prato;
-      cPrato = mix(cPrato, vec3(0.19, 0.125, 0.06) * (0.8 + 0.4 * r3), terra * 0.5);
-      vec3 lett = mix(vec3(0.011, 0.0065, 0.003), vec3(0.06, 0.036, 0.016), smoothstep(0.3, 0.8, r2));
-      lett = mix(lett, vec3(0.003, 0.003, 0.002), smoothstep(0.55, 0.8, r3 * 0.5 + r2 * 0.5) * 0.85);
-      lett = mix(lett, vec3(0.012, 0.03, 0.007), smoothstep(0.45, 0.68, r4) * 0.85);
-      lett *= 0.6 + 0.8 * r3;
-      cPrato = mix(cPrato, lett, vSuolo.x * 0.95 * prato * blocco);
-      cPrato = mix(cPrato, vec3(0.07, 0.055, 0.035) * (0.8 + 0.4 * r2), smoothstep(0.3, 1.0, vSuolo.y) * 0.6 * blocco);
+      // Prestazioni: niente rumori dove non servono. Terra nuda solo sul prato entro 3 km; lettiera e fango solo dove
+      // il blocco li porta (aSuolo, 0 negli anelli); la grana di 2 m solo vicino.
+      float suoloV = max(vSuolo.x, vSuolo.y) * blocco;
+      if (prato > 0.01 && dist < 3000.0 || suoloV > 0.01) {
+        float r1 = rumoreSuolo(p, 32.0), r2 = rumoreSuolo(p, 8.0);
+        float r3 = dist < 400.0 ? rumoreSuolo(p, 2.0) : 0.5, r4 = 1.0 - r1;
+        float terra = smoothstep(0.62, 0.78, r1 * 0.6 + r2 * 0.4) * prato;
+        cPrato = mix(cPrato, vec3(0.19, 0.125, 0.06) * (0.8 + 0.4 * r3), terra * 0.5);
+        if (suoloV > 0.01) {
+          vec3 lett = mix(vec3(0.011, 0.0065, 0.003), vec3(0.06, 0.036, 0.016), smoothstep(0.3, 0.8, r2));
+          lett = mix(lett, vec3(0.003, 0.003, 0.002), smoothstep(0.55, 0.8, r3 * 0.5 + r2 * 0.5) * 0.85);
+          lett = mix(lett, vec3(0.012, 0.03, 0.007), smoothstep(0.45, 0.68, r4) * 0.85);
+          lett *= 0.6 + 0.8 * r3;
+          cPrato = mix(cPrato, lett, vSuolo.x * 0.95 * prato * blocco);
+          cPrato = mix(cPrato, vec3(0.07, 0.055, 0.035) * (0.8 + 0.4 * r2), smoothstep(0.3, 1.0, vSuolo.y) * 0.6 * blocco);
+        }
+      }
     }
     vec3 c = mix(cPrato, cRoccia * (1.0 + 0.5 * dettaglio), roccia);
     // Strada di terra battuta (js/mondo/strade.js): bordo frastagliato di qualche decimetro, solchi delle ruote
