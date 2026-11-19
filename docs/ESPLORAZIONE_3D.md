@@ -555,6 +555,18 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
    ombreggiatura e curve di livello (equidistanza 5–50 m secondo lo zoom, una curva su cinque più scura),
    a pezzi tra un fotogramma e l'altro (200–330 ms); zoom massimo ×80 (~15 m per campione). Sotto il
    puntatore la quota nella Scena oltre a quella della cella.
+   **Correzioni dopo la prova (segnalate dall'utente):**
+   - *Valli troppo larghe e lisce.* I versanti si raccordavano al terreno entro 1 km per ogni fiume e
+     cancellavano il dettaglio: attorno anche a un torrente c'era per km una conca liscia e uniforme. Ora la
+     fascia dei versanti è proporzionale al fiume (R = 120 + 8·semilarghezza m: ~240 m per un torrente,
+     ~600 m per i fiumi più grandi) e il dettaglio del rilievo vi torna man mano (pieno da 0,6·R): la valle
+     segue i rilievi attorno. L'argine (dove il terreno è più basso del fiume) si raccorda entro R.
+   - *Linea nera all'orizzonte e «parete».* Era la superficie di un lago in quota vista di taglio da sotto:
+     la B-spline della Carta mescolava il fondo del lago (anche 200 m sotto il livello) con la soglia, la
+     riva nella Scena scendeva sotto il livello e l'acqua restava sospesa. Ora la levigatura usa il livello
+     per le celle di lago e toglie poi la profondità interpolata tra le celle (a riva il terreno resta quello
+     dei dintorni); in più, nella fascia attorno al lago, il terreno sale fino al livello + 0,5 m. Il letto
+     dei fiumi vicino ai laghi segue la stessa riva; un immissario arriva al livello del lago.
 7. **Temperatura, umidità, biomi** (fasi 6–7) e limite delle nevi nello shader; colori della Scena per
    bioma. *Prova:* livelli della Carta; neve sulle cime.
 8. **Regole di varietà e verifica automatica** (fase 8) su N semi, con esito per regola. Con i passi 3 e
