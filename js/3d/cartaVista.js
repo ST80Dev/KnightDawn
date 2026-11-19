@@ -10,7 +10,7 @@
 // fino a pochi metri per campione): ombreggiatura e curve di livello, per scegliere una cima o una conca.
 
 import { ACQUA, BIOMA, NOMI_BIOMI, profiloMassicci } from '../mondo/carta.js';
-import { verificaFiumi, verificaPanorami, verificaVarieta } from '../mondo/verifica.js';
+import { verificaFiumi, verificaPanorami, verificaVarieta, verificaLuoghi } from '../mondo/verifica.js';
 import { semeDaTesto, derivaSeme } from '../mondo/rumore.js';
 import { quotaMondo, scavaFiumi, livelloLago, raffinaZona, percorsiFiumi } from '../mondo/scena.js';
 
@@ -45,6 +45,9 @@ const COSTA = [70, 52, 30];
 const ESAGERAZIONE = 6;           // quanto il rilievo pesa nell'ombreggiatura
 const COLORE_PANORAMA = 'rgba(150, 40, 30, 0.9)';
 const COLORE_CAVALIERE = '#e8402a';
+// Rocche (M7): segno più grande secondo la classe; candidati scartati come puntini (pulsante «Candidati»).
+const CLASSI_ROCCA = { minore: ['rocca minore', 5], casata: ['castello di casata', 6.5], maggiore: ['sede maggiore', 8] };
+const COLORE_ROCCA = '#8c1c13';
 // Rilievo fine della parte visibile: da zoom DA, un campione ogni `passo` pixel (CSS) dello schermo,
 // calcolato a pezzi tra un fotogramma e l'altro (`budget` ms) dopo che la vista si è fermata (`attesa` ms).
 const DETTAGLIO = { da: 4, passo: 2, attesa: 120, budget: 12, esagerazione: 2, equidistanze: [5, 10, 20, 25, 50, 100, 200, 250, 500],
@@ -122,6 +125,7 @@ const fmt = (n, d = 0) => n.toLocaleString('it-IT', { minimumFractionDigits: d, 
  *   posizione?: () => ({x:number, y:number}|null),  // cavaliere sulla Carta (km da ovest e da nord)
  *   onScegli?: (carta: object, x: number, y: number) => void,   // clic su una cella di terra
  *   onTavullia?: () => void,                        // pulsante «Tavullia (prova)»
+ *   onRocca?: (carta: object, sito: object) => void, // pulsante «Vai alla rocca» (M7)
  *   generaCarta: (seme: number, avanzamento) => Promise<object>,   // dal Web Worker (generatore.js)
  * }} opzioni
  */
@@ -142,6 +146,8 @@ export function createCartaVista(contenitore, opzioni = {}) {
       </select>
       <button type="button" class="intera" title="Tutta la Carta">Vista intera</button>
       <button type="button" class="centra" title="Ingrandisci attorno al cavaliere">Centra sul cavaliere</button>
+      <button type="button" class="rocca" title="Scena della rocca successiva (fuori dalla porta del borgo)">Vai alla rocca</button>
+      <button type="button" class="candidati" title="Siti validi non scelti, colorati per punteggio">Candidati</button>
       <button type="button" class="semi" title="Genera 10 semi a caso e verifica ogni regola (fiumi, punti panoramici, varietà)">Verifica 10 semi</button>
       <button type="button" class="tavullia" title="Terreno reale di Tavullia con il castello (scena di prova)">Tavullia (prova)</button>
       <span class="legenda"></span>
@@ -191,6 +197,9 @@ export function createCartaVista(contenitore, opzioni = {}) {
   let varieta = null;                            // esito di verificaVarieta
   let esitoSemi = '';                            // ultima verifica su più semi
   let mostraPanorami = false;                    // i triangoli sono tanti: si mostrano a richiesta
+  let mostraCandidati = false;                   // siti delle rocche validi ma non scelti
+  let luoghiVerifica = null;                     // esito di verificaLuoghi
+  let roccaSuccessiva = 0;
 
   // ─── Vista: centro (in celle = km) e zoom (1 = tutta la Carta nello spazio disponibile) ───
   const ZOOM_MAX = 80;
@@ -250,6 +259,8 @@ export function createCartaVista(contenitore, opzioni = {}) {
     verifica = carta.verifiche?.fiumi ?? verificaFiumi(carta);
     panorami = carta.verifiche?.panorami ?? verificaPanorami(carta);
     varieta = carta.verifiche?.varieta ?? verificaVarieta(carta);
+    luoghiVerifica = carta.luoghi ? (carta.verifiche?.luoghi ?? verificaLuoghi(carta)) : null;
+    if (nuova) roccaSuccessiva = 0;
     if (nuova) vistaIntera();
     disegnaIstogramma();
     adatta();
@@ -466,6 +477,37 @@ export function createCartaVista(contenitore, opzioni = {}) {
       }
       ctx.fill();
     }
+    // Rocche (M7): torre stilizzata, più grande secondo la classe; la partenza cerchiata.
+    if (mostraCandidati && carta.candidatiLuoghi?.length) {
+      const C = carta.cella, ps = carta.candidatiLuoghi.map((k) => k.punteggio);
+      const pmin = Math.min(...ps), pmax = Math.max(...ps);
+      for (const k of carta.candidatiLuoghi) {
+        const [px, py] = P(k.x / C, k.z / C);
+        const t = pmax > pmin ? (k.punteggio - pmin) / (pmax - pmin) : 1;
+        ctx.fillStyle = `rgba(${Math.round(80 + 160 * t)}, ${Math.round(60 + 40 * t)}, 40, 0.9)`;
+        ctx.beginPath(); ctx.arc(px, py, 2.5 * dpr, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    if (carta.luoghi) {
+      const C = carta.cella;
+      ctx.font = `${Math.round(11 * dpr)}px Georgia, serif`;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      for (const l of carta.luoghi) {
+        const [px, py] = P(l.x / C, l.z / C), m = CLASSI_ROCCA[l.classe][1] * dpr;
+        ctx.fillStyle = COLORE_ROCCA; ctx.strokeStyle = '#f4ead0'; ctx.lineWidth = 1.2 * dpr;
+        ctx.beginPath();                                   // torre con due merli
+        ctx.moveTo(px - m, py + m); ctx.lineTo(px - m, py - m * 0.6); ctx.lineTo(px - m * 0.45, py - m * 0.6);
+        ctx.lineTo(px - m * 0.45, py - m * 0.15); ctx.lineTo(px + m * 0.45, py - m * 0.15); ctx.lineTo(px + m * 0.45, py - m * 0.6);
+        ctx.lineTo(px + m, py - m * 0.6); ctx.lineTo(px + m, py + m); ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        if (l.partenza) { ctx.beginPath(); ctx.arc(px, py + m * 0.2, m * 1.7, 0, Math.PI * 2); ctx.stroke(); }
+        ctx.fillStyle = '#f4ead0'; ctx.fillText(`R${l.id + 1}`, px + m + 3 * dpr, py);
+        if (vista.z >= 8) {                                // verso del borgo
+          ctx.beginPath(); ctx.moveTo(px, py);
+          ctx.lineTo(px + l.verso.x * m * 2.4, py + l.verso.z * m * 2.4); ctx.stroke();
+        }
+      }
+    }
     const p = diPartita() ? opzioni.posizione?.() : null;
     if (p) {
       const [px, py] = P(p.x, p.y);
@@ -539,6 +581,8 @@ export function createCartaVista(contenitore, opzioni = {}) {
       + (carta.statistiche.biomi ? ' · biomi: ' + Object.entries(carta.statistiche.biomi).filter(([, v]) => v >= 0.0005)
         .sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${fmt(v * 100, 1)} %`).join(', ') : '')
       + (varieta ? ` · varietà ${varieta.ok ? 'rispettata' : 'NON rispettata'}: ` + varieta.regole.map((r) => (r.ok ? '' : '✗ ') + r.testo).join('; ') : '')
+      + (luoghiVerifica ? ` · rocche: ${luoghiVerifica.ok ? '' : 'VERIFICA NON SUPERATA: '}${luoghiVerifica.testo}`
+        + (carta.statistiche.luoghi ? ` (siti validi ${carta.statistiche.luoghi.validi} su ${carta.statistiche.luoghi.affinati} esaminati, ${fmt(carta.statistiche.luoghi.ms)} ms)` : '') : '')
       + (esitoSemi ? ` · ${esitoSemi}` : '');
   }
 
@@ -565,6 +609,20 @@ export function createCartaVista(contenitore, opzioni = {}) {
     e.currentTarget.classList.toggle('attivo', mostraPanorami);
     if (carta) ridisegna();
   });
+  el.querySelector('.candidati').addEventListener('click', (e) => {
+    mostraCandidati = !mostraCandidati;
+    e.currentTarget.classList.toggle('attivo', mostraCandidati);
+    if (carta) ridisegna();
+  });
+  const btnRocca = el.querySelector('.rocca');
+  if (opzioni.onRocca) {
+    btnRocca.addEventListener('click', () => {
+      if (!carta?.luoghi?.length) { elCursore.textContent = 'Questa Carta non ha rocche.'; return; }
+      const sito = carta.luoghi[roccaSuccessiva % carta.luoghi.length];
+      roccaSuccessiva++;
+      opzioni.onRocca(carta, sito);
+    });
+  } else btnRocca.hidden = true;
   el.querySelector('.intera').addEventListener('click', () => { if (carta) { vistaIntera(); ridisegna(); } });
   el.querySelector('.centra').addEventListener('click', () => {
     const p = diPartita() ? opzioni.posizione?.() : null;
@@ -648,11 +706,25 @@ export function createCartaVista(contenitore, opzioni = {}) {
       + (carta.acque?.[i] === ACQUA.LAGO ? `lago, superficie a ${fmt(carta.livelloAcqua[i])} m, fondo a ${fmt(q)} m`
         : carta.acque?.[i] === ACQUA.LAGO_COSTIERO ? `lago costiero, fondo a ${fmt(-q)} m sotto il livello del mare`
           : carta.mare[i] ? `mare, profondità ${fmt(-q)} m`
-            : gruppoSotto(xf, yf) + `${esatta}quota della cella ${fmt(q)} m (${fasciaDi(q)})`
+            : roccaSotto(xf, yf) + gruppoSotto(xf, yf) + `${esatta}quota della cella ${fmt(q)} m (${fasciaDi(q)})`
               + (carta.bioma ? ` · ${NOMI_BIOMI[carta.bioma[i]]} · ${fmt(carta.temperatura[i], 1)} °C · umidità ${fmt(carta.umidita[i] * 100)} %` : '')
               + ` · catena ${fmt(carta.catena[i], 2)}`
               + (carta.bacino?.[i] >= carta.sogliaFiume ? ` · fiume, bacino ${fmt(carta.bacino[i])} km²` : ''));
   });
+  /** Rocca entro ~1,5 km dal puntatore (o 8 pixel, se di più): classe, carattere e misure del sito. */
+  function roccaSotto(x, y) {
+    if (!carta.luoghi) return '';
+    const raggio = Math.max(1.5, 8 * dpr / scala());
+    for (const l of carta.luoghi) {
+      const dx = l.x / carta.cella - x, dy = l.z / carta.cella - y;
+      if (dx * dx + dy * dy > raggio * raggio) continue;
+      return `rocca ${l.id + 1}${l.partenza ? ' (partenza)' : ''}: ${CLASSI_ROCCA[l.classe][0]}, ${l.carattere}, cima ${fmt(l.quota)} m,`
+        + ` borgo ${fmt(l.quotaBorgo)} m, dominanza ${fmt(l.dominanza)} m, lavoro di terra ${fmt(l.dislivelli.rocca, 1)} / ${fmt(l.dislivelli.borgo, 1)} m,`
+        + ` pendenza ${fmt(l.pendenza, 1)}°, fiume a ${l.fiume.distanza === Infinity ? '> 6' : fmt(l.fiume.distanza, 1)} km,`
+        + ` valico a ${l.valico === Infinity ? '-' : fmt(l.valico)} km · `;
+    }
+    return '';
+  }
   function gruppoSotto(x, y) {
     if (!carta.massicci) return '';
     const g = profiloMassicci(carta.massicci, x, y);

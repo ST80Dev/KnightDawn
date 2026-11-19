@@ -12,7 +12,8 @@
 // CACHE_MASSIMO Carte usate (~8–10 MB l'una). Non è un salvataggio: la Carta si rigenera identica dal seme.
 
 import { generaCarta, VERSIONE_GENERATORE } from './carta.js';
-import { verificaFiumi, verificaPanorami, verificaVarieta } from './verifica.js';
+import { verificaFiumi, verificaPanorami, verificaVarieta, verificaLuoghi } from './verifica.js';
+import { aggiungiLuoghi } from './luoghi.js';
 
 const CACHE_MASSIMO = 3;
 
@@ -75,12 +76,13 @@ function verificaSemi(id, semi) {
   semi.forEach((seme, k) => {
     self.postMessage({ id, tipo: 'avanzamento', testo: `seme ${seme} (${k + 1} di ${semi.length})`, frazione: k / semi.length });
     const t0 = performance.now();
-    const carta = generaCarta(seme);
-    const f = verificaFiumi(carta), p = verificaPanorami(carta), v = verificaVarieta(carta);
+    const carta = aggiungiLuoghi(generaCarta(seme));
+    const f = verificaFiumi(carta), p = verificaPanorami(carta), v = verificaVarieta(carta), l = verificaLuoghi(carta);
     esiti.push({ seme, ms: performance.now() - t0, regole: [
       { nome: 'fiumi', ok: f.ok, testo: f.ok ? 'fiumi in discesa, con foce' : f.errori[0] },
       { nome: 'panorami', ok: p.ok, testo: `punti panoramici: ${(p.copertura * 100).toFixed(1)} %` },
       ...v.regole,
+      { nome: 'rocche', ok: l.ok, testo: l.testo },
     ] });
   });
   self.postMessage({ id, tipo: 'semi', esiti });
@@ -100,8 +102,11 @@ self.onmessage = async (e) => {
       carta.daCache = true;
     } else {
       carta = generaCarta(seme, { avanzamento });
+      avanzamento('Rocche e borghi', 0.95);
+      aggiungiLuoghi(carta);
       const t0 = performance.now();
-      carta.verifiche = { fiumi: verificaFiumi(carta), panorami: verificaPanorami(carta), varieta: verificaVarieta(carta) };
+      carta.verifiche = { fiumi: verificaFiumi(carta), panorami: verificaPanorami(carta), varieta: verificaVarieta(carta),
+        luoghi: verificaLuoghi(carta) };
       carta.statistiche.msVerifiche = performance.now() - t0;
       carta.daCache = false;
       await scriviCache(chiave, carta);                // prima di trasferire i buffer (la put li copia)

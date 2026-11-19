@@ -749,7 +749,9 @@ con copertura, fiumi mostrati, clima, luoghi, nomi e fazioni generati dalle stes
 - Copernicus e Terrarium includono edifici e alberi (modelli di superficie): i paesi veri lasciano
   piccoli rilievi dove nel gioco non ci sono.
 
-## M7 — Rocca e borgo (piano approvato, da iniziare dopo la prova di M6)
+## M7 — Rocca e borgo — fase corrente
+
+> Iniziata su richiesta dell'utente (novembre 2026) prima della sua prova di M6.
 
 > **Prerequisito (regola 4):** M6 va provata dall'utente prima di iniziare. Se la prova cambia il
 > generatore (quote, fiumi, gruppi montuosi), i criteri del passo 1 vanno ritarati, non riscritti.
@@ -901,6 +903,34 @@ conoscenza sulla Carta. Tavullia resta la scena di prova con il castello di M4.
    alla rocca» nella vista della Carta; pulsante di sviluppo che mostra i candidati con il punteggio.
    *Prova:* su più semi i segni stanno su alture, vicino a un fiume o a un valico, mai in acqua né sulle
    pareti, a ≥ 20 km tra loro; verifica su 30 semi.
+   **Stato: fatto, da provare dall'utente.** `js/mondo/luoghi.js` (`scegliLuoghi`, `aggiungiLuoghi`), chiamato
+   nel Worker dopo `generaCarta` e salvato nella cache con la Carta (`VERSIONE_GENERATORE` = `m7-siti-1`).
+   - *Stadio 1:* ~55 000–65 000 celle ammesse; si affinano le 260 stime migliori, 65 per ognuna delle zone
+     a 90, 140, 220 e 400 km dal centro.
+   - *Stadio 2:* il punto più alto della cella (griglia di 50 m, poi 10 m) deve essere **una cima vera**:
+     nulla più alto entro 150, 300 e 450 m (16 direzioni). Senza questa regola il primo sito del seme 48213
+     era un dosso a 469 m ai piedi di un rilievo di 522 m a 400 m di distanza, e il borgo cadeva nella sella.
+     Poi lavoro di terra su 52×52 m (rocca) e 90×130 m (borgo, nella migliore delle 8 direzioni in discesa),
+     pendenza media del borgo, dominanza sull'anello a 1,5 km, distanza esatta dal segmento di fiume più
+     vicino e dalla forcella più vicina. Direzioni e gradi senza trigonometria (costanti scritte e
+     arcotangente approssimata).
+   - *Scelta:* il migliore nella zona più vicina al centro (partenza, castello di casata), poi uno di
+     carattere diverso (fiume, valico, altura) e il migliore rimasto, a ≥ 20 km (scalini 15 e 10 km, zone più
+     larghe se non bastano). Degli altri due, quello col punteggio più alto è la sede maggiore.
+   - *Verifica* (`verificaLuoghi` in `verifica.js`, regola «rocche» anche in «Verifica 10 semi»): almeno 2
+     siti su terra, non sulle pareti né vicino al bordo, ≥ 0,9 km dai fiumi, lavoro di terra e pendenza nei
+     limiti, ≥ 10 km tra loro. **30 semi su 30: 3 siti, sempre allo scalino migliore** (zona 90 km,
+     distanza 20 km); 400–550 ms per Carta nel Worker.
+   - *Carta:* torre rossa più grande secondo la classe, partenza cerchiata, verso del borgo da zoom ×8;
+     sotto il puntatore classe, carattere, quote, dominanza, lavoro di terra, pendenza, distanze; pulsanti
+     «Vai alla rocca» (alla successiva, a ogni clic) e «Candidati» (siti validi non scelti, più chiari col
+     punteggio più alto). Esito nel piede.
+   - *Partenza:* nuova partita nella Scena centrata sulla rocca di partenza, 170 m più in basso verso il
+     borgo, rivolti alla cima. Provvisorio: un'asta con bandiera (colore della classe) sulla cima di ogni
+     rocca nel blocco.
+   Limiti: entro 90 km dal centro raramente c'è un gruppo montuoso, quindi nessun sito «valico» nei 30 semi
+   (resta possibile più lontano); le partite salvate nel mondo generato riprendono dove erano (il terreno
+   non cambia fino al passo 2).
 2. **Terrapieno nel mondo.** `spianaLuoghi` e il punto unico `quotaFinale`; per ora i contorni sono
    rettangoli arrotondati. *Prova:* la Scena sul sito mostra piani e scarpate; nessuna giuntura con il
    blocco accanto e con l'orizzonte (misura come in M6); la Carta zoomata mostra il terrapieno; F3: salto

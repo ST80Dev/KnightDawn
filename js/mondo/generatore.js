@@ -3,7 +3,8 @@
 // Worker in moduli ES), genera qui, dopo aver lasciato disegnare la schermata di caricamento.
 
 import { generaCarta } from './carta.js';
-import { verificaFiumi, verificaPanorami, verificaVarieta } from './verifica.js';
+import { verificaFiumi, verificaPanorami, verificaVarieta, verificaLuoghi } from './verifica.js';
+import { aggiungiLuoghi } from './luoghi.js';
 
 let lavoratore = null;
 let senzaWorker = false;
@@ -40,8 +41,9 @@ function avviaLavoratore() {
 async function generaQui(seme, avanzamento) {
   avanzamento?.('Generazione del mondo', 0);
   await new Promise((r) => setTimeout(r, 30));      // lascia disegnare la schermata
-  const carta = generaCarta(seme, { avanzamento });
-  carta.verifiche = { fiumi: verificaFiumi(carta), panorami: verificaPanorami(carta), varieta: verificaVarieta(carta) };
+  const carta = aggiungiLuoghi(generaCarta(seme, { avanzamento }));
+  carta.verifiche = { fiumi: verificaFiumi(carta), panorami: verificaPanorami(carta), varieta: verificaVarieta(carta),
+    luoghi: verificaLuoghi(carta) };
   carta.daCache = false;
   return carta;
 }

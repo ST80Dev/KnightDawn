@@ -24,7 +24,8 @@ export const CARTA_PREDEFINITA = { cols: 600, rows: 450, cella: 1000 };
 // Versione del generatore: entra nella chiave della cache delle Carte (IndexedDB, lavoratore.js).
 // VA CAMBIATA a ogni modifica che cambia le Carte generate, altrimenti il browser riusa Carte vecchie.
 // (In alternativa: ?rigenera nell'indirizzo ignora la cache.)
-export const VERSIONE_GENERATORE = 'm6-massicci-1';
+// Comprende i luoghi (M7, js/mondo/luoghi.js), che si aggiungono alla Carta nel Worker e stanno nella stessa cache.
+export const VERSIONE_GENERATORE = 'm7-siti-1';
 
 // Parametri della forma (km dove non indicato). Valori di partenza, da tarare guardando le Carte.
 const FORMA = {

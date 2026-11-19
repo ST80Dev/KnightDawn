@@ -17,7 +17,7 @@ instabile durante lo sviluppo. In alternativa in locale con `python -m http.serv
 - `index.html` + `style.css` — canvas WebGL + overlay HUD in HTML/CSS + importmap
 - `js/3d/` — moduli ES del motore 3D: `main.js` (renderer, luci, loop, input, F3), `terrain.js`, `orizzonte.js`, `acqua.js`, `knight3d.js`, `camera.js`, `castle3d.js`
 - `js/mondo/` — generatore del mondo, moduli ES senza grafica né DOM (`rumore.js`, `carta.js`, `verifica.js`,
-  `scena.js`, `fiumi.js`; `lavoratore.js` = Web Worker con cache IndexedDB, `generatore.js` = lato pagina); la vista di
+  `scena.js`, `fiumi.js`, `luoghi.js`; `lavoratore.js` = Web Worker con cache IndexedDB, `generatore.js` = lato pagina); la vista di
   sviluppo della Carta è `js/3d/cartaVista.js`. Cambiando le Carte generate: aggiornare `VERSIONE_GENERATORE`
 - `js/` — logica di gioco ereditata, script classici senza grafica (`config` `calendar` `knight`
   `combat` `events` `news` `save` + `data/`). I moduli 3D li leggono come globali.
@@ -64,5 +64,5 @@ architettura: quelle stanno in `docs/`. Aggiornare la fase corrente a ogni cambi
 
 ## Fase corrente
 
-**M6, prototipo del generatore del mondo** (Carta e Scene, `docs/GDD.md` §2 *Il mondo*): piano in 8 passi
-in `docs/ESPLORAZIONE_3D.md`. M0–M5 completate. La versione 2D resta nella cronologia git (`2c869fa`).
+**M7, rocca e borgo sul mondo generato**: piano in 8 passi in `docs/ESPLORAZIONE_3D.md`. M0–M5 completate;
+M6 (generatore del mondo) fatta, prova dell'utente in sospeso. La versione 2D resta nella cronologia git (`2c869fa`).
