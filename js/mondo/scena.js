@@ -13,6 +13,7 @@
 import { gradienteD, derivaSeme, smoothstep, ridged } from './rumore.js';
 import { ACQUA, profiloMassicci } from './carta.js';
 import { tracciaPercorso, lettoMonotono, PERCORSO } from './fiumi.js';
+import { spianaStrade, raffinaStrade } from './strade.js';   // import circolare: usate solo dentro le funzioni
 
 export const SCENA = { lato: 2000, celle: 256 };   // 2×2 km, 257×257 vertici (come Tavullia)
 
@@ -697,11 +698,12 @@ export function spianaLuoghi(carta, x, z, h) {
 }
 
 /**
- * Quota finale del mondo nel punto (x, z): rilievo (quotaMondo), fiumi e laghi (scavaFiumi), terrapieni dei luoghi
- * (spianaLuoghi). Unico punto usato da blocco, orizzonte e Carta zoomata.
+ * Quota finale del mondo nel punto (x, z): rilievo (quotaMondo), fiumi e laghi (scavaFiumi), strade (spianaStrade,
+ * solo dove il tracciato fine è già stato cercato), terrapieni dei luoghi (spianaLuoghi). Unico punto usato da blocco, orizzonte e Carta zoomata.
  */
 export function quotaFinale(carta, x, z, seedDettaglio = derivaSeme(carta.seme, 101), esito = _esito, pesi = null) {
-  return spianaLuoghi(carta, x, z, scavaFiumi(carta, x, z, quotaMondo(carta, x, z, seedDettaglio, pesi), esito));
+  const h = scavaFiumi(carta, x, z, quotaMondo(carta, x, z, seedDettaglio, pesi), esito);
+  return spianaLuoghi(carta, x, z, spianaStrade(carta, x, z, h, esito));
 }
 
 const _lago = { peso: 0, livello: NaN };
@@ -815,6 +817,7 @@ export function generaScena(carta, cx, cz) {
   const t0 = performance.now();
   cx = centroBlocco(cx); cz = centroBlocco(cz);
   const msFiumi = raffinaZona(carta, cx, cz);
+  const msStrade = raffinaStrade(carta, cx, cz);
   const n = SCENA.celle + 1, cell = SCENA.lato / SCENA.celle, half = SCENA.lato / 2;
   const heights = new Float32Array(n * n);
   const fiume = new Float32Array(n * n).fill(NaN);      // pelo dell'acqua dei fiumi (NaN = asciutto)
@@ -836,7 +839,7 @@ export function generaScena(carta, cx, cz) {
     name: `mondo-${carta.seme}`, cols: n, rows: n, cellSize: cell, sizeMeters: SCENA.lato,
     source: `generato · seme ${carta.seme} · centro ${(cx / 1000).toFixed(2)}, ${(cz / 1000).toFixed(2)} km`,
     seme: carta.seme, centroMondo: { x: cx, z: cz },
-    ms: performance.now() - t0, msFiumi,
+    ms: performance.now() - t0, msFiumi, msStrade,
   };
   return { meta, heights, acqua: { fiume, lago, tracciati } };
 }

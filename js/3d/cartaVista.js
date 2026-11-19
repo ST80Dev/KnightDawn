@@ -41,6 +41,10 @@ const FASCE = [['pianura', 0, 200], ['collina', 200, 700], ['pedemonte', 700, 15
 const MARE_BASSO = [122, 158, 168], MARE_FONDO = [40, 70, 92];
 const LAGO = [104, 150, 178];
 const COLORE_FIUME = '#2f6690';
+const COLORE_STRADA = 'rgba(122, 74, 38, 0.95)';   // strade di terra battuta
+const COLORE_SENTIERO = 'rgba(150, 40, 30, 0.9)';
+// [classe, spessore (come i fiumi), tratteggio]: dalla più importante.
+const STILE_STRADE = [['maestra', 1.3, []], ['carrareccia', 0.9, []], ['mulattiera', 0.8, [3, 2]], ['sentiero', 0.7, [1.5, 2]]];
 const COSTA = [70, 52, 30];
 const ESAGERAZIONE = 6;           // quanto il rilievo pesa nell'ombreggiatura
 const COLORE_PANORAMA = 'rgba(150, 40, 30, 0.9)';
@@ -198,6 +202,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
   let carta = null;
   let rilievo = null;                            // immagine del rilievo della Carta mostrata (1 px per cella)
   let tracciatiLaghi = null, tracciatiFiumi = null;   // Path2D in coordinate di cella, una volta per Carta
+  let tracciatiStrade = null;                          // { classe: Path2D } dai rami della rete (js/mondo/strade.js)
   let verifica = null;                           // esito di verificaFiumi
   let panorami = null;                           // esito di verificaPanorami
   let varieta = null;                            // esito di verificaVarieta
@@ -261,6 +266,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
     c2.putImageData(img, 0, 0);
     tracciatiLaghi = costruisciLaghi();
     tracciatiFiumi = costruisciFiumi();
+    tracciatiStrade = costruisciStrade();
     // Verifiche già fatte dal Worker; altrimenti qui (Carte di altra provenienza).
     verifica = carta.verifiche?.fiumi ?? verificaFiumi(carta);
     panorami = carta.verifiche?.panorami ?? verificaPanorami(carta);
@@ -276,6 +282,17 @@ export function createCartaVista(contenitore, opzioni = {}) {
   // Classi per bacino (multipli di sogliaFiume, 150 km²): torrenti da 20 km², poi 150, 375, 900, 1800 km²
   // (nella regione di 120×90 km i bacini più grandi arrivano a ~2500 km²).
   const CLASSI_FIUMI = [[0.13, 0.35], [1, 0.7], [2.5, 1.1], [6, 1.6], [12, 2.3]];
+
+  /** Strade: i rami della rete, un Path2D per classe (sopra i fiumi: i ponti si vedono). */
+  function costruisciStrade() {
+    const out = {};
+    for (const r of carta.strade?.rami ?? []) {
+      const p = (out[r.classe] ??= new Path2D());
+      p.moveTo(r.x[0], r.y[0]);
+      for (let i = 1; i < r.x.length; i++) p.lineTo(r.x[i], r.y[i]);
+    }
+    return out;
+  }
 
   /** Fiumi: i tracciati curvi della Carta (tracciaFiumi), un Path2D per classe di larghezza. */
   function costruisciFiumi() {
@@ -454,6 +471,18 @@ export function createCartaVista(contenitore, opzioni = {}) {
         ctx.stroke();
       }
     } else CLASSI_FIUMI.forEach(([, w], k) => { ctx.lineWidth = w * spessore; ctx.stroke(tracciatiFiumi[k]); });
+    // Strade e sentieri: terra battuta, tratteggio per mulattiere e sentieri.
+    if (tracciatiStrade) {
+      for (const [classe, w, trattino] of STILE_STRADE) {
+        const p = tracciatiStrade[classe];
+        if (!p) continue;
+        ctx.strokeStyle = classe === 'sentiero' ? COLORE_SENTIERO : COLORE_STRADA;
+        ctx.lineWidth = w * spessore;
+        ctx.setLineDash(trattino.map((t) => t * spessore));
+        ctx.stroke(p);
+      }
+      ctx.setLineDash([]);
+    }
     // Segni in pixel dello schermo, indipendenti dallo zoom.
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const P = (x, y) => [x * s + tx, y * s + ty];
