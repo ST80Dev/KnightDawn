@@ -67,7 +67,26 @@ Problema segnalato dall'utente: sulla neve, soprattutto vicino al cavaliere, non
      (~1 m), pieno fino a 50 m dalla camera, spento a 150 m (`DETTAGLIO_NEVE`). Solo luce.
 - Estensione naturale: lo stesso meccanismo (normale inclinata nello shader) per prato, terra e roccia.
 
-## Apporti esterni (rinviati)
+## Prestazioni (segnalazione dell'utente: da ~100 a ~37 FPS con rocca, colore per pixel, terreno più vario)
+
+Misure in headless (rendering software: valgono le proporzioni, non i millisecondi), seme 4242, partenza alla rocca:
+- **Shader del suolo a colore per pixel** (blocco + orizzonte): circa **metà del frame**; con un Lambert semplice il
+  frame è ~2–5 volte più veloce. Calcolava tutte le ottave di rumore anche dove sono già spente (lontano):
+  ora ogni ottava si salta oltre la sua distanza di spegnimento (stesso risultato visivo; il guadagno si vede solo
+  su una scheda video vera, il rendering software esegue comunque entrambi i rami).
+- **Rocca:** 170 oggetti separati = ~168 delle 275 chiamate di disegno. **Cavaliere:** 86 oggetti (85 chiamate).
+  Rimedio possibile: unire le geometrie per materiale (pochi oggetti per snodo).
+- Vegetazione ~137 000 triangoli in 10 chiamate; orizzonte ~190 000: pesi minori.
+
+Diagnostica sulla scheda vera: con `F3` aperto, **`F4`** passa tra *normale*, *suolo semplice*, *senza vegetazione*,
+*senza orizzonte*, *senza rocche*, *risoluzione ×0,6*; il pannello mostra FPS, chiamate, triangoli e pixel.
+Si decide il rimedio guardando i numeri dell'utente. Candidati, in ordine di resa attesa [Probabile]:
+1. rumore del suolo letto da una texture generata dal codice (una lettura per ottava invece di 4 hash) — se il
+   collo di bottiglia è lo shader;
+2. risoluzione adattiva (scende un po' sotto i 55 FPS, risale quando c'è margine) — rete di sicurezza per tutto;
+3. unione delle geometrie di rocca e cavaliere — se il collo di bottiglia sono le chiamate.
+
+
 
 Si decide solo dopo aver raggiunto il massimo con il codice. Regole già concordate: una sola fonte per
 categoria (texture, vegetazione, personaggi); licenze CC0 preferite (CC-BY → file dei crediti); ogni elemento

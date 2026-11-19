@@ -245,8 +245,11 @@ export const SUOLO = {
   spegni: [60, 200],     // la scala s si spegne tra 60·s e 200·s m dalla camera (~8 → ~3 pixel per onda)
 };
 
+// Ogni ottava si calcola solo dove non è già spenta: lontano il rumore fine valeva zero ma costava lo stesso
+// (misurato: lo shader del suolo era circa metà del tempo di un frame). Il risultato visivo non cambia.
 const ottaveGLSL = (lista, varNome) => lista.map(([s, a]) =>
-  `  ${varNome} += (rumoreSuolo(p, ${s.toFixed(1)}) - 0.5) * ${a.toFixed(3)} * spegniSuolo(${s.toFixed(1)}, dist);`).join('\n');
+  `  if (dist < ${(s * SUOLO.spegni[1]).toFixed(1)}) ${varNome} += (rumoreSuolo(p, ${s.toFixed(1)}) - 0.5) * ${a.toFixed(3)}`
+  + ` * spegniSuolo(${s.toFixed(1)}, dist);`).join('\n');
 
 /**
  * Materiale del terreno del mondo generato a colore per pixel. La geometria deve avere gli attributi `base` (vec3)
@@ -352,7 +355,12 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
     }
     vec3 c = mix(cPrato, cRoccia * (1.0 + 0.5 * dettaglio), roccia);
     // La neve ha un bordo suo (rumore spostato), non quello della roccia.
-    float neve = sogliaSuolo(vStrati.y + 0.8 * bordo + (rumoreSuolo(p + 517.0, 16.0) - 0.5) * 0.12 * spegniSuolo(16.0, dist));
+    // Rumore del bordo della neve solo dove la neve può esserci e non è già spento. fwidth (in sogliaSuolo)
+    // resta fuori dai rami: le derivate dentro un ramo non uniforme non sono definite.
+    float bordoNeve = 0.0;
+    if (vStrati.y > 0.05 && dist < ${(16 * SUOLO.spegni[1]).toFixed(1)})
+      bordoNeve = (rumoreSuolo(p + 517.0, 16.0) - 0.5) * 0.12 * spegniSuolo(16.0, dist);
+    float neve = sogliaSuolo(vStrati.y + 0.8 * bordo + bordoNeve);
     // Sui versanti la neve vira all'azzurro-grigio: pendenza dalla normale del pixel (vista → mondo).
     vec3 nMondo = normalize((vec4(normalize(vNormal), 0.0) * viewMatrix).xyz);
     float pendNeve = degrees(acos(clamp(nMondo.y, -1.0, 1.0)));
