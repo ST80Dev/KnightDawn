@@ -1350,6 +1350,15 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
    - *Limiti*: nei ~30 m dal bordo la pendenza «di zona» e la distanza dall'acqua non vedono oltre il blocco (lì
      blocchi vicini possono differire); il seme 48213 parte in una valle fredda (0,9 °C al mare): niente alberi, solo
      arbusti alti, coerente col clima; da vicino un punto copre mezzo schermo (sono punti di prova, non oggetti).
+   - *Densità ritoccate dopo la prova dell'utente* (nel prato gli alberi isolati capitavano ogni 35–45 m: un pascolo
+     alberato). Deciso con l'utente: **alberi isolati veri**, uno ogni ~100–150 m (`VEGETAZIONE.isolati`, ~4 volte
+     meno), e **boschi fitti** dove bioma, pendenza e quota li prevedono: bosco della Carta a ~250 alberi per ettaro
+     (`bosco.densita` 0,9 per cella di 6 m, era 0,62) e **boschi di versante** a macchie (rumore su 350 m) sui pendii
+     di 15–34° sotto il limite degli alberi, dove l'umidità supera ~0,3–0,45 (niente in sabbia, palude, neve).
+     Il colore del terreno non cambia: sui versanti il bosco lo fanno gli alberi. Misure: pianura ~1 albero ogni
+     125 m; blocchi di bosco 70 000–93 000 alberi (erano 40 000–63 000; [Probabile] il carico più alto per il passo
+     2); collina umida 2 500 → 12 500 alberi, collina secca invariata. 30 semi: esclusioni e zona comune come prima;
+     posizionamento 110–220 ms.
 2. **Alberi.** Latifoglia e conifera, livelli vicino e lontano, aggiornamento delle istanze vicine, crescita
    all'ingresso. *Prova:* il bosco si legge come bosco da vicino e da 1 km; nessun tronco sospeso o sepolto;
    FPS in pieno bosco e da un'altura che guarda il blocco; chiamate e istanze in F3; giudizio dell'utente sullo stile.

@@ -155,8 +155,13 @@ export const STRIDE = 6;                 // per oggetto: x, quota, z (locali al 
 /** Parametri del posizionamento ([Ipotesi] da tarare guardando). */
 export const VEGETAZIONE = {
   passoAlberi: 6,                        // m: un albero al più ogni cella di 6×6 m
-  bosco: { soglia: [0.32, 0.62], bordo: { lunghezza: 90, ampiezza: 0.12 }, densita: 0.62 },
-  isolati: { base: 0.012, umidita: 0.03 },
+  // Bosco fitto: ~0,9 alberi per cella di 6×6 m (≈ 250 alberi per ettaro, chiome che si toccano).
+  bosco: { soglia: [0.32, 0.62], bordo: { lunghezza: 90, ampiezza: 0.12 }, densita: 0.9 },
+  // Boschi di versante (deciso con l'utente): a macchie sui pendii di collina e montagna che non si coltivano,
+  // sotto il limite degli alberi e dove non è secco. Pendenza «di zona» (come il colore), gradi.
+  versante: { pendenza: [15, 22], troppo: [34, 40], lunghezza: 350, soglia: [-0.05, 0.2], umidita: [0.3, 0.45] },
+  // Alberi isolati veri (deciso con l'utente): uno ogni ~100–150 m nei prati.
+  isolati: { base: 0.0012, umidita: 0.0025 },
   limiteAlberi: [-0.5, 2],               // °C attorno a CLIMA.bosco: gli alberi si diradano e si abbassano
   pendenza: { alberi: [30, 40], arbusti: [36, 46], pareti: 48 },   // gradi (pendenza fine della mesh)
   riva: { celle: [1, 3], densita: 0.22, canne: 0.35 },             // celle di 7,8 m dall'acqua
@@ -170,7 +175,7 @@ const _cop = nuovaCopertura();
  * Densità per vertice della griglia del blocco: per ogni tipo la probabilità che una cella della sua griglia abbia
  * un oggetto, più i pesi delle specie di albero. `pend` è la pendenza «di zona» (come il colore), `pf` quella fine.
  */
-function densitaVertice(cp, pf, distAcqua, x, z, semeBordo, D, i) {
+function densitaVertice(cp, pend, pf, distAcqua, x, z, semeBordo, D, i) {
   const V = VEGETAZIONE;
   const prato = 1 - Math.max(cp.roccia, cp.neve, cp.ghiaia * 2);
   let sabbia = 0, palude = 0, nordSud = 0;
@@ -183,7 +188,14 @@ function densitaVertice(cp, pf, distAcqua, x, z, semeBordo, D, i) {
   // Bosco: lo stesso «quanto bosco» del colore (radure, alpeggi), con bordi organici e non a righello.
   const vista = cp.bosco * (1 - 0.8 * cp.radura) * (1 - cp.alpeggio);
   const e = cp.bosco > 0 ? V.bosco.bordo.ampiezza * fbm(x, z, semeBordo, V.bosco.bordo.lunghezza, 2) : 0;
-  const foresta = smoothstep(V.bosco.soglia[0], V.bosco.soglia[1], vista + e);
+  // Boschi di versante: anche fuori dal bosco della Carta, sui pendii (non in sabbia, palude, neve).
+  const W = V.versante;
+  let versante = smoothstep(W.pendenza[0], W.pendenza[1], pend) * (1 - smoothstep(W.troppo[0], W.troppo[1], pend));
+  if (versante > 0) {
+    versante *= smoothstep(W.umidita[0], W.umidita[1], cp.umidita) * (1 - sabbia) * (1 - palude) * (1 - cp.neveFissa)
+      * smoothstep(W.soglia[0], W.soglia[1], fbm(x, z, semeBordo ^ 0x3c6ef372, W.lunghezza, 2));
+  }
+  const foresta = Math.max(smoothstep(V.bosco.soglia[0], V.bosco.soglia[1], vista + e), versante);
   const limite = smoothstep(CLIMA.bosco + V.limiteAlberi[0], CLIMA.bosco + V.limiteAlberi[1], cp.T);
   const ripido = 1 - smoothstep(V.pendenza.alberi[0], V.pendenza.alberi[1], pf);
   const riva = distAcqua >= V.riva.celle[0] && distAcqua <= V.riva.celle[1] && cp.T > 3 ? 1 : 0;
@@ -269,7 +281,7 @@ export function posizionaVegetazione(o) {
       const pf = Math.atan(Math.hypot(fx, fz)) * 180 / Math.PI;
       const x = cx - half + c * cell, z = cz - half + r * cell;
       copertura(_cop, x, z, heights[i], pend);
-      densitaVertice(_cop, pf, dist[i], x, z, semeBordo, D, i);
+      densitaVertice(_cop, pend, pf, dist[i], x, z, semeBordo, D, i);
     }
   }
   const msCampi = performance.now() - t0;
