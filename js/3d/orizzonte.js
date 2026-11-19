@@ -11,11 +11,14 @@
 // ventaglio sui vertici più fitti dentro, e i vertici in comune hanno la stessa quota (stessa funzione,
 // stesse coordinate). Oltre 1,5 km dal centro la superficie scende con la curvatura della Terra (con la
 // rifrazione dell'aria: raggio efficace 7/6 di quello vero).
+// Passo 6: valli dei fiumi scavate come nel blocco; i fiumi continuano come nastri posati sugli anelli e i
+// laghi in quota come celle al livello del lago.
 //
 // Coordinate locali della Scena: x verso est, z verso sud, centro del blocco in (0, 0).
 
 import * as THREE from 'three';
-import { quotaMondo, quotaCarta, SCENA, OTTAVE_DETTAGLIO } from '../mondo/scena.js';
+import { quotaMondo, quotaCarta, scavaFiumi, livelloLago, tracciatiFiumi, SCENA, OTTAVE_DETTAGLIO } from '../mondo/scena.js';
+import { creaNastro, materialeAcqua, SOPRA_PELO } from './acqua.js';
 import { hash2, derivaSeme } from '../mondo/rumore.js';
 import { coloreTerreno } from './terrain.js';
 
@@ -30,6 +33,11 @@ export const ORIZZONTE = {
   spegnimento: [[15000, 18000], [12000, 17000], [6000, 9000], [4000, 6000], [1500, 3500], [1200, 2500]],
   curvatura: { da: 1500, raggioTerra: 6371000 * 7 / 6 },
   passoAcqua: 1000,
+  // Fiumi lontani: fino a `raggio` (m, in quadrato), e ciascun punto finché è largo almeno ~1 pixel
+  // (vista = metri di distanza per metro di semilarghezza). Si posano sulla superficie degli anelli, più
+  // grossolana del blocco, appena sopra (sopra: m + per metro di distanza); il raccordo dal pelo dell'acqua
+  // del blocco alla superficie è nei primi `raccordo` m.
+  fiumi: { raggio: 18000, vista: 1800, sopra: [0.3, 0.0003], raccordo: 250 },
 };
 
 /** Abbassamento (m) dovuto alla curvatura della Terra a distanza d (m) dal centro della Scena. */
@@ -44,22 +52,47 @@ const smooth = (a, b, x) => {
 };
 
 /**
- * Un anello quadrato di terreno: celle di lato `passo` tra il bordo interno (`buco`, metà lato) e quello
- * esterno (`raggio`). Le celle che toccano un lato del buco sono a ventaglio sui `fini` sotto-punti di quel
- * lato, così coincidono con i vertici più fitti dentro. Facce piatte con colore per faccia.
+ * Celle di un anello quadrato di lato `passo` tra il bordo interno (`buco`, metà lato) e quello esterno
+ * (`raggio`). Le celle che toccano un lato del buco sono a ventaglio sui `fini` sotto-punti di quel lato, così
+ * coincidono con i vertici più fitti dentro. `cella(r, c, tri)` chiama tri(a, b, c) per ogni triangolo della
+ * cella ([x, y, z] da P) e restituisce false se la cella è nel buco. Una sola definizione per la mesh e per
+ * la quota della superficie (su cui si posano i fiumi lontani).
  */
-function anello(quota, buco, passo, raggio, fini, colore) {
+function celleAnello(buco, passo, raggio, fini, P) {
   const n = Math.round(2 * raggio / passo);
+  function cella(r, c, tri) {
+    const z0 = -raggio + r * passo, z1 = z0 + passo;
+    const x0 = -raggio + c * passo, x1 = x0 + passo;
+    if (x0 >= -buco && x1 <= buco && z0 >= -buco && z1 <= buco) return false;          // dentro il buco
+    const dentroZ = z0 >= -buco && z1 <= buco, dentroX = x0 >= -buco && x1 <= buco;
+    // Lato condiviso con il buco: punti fitti da un'estremità all'altra, e i due vertici opposti.
+    let lato = null, q0, q1;
+    if (dentroZ && x1 === -buco) { lato = (t) => [x1, z0 + t * passo]; q0 = P(x0, z0); q1 = P(x0, z1); }
+    else if (dentroZ && x0 === buco) { lato = (t) => [x0, z0 + t * passo]; q0 = P(x1, z0); q1 = P(x1, z1); }
+    else if (dentroX && z1 === -buco) { lato = (t) => [x0 + t * passo, z1]; q0 = P(x0, z0); q1 = P(x1, z0); }
+    else if (dentroX && z0 === buco) { lato = (t) => [x0 + t * passo, z0]; q0 = P(x0, z1); q1 = P(x1, z1); }
+    if (lato) {
+      const punti = [];
+      for (let k = 0; k <= fini; k++) { const [x, z] = lato(k / fini); punti.push(P(x, z)); }
+      const meta = Math.floor(fini / 2);
+      for (let k = 0; k < fini; k++) tri(k < meta ? q0 : q1, punti[k], punti[k + 1]);
+      tri(q0, punti[meta], q1);
+      return true;
+    }
+    const a = P(x0, z0), b = P(x1, z0), d = P(x0, z1), e = P(x1, z1);
+    tri(a, d, b);
+    tri(b, d, e);
+    return true;
+  }
+  return { n, cella, passo, buco, raggio };
+}
+
+/** Mesh di un anello: facce piatte con colore per faccia. */
+function anello(celle, colore) {
   const pos = [], col = [];
   const tmp = new THREE.Color();
-  const v = new Map();                       // quota dei vertici della griglia, calcolata una volta sola
-  const q = (x, z) => {
-    const k = x * 1e6 + z;
-    let h = v.get(k);
-    if (h === undefined) { h = quota(x, z); v.set(k, h); }
-    return h;
-  };
-  function tri(a, b, c, seme) {
+  let seme = 0;
+  function tri(a, b, c) {
     let ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
     let wx = c[0] - a[0], wy = c[1] - a[1], wz = c[2] - a[2];
     let nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
@@ -70,31 +103,10 @@ function anello(quota, buco, passo, raggio, fini, colore) {
     pos.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
     for (let k = 0; k < 3; k++) col.push(tmp.r, tmp.g, tmp.b);
   }
-  const P = (x, z) => [x, q(x, z), z];
-  for (let r = 0; r < n; r++) {
-    const z0 = -raggio + r * passo, z1 = z0 + passo;
-    for (let c = 0; c < n; c++) {
-      const x0 = -raggio + c * passo, x1 = x0 + passo;
-      if (x0 >= -buco && x1 <= buco && z0 >= -buco && z1 <= buco) continue;          // dentro il buco
-      const seme = hash2(c, r, 911) / 4294967296;
-      const dentroZ = z0 >= -buco && z1 <= buco, dentroX = x0 >= -buco && x1 <= buco;
-      // Lato condiviso con il buco: punti fitti da un'estremità all'altra, e i due vertici opposti.
-      let lato = null, q0, q1;
-      if (dentroZ && x1 === -buco) { lato = (t) => [x1, z0 + t * passo]; q0 = P(x0, z0); q1 = P(x0, z1); }
-      else if (dentroZ && x0 === buco) { lato = (t) => [x0, z0 + t * passo]; q0 = P(x1, z0); q1 = P(x1, z1); }
-      else if (dentroX && z1 === -buco) { lato = (t) => [x0 + t * passo, z1]; q0 = P(x0, z0); q1 = P(x1, z0); }
-      else if (dentroX && z0 === buco) { lato = (t) => [x0 + t * passo, z0]; q0 = P(x0, z1); q1 = P(x1, z1); }
-      if (lato) {
-        const punti = [];
-        for (let k = 0; k <= fini; k++) { const [x, z] = lato(k / fini); punti.push(P(x, z)); }
-        const meta = Math.floor(fini / 2);
-        for (let k = 0; k < fini; k++) tri(k < meta ? q0 : q1, punti[k], punti[k + 1], seme);
-        tri(q0, punti[meta], q1, seme);
-        continue;
-      }
-      const a = P(x0, z0), b = P(x1, z0), d = P(x0, z1), e = P(x1, z1);
-      tri(a, d, b, seme);
-      tri(b, d, e, seme);
+  for (let r = 0; r < celle.n; r++) {
+    for (let c = 0; c < celle.n; c++) {
+      seme = hash2(c, r, 911) / 4294967296;
+      celle.cella(r, c, tri);
     }
   }
   const geo = new THREE.BufferGeometry();
@@ -103,6 +115,78 @@ function anello(quota, buco, passo, raggio, fini, colore) {
   geo.computeVertexNormals();                // facce piatte: i tre vertici di una faccia non sono condivisi
   geo.computeBoundingSphere();
   return geo;
+}
+
+/** Quota (m, già abbassata dalla curvatura) della superficie disegnata degli anelli nel punto, o NaN. */
+function superficie(anelli, x, z) {
+  const d = Math.max(Math.abs(x), Math.abs(z));
+  const A = anelli.find((a) => d > a.buco && d <= a.raggio);
+  if (!A) return NaN;
+  const c = Math.min(A.n - 1, Math.floor((x + A.raggio) / A.passo));
+  const r = Math.min(A.n - 1, Math.floor((z + A.raggio) / A.passo));
+  let h = NaN, migliore = -Infinity;
+  A.cella(r, c, (a, b, e) => {
+    // Coordinate baricentriche nel piano x-z; si tiene il triangolo che contiene il punto (o il più vicino).
+    const det = (b[2] - e[2]) * (a[0] - e[0]) + (e[0] - b[0]) * (a[2] - e[2]);
+    if (det === 0) return;
+    const l1 = ((b[2] - e[2]) * (x - e[0]) + (e[0] - b[0]) * (z - e[2])) / det;
+    const l2 = ((e[2] - a[2]) * (x - e[0]) + (a[0] - e[0]) * (z - e[2])) / det;
+    const l3 = 1 - l1 - l2, minimo = Math.min(l1, l2, l3);
+    if (minimo > migliore) { migliore = minimo; h = l1 * a[1] + l2 * b[1] + l3 * e[1]; }
+  });
+  return h;
+}
+
+/** Fiumi (nastri posati sulla superficie degli anelli) e laghi in quota (celle degli anelli) oltre il blocco. */
+function acqueOrizzonte(carta, cx, cz, anelli, colore) {
+  const F = ORIZZONTE.fiumi, half = SCENA.lato / 2;
+  const gruppo = new THREE.Group();
+  gruppo.name = 'acque-orizzonte';
+  const mat = materialeAcqua(colore);
+  const pezzi = tracciatiFiumi(carta, cx, cz, half, false, F.raggio, (w) => w * F.vista);
+  for (const t of pezzi) {
+    const quota = (x, z, pelo) => {
+      const d = Math.max(Math.abs(x), Math.abs(z));
+      const acquaY = pelo + SOPRA_PELO - abbassamento(Math.hypot(x, z));
+      const s = smooth(half, half + F.raccordo, d);
+      if (s === 0) return acquaY;
+      const terra = superficie(anelli, x, z);
+      if (Number.isNaN(terra)) return acquaY;
+      return acquaY + s * Math.max(0, terra + F.sopra[0] + F.sopra[1] * d - acquaY);
+    };
+    // Suddivisione: metà del passo dell'anello in cui comincia il pezzo (al più fitto, 31 m).
+    const d0 = Math.max(Math.abs(t[0]), Math.abs(t[1]));
+    const A = anelli.find((a) => d0 <= a.raggio) || anelli[anelli.length - 1];
+    gruppo.add(creaNastro(t, mat, A.passo / 2, quota));
+  }
+  // Laghi: una cella degli anelli è lago se l'indicatore lo è in un angolo o al centro (come nel blocco).
+  const pos = [];
+  for (const A of anelli) {
+    for (let r = 0; r < A.n; r++) {
+      const z0 = -A.raggio + r * A.passo, z1 = z0 + A.passo;
+      for (let c = 0; c < A.n; c++) {
+        const x0 = -A.raggio + c * A.passo, x1 = x0 + A.passo;
+        if (x0 >= -A.buco && x1 <= A.buco && z0 >= -A.buco && z1 <= A.buco) continue;
+        let livello = NaN;
+        for (const [x, z] of [[(x0 + x1) / 2, (z0 + z1) / 2], [x0, z0], [x1, z0], [x0, z1], [x1, z1]]) {
+          livello = livelloLago(carta, cx + x, cz + z);
+          if (!Number.isNaN(livello)) break;
+        }
+        if (Number.isNaN(livello)) continue;
+        const v = (x, z) => [x, livello - abbassamento(Math.hypot(x, z)), z];
+        pos.push(...v(x0, z0), ...v(x0, z1), ...v(x1, z0), ...v(x1, z0), ...v(x0, z1), ...v(x1, z1));
+      }
+    }
+  }
+  if (pos.length) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.computeVertexNormals();
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.name = 'laghi';
+    gruppo.add(mesh);
+  }
+  return gruppo.children.length ? gruppo : null;
 }
 
 /**
@@ -132,18 +216,28 @@ export function creaOrizzonte(carta, cx, cz, terrain, coloreAcqua) {
       if (p > 0) nessuno = false;
     }
     // Al bordo del blocco tutte le ottave sono piene: stesso calcolo del blocco (null = senza pesi).
-    const h = nessuno ? quotaCarta(carta, cx + x, cz + z)
+    const base = nessuno ? quotaCarta(carta, cx + x, cz + z)
       : quotaMondo(carta, cx + x, cz + z, seme, tutti ? null : pesi);
+    // Le valli dei fiumi anche nell'orizzonte: stessa funzione del blocco (al bordo le quote coincidono).
+    const h = scavaFiumi(carta, cx + x, cz + z, base);
     if (h < minimo) minimo = h;
     return h - abbassamento(Math.hypot(x, z));
   };
-  const geometrie = [];
+  const cache = new Map();                   // quota dei vertici, calcolata una volta sola
+  const P = (x, z) => {
+    const k = x * 1e6 + z;
+    let h = cache.get(k);
+    if (h === undefined) { h = quota(x, z); cache.set(k, h); }
+    return [x, h, z];
+  };
+  const anelli = [];
   let interno = half, passoDentro = SCENA.lato / SCENA.celle;
   for (const { passo, raggio } of O.anelli) {
-    geometrie.push(anello(quota, interno, passo, raggio, Math.round(passo / passoDentro), colore));
+    anelli.push(celleAnello(interno, passo, raggio, Math.round(passo / passoDentro), P));
     interno = raggio;
     passoDentro = passo;
   }
+  const geometrie = anelli.map((a) => anello(a, colore));
 
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
   const oggetto = new THREE.Group();
@@ -161,6 +255,9 @@ export function creaOrizzonte(carta, cx, cz, terrain, coloreAcqua) {
     acqua = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: coloreAcqua, transparent: true, opacity: 0.88 }));
     acqua.name = 'acqua';
   }
+  // Fiumi e laghi in quota oltre il blocco (passo 6): continuano quelli della Scena.
+  const acque = acqueOrizzonte(carta, cx, cz, anelli, coloreAcqua);
+  if (acque) oggetto.add(acque);
   const triangoli = geometrie.reduce((t, g) => t + g.attributes.position.count / 3, 0);
   return { oggetto, acqua, triangoli, ms: performance.now() - t0 };
 }

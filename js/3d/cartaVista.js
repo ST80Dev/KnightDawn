@@ -6,10 +6,13 @@
 // Mentre è aperta il gioco è fermo e la scena 3D non si disegna.
 //
 // La pittura dei pixel (disegnaRilievo) non usa il DOM: si può chiamare anche fuori dal browser.
+// Da zoom ×4 la parte visibile si ridisegna con le quote vere delle Scene (stessa funzione del terreno 3D,
+// fino a pochi metri per campione): ombreggiatura e curve di livello, per scegliere una cima o una conca.
 
 import { ACQUA } from '../mondo/carta.js';
 import { verificaFiumi, verificaPanorami } from '../mondo/verifica.js';
-import { semeDaTesto } from '../mondo/rumore.js';
+import { semeDaTesto, derivaSeme } from '../mondo/rumore.js';
+import { quotaMondo, scavaFiumi, livelloLago } from '../mondo/scena.js';
 
 // Colori del rilievo: SOLO quota (metri), a un solo tono, più alto = più scuro. Niente verdi, ocra o
 // bianchi: si leggerebbero come biomi (prati, deserti, neve), che arrivano al passo 7 come livello a sé.
@@ -29,6 +32,9 @@ const COSTA = [70, 52, 30];
 const ESAGERAZIONE = 6;           // quanto il rilievo pesa nell'ombreggiatura
 const COLORE_PANORAMA = 'rgba(150, 40, 30, 0.9)';
 const COLORE_CAVALIERE = '#e8402a';
+// Rilievo fine della parte visibile: da zoom DA, un campione ogni `passo` pixel (CSS) dello schermo,
+// calcolato a pezzi tra un fotogramma e l'altro (`budget` ms) dopo che la vista si è fermata (`attesa` ms).
+const DETTAGLIO = { da: 4, passo: 2, attesa: 120, budget: 12, esagerazione: 2, equidistanze: [5, 10, 20, 25, 50, 100, 200, 250, 500] };
 const fasciaDi = (m) => FASCE.find(([, a, b]) => m >= a && m < b)?.[0] ?? 'montagna';
 const LUCE = (() => {             // luce da nord-ovest, alta 45°
   const x = -1, y = -1, z = 1.4142135623730951;
@@ -141,7 +147,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
   let mostraPanorami = false;                    // i triangoli sono tanti: si mostrano a richiesta
 
   // ─── Vista: centro (in celle = km) e zoom (1 = tutta la Carta nello spazio disponibile) ───
-  const ZOOM_MAX = 40;
+  const ZOOM_MAX = 80;
   const vista = { cx: 0, cy: 0, z: 1 };
   let dpr = 1, larghezza = 1, altezza = 1;        // canvas in pixel del dispositivo
   const base = () => Math.min(larghezza / carta.cols, altezza / carta.rows);   // pixel per cella a zoom 1
@@ -270,6 +276,77 @@ export function createCartaVista(contenitore, opzioni = {}) {
     return p;
   }
 
+  // ─── Rilievo fine della parte visibile (da zoom DETTAGLIO.da) ───
+  let dettaglio = null;                          // { img (canvas), x0, y0, w, h (km), eq (m), chiave }
+  let chiaveInCorso = '', lavoro = 0, attesa = 0;
+  const chiaveVista = () => `${carta.seme}|${vista.cx}|${vista.cy}|${vista.z}|${larghezza}|${altezza}`;
+  function chiediDettaglio() {
+    if (vista.z < DETTAGLIO.da) { clearTimeout(attesa); chiaveInCorso = ''; lavoro++; return; }
+    const k = chiaveVista();
+    if (k === chiaveInCorso || dettaglio?.chiave === k) return;
+    clearTimeout(attesa);
+    lavoro++;
+    chiaveInCorso = k;
+    attesa = setTimeout(() => calcolaDettaglio(k), DETTAGLIO.attesa);
+  }
+  async function calcolaDettaglio(chiave) {
+    const mio = lavoro, c0 = carta;
+    const s = scala(), [tx, ty] = origine();
+    const k = DETTAGLIO.passo * dpr / s;          // km per campione
+    const x0 = Math.max(0, -tx / s), y0 = Math.max(0, -ty / s);
+    const x1 = Math.min(c0.cols, (larghezza - tx) / s), y1 = Math.min(c0.rows, (altezza - ty) / s);
+    const nx = Math.max(1, Math.ceil((x1 - x0) / k)), ny = Math.max(1, Math.ceil((y1 - y0) / k));
+    const h = new Float32Array(nx * ny), acqua = new Float32Array(nx * ny);
+    const seme = derivaSeme(c0.seme, 101), C = c0.cella, esito = { quota: 0, livello: NaN };
+    let t = performance.now();
+    for (let r = 0; r < ny; r++) {
+      const Z = (y0 + (r + 0.5) * k) * C;
+      for (let c = 0; c < nx; c++) {
+        const X = (x0 + (c + 0.5) * k) * C, i = r * nx + c;
+        h[i] = scavaFiumi(c0, X, Z, quotaMondo(c0, X, Z, seme), esito);
+        let w = esito.livello;
+        if (Number.isNaN(w)) { const l = livelloLago(c0, X, Z); if (l > h[i]) w = l; }
+        acqua[i] = w;
+      }
+      if (performance.now() - t > DETTAGLIO.budget) {
+        await new Promise(requestAnimationFrame);
+        if (mio !== lavoro || carta !== c0) return;
+        t = performance.now();
+      }
+    }
+    // Equidistanza delle curve: circa un quarto dei metri per campione, a valori tondi.
+    const eq = DETTAGLIO.equidistanze.find((e) => e >= k * C / 4) ?? 500;
+    const img = document.createElement('canvas');
+    img.width = nx; img.height = ny;
+    const g = img.getContext('2d'), dati = g.createImageData(nx, ny), px = dati.data;
+    const H = (c, r) => h[Math.min(ny - 1, Math.max(0, r)) * nx + Math.min(nx - 1, Math.max(0, c))];
+    const passoM = 2 * k * C / DETTAGLIO.esagerazione, piatto = LUCE[2];
+    for (let r = 0; r < ny; r++) {
+      for (let c = 0; c < nx; c++) {
+        const i = r * nx + c, v = h[i];
+        let col;
+        if (!Number.isNaN(acqua[i])) col = LAGO;
+        else if (v < 0) col = tinta([[0, MARE_BASSO], [1, MARE_FONDO]], Math.sqrt(Math.min(1, -v / 2500)));
+        else {
+          const dx = (H(c + 1, r) - H(c - 1, r)) / passoM, dy = (H(c, r + 1) - H(c, r - 1)) / passoM;
+          const l = Math.sqrt(dx * dx + dy * dy + 1);
+          const luce = (-dx * LUCE[0] - dy * LUCE[1] + LUCE[2]) / l / piatto;
+          let f = 0.55 + 0.45 * Math.min(1.5, Math.max(0, luce));
+          const b = Math.floor(v / eq);             // curva di livello: cambia fascia verso destra o in basso
+          const bd = Math.floor(H(c + 1, r) / eq), bg = Math.floor(H(c, r + 1) / eq);
+          if (b !== bd || b !== bg) f *= Math.max(b, bd, bg) % 5 === 0 ? 0.55 : 0.78;
+          col = tinta(TERRA, v).map((x) => x * f);
+        }
+        const p = i * 4;
+        px[p] = col[0]; px[p + 1] = col[1]; px[p + 2] = col[2]; px[p + 3] = 255;
+      }
+    }
+    g.putImageData(dati, 0, 0);
+    dettaglio = { img, x0, y0, w: nx * k, h: ny * k, eq, chiave };
+    if (chiaveInCorso === chiave) chiaveInCorso = '';
+    ridisegna();
+  }
+
   /** Rilievo, laghi, fiumi, punti panoramici e (se è la Carta della partita) il cavaliere. */
   function ridisegna() {
     const s = scala(), [tx, ty] = origine();
@@ -280,8 +357,13 @@ export function createCartaVista(contenitore, opzioni = {}) {
     // Vista intera: celle nette. Da ×3: rilievo sfumato (più leggibile; coordinate e clic restano esatti).
     ctx.imageSmoothingEnabled = vista.z >= 3;
     ctx.drawImage(rilievo, 0, 0);
-    ctx.fillStyle = `rgb(${LAGO.join(',')})`;
-    ctx.fill(tracciatiLaghi);
+    if (dettaglio && dettaglio.chiave.startsWith(carta.seme + '|') && vista.z >= DETTAGLIO.da) {
+      ctx.imageSmoothingEnabled = true;            // i laghi ci sono già, con la forma che hanno nelle Scene
+      ctx.drawImage(dettaglio.img, dettaglio.x0, dettaglio.y0, dettaglio.w, dettaglio.h);
+    } else {
+      ctx.fillStyle = `rgb(${LAGO.join(',')})`;
+      ctx.fill(tracciatiLaghi);
+    }
     ctx.strokeStyle = COLORE_FIUME;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -313,7 +395,10 @@ export function createCartaVista(contenitore, opzioni = {}) {
     const st = carta.statistiche;
     elInfo.textContent = `${diPartita() ? 'mondo della partita' : 'anteprima'} · ${carta.cols}×${carta.rows} km`
       + ` · mare ${fmt(st.frazioneMare * 100, 1)} % · ${carta.daCache ? 'dalla cache' : `${fmt(st.ms)} ms`}`
-      + ` · controllo ${carta.controllo} · zoom ×${fmt(vista.z, 1)}`;
+      + ` · controllo ${carta.controllo} · zoom ×${fmt(vista.z, 1)}`
+      + (vista.z < DETTAGLIO.da ? '' : dettaglio?.chiave === chiaveVista()
+        ? ` · rilievo delle Scene, curve ogni ${dettaglio.eq} m` : ' · calcolo del rilievo delle Scene…');
+    chiediDettaglio();
   }
 
   /** Genera un'anteprima per un seme (testo libero; vuoto = a caso), nel Web Worker. */
@@ -449,11 +534,13 @@ export function createCartaVista(contenitore, opzioni = {}) {
     if (x < 0 || y < 0 || x >= carta.cols || y >= carta.rows) { elCursore.innerHTML = '&nbsp;'; return; }
     const i = y * carta.cols + x;
     const q = carta.quota[i];
+    const X = xf * carta.cella, Z = yf * carta.cella;
+    const esatta = carta.mare[i] ? '' : `quota nella Scena ${fmt(scavaFiumi(carta, X, Z, quotaMondo(carta, X, Z)))} m · `;
     elCursore.textContent = `${fmt(xf, 2)}, ${fmt(yf, 2)} km (da ovest, da nord) · cella ${x}, ${y} · `
       + (carta.acque?.[i] === ACQUA.LAGO ? `lago, superficie a ${fmt(carta.livelloAcqua[i])} m, fondo a ${fmt(q)} m`
         : carta.acque?.[i] === ACQUA.LAGO_COSTIERO ? `lago costiero, fondo a ${fmt(-q)} m sotto il livello del mare`
           : carta.mare[i] ? `mare, profondità ${fmt(-q)} m`
-            : `quota ${fmt(q)} m (${fasciaDi(q)}) · catena ${fmt(carta.catena[i], 2)}`
+            : `${esatta}quota della cella ${fmt(q)} m (${fasciaDi(q)}) · catena ${fmt(carta.catena[i], 2)}`
               + (carta.bacino?.[i] >= carta.sogliaFiume ? ` · fiume, bacino ${fmt(carta.bacino[i])} km²` : ''));
   });
   const fine = (e) => {

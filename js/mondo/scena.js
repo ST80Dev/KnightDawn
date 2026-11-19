@@ -11,6 +11,7 @@
 // Il blocco usa coordinate locali centrate sul suo centro (vedi docs/ESPLORAZIONE_3D.md, Coordinate).
 
 import { gradienteD, derivaSeme, smoothstep } from './rumore.js';
+import { ACQUA } from './carta.js';
 
 export const SCENA = { lato: 2000, celle: 256 };   // 2×2 km, 257×257 vertici (come Tavullia)
 
@@ -101,6 +102,193 @@ export function quotaMondo(carta, x, z, seedDettaglio = derivaSeme(carta.seme, 1
   return h + ampiezza * fbmEroso(x, z, seedDettaglio, pesi);
 }
 
+// ─── Fiumi e laghi nelle Scene (passo 6) ────────────────────────────────
+// Il letto di ogni fiume si calcola una volta per Carta lungo il tracciato curvo (carta.fiumi), dalla
+// sorgente alla foce, sempre in discesa e raccordato alle confluenze: dipende solo dalla posizione nel
+// mondo, quindi due Scene vicine (e l'orizzonte) combaciano. Attorno al tracciato: alveo (parabola fino al
+// pelo dell'acqua), sponde basse, poi versanti che risalgono fino al terreno, sempre più ripidi con la
+// distanza (raccordo continuo entro FIUMI_SCENA.raggio).
+
+const FIUMI_SCENA = {
+  semilarghezza: { base: 3, perRadice: 0.6, max: 60 },   // m: base + perRadice·√bacino (km²)
+  profondita: { base: 0.5, perRadice: 0.022 },           // m d'acqua: ~0,8 m a 150 km² (si guada), ~1,2 m a 1000 km², ~2,7 m a 10 000 km²
+  sponda: { larghezza: 6, altezza: 0.8 },                // m: sponde basse oltre il pelo dell'acqua
+  argine: 0.15,                                          // pendenza oltre le sponde dove il terreno è più basso
+  versante: 0.12, raggio: 1000,                          // pendenza iniziale dei versanti; raggio d'influenza (m)
+  scendi: 0.02,                                          // m: discesa minima del letto tra due punti (~0,2 km)
+  cellaIndice: 1000,                                     // m: celle dell'indice spaziale dei tratti
+};
+
+const _fiumi = new WeakMap();
+
+/** Fiumi della Carta pronti per le Scene: punti in metri, letto, semilarghezza, profondità, indice. */
+export function fiumiScena(carta) {
+  let pronto = _fiumi.get(carta);
+  if (pronto) return pronto;
+  const F = FIUMI_SCENA, C = carta.cella;
+  const curve = [];
+  const lettoDi = new Map();                             // punto (chiave esatta) → letto, per le confluenze
+  const chiave = (x, y) => `${x},${y}`;
+  for (const f of carta.fiumi || []) {
+    const m = f.length / 4;
+    if (m < 2) continue;
+    const x = new Float64Array(m), z = new Float64Array(m), letto = new Float64Array(m);
+    const w = new Float64Array(m), prof = new Float64Array(m);
+    for (let i = 0; i < m; i++) {
+      x[i] = f[i * 4] * C; z[i] = f[i * 4 + 1] * C;
+      const r = Math.sqrt(Math.max(1, f[i * 4 + 2]));
+      w[i] = Math.min(F.semilarghezza.max, F.semilarghezza.base + F.semilarghezza.perRadice * r);
+      prof[i] = F.profondita.base + F.profondita.perRadice * r;
+      // Letto sotto la superficie liscia della Carta: pelo dell'acqua F.sponda.altezza sotto il terreno.
+      const grezzo = quotaCarta(carta, x[i], z[i]) - prof[i] - F.sponda.altezza;
+      letto[i] = i === 0 ? grezzo : Math.min(grezzo, letto[i - 1] - F.scendi);
+    }
+    // Confluenza: l'ultimo punto è un punto di un fiume più grande (già calcolato): stesso letto, e a monte
+    // il letto non scende sotto di esso (resta sempre in discesa verso valle).
+    const valle = lettoDi.get(chiave(f[(m - 1) * 4], f[(m - 1) * 4 + 1]));
+    if (valle !== undefined) {
+      letto[m - 1] = valle;
+      for (let i = m - 2; i >= 0; i--) if (letto[i] < letto[i + 1]) letto[i] = letto[i + 1];
+    }
+    for (let i = 0; i < m; i++) {
+      const k = chiave(f[i * 4], f[i * 4 + 1]);
+      if (!lettoDi.has(k)) lettoDi.set(k, letto[i]);
+    }
+    curve.push({ x, z, letto, w, prof });
+  }
+  // Indice: celle di F.cellaIndice m → tratti (curva, punto) il cui riquadro allargato del raggio le tocca.
+  const indice = new Map();
+  const R = F.raggio, L = F.cellaIndice;
+  curve.forEach((cv, ci) => {
+    for (let i = 0; i < cv.x.length - 1; i++) {
+      const x0 = Math.floor((Math.min(cv.x[i], cv.x[i + 1]) - R) / L), x1 = Math.floor((Math.max(cv.x[i], cv.x[i + 1]) + R) / L);
+      const z0 = Math.floor((Math.min(cv.z[i], cv.z[i + 1]) - R) / L), z1 = Math.floor((Math.max(cv.z[i], cv.z[i + 1]) + R) / L);
+      for (let gz = z0; gz <= z1; gz++) {
+        for (let gx = x0; gx <= x1; gx++) {
+          const k = gx * 1000003 + gz;
+          let lista = indice.get(k);
+          if (!lista) indice.set(k, (lista = []));
+          lista.push(ci, i);
+        }
+      }
+    }
+  });
+  pronto = { curve, indice };
+  _fiumi.set(carta, pronto);
+  return pronto;
+}
+
+const _esito = { quota: 0, livello: NaN };
+
+/**
+ * Quota (m) nel punto (x, z) del mondo con fiumi scavati, a partire dalla quota senza fiumi h0. Scrive in
+ * `esito.livello` il pelo dell'acqua del fiume se il punto è nell'alveo (altrimenti NaN).
+ */
+export function scavaFiumi(carta, x, z, h0, esito = _esito) {
+  const F = FIUMI_SCENA, R = F.raggio;
+  const { curve, indice } = fiumiScena(carta);
+  esito.quota = h0; esito.livello = NaN;
+  const lista = indice.get(Math.floor(x / F.cellaIndice) * 1000003 + Math.floor(z / F.cellaIndice));
+  if (!lista) return h0;
+  let migliore = Infinity, mL = 0, mW = 0, mB = 0, mProf = 0, mD = 0;   // tratto con l'alveo più vicino
+  let cap = Infinity;                       // versanti: il più basso tra i tratti
+  let fuoriMin = Infinity, peloArgine = 0;  // tratto più vicino fuori dalle sponde (per l'argine)
+  for (let k = 0; k < lista.length; k += 2) {
+    const cv = curve[lista[k]], i = lista[k + 1];
+    const ax = cv.x[i], az = cv.z[i], bx = cv.x[i + 1], bz = cv.z[i + 1];
+    const vx = bx - ax, vz = bz - az, l2 = vx * vx + vz * vz;
+    let t = l2 > 0 ? ((x - ax) * vx + (z - az) * vz) / l2 : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const dx = x - ax - vx * t, dz = z - az - vz * t;
+    const d = Math.sqrt(dx * dx + dz * dz);
+    if (d >= R) continue;
+    const w = cv.w[i] + (cv.w[i + 1] - cv.w[i]) * t;
+    const prof = cv.prof[i] + (cv.prof[i + 1] - cv.prof[i]) * t;
+    const letto = cv.letto[i] + (cv.letto[i + 1] - cv.letto[i]) * t;
+    const pelo = letto + prof;
+    const fuori = d - w - F.sponda.larghezza;
+    if (fuori <= 0) {
+      if (d - w < migliore) { migliore = d - w; mL = pelo; mW = w; mB = letto; mProf = prof; mD = d; }
+    } else {
+      const c = pelo + F.sponda.altezza + fuori * (F.versante + 1.5 * (fuori / R) * (fuori / R));
+      if (c < cap) cap = c;
+      if (fuori < fuoriMin) { fuoriMin = fuori; peloArgine = pelo; }
+    }
+  }
+  if (migliore !== Infinity) {                       // nell'alveo o sulle sponde: forma imposta
+    if (mD < mW) {
+      esito.livello = mL;
+      esito.quota = mB + mProf * (mD / mW) * (mD / mW);
+    } else {
+      esito.quota = mL + F.sponda.altezza * smoothstep(0, 1, (mD - mW) / F.sponda.larghezza);
+    }
+    return esito.quota;
+  }
+  if (cap === Infinity) return h0;
+  // Versanti: mai sopra il terreno. Dove il terreno è più basso del fiume, un argine che scende piano dalla
+  // sponda (il fiume non resta sospeso sopra una conca).
+  const argine = Math.min(peloArgine + F.sponda.altezza - F.argine * fuoriMin, cap);
+  const h = Math.max(h0 < cap ? h0 : cap, argine);
+  esito.quota = h;
+  return h;
+}
+
+/** Livello dei laghi in quota (m) nel punto del mondo, o NaN: indicatore «lago» interpolato tra le celle. */
+export function livelloLago(carta, x, z) {
+  const { cols, rows, acque, livelloAcqua, cella } = carta;
+  if (!acque) return NaN;
+  const u = x / cella - 0.5, v = z / cella - 0.5;
+  const i0 = Math.floor(u), j0 = Math.floor(v), fu = u - i0, fv = v - j0;
+  let somma = 0, livello = NaN, peso = -1;
+  for (let b = 0; b < 2; b++) {
+    for (let a = 0; a < 2; a++) {
+      const i = Math.min(cols - 1, Math.max(0, i0 + a)), j = Math.min(rows - 1, Math.max(0, j0 + b));
+      const w = (a ? fu : 1 - fu) * (b ? fv : 1 - fv);
+      const c = j * cols + i;
+      if (acque[c] === ACQUA.LAGO) { somma += w; if (w > peso) { peso = w; livello = livelloAcqua[c]; } }
+    }
+  }
+  return somma >= 0.25 ? livello : NaN;
+}
+
+/**
+ * Pezzi dei tracciati dei fiumi attorno a (cx, cz), in coordinate locali: Float32Array [lx, lz, pelo, w, …].
+ * `dentro` true: solo dentro il quadrato di metà lato `half` (il blocco); false: solo fuori, entro `raggio`
+ * (in quadrato) e, per ogni punto, entro `vista(w)` (i fiumi stretti si perdono prima). Sul bordo del quadrato
+ * i pezzi finiscono esattamente nel punto d'incrocio, lo stesso per il blocco e per l'orizzonte.
+ */
+export function tracciatiFiumi(carta, cx, cz, half, dentro, raggio = Infinity, vista = null) {
+  const { curve } = fiumiScena(carta);
+  const pezzi = [];
+  const dist = (p) => Math.max(Math.abs(p[0]), Math.abs(p[1]));
+  const lato = (p) => (dist(p) <= half) === dentro;
+  const visibile = (p) => { const d = dist(p); return d <= raggio && (!vista || d <= vista(p[3])); };
+  const mescola = (a, b, t) => a.map((v, k) => v + (b[k] - v) * t);
+  let pezzo = null;
+  const chiudi = () => { if (pezzo && pezzo.length >= 8) pezzi.push(Float32Array.from(pezzo)); pezzo = null; };
+  for (const cv of curve) {
+    let prima = null;
+    for (let i = 0; i < cv.x.length; i++) {
+      const p = [cv.x[i] - cx, cv.z[i] - cz, cv.letto[i] + cv.prof[i], cv.w[i]];
+      if (prima && lato(prima) !== lato(p)) {
+        let t0 = 0, t1 = 1;                      // incrocio con il bordo del quadrato (bisezione)
+        for (let k = 0; k < 40; k++) {
+          const t = (t0 + t1) / 2;
+          if (lato(mescola(prima, p, t)) === lato(prima)) t0 = t; else t1 = t;
+        }
+        const X = mescola(prima, p, (t0 + t1) / 2);
+        if (pezzo) { pezzo.push(...X); chiudi(); }
+        else if (visibile(X)) pezzo = [...X];
+      }
+      if (lato(p) && visibile(p)) (pezzo ??= []).push(...p);
+      else chiudi();
+      prima = p;
+    }
+    chiudi();
+  }
+  return pezzi;
+}
+
 /**
  * Blocco di terreno di una Scena, nello stesso formato del terreno reale (griglia di quote + metadati):
  * terrain.js lo usa senza sapere da dove viene.
@@ -113,18 +301,26 @@ export function generaScena(carta, cx, cz) {
   const t0 = performance.now();
   const n = SCENA.celle + 1, cell = SCENA.lato / SCENA.celle, half = SCENA.lato / 2;
   const heights = new Float32Array(n * n);
+  const fiume = new Float32Array(n * n).fill(NaN);      // pelo dell'acqua dei fiumi (NaN = asciutto)
+  const lago = new Float32Array(n * n).fill(NaN);       // livello dei laghi in quota
   const seed = derivaSeme(carta.seme, 101);
+  const esito = { quota: 0, livello: NaN };
   for (let r = 0; r < n; r++) {
     const z = cz - half + r * cell;
     for (let c = 0; c < n; c++) {
-      heights[r * n + c] = quotaMondo(carta, cx - half + c * cell, z, seed);
+      const x = cx - half + c * cell, i = r * n + c;
+      heights[i] = scavaFiumi(carta, x, z, quotaMondo(carta, x, z, seed), esito);
+      fiume[i] = esito.livello;
+      lago[i] = livelloLago(carta, x, z);
     }
   }
+  // Tracciati dei fiumi nel blocco (coordinate locali, tagliati sul bordo): per il nastro d'acqua.
+  const tracciati = tracciatiFiumi(carta, cx, cz, half, true);
   const meta = {
     name: `mondo-${carta.seme}`, cols: n, rows: n, cellSize: cell, sizeMeters: SCENA.lato,
     source: `generato · seme ${carta.seme} · centro ${(cx / 1000).toFixed(2)}, ${(cz / 1000).toFixed(2)} km`,
     seme: carta.seme, centroMondo: { x: cx, z: cz },
     ms: performance.now() - t0,
   };
-  return { meta, heights };
+  return { meta, heights, acqua: { fiume, lago, tracciati } };
 }

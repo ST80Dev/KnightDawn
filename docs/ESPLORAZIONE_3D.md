@@ -528,6 +528,33 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
    shader da `main.js`, senza toccare `lib/three/`). Foschia di giorno da 3 a 50 km.
 6. **Fiumi nella Scena**: tracciato liscio (non a celle), letto scavato sempre in discesa, superficie
    dell'acqua. *Prova:* il fiume sta in una valle, scende, prosegue senza stacchi nel blocco accanto.
+   **Stato: fatto, da provare dall'utente.** Tutto in `js/mondo/scena.js` (senza grafica) più le mesh in
+   `js/3d/acqua.js`; la Carta non cambia (`VERSIONE_GENERATORE` invariata).
+   - *Letto:* calcolato una volta per Carta lungo i tracciati curvi (`fiumiScena`, ~350 ms alla prima Scena):
+     pelo dell'acqua 0,8 m sotto la superficie liscia della Carta, letto che scende di almeno 2 cm ogni
+     0,2 km, alle confluenze lo stesso letto del fiume principale e a monte mai più basso. Verificato: 0
+     risalite su 421 tracciati (seme 48213).
+   - *Sezione* (`scavaFiumi`, funzione del solo punto del mondo, quindi blocchi accanto e orizzonte
+     combaciano): alveo a parabola largo 2·(3 + 0,6·√bacino) m (max 120 m), profondo 0,5 + 0,022·√bacino m
+     (~0,8 m a 150 km², si guada; ~2,7 m a 10 000 km²), sponde basse di 6 m, poi versanti che risalgono
+     fino al terreno sempre più ripidi entro 1 km; dove il terreno è più basso del fiume un argine che
+     scende piano (il fiume non resta sospeso).
+   - *Acqua:* nastro lungo il tracciato al pelo dell'acqua; laghi in quota come quadrati da ~31 m al livello
+     del lago. Fuori dal blocco continuano nell'orizzonte: i tracciati sono tagliati esattamente sul bordo
+     del blocco, e oltre i nastri si posano sulla superficie (più grossolana) degli anelli, ciascun punto
+     finché è largo almeno ~1 pixel (fino a 18 km per i fiumi grandi); i laghi come celle degli anelli.
+   - *Cavaliere:* non entra dove l'acqua supera 0,9 m (fiumi grandi e laghi; si guadano i piccoli); la camera
+     non scende sotto il pelo dell'acqua. F3: pelo e profondità dell'acqua sotto il cavaliere.
+   - *Tempi* (headless): Scena con fiume ~110 ms, orizzonte con valli e acqua 250–320 ms (prima 150–270).
+   Limiti noti: i laghi fuori dal blocco hanno la riva a gradini di 62,5 m; il nastro dei fiumi lontani è
+   posato sopra il terreno (pochi metri, invisibili da lontano); colori dell'acqua e delle rive provvisori
+   (passo 7). L'acqua non scorre (nessuna animazione).
+   **Aggiunta (segnalata dall'utente): rilievo fine nella Carta.** Zoomando, la Carta a celle di 1 km
+   sfumata non lasciava distinguere una cima da una conca. Da zoom ×4 la parte visibile si ricalcola con
+   le quote vere delle Scene (stessa funzione del terreno 3D, valli dei fiumi comprese), con
+   ombreggiatura e curve di livello (equidistanza 5–50 m secondo lo zoom, una curva su cinque più scura),
+   a pezzi tra un fotogramma e l'altro (200–330 ms); zoom massimo ×80 (~15 m per campione). Sotto il
+   puntatore la quota nella Scena oltre a quella della cella.
 7. **Temperatura, umidità, biomi** (fasi 6–7) e limite delle nevi nello shader; colori della Scena per
    bioma. *Prova:* livelli della Carta; neve sulle cime.
 8. **Regole di varietà e verifica automatica** (fase 8) su N semi, con esito per regola. Con i passi 3 e
