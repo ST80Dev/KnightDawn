@@ -1377,6 +1377,34 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
    - *Misure* (headless, rendering software: non fa testo per gli FPS): partenza del seme 855588 ~12 500 oggetti
      disegnati, 0,4–0,8 milioni di triangoli di vegetazione (1,1 in tutto); costruzione 35–40 ms oltre al
      posizionamento. Nessun errore in console, nel mondo e a Tavullia. Le collisioni con i tronchi arrivano al passo 3.
+   - *Dopo la prova dell'utente su Pages* (seme 570549: «bella la diversità tra campo aperto e bosco; chiome più
+     verosimili, più varie, meno poligonali; serve sottobosco e prato, terra, fango, terreno misto»; poi sulle rocce:
+     «più sassi piccoli in montagna, misure varie anche grandi massi di frana da girarci attorno, forme irregolari,
+     grigi diversi»; poi «terra del sottobosco più scura e disomogenea, marrone chiaro e scuro, nero e verde»):
+     - *Chiome a ciuffi*: 14–22 icosaedri piccoli sparsi su un ellissoide, con le normali dell'intera chioma (luce
+       sopra, ombra sotto e dentro) e un tono per ciuffo. **Varianti** da vicino: quercia (larga), faggio (ovale e
+       alto), castagno (a due masse); abete largo e slanciato (palchi a 12 lati con le punte che ricadono); pino a
+       ombrello piatto e a due ripiani; due forme di cespuglio. Ogni istanza ha larghezza, altezza e una piccola
+       inclinazione sue. Livello vicino ridotto a 110 m, medio a 450 m.
+     - *Rocce spigolose*: icosaedro tagliato da 5–10 piani a caso (pietra spaccata) con uno scarto per vertice, grigi
+       diversi per faccia, facce in alto più chiare, qualche lichene; per istanza grigi caldi e freddi, proporzioni e
+       inclinazione. Tre forme di sasso, tre di masso, due di affioramento. Misure: sassi 0,2–2,2 e massi 0,4–3,4
+       volte il modello (tanti piccoli, pochi enormi); **frane** a macchie ai piedi dei pendii ripidi in montagna con
+       massi più fitti e fino a ~8 m; più sassi in montagna; **ciottoli** vicino al cavaliere (griglia di 1,5 m,
+       raggio 40 m). Le collisioni con i massi grandi restano per il passo 3.
+     - *Suolo nello shader del terreno* (`materialeSuolo` in `terrain.js`, solo mondo generato): ciuffi chiari e scuri
+       e chiazze vicino alla camera, terra nuda a chiazze nei prati, **lettiera** sotto il bosco tra marrone chiaro,
+       marrone scuro, quasi nero e muschio (tre scale di rumore), **fango** vicino all'acqua. Bosco e acqua arrivano
+       per vertice dal posizionamento (`suolo`, attributo `aSuolo`); niente lettiera nella spianata di rocca e borgo;
+       negli ultimi 120 m del blocco terra, lettiera e fango sfumano (l'orizzonte ha il solo colore).
+     - *Erba e felci vicine* (anticipato dal passo 5): ciuffi di 14 fili entro 32 m (griglia del mondo di 0,6 m, colore
+       dal terreno sotto), felci nel sottobosco umido entro 45 m, quasi niente erba sotto gli alberi; vento nello
+       shader; si rimpiccioliscono verso il limite. Ricalcolati ogni 4 m (`erbaAttorno`, deterministico).
+     - *Misure* (headless): blocco di bosco (seme 570549) ~56 000 oggetti disegnati, 2,0–2,2 milioni di triangoli di
+       vegetazione, 25 chiamate; partenza del seme 855588 ~16 000 oggetti, 1,2 milioni; massimo teorico 40 chiamate.
+       Ridistribuzione dei livelli 3–7 ms ogni 12 m, erba vicina ~6 ms ogni 4 m: [Probabile] un piccolo scatto in
+       corsa sui PC lenti; se si vede, il lavoro va spezzato tra più fotogrammi. 30 semi: esclusioni e zona comune come
+       prima; posizionamento 140–220 ms.
 3. **Collisioni.** Tronchi, massi e affioramenti come ostacoli a griglia. *Prova:* si attraversa un bosco fitto
    scivolando tra i tronchi senza incastrarsi; la camera resta usabile nel bosco.
 4. **Arbusti e rocce.** Cespugli (macchia, margini, sottobosco), arbusti d'alta quota, sassi, massi, affioramenti

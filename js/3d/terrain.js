@@ -261,9 +261,68 @@ function buildSurfaceMondo(heights, cols, rows, cell, half, colore, centro) {
   geo.setIndex(new THREE.BufferAttribute(indici, 1));
   geo.computeBoundingSphere();
   geo.computeBoundingBox();
-  const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  const m = new THREE.Mesh(geo, materialeSuolo(cx, cz, half));
   m.name = 'terreno-superficie';
   return m;
+}
+
+// ─── Dettaglio del suolo nello shader (vegetazione, dopo la prova dell'utente) ───
+// Sopra il colore per vertice (bioma, roccia, neve) lo shader aggiunge in coordinate del mondo: ciuffi chiari e scuri
+// (~0,6 m) e chiazze (~5 m) solo vicino alla camera, chiazze di terra nuda nei prati, lettiera scura sotto il bosco e
+// fango vicino all'acqua. Bosco e acqua arrivano dall'attributo `aSuolo` (vegetazione3d.js, per vertice: bosco sopra,
+// vicinanza dell'acqua); senza attributo valgono 0. Solo dove il colore è prato (non su roccia e neve).
+const SUOLO_GLSL = `
+float kdH(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float kdN(vec2 p) {
+  vec2 i = floor(p), f = fract(p), u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(kdH(i), kdH(i + vec2(1.0, 0.0)), u.x), mix(kdH(i + vec2(0.0, 1.0)), kdH(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+float kdF(vec2 p) { return 0.5 * kdN(p) + 0.3 * kdN(p * 2.03 + 7.1) + 0.2 * kdN(p * 4.01 + 3.7); }
+`;
+
+/**
+ * Materiale del terreno del mondo generato con il dettaglio del suolo. cx, cz: centro del blocco nel mondo (m); negli
+ * ultimi 120 m verso il bordo del blocco terra, lettiera e fango sfumano (l'orizzonte ha il solo colore).
+ */
+function materialeSuolo(cx, cz, half) {
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  // Origine del rumore: il centro del blocco ridotto (precisione dei float nello shader a ~100 km dall'origine).
+  const origine = new THREE.Vector2(((cx % 4096) + 4096) % 4096, ((cz % 4096) + 4096) % 4096);
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uOrigine = { value: origine };
+    sh.uniforms.uMezzo = { value: half };
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute vec2 aSuolo;\nvarying vec2 vSuolo;\nvarying vec2 vMondo;\nuniform vec2 uOrigine;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSuolo = aSuolo;\nvMondo = position.xz + uOrigine;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vSuolo;\nvarying vec2 vMondo;\nuniform vec2 uOrigine;\nuniform float uMezzo;\n' + SUOLO_GLSL)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+      {
+        vec3 c = diffuseColor.rgb;
+        vec2 loc = abs(vMondo - uOrigine);
+        float prato = smoothstep(0.3, 0.6, (c.g - c.b) / max(c.g, 0.001)) * (1.0 - smoothstep(uMezzo - 120.0, uMezzo, max(loc.x, loc.y)));
+        float vicino = 1.0 - smoothstep(40.0, 220.0, length(vViewPosition));
+        float g1 = kdF(vMondo * 0.18), g2 = kdN(vMondo * 1.7), g3 = kdF(vMondo * 0.045 + 13.0);
+        // Terra nuda a chiazze nei prati.
+        float terra = smoothstep(0.6, 0.76, g3 * 0.6 + g1 * 0.4) * prato;
+        c = mix(c, vec3(0.19, 0.125, 0.06), terra * 0.55);
+        // Lettiera sotto il bosco (richiesta dell'utente: più scura e disomogenea): chiazze tra marrone chiaro e scuro,
+        // zone quasi nere (terra umida, humus) e muschio verde scuro, su tre scale diverse.
+        float l1 = kdF(vMondo * 0.32 + 31.0), l2 = kdN(vMondo * 1.1 + 5.0), l3 = kdF(vMondo * 0.09 + 71.0);
+        vec3 lett = mix(vec3(0.011, 0.0065, 0.003), vec3(0.06, 0.036, 0.016), smoothstep(0.3, 0.8, l1));
+        lett = mix(lett, vec3(0.003, 0.003, 0.002), smoothstep(0.42, 0.7, l2) * 0.85);
+        lett = mix(lett, vec3(0.012, 0.03, 0.007), smoothstep(0.4, 0.66, l3) * 0.85);
+        lett *= 0.6 + 0.8 * g2;
+        c = mix(c, lett, vSuolo.x * 0.95 * prato);
+        // Fango vicino all'acqua.
+        c = mix(c, vec3(0.07, 0.055, 0.035), smoothstep(0.3, 1.0, vSuolo.y) * 0.6 * (0.6 + 0.4 * g1) * step(0.001, prato));
+        // Ciuffi chiari e scuri, solo vicino (lontano sfarfallerebbero).
+        c *= 1.0 + vicino * prato * ((g2 - 0.5) * 0.35 + (g1 - 0.5) * 0.25);
+        diffuseColor.rgb = c;
+      }`);
+  };
+  mat.customProgramCacheKey = () => 'kd-suolo-1';
+  return mat;
 }
 
 // ─── Mesh della superficie ──────────────────────────────────────────────
