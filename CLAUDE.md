@@ -32,6 +32,7 @@ instabile durante lo sviluppo. In alternativa in locale con `python -m http.serv
 |---|---|
 | Scene 3D, terreno, generatore del mondo, milestone attuali | `docs/ESPLORAZIONE_3D.md` ⭐ |
 | Stile grafico 3D, materiali, cavaliere | `docs/GRAFICA_3D.md` |
+| Prestazioni: budget, misure, regole per ciò che si disegna | `docs/PRESTAZIONI.md` |
 | Visione, mondo e regole di generazione, tempo, meccaniche | `docs/GDD.md` |
 | Combattimento | `docs/COMBAT.md` |
 | Eventi | `docs/EVENTS.md` |
@@ -65,5 +66,6 @@ architettura: quelle stanno in `docs/`. Aggiornare la fase corrente a ogni cambi
 
 ## Fase corrente
 
-**M7, rocca e borgo sul mondo generato**: piano in 8 passi in `docs/ESPLORAZIONE_3D.md`; mondo regionale di 120×90 km. M0–M5 completate;
-M6 (generatore del mondo) completata. La versione 2D resta nella cronologia git (`2c869fa`).
+**Milestone «Prestazioni»** (`docs/PRESTAZIONI.md`, sessione responsabile «M1 - grafica»): misura sulla scheda di
+riferimento (Intel UHD 730), budget, fondamenta del renderer. **M7 (rocca e borgo) in pausa** fino alla sua chiusura.
+M0–M6 completate. La versione 2D resta nella cronologia git (`2c869fa`).
