@@ -201,6 +201,7 @@ html, body {
 #carta .titolo { color: #c8a030; font-size: 16px; letter-spacing: 0.04em; }
 
 #carta input,
+#carta select,
 #carta button {
   font: inherit;
   color: #e8d8b0;

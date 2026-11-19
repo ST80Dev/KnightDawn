@@ -593,6 +593,41 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
      casi peggiori (1 %) restano tagli o colmate di 20–30 m.
 7. **Temperatura, umidità, biomi** (fasi 6–7) e limite delle nevi nello shader; colori della Scena per
    bioma. *Prova:* livelli della Carta; neve sulle cime.
+   **Stato: fatto, da provare dall'utente.**
+   - *Carta* (`carta.js`, fasi 6–7, `VERSIONE_GENERATORE` = `m6-biomi-2`): temperatura media annua al livello
+     del mare da latitudine (−4 °C a nord, 21 °C a sud), ±2 °C per seme e rumore su ~220 km (±3 °C); −6,5 °C
+     ogni 1000 m. Umidità da vicinanza al mare, rumore su ~150 km e piogge sui rilievi, più secco o umido
+     per seme. Biomi con i codici del 2D (costi di viaggio ed eventi validi): neve dove la media annua è
+     sotto −5 °C; roccia sui pendii ripidi (più dolci sopra il limite degli alberi); montagna oltre 1500 m;
+     palude solo in basso, vicino alla costa, umida e calda (rara: 0–0,2 %); sabbia dove è caldo e secco;
+     collina dove la Carta è mossa (dislivello > 110 m nelle 3×3 celle) o oltre 700 m; pianura di tre tipi
+     secondo la temperatura; boschi a grumi con soglia per quantile (copertura del seme 20–42 %). Soglie
+     frastagliate da un rumore su ~7 km. Vista della Carta: livelli rilievo / temperatura / umidità / biomi
+     con legenda, clima e bioma sotto il puntatore, parti dei biomi nel piede. FIUME non è un bioma di cella
+     (i fiumi hanno il loro tracciato).
+   - *Scene* (`terrain.js`, `coloreMondo`): colore per vertice dai biomi delle 4 celle vicine (bilineare, letti
+     in un punto spostato di ±350 m da un rumore: confini irregolari), toni ampi più verdi o più secchi,
+     macchia più scura sui pendii 14–28°, roccia oltre 32–44°, radure nei boschi, alpeggi sopra il limite
+     degli alberi; neve sopra il limite della stagione (media stagionale < −3 °C: alla latitudine media ~1800
+     m in primavera e autunno, ~3000 m d'estate, ~400 m d'inverno; ondeggia di ±90 m, non sui pendii oltre
+     ~45°) e sempre sulla neve perenne. Normali lisce (niente più chiazze a triangoli né facce staccate dalla
+     luce); l'orizzonte usa la stessa funzione con normali dai triangoli attorno a ogni vertice. Tavullia
+     resta con i colori di prima.
+   - *Roccia in montagna* (richiesta dall'utente): sopra il limite degli alberi e nel bioma roccia la roccia
+     compare già dai 18–30° (altrove 32–44°), con affioramenti a chiazze sui pendii medi (più frequenti in
+     alto, rari in collina), ghiaioni anche sul dolce 3–6 °C sotto il limite degli alberi, roccia chiara e
+     scura; sulle pareti oltre ~30–42° la neve non tiene e affiora la roccia. Il colore usa la pendenza su
+     ~60 m (come l'orizzonte vicino; con quella fine il blocco veniva più roccioso dei dintorni e si vedeva
+     il riquadro); la luce del blocco passa dalle normali fini a quelle su ~60 m negli ultimi 600 m verso il
+     bordo. Limite: pareti davvero verticali richiedono rilievo apposito (oggi le pendenze arrivano a ~45°).
+   - **Da fare (deciso con l'utente): vette aspre e pendenze invalicabili.** Creste nette, salti di roccia e
+     pareti oltre il limite del cavaliere (35°) in montagna; il cavaliere cerca i passaggi più dolci, come
+     nella realtà. Condizione: tra le valli di una catena restano **valichi** percorribili (pendenza entro il
+     limite), verificati automaticamente, e i percorsi della Carta passano da lì; la regola dei punti
+     panoramici e i fiumi (percorso sul terreno) vanno ricontrollati dopo il cambio del rilievo.
+   Limiti noti: il limite delle nevi si calcola al caricamento della Scena (cambiando stagione dentro la
+   Scena si aggiorna alla Scena successiva); niente alberi né rocce come oggetti (il bosco è un colore);
+   paludi rare; le regole di varietà (deserto–neve, distese monotone) si verificano al passo 8.
 8. **Regole di varietà e verifica automatica** (fase 8) su N semi, con esito per regola. Con i passi 3 e
    6 chiude l'accettazione.
 

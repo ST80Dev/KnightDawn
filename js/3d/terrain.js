@@ -9,8 +9,14 @@
 // Ogni cella è divisa in due triangoli lungo la diagonale NE–SO. getHeight() interpola sul
 // triangolo effettivamente disegnato (non in bilineare), così ciò che sta sul terreno
 // combacia esattamente con la superficie visibile.
+//
+// Mondo generato (M6, passo 7): colori per vertice dal bioma delle celle della Carta (sfumati, bordi
+// irregolari), dalla pendenza e dal limite delle nevi della stagione; normali lisce. Niente più chiazze a
+// triangoli: la stessa funzione colora il blocco e l'orizzonte (coloreMondo). Tavullia resta com'era.
 
 import * as THREE from 'three';
+import { BIOMA, CLIMA, limiteNevi } from '../mondo/carta.js';
+import { fbm, derivaSeme, smoothstep } from '../mondo/rumore.js';
 
 const PAL = (typeof PALETTE !== 'undefined') ? PALETTE : {};
 
@@ -79,7 +85,7 @@ export async function loadTerrain(name = 'tavullia', basePath = 'assets/terrain/
  *   contains:  (x:number, z:number) => boolean,
  * }}
  */
-export function createTerrain(meta, heights, isFallback = false) {
+export function createTerrain(meta, heights, isFallback = false, colore = null) {
   const { cols, rows } = meta;
   const cell = meta.cellSize;
   const size = cell * (cols - 1);
@@ -126,10 +132,182 @@ export function createTerrain(meta, heights, isFallback = false) {
 
   const mesh = new THREE.Group();
   mesh.name = 'terreno';
-  mesh.add(buildSurface(heights, cols, rows, cell, half, minElev, maxElev));
+  mesh.add(colore
+    ? buildSurfaceMondo(heights, cols, rows, cell, half, colore, meta.centroMondo)
+    : buildSurface(heights, cols, rows, cell, half, minElev, maxElev));
   mesh.add(buildSkirt(heights, cols, rows, cell, half, minElev - PROFONDITA_BORDO));
 
   return { mesh, meta, isFallback, size, half, minElev, maxElev, getHeight, getSlope, contains };
+}
+
+// ─── Colori del mondo generato (passo 7) ────────────────────────────────
+
+// Colori dei biomi nelle Scene (tarati sulla luce 3D; più tenui della Carta).
+const COLORI_SCENA = [];
+COLORI_SCENA[BIOMA.ACQUA] = new THREE.Color('#7d8a55');          // rive e fondali bassi (sotto l'acqua)
+COLORI_SCENA[BIOMA.PIANURA] = new THREE.Color('#8fae55');
+COLORI_SCENA[BIOMA.PIANURA_N] = new THREE.Color('#9a9566');      // steppa, prati radi del nord
+COLORI_SCENA[BIOMA.PIANURA_S] = new THREE.Color('#b5a868');      // prati secchi del sud
+COLORI_SCENA[BIOMA.COLLINA] = new THREE.Color('#9aa65a');
+COLORI_SCENA[BIOMA.FORESTA] = new THREE.Color('#41652c');
+COLORI_SCENA[BIOMA.MONTAGNA] = new THREE.Color('#87975a');       // pascoli d'alta quota
+COLORI_SCENA[BIOMA.ROCCIA] = new THREE.Color('#8e8678');
+COLORI_SCENA[BIOMA.NEVE] = new THREE.Color('#eef1f4');
+COLORI_SCENA[BIOMA.GHIACCIO] = new THREE.Color('#d6e6f0');
+COLORI_SCENA[BIOMA.SABBIA] = new THREE.Color('#d6bf8a');
+COLORI_SCENA[BIOMA.PALUDE] = new THREE.Color('#5f7048');
+COLORI_SCENA[BIOMA.FIUME] = COLORI_SCENA[BIOMA.PIANURA];
+const COLORE_ROCCIA = new THREE.Color('#8f877a');
+const COLORE_ROCCIA_SCURA = new THREE.Color('#6c665e');
+const COLORE_GHIAIONE = new THREE.Color('#9d978b');
+const COLORE_NEVE = new THREE.Color('#f1f3f6');
+const COLORE_RADURA = new THREE.Color('#7f9f4c');
+const COLORE_ALPEGGIO = new THREE.Color('#8a985c');
+
+export const COLORI_MONDO = {
+  bordo: { spostamento: 350, lunghezza: 1600 },   // m: i confini tra biomi ondeggiano di ±350 m
+  roccia: [32, 44],                               // gradi: dal prato (o bosco) alla roccia
+  rocciaBosco: [38, 50],
+  rocciaAlta: [18, 30],                           // gradi, sopra il limite degli alberi e nei biomi di montagna
+  affioramenti: { lunghezza: 90, soglia: [0.2, 0.42], pendenza: [15, 26] },   // chiazze di roccia sui pendii medi
+  ghiaioni: { sotto: [3, 6], quanto: 0.25 },      // °C sotto il limite degli alberi: detriti anche sui pendii dolci
+  scalaPendenza: 62.5,                            // m: pendenza per il colore su questa scala (come l'orizzonte vicino)
+  toni: { lunghezza: 140 },                       // roccia chiara e scura
+  neve: { fascia: 30, ondeggia: 90, lunghezza: 500, pendenza: [30, 42] },   // m, gradi
+  variazione: { lunghezza: 180, ampiezza: 0.08 },
+  tono: { lunghezza: 700, ampiezza: 0.45 },        // macchie ampie più verdi o più secche
+  macchia: [14, 28, 0.35],                          // gradi, quanto: sui pendii cespugli più scuri
+  radure: { lunghezza: 260, soglia: -0.3 },        // nel bosco, dove il rumore è basso
+};
+
+const STAGIONI = ['primavera', 'estate', 'autunno', 'inverno'];
+
+/**
+ * Colore del terreno del mondo generato in un punto del mondo (x, z in metri, quota h, pendenza in gradi).
+ * @param {object} carta  @param {number} stagione  indice del calendario (0 primavera … 3 inverno)
+ * @returns {(out: THREE.Color, x: number, z: number, h: number, pendenza: number) => THREE.Color}
+ */
+export function coloreMondo(carta, stagione = 0) {
+  const K = COLORI_MONDO, { cols, rows, cella, bioma, temperaturaMare } = carta;
+  const nomeStagione = STAGIONI[stagione] ?? 'primavera';
+  const s1 = derivaSeme(carta.seme, 301), s2 = derivaSeme(carta.seme, 302), s3 = derivaSeme(carta.seme, 303);
+  const s4 = derivaSeme(carta.seme, 304), s5 = derivaSeme(carta.seme, 305);
+  const c = new THREE.Color();
+  return (out, x, z, h, pendenza) => {
+    // Confini irregolari: si legge la Carta in un punto spostato da un rumore.
+    const bx = x + K.bordo.spostamento * fbm(x, z, s1, K.bordo.lunghezza, 2);
+    const bz = z + K.bordo.spostamento * fbm(x, z, s2, K.bordo.lunghezza, 2);
+    const u = bx / cella - 0.5, v = bz / cella - 0.5;
+    const i0 = Math.floor(u), j0 = Math.floor(v), fu = u - i0, fv = v - j0;
+    out.setRGB(0, 0, 0);
+    let t0 = 0, bosco = 0, neveFissa = 0, monte = 0;
+    for (let b = 0; b < 2; b++) {
+      const j = Math.min(rows - 1, Math.max(0, j0 + b));
+      for (let a = 0; a < 2; a++) {
+        const i = Math.min(cols - 1, Math.max(0, i0 + a)), k = j * cols + i;
+        const w = (a ? fu : 1 - fu) * (b ? fv : 1 - fv);
+        const bi = bioma ? bioma[k] : BIOMA.PIANURA;
+        const col = COLORI_SCENA[bi] || COLORI_SCENA[BIOMA.PIANURA];
+        out.r += col.r * w; out.g += col.g * w; out.b += col.b * w;
+        t0 += (temperaturaMare ? temperaturaMare[k] : 10) * w;
+        if (bi === BIOMA.FORESTA) bosco += w;
+        if (bi === BIOMA.NEVE || bi === BIOMA.GHIACCIO) neveFissa += w;
+        if (bi === BIOMA.ROCCIA) monte += w; else if (bi === BIOMA.MONTAGNA) monte += 0.5 * w;
+      }
+    }
+    // Radure nel bosco; sopra il limite degli alberi il bosco lascia il posto agli alpeggi.
+    if (bosco > 0) {
+      const r = smoothstep(K.radure.soglia, K.radure.soglia - 0.2, fbm(x, z, s4, K.radure.lunghezza, 2));
+      if (r > 0) out.lerp(COLORE_RADURA, r * bosco * 0.8);
+      const T = t0 - CLIMA.gradiente * h;
+      if (T < CLIMA.bosco + 1) out.lerp(COLORE_ALPEGGIO, bosco * smoothstep(CLIMA.bosco + 1, CLIMA.bosco - 1, T));
+    }
+    // Toni ampi (più verde o più secco) e macchia più scura sui pendii: il rilievo si legge anche da lontano.
+    const tono = K.tono.ampiezza * fbm(x, z, s3 ^ 0x5bd1, K.tono.lunghezza, 2);
+    if (tono > 0) out.lerp(COLORE_RADURA, tono * (1 - bosco)); else out.lerp(COLORI_SCENA[BIOMA.PIANURA_S], -tono * 0.6 * (1 - bosco));
+    out.lerp(COLORI_SCENA[BIOMA.FORESTA], K.macchia[2] * (1 - bosco) * (1 - neveFissa) * smoothstep(K.macchia[0], K.macchia[1], pendenza));
+    // Roccia: pareti e pendii ripidi (nel bosco un po' più tardi); sopra il limite degli alberi e nei biomi di
+    // montagna già dai pendii medi, con affioramenti a chiazze e, più in alto, ghiaioni anche sul dolce.
+    const T = t0 - CLIMA.gradiente * h;
+    const alto = Math.max(smoothstep(CLIMA.bosco + 2, CLIMA.bosco - 2, T), monte);
+    const R = bosco > 0.5 ? K.rocciaBosco : K.roccia;
+    const r0 = R[0] + (K.rocciaAlta[0] - R[0]) * alto, r1 = R[1] + (K.rocciaAlta[1] - R[1]) * alto;
+    let roccia = smoothstep(r0, r1, pendenza);
+    const A = K.affioramenti;
+    const chiazze = smoothstep(A.soglia[0], A.soglia[1], fbm(x, z, s1 ^ 0x2c1b, A.lunghezza, 3))
+      * smoothstep(A.pendenza[0], A.pendenza[1], pendenza) * (0.35 + 0.65 * alto);
+    roccia = Math.max(roccia, chiazze);
+    const ghiaia = K.ghiaioni.quanto * smoothstep(CLIMA.bosco - K.ghiaioni.sotto[0], CLIMA.bosco - K.ghiaioni.sotto[1], T);
+    if (ghiaia > 0) out.lerp(COLORE_GHIAIONE, ghiaia);
+    if (roccia > 0) {
+      c.copy(COLORE_ROCCIA).lerp(COLORE_ROCCIA_SCURA, 0.5 + 0.5 * fbm(x, z, s2 ^ 0x77e1, K.toni.lunghezza, 2));
+      out.lerp(c, roccia);
+    }
+    // Variazione lenta di luminosità (niente distese piatte, niente chiazze a triangoli).
+    out.multiplyScalar(1 + K.variazione.ampiezza * fbm(x, z, s3, K.variazione.lunghezza, 2));
+    // Neve: sopra il limite della stagione (ondeggiante), non sui pendii più ripidi; sempre sulla neve perenne.
+    const limite = limiteNevi(t0, nomeStagione) + K.neve.ondeggia * fbm(x, z, s5, K.neve.lunghezza, 2);
+    let neve = smoothstep(limite - K.neve.fascia, limite + K.neve.fascia, h);
+    neve = Math.max(neve, neveFissa) * (1 - smoothstep(K.neve.pendenza[0], K.neve.pendenza[1], pendenza));
+    if (neve > 0) out.lerp(COLORE_NEVE, neve);
+    return out;
+  };
+}
+
+/**
+ * Superficie del mondo generato: colori e normali per vertice (lisce), triangoli come buildSurface (diagonale
+ * NE–SO), quindi getHeight combacia. `colore` lavora in coordinate del mondo: centro del blocco + locali.
+ */
+function buildSurfaceMondo(heights, cols, rows, cell, half, colore, centro) {
+  const n = cols * rows;
+  const H = (c, r) => heights[Math.min(Math.max(r, 0), rows - 1) * cols + Math.min(Math.max(c, 0), cols - 1)];
+  const nor = new Float32Array(n * 3), col = new Float32Array(n * 3);
+  const tmp = new THREE.Color();
+  const cx = centro ? centro.x : 0, cz = centro ? centro.z : 0;
+  // Il colore usa la pendenza su ~60 m (come l'orizzonte vicino): con quella fine il blocco veniva più roccioso
+  // dei dintorni e si vedeva il riquadro. La luce usa le normali fini.
+  const k = Math.max(1, Math.round(COLORI_MONDO.scalaPendenza / (2 * cell)));
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const i = r * cols + c;
+      const sx = (H(c + k, r) - H(c - k, r)) / (2 * k * cell), sz = (H(c, r + k) - H(c, r - k)) / (2 * k * cell);
+      // Luce: normali fini, che verso il bordo del blocco passano a quelle su ~60 m dell'orizzonte (niente riquadro).
+      const bordo = smoothstep(half - 600, half, Math.max(Math.abs(c * cell - half), Math.abs(r * cell - half)));
+      const gx = ((H(c + 1, r) - H(c - 1, r)) / (2 * cell)) * (1 - bordo) + sx * bordo;
+      const gz = ((H(c, r + 1) - H(c, r - 1)) / (2 * cell)) * (1 - bordo) + sz * bordo;
+      const l = Math.hypot(gx, 1, gz);
+      nor[i * 3] = -gx / l; nor[i * 3 + 1] = 1 / l; nor[i * 3 + 2] = -gz / l;
+      const pend = Math.atan(Math.hypot(sx, sz)) * 180 / Math.PI;
+      colore(tmp, cx - half + c * cell, cz - half + r * cell, heights[i], pend);
+      col[i * 3] = tmp.r; col[i * 3 + 1] = tmp.g; col[i * 3 + 2] = tmp.b;
+    }
+  }
+  const pos = new Float32Array(n * 3);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const i = r * cols + c;
+      pos[i * 3] = -half + c * cell; pos[i * 3 + 1] = heights[i]; pos[i * 3 + 2] = -half + r * cell;
+    }
+  }
+  const indici = new Uint32Array((cols - 1) * (rows - 1) * 6);
+  let o = 0;
+  for (let r = 0; r < rows - 1; r++) {
+    for (let c = 0; c < cols - 1; c++) {
+      const a = r * cols + c, b = a + 1, d = a + cols, e = d + 1;
+      indici[o++] = a; indici[o++] = d; indici[o++] = b;      // NO: a, d, b
+      indici[o++] = b; indici[o++] = d; indici[o++] = e;      // SE: b, d, e
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setIndex(new THREE.BufferAttribute(indici, 1));
+  geo.computeBoundingSphere();
+  geo.computeBoundingBox();
+  const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  m.name = 'terreno-superficie';
+  return m;
 }
 
 // ─── Mesh della superficie ──────────────────────────────────────────────
