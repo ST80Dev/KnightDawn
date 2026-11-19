@@ -14,7 +14,8 @@ export const PERCORSO = {
   cella: 40,            // m: passo della griglia su cui si cerca il percorso
   corridoio: 800,       // m: distanza massima dal tracciato della Carta
   dislivello: 6,        // m: salire di tanto sopra il livello atteso raddoppia il costo (cresce col quadrato)
-  attrazione: 0.6,      // costo in più al bordo del corridoio (cresce col quadrato della distanza)
+  attrazione: 3,        // costo in più al bordo del corridoio (cresce col quadrato della distanza): con poco
+                        // richiamo, in pianura il percorso più corto era una retta e perdeva le anse della Carta
   passo: 20,            // m: distanza tra i punti del percorso finale
   liscia: [5, 4],       // media mobile su ±5 punti (~200 m), 4 passate: via i gradini della griglia
 };

@@ -25,7 +25,7 @@ export const CARTA_PREDEFINITA = { cols: 600, rows: 450, cella: 1000 };
 // VA CAMBIATA a ogni modifica che cambia le Carte generate, altrimenti il browser riusa Carte vecchie.
 // (In alternativa: ?rigenera nell'indirizzo ignora la cache.)
 // Comprende i luoghi (M7, js/mondo/luoghi.js), che si aggiungono alla Carta nel Worker e stanno nella stessa cache.
-export const VERSIONE_GENERATORE = 'm7-valichi-2';
+export const VERSIONE_GENERATORE = 'm7-torrenti-1';
 
 // Parametri della forma (km dove non indicato). Valori di partenza, da tarare guardando le Carte.
 const FORMA = {
@@ -44,6 +44,10 @@ const FORMA = {
     linea: 300, larghezza: 0.09, pedemonte: 0.26,
     maschera: 360, rampaMaschera: 0.15, sogliaMontagna: 0.35,
     dettaglio: 32, contrafforti: 0.7, creste: 14, altezza: 0.75,
+    // Zoccolo dei contrafforti (deciso con l'utente): parte del piede della catena che è una base continua e non
+    // solo contrafforti. Senza (0) le valli tra i contrafforti scendevano alla quota delle colline fin sotto la
+    // spina; con lo zoccolo i fondovalle salgono gradualmente addentrandosi nella catena.
+    zoccolo: 0.6,
   },
 };
 
@@ -158,7 +162,8 @@ export function generaCarta(seme, opzioni = {}) {
         const piede = 1 - smoothstep(0, R.pedemonte, l);
         // La spina ha creste e selle (ridged a scala più piccola), non un profilo liscio.
         const creste = spina > 0 ? 0.55 + 0.45 * ridged(wx, wy, sD ^ 0x6a09e667, R.creste, 4) : 0;
-        profilo[i] = 0.6 * spina * spina * creste + R.contrafforti * piede * ridged(wx, wy, sD, R.dettaglio, 5);
+        profilo[i] = 0.6 * spina * spina * creste
+          + R.contrafforti * piede * (R.zoccolo + (1 - R.zoccolo) * ridged(wx, wy, sD, R.dettaglio, 5));
         fianchi[i] = piede;
       }
       collinare[i] = fbm(wx, wy, sH, QC.lunghezza, 4);
@@ -261,8 +266,15 @@ export function generaCarta(seme, opzioni = {}) {
   mappaFasce(quota, mare, carattere, quota);
   avanzamento?.('Fiumi, laghi e poggi', 0.78);
 
+  // ─── Valichi tra grandi valli contrapposte (prima del drenaggio, che si ricalcola sul passo scavato) ───
+  const valichiCarta = valichiTraValli(seme, cols, rows, quota, mare);
+
   // ─── Fasi 4–5: drenaggio, valli, fiumi e laghi ───
   const dren = drenaggio(cols, rows, quota, mare, seme);
+  for (const v of valichiCarta) {                    // quota finale del passo (dopo lo scavo delle valli)
+    v.quota = quota[Math.floor(v.y) * cols + Math.floor(v.x)];
+    for (const t of v.valli) t.quota = quota[Math.floor(t.y) * cols + Math.floor(t.x)];
+  }
 
   // ─── Fase 3 (dopo il drenaggio): poggi ───
   // Dopo, non prima: messi prima, i gruppi di poggi chiudevano conche nelle pianure (~150 laghetti in più).
@@ -270,7 +282,7 @@ export function generaCarta(seme, opzioni = {}) {
   const poggi = piazzaPoggi(seme, cols, rows, quota, mare, catena, dren);
 
   // ─── Gruppi montuosi e forcelle (dopo il passo 8) ───
-  const vette = massicciEForcelle(seme, cols, rows, quota, mare, dren.acque);
+  const vette = massicciEForcelle(seme, cols, rows, quota, mare, dren.acque, valichiCarta);
 
   // ─── Fasi 6–7: clima e biomi ───
   avanzamento?.('Clima e biomi', 0.88);
@@ -307,10 +319,12 @@ export function generaCarta(seme, opzioni = {}) {
     ricevente: dren.ricevente,     // cella a valle (-1 = foce: mare, lago costiero, bordo)
     bacino: dren.bacino,           // km² drenati dalla cella
     sogliaFiume: DRENAGGIO.fiume,
+    sogliaTorrente: DRENAGGIO.torrente,       // carta.fiumi comprende anche i torrenti (bacino da qui a sogliaFiume)
     temperaturaMare: clima.temperaturaMare,   // °C, media annua al livello del mare (limite delle nevi)
     temperatura: clima.temperatura,           // °C, media annua alla quota della cella
     umidita: clima.umidita,                   // 0…1
     bioma: clima.bioma,                       // BIOMA.*
+    valichiCarta,                             // valichi tra grandi valli (luoghi.js li rende carta.valichi)
     massicci: vette.massicci,                 // gruppi montuosi: { id, x, y (km), forma, altezza, torri, raggio }
     asprezza: vette.asprezza,                 // 0…1; > 0,5: pareti di un gruppo
     valico: vette.valico,                     // 1 = cella di una forcella tra le torri di un gruppo (non un valico:
@@ -464,6 +478,150 @@ function climaEBiomi(seme, cols, rows, quota, mare, acque) {
   return { temperaturaMare, temperatura, umidita, bioma, copertura };
 }
 
+// ─── Valichi tra grandi valli contrapposte ───────────────────────────────
+
+/**
+ * Valichi (deciso con l'utente): dove due grandi valli di sistemi diversi salgono da lati opposti fin sotto una
+ * catena, tra le loro testate c'è un passo: il punto più basso del crinale tra le due (percorso «minimax» in un
+ * corridoio). Se il passo è troppo alto lo si scava (al più `scavo` m), prima del drenaggio: fiumi e laghi si
+ * ricalcolano sul rilievo finale. Al più un valico ogni `distanza` km. Lunghezze in km, quote in m.
+ */
+export const VALICHI_CARTA = {
+  testata: { quota: [250, 2100], vicinoMonti: 15, monti: 1700 },   // testata di una grande valle, vicino ai monti
+  coppia: { distanza: [6, 32], giro: 25, corridoio: 3 },           // testate opposte; sistemi diversi
+  sella: { sopra: 250, massima: 3000 },        // il passo sta almeno così sopra entrambe le testate
+  bersaglio: 2000, scavo: 500,                 // si scava fino a bersaglio, al più di scavo m (valichi alti fino a ~2500)
+  intaglio: { lungo: 45, largo: 220, raggio: 5 },   // m per km lungo il passo, m per km² ai lati; km
+  distanza: 20,
+  // Punteggio (più basso = meglio): quota del passo, salita dalla testata più bassa (le valli che salgono piano
+  // fin sotto il passo sono le migliori), distanza tra le testate, grandezza delle due valli (bacino a `valle` km
+  // sotto la testata: le valli grandi che si addentrano nella catena).
+  peso: { quota: 0.5, salita: 1, distanza: 12, grandezza: 160 }, valle: 10,
+};
+
+function valichiTraValli(seme, cols, rows, quota, mare) {
+  const V = VALICHI_CARTA, n = cols * rows;
+  const acque = classificaAcque(cols, rows, mare);
+  const foce = foci(cols, rows, acque);
+  const { ricevente, bacino, ordine } = flusso(cols, rows, riempi(cols, rows, quota, foce), foce, acque, derivaSeme(seme, 42));
+  const soglia = DRENAGGIO.fiume;
+  const terra = (i) => !mare[i] && acque[i] === ACQUA.TERRA;
+  const vicinoMonti = distanzaDa(cols, rows, (i) => terra(i) && quota[i] >= V.testata.monti);
+  // Foce di ogni cella (sistema del fiume).
+  const fociDi = new Int32Array(n).fill(-1);
+  for (let t = ordine.length - 1; t >= 0; t--) {
+    const i = ordine[t], r = ricevente[i];
+    fociDi[i] = r < 0 ? i : fociDi[r] >= 0 ? fociDi[r] : r;
+  }
+  // Testate: celle di fiume senza affluenti di fiume a monte, vicino ai monti, ben sotto la catena.
+  const affluente = new Uint8Array(n);
+  for (let i = 0; i < n; i++) if (bacino[i] >= soglia && ricevente[i] >= 0) affluente[ricevente[i]] = 1;
+  const testate = [];
+  for (let i = 0; i < n; i++) {
+    if (!terra(i) || bacino[i] < soglia || affluente[i]) continue;
+    if (quota[i] < V.testata.quota[0] || quota[i] > V.testata.quota[1] || vicinoMonti[i] > V.testata.vicinoMonti) continue;
+    testate.push(i);
+  }
+  const passo = (i, j) => ((i % cols) !== (j % cols) && ((i / cols) | 0) !== ((j / cols) | 0) ? Math.SQRT2 : 1);
+  /** Grandezza della valle: bacino (km²) V.valle km a valle della testata. */
+  const grande = (i) => { for (let k = 0; k < V.valle && ricevente[i] >= 0; k++) i = ricevente[i]; return bacino[i]; };
+  const lungoFiume = new Map();
+  /** Giro lungo i fiumi tra due celle dello stesso sistema (km). */
+  function giro(a, b) {
+    lungoFiume.clear();
+    let d = 0, j = a;
+    for (let k = 0; j >= 0 && k < 5000; k++) { lungoFiume.set(j, d); const r = ricevente[j]; if (r >= 0) d += passo(j, r); j = r; }
+    d = 0; j = b;
+    for (let k = 0; j >= 0 && k < 5000; k++) {
+      if (lungoFiume.has(j)) return d + lungoFiume.get(j);
+      const r = ricevente[j]; if (r >= 0) d += passo(j, r); j = r;
+    }
+    return Infinity;
+  }
+  /** Passo tra due testate: percorso che minimizza la quota massima, nel corridoio attorno al segmento. */
+  function sella(a, b) {
+    const ax = a % cols, ay = (a / cols) | 0, bx = b % cols, by = (b / cols) | 0;
+    const vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy, C = V.coppia.corridoio;
+    const nel = (x, y) => {
+      let t = ((x - ax) * vx + (y - ay) * vy) / l2; t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const dx = x - ax - vx * t, dy = y - ay - vy * t;
+      return dx * dx + dy * dy <= C * C;
+    };
+    const costo = new Map([[a, quota[a]]]), da = new Map(), coda = [[quota[a], a]];
+    const fatto = new Set();
+    while (coda.length) {
+      let m = 0;
+      for (let k = 1; k < coda.length; k++) if (coda[k][0] < coda[m][0]) m = k;
+      const [c, i] = coda[m]; coda[m] = coda[coda.length - 1]; coda.pop();
+      if (fatto.has(i)) continue;
+      fatto.add(i);
+      if (i === b) break;
+      const x = i % cols, y = (i / cols) | 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const xx = x + dx, yy = y + dy;
+        if ((!dx && !dy) || xx < 0 || yy < 0 || xx >= cols || yy >= rows || !nel(xx, yy)) continue;
+        const j = yy * cols + xx;
+        if (!terra(j) || fatto.has(j)) continue;
+        const nc = Math.max(c, quota[j]);
+        if (nc < (costo.get(j) ?? Infinity)) { costo.set(j, nc); da.set(j, i); coda.push([nc, j]); }
+      }
+    }
+    if (!fatto.has(b)) return null;
+    let alto = b;
+    for (let i = b; i !== a; i = da.get(i)) if (quota[i] > quota[alto]) alto = i;
+    return { cella: alto, quota: quota[alto] };
+  }
+  // Coppie di testate opposte e il loro passo.
+  const candidati = [];
+  const D = V.coppia.distanza;
+  for (let p = 0; p < testate.length; p++) {
+    const a = testate[p], ax = a % cols, ay = (a / cols) | 0;
+    for (let q = p + 1; q < testate.length; q++) {
+      const b = testate[q], dx = (b % cols) - ax, dy = ((b / cols) | 0) - ay, d = Math.sqrt(dx * dx + dy * dy);
+      if (d < D[0] || d > D[1]) continue;
+      if (fociDi[a] === fociDi[b] && giro(a, b) < V.coppia.giro) continue;
+      const s = sella(a, b);
+      if (!s) continue;
+      const sopra = s.quota - Math.max(quota[a], quota[b]);
+      if (sopra < V.sella.sopra || s.quota > V.sella.massima) continue;
+      const finale = s.quota <= V.bersaglio ? s.quota : Math.max(V.bersaglio, s.quota - V.scavo);
+      const P = V.peso, salita = finale - Math.min(quota[a], quota[b]);
+      const grandezza = Math.log2(Math.min(grande(a), grande(b)) / soglia);
+      const deviazione = fociDi[a] === fociDi[b] ? giro(a, b) : Infinity;
+      candidati.push({ a, b, sella: s.cella, quotaSella: s.quota, finale, d, deviazione,
+        punteggio: P.quota * finale + P.salita * salita + P.distanza * d - P.grandezza * grandezza });
+    }
+  }
+  candidati.sort((u, v) => u.punteggio - v.punteggio || u.sella - v.sella);
+  const scelti = [];
+  for (const c of candidati) {
+    const x = (c.sella % cols) + 0.5, y = ((c.sella / cols) | 0) + 0.5;
+    if (scelti.some((v) => Math.hypot(v.x - x, v.y - y) < V.distanza)) continue;
+    scelti.push({ x, y, c });
+  }
+  // Scavo: un intaglio morbido attorno al passo, dolce lungo la direzione tra le testate, che sale ai lati.
+  const I = V.intaglio;
+  const valichi = scelti.map(({ x, y, c }, id) => {
+    if (c.finale < c.quotaSella) {
+      const ax = c.a % cols, ay = (c.a / cols) | 0, bx = c.b % cols, by = (c.b / cols) | 0;
+      const l = Math.hypot(bx - ax, by - ay) || 1, ux = (bx - ax) / l, uy = (by - ay) / l;
+      const sx = Math.floor(x), sy = Math.floor(y);
+      for (let yy = Math.max(0, sy - I.raggio); yy <= Math.min(rows - 1, sy + I.raggio); yy++) {
+        for (let xx = Math.max(0, sx - I.raggio); xx <= Math.min(cols - 1, sx + I.raggio); xx++) {
+          const j = yy * cols + xx;
+          if (!terra(j)) continue;
+          const px = xx - sx, py = yy - sy, lungo = px * ux + py * uy, lato = -px * uy + py * ux;
+          const bersaglio = c.finale + I.lungo * Math.abs(lungo) + I.largo * lato * lato;
+          if (quota[j] > bersaglio) quota[j] = Math.max(quota[j] - V.scavo, bersaglio);
+        }
+      }
+    }
+    return { id, x, y, quota: c.finale, scavo: c.quotaSella - c.finale, distanza: c.d, deviazione: c.deviazione,
+      valli: [c.a, c.b].map((t) => ({ x: (t % cols) + 0.5, y: ((t / cols) | 0) + 0.5, quota: quota[t] })) };
+  });
+  return valichi;
+}
+
 // ─── Gruppi montuosi e forcelle ──────────────────────────────────────────
 
 /**
@@ -486,6 +644,7 @@ export const MASSICCI = {
   ghiaione: 0.22,               // altezza del ghiaione (frazione)
   muro: 0.82,                   // la parete va da 1 a muro × raggio
   invalicabile: 0.5,
+  lontanoValichi: 9,            // km: nessun gruppo così vicino a un valico
 };
 
 const FORME_TORRI = {           // esponente della superellisse, allungamento, cima
@@ -540,7 +699,7 @@ export function profiloMassicci(massicci, x, y, out = { a: 0, altezza: 0, d: Inf
  * Sceglie i gruppi (cime alte e distanti tra loro) con forma, torri e misure dal seme; ne ricava l'asprezza per
  * cella (> MASSICCI.invalicabile: parete) e le celle delle forcelle.
  */
-function massicciEForcelle(seme, cols, rows, quota, mare, acque) {
+function massicciEForcelle(seme, cols, rows, quota, mare, acque, valichiCarta = []) {
   const M = MASSICCI, n = cols * rows;
   const rng = mulberry32(derivaSeme(seme, 81));
   const terra = (i) => !mare[i] && acque[i] === ACQUA.TERRA;
@@ -565,6 +724,7 @@ function massicciEForcelle(seme, cols, rows, quota, mare, acque) {
     if (massicci.length >= quanti) break;
     const cx = (i % cols) + 0.5, cy = ((i / cols) | 0) + 0.5;
     if (massicci.some((g) => Math.hypot(g.x - cx, g.y - cy) < M.distanza)) continue;
+    if (valichiCarta.some((v) => Math.hypot(v.x - cx, v.y - cy) < M.lontanoValichi)) continue;   // niente pareti sui valichi
     const forma = M.forme[Math.floor(rng() * M.forme.length)];
     const F = FORME_TORRI[forma];
     const nt = forma === 'cresta' ? 1 + Math.floor(rng() * 2) : M.torri[0] + Math.floor(rng() * (M.torri[1] - M.torri[0] + 1));
@@ -962,6 +1122,10 @@ const DRENAGGIO = {
   // svuotarla (come fa un fiume vero); le conche più profonde restano laghi.
   valli: { k: 5, frazione: 0.45, areaMinima: 15, raggioBase: 1.5, raggioPer: 0.12, raggioMax: 8, breccia: 60 },
   fiume: 150,              // km² di bacino: da qui una cella porta un fiume
+  // Torrenti (deciso con l'utente): da `torrente` km² si disegnano anche i corsi minori, che nascono in alto
+  // sotto le cime, e confluiscono nei fiumi; non cambiano il drenaggio (le loro valli sono già scavate per cella).
+  torrente: 20,
+  spostaTorrenti: { ampiezza: 0.42, lunghezze: [3, 8] },   // km: i punti delle celle ondeggiano (niente righe a griglia)
   // Conche più profonde (m) e più ampie (km²) diventano laghi; le altre si colmano. Con la collina al
   // 45–55 % il rilievo a rumore ha molte conche: soglie basse davano 100–200 laghi.
   lago: { profondita: 20, area: 10 },
@@ -1425,7 +1589,8 @@ export function drenaggio(cols, rows, quota, mare, seme = 0) {
     }
     if (pezzo.length >= 2 * PASSO_PUNTO) fiumi.push(Float32Array.from(pezzo));
   }
-  return { acque, livello, ricevente, bacino, laghi, fiumi };
+  const torrenti = tracciaTorrenti(cols, rows, quota, acque, ricevente, bacino, fiumi, seme);
+  return { acque, livello, ricevente, bacino, laghi, fiumi: fiumi.concat(torrenti), torrenti: torrenti.length };
 }
 
 // ─── Tracciati dei fiumi ────────────────────────────────────────────────
@@ -1494,6 +1659,82 @@ function ricampiona(p, passo) {
   const u = p.length - S;
   if (q[q.length - S] !== p[u] || q[q.length - S + 1] !== p[u + 1]) for (let c = 0; c < S; c++) q.push(p[u + c]);
   return q;
+}
+
+/**
+ * Torrenti: corsi con bacino tra DRENAGGIO.torrente e DRENAGGIO.fiume km², dalle loro sorgenti fino al fiume (o al
+ * torrente) in cui confluiscono, come i fiumi: Float32Array di punti (x, y, bacino, letto = NaN), dalla sorgente
+ * a valle. L'ultimo punto è esattamente un punto del corso in cui confluiscono (le Scene raccordano lì il letto).
+ * Prima i più lunghi, così ogni affluente trova già il suo corso.
+ */
+function tracciaTorrenti(cols, rows, quota, acque, ricevente, bacino, fiumi, seme) {
+  const D = DRENAGGIO, n = cols * rows, S = PASSO_PUNTO, SP = D.spostaTorrenti;
+  const sX = derivaSeme(seme, 54), sY = derivaSeme(seme, 55);
+  /** Punto di una cella: centro più uno spostamento dolce (lo stesso per chi ci passa). */
+  const punto = (c, r) => [
+    c + 0.5 + SP.ampiezza * (0.65 * fbm(c, r, sX, SP.lunghezze[0], 2) + 0.35 * fbm(c, r, sX ^ 0x9e3779b9, SP.lunghezze[1], 2)),
+    r + 0.5 + SP.ampiezza * (0.65 * fbm(c, r, sY, SP.lunghezze[0], 2) + 0.35 * fbm(c, r, sY ^ 0x9e3779b9, SP.lunghezze[1], 2))];
+  const torrente = (i) => i >= 0 && acque[i] === ACQUA.TERRA && bacino[i] >= D.torrente && bacino[i] < D.fiume;
+  // Indice dei punti dei corsi già tracciati (celle di 1 km → [curva, punto]).
+  const corsi = fiumi.slice(), indice = new Map();
+  const indicizza = (ci) => {
+    const f = corsi[ci];
+    for (let k = 0; k < f.length; k += S) {
+      const key = Math.floor(f[k + 1]) * cols + Math.floor(f[k]);
+      let l = indice.get(key);
+      if (!l) indice.set(key, (l = []));
+      l.push(ci, k);
+    }
+  };
+  corsi.forEach((_, ci) => indicizza(ci));
+  /** Punto (x, y) esatto del corso più vicino alla cella (entro 1 cella), o null. */
+  const aggancio = (i, x, y) => {
+    let best = null, bd = Infinity;
+    const c = i % cols, r = (i - c) / cols;
+    for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) {
+      const l = indice.get((r + b) * cols + c + a);
+      if (!l) continue;
+      for (let t = 0; t < l.length; t += 2) {
+        const f = corsi[l[t]], k = l[t + 1], d = (f[k] - x) * (f[k] - x) + (f[k + 1] - y) * (f[k + 1] - y);
+        if (d < bd) { bd = d; best = [f[k], f[k + 1], f[k + 2]]; }
+      }
+    }
+    return best;
+  };
+  // Sorgenti: torrenti senza affluenti torrente; lunghezza del percorso fino alla confluenza.
+  const affluente = new Uint8Array(n);
+  for (let i = 0; i < n; i++) if (torrente(i) && ricevente[i] >= 0) affluente[ricevente[i]] = 1;
+  const sorgenti = [];
+  for (let i = 0; i < n; i++) {
+    if (!torrente(i) || affluente[i]) continue;
+    let l = 0, j = i;
+    while (torrente(j) && l < 500) { j = ricevente[j]; l++; }
+    sorgenti.push([l, i]);
+  }
+  sorgenti.sort((a, b) => b[0] - a[0] || a[1] - b[1]);
+  const fatto = new Uint8Array(n);
+  const out = [];
+  for (const [, i0] of sorgenti) {
+    const p = [];
+    let i = i0, fine = null;
+    while (torrente(i) && !fatto[i]) {
+      fatto[i] = 1;
+      const [px, py] = punto(i % cols, (i / cols) | 0);
+      p.push(px, py, bacino[i], NaN);
+      i = ricevente[i];
+    }
+    if (p.length < 2 * S) continue;
+    // Fine: il corso in cui confluisce (fiume o torrente già tracciato), se c'è; altrimenti (mare, lago) com'è.
+    if (i >= 0) fine = aggancio(i, p[p.length - S], p[p.length - S + 1]);
+    let q = ricampiona(chaikin(p, 3), TRACCIATI.passo);
+    if (fine) { q = q.concat([fine[0], fine[1], Math.max(fine[2], q[q.length - 2]), NaN]); }
+    const f = Float32Array.from(q);
+    if (fine) { f[f.length - S] = fine[0]; f[f.length - S + 1] = fine[1]; }   // esatto (Float32 come il corso)
+    out.push(f);
+    corsi.push(f);
+    indicizza(corsi.length - 1);
+  }
+  return out;
 }
 
 /**

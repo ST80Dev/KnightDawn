@@ -705,7 +705,8 @@ const cartaVista = createCartaVista(document.body, {
   generaCarta: (seme, avanzamento) => generaCartaAsincrona(seme, { avanzamento, cache: !PARAMETRI.has('rigenera') }),
   verificaSemi,
   posizione: () => (scenaAttuale?.tipo === 'mondo' && knight
-    ? { x: (scenaAttuale.cx + knight.stato.x) / carta.cella, y: (scenaAttuale.cz + knight.stato.z) / carta.cella }
+    ? { x: (scenaAttuale.cx + knight.stato.x) / carta.cella, y: (scenaAttuale.cz + knight.stato.z) / carta.cella,
+      direzione: knight.stato.direzione }
     : null),
   onScegli: (c, x, y) => {
     entraDallaCarta(c, x, y).catch((err) => { console.error('[scena]', err); messaggio(`Errore: ${err.message}`); });

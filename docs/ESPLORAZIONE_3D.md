@@ -933,6 +933,53 @@ conoscenza sulla Carta. Tavullia resta la scena di prova con il castello di M4.
      *Correzione:* la prima versione del passo misurava la vicinanza alle **forcelle** (8–12 km): sono a
      2300–3400 m e la terra sotto i 900 m sta a 5–17 km, quindi in 30 semi nessun sito «di valico».
      L'utente ha fatto notare che il criterio era sbagliato in sé (le forcelle raramente si presidiano).
+   - *Valichi tra grandi valli e zoccolo* (richiesta dell'utente, passata dalla sessione M5; seme 171289: le
+     valli che salivano da lati opposti della catena non avevano un passo tra le testate, che invece cadeva tra
+     valli indistinte). Misurato: le selle tra quelle testate stavano a 2248 e 2666 m (fuori dai 1000–2000 m
+     accettati) e i fondovalle restavano 1500–1900 m sotto il crinale fin quasi ai suoi piedi. Nessun parametro
+     esistente cambiava il profilo (erosione: solo più laghi; pedemonte: nullo o contrario); la causa era la
+     formula dei fianchi delle catene, di soli contrafforti. Due cambi in `carta.js`
+     (`VERSIONE_GENERATORE` = `m7-valichi-3`):
+     1. **Zoccolo dei contrafforti** (`FORMA.catene.zoccolo` = 0,3): il piede della catena ha una base continua.
+        Quota mediana dei fiumi a 0-3 / 3-6 / 6-10 / 10-20 km dalla terra sopra i 2000 m: seme 171289 da
+        1687/1062/675/354 a 1928/1381/1017/381 m, seme 48213 da 1789/1336/886/560 a 1875/1389/1092/626 m; fasce
+        di quota e laghi quasi invariati.
+     2. **Valichi tra grandi valli contrapposte** (`valichiTraValli`, prima del drenaggio, regola nuova
+        approvata dall'utente): testate dei fiumi (bacino ≥ 150 km², 250–1600 m, entro 15 km da terra oltre
+        1700 m); coppie a 6–32 km di sistemi diversi (foci diverse o giro ≥ 25 km); il passo è il punto più alto
+        del percorso che minimizza la quota massima in un corridoio di 3 km, almeno 400 m sopra entrambe le
+        testate e al più a 3000 m. Se è sopra i 2000 m si scava un intaglio (dolce lungo il passaggio, che
+        sale ai lati) fino a 2000 m, al più di 500 m: valichi alti fino a ~2500 m, senza chiusura invernale
+        (deciso con l'utente). Punteggio: quota del passo, salita dalla testata più bassa, distanza tra le
+        testate, grandezza delle due valli; al più un valico ogni 20 km. Drenaggio, fiumi e laghi si
+        calcolano poi sul rilievo scavato. Nessun gruppo montuoso a meno di 9 km da un valico.
+        `luoghi.js` (`valichiDaCarta`) li rende `carta.valichi` (con sentinella all'85 %); `trovaValichi`
+        resta per le Carte senza `valichiCarta`. 12 semi: 8–21 valichi, 0–5 alti; tutte le verifiche
+        (fiumi, panorami, varietà, luoghi) superate; generazione 3,2–4,3 s (prima 2,6–3,4).
+        Seme 171289: un valico a 1389 m verso (327, 98), vicino alla prima coppia indicata dall'utente, e uno a
+        1799 m verso (362, 104), vicino alla seconda. Con lo zoccolo il rilievo cambia, quindi le sorgenti
+        indicate sullo screenshot non sono più le stesse. Limite: le testate di questi due valichi restano
+        basse (265–404 m e 219–869 m), quindi la salita all'ultimo tratto è ancora ripida.
+   - *Valli più alte e torrenti* (richiesta dell'utente: fondovalle a 400 m sotto montagne di 2000 m sono rari;
+     le sorgenti partono quasi dalle cime). Misurato: le «sorgenti» visibili erano solo i punti dove il bacino
+     arriva a 150 km² (già un fiume); i torrenti esistevano nel drenaggio ma non si disegnavano. Due cambi
+     (`VERSIONE_GENERATORE` = `m7-torrenti-1`):
+     1. Zoccolo dei contrafforti a 0,6: fiumi a 3-6 / 6-10 km dalla terra sopra i 2000 m a 1534/1250 m (seme
+        171289; erano 1062/675 senza zoccolo) e 1523/1326 m (48213); laghi 71 e 55, fasce invariate.
+     2. **Torrenti** (`tracciaTorrenti`, `DRENAGGIO.torrente` = 20 km²): corsi da 20 a 150 km² dalle sorgenti
+        al fiume (o torrente) in cui confluiscono, punti delle celle spostati da un rumore (niente righe a
+        griglia), ultimo punto esattamente sul corso ricevente (le Scene raccordano lì il letto). Sono in
+        `carta.fiumi` dopo i fiumi (`carta.sogliaTorrente`); nelle Scene alvei più stretti (semilarghezza 1,5 +
+        0,6·√bacino m: ~8 m a 20 km²); nella Carta una classe sottile. Le rocche contano solo i fiumi. In
+        montagna i torrenti nascono a ~1700 m, 750–1000 m sotto la cima vicina (come nelle Alpi). Costo:
+        ~2250 corsi in più, `fiumiScena` ~0,9 s alla prima Scena (prima ~0,6). Valichi: testate fino a 2100 m e
+        250 m sotto il passo (con le valli più alte i 400 m ne lasciavano 2–11 per mondo): 5–18 per mondo.
+   - *Fiumi diritti nella Carta zoomata* (segnalato dall'utente): in pianura il percorso a costo minimo era una
+     retta che perdeva le anse della Carta. Ora il tratto tiene il tracciato della Carta se questo non sale mai
+     più di 6 m sopra il livello atteso (`FIUMI_SCENA.tratti.tieni`), e altrove il richiamo verso le anse è più
+     forte (`PERCORSO.attrazione` 3).
+   - *Carta, il cavaliere* (richiesta dell'utente): freccia della direzione in cui guarda e cerchi a 10 e 20 km
+     con il tempo di marcia sulla Carta (~15 min/km, `docs/GDD.md` §3: 2,5 e 5 h).
    - *Stadio 2:* il punto più alto della cella (griglia di 50 m, poi 10 m) deve essere **una cima vera**:
      nulla più alto entro 150, 300 e 450 m (16 direzioni). Senza questa regola il primo sito del seme 48213
      era un dosso a 469 m ai piedi di un rilievo di 522 m a 400 m di distanza, e il borgo cadeva nella sella.
