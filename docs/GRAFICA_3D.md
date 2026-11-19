@@ -69,34 +69,14 @@ Problema segnalato dall'utente: sulla neve, soprattutto vicino al cavaliere, non
      (~1 m), pieno fino a 50 m dalla camera, spento a 150 m (`DETTAGLIO_NEVE`). Solo luce.
 - Estensione naturale: lo stesso meccanismo (normale inclinata nello shader) per prato, terra e roccia.
 
-## Prestazioni (segnalazione dell'utente: da ~100 a ~37 FPS con rocca, colore per pixel, terreno più vario)
+## Prestazioni
 
-Misure in headless (rendering software: valgono le proporzioni, non i millisecondi), seme 4242, partenza alla rocca:
-- **Shader del suolo a colore per pixel** (blocco + orizzonte): circa **metà del frame**; con un Lambert semplice il
-  frame è ~2–5 volte più veloce. Calcolava tutte le ottave di rumore anche dove sono già spente (lontano):
-  ora ogni ottava si salta oltre la sua distanza di spegnimento (stesso risultato visivo; il guadagno si vede solo
-  su una scheda video vera, il rendering software esegue comunque entrambi i rami).
-- **Rocca:** 170 oggetti separati = ~168 delle 275 chiamate di disegno. **Cavaliere:** 86 oggetti (85 chiamate).
-  Rimedio possibile: unire le geometrie per materiale (pochi oggetti per snodo).
-- Vegetazione ~137 000 triangoli in 10 chiamate; orizzonte ~190 000: pesi minori.
+Budget, misure, cause note e piano della milestone «Prestazioni»: `docs/PRESTAZIONI.md` (scheda di riferimento:
+integrata Intel). Già fatto qui: ottave del rumore del suolo saltate oltre la distanza di spegnimento e rumore da
+texture per le scale fino a 32 m (PR #114), diagnostica `F4` nel pannello `F3`, riflessi d'ambiente del cavaliere
+tolti (PR #117).
 
-- **Fatto** (coordinato con le sessioni M6 e vegetazione; M6 ha lasciato a questa sessione l'ottimizzazione di
-  `materialeSuolo`): ottave saltate oltre la loro distanza di spegnimento; **rumore da texture** per le scale fino a
-  32 m (256×256 valori generati dal codice, una lettura bilineare spostata con la curva smoothstep invece di 4 hash e
-  4 mod; firma di `rumoreSuolo` e periodo di 8192 m invariati, oltre 32 m resta l'hash); `fwidth` della strada fuori
-  dal ramo. Effetto collaterale: le scale piccole si ripetono prima (2 m ogni 512 m, 8 m ogni 2 km), mescolate alle
-  altre non si nota. In headless il suolo passa da ~52% a ~45% del frame; sulla scheda vera il guadagno atteso è
-  maggiore [Probabile] e va misurato con F4.
-
-Diagnostica sulla scheda vera: con `F3` aperto, **`F4`** passa tra *normale*, *suolo semplice*, *senza vegetazione*,
-*senza orizzonte*, *senza rocche*, *risoluzione ×0,6*; il pannello mostra FPS, chiamate, triangoli e pixel.
-Si decide il rimedio guardando i numeri dell'utente. Candidati, in ordine di resa attesa [Probabile]:
-1. rumore del suolo letto da una texture generata dal codice (una lettura per ottava invece di 4 hash) — se il
-   collo di bottiglia è lo shader;
-2. risoluzione adattiva (scende un po' sotto i 55 FPS, risale quando c'è margine) — rete di sicurezza per tutto;
-3. unione delle geometrie di rocca e cavaliere — se il collo di bottiglia sono le chiamate.
-
-
+## Apporti esterni (rinviati)
 
 Si decide solo dopo aver raggiunto il massimo con il codice. Regole già concordate: una sola fonte per
 categoria (texture, vegetazione, personaggi); licenze CC0 preferite (CC-BY → file dei crediti); ogni elemento
