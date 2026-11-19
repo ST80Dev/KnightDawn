@@ -1049,6 +1049,37 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
    più basso ≥ 6 m sopra l'acqua (controlli nella verifica dei luoghi). *Prova:* sul castello di valle di
    partenza si vedono i piani e le scarpate; nessuna giuntura con il blocco accanto e con l'orizzonte; la
    Carta zoomata mostra il terrapieno; F3: salto e pendenza massima delle scarpate.
+   **Stato: fatto, da provare dall'utente** (`VERSIONE_GENERATORE` = `m7-terrapieno-1`).
+   - *Piani* (`luoghi.js`, `pianifica`, nel Worker dopo la scelta dei siti): piano della rocca (classe minore
+     40×36 m, casata 52×46, maggiore 64×56) alla quota (massimo + media)/2 del terreno sotto; borgo subito
+     dopo, lungo il verso (60×80, 90×130, 130×200 m) diviso in 1–2, 2–3 o 3–4 terrazze secondo il dislivello
+     (una ogni ~6 m), ciascuna alla quota media del suo terreno, mai più alta della precedente; la rocca
+     almeno 3 m sopra la prima terrazza. Si provano le 8 direzioni del borgo e si tiene quella col minor
+     lavoro di terra (scarto medio piano–terreno; la direzione dell'affinamento ha uno sconto del 20 %).
+   - *Fiumi:* prima `raffinaZona` attorno al sito (percorsi come nelle Scene, 50–150 ms per 3 siti); una
+     direzione si scarta se nel piano o nella sua scarpata `scavaFiumi` cambia la quota o c'è acqua (fiumi
+     **e torrenti**). Il piano più basso sta almeno 6 m sopra il pelo d'acqua più alto entro 300 m (si alza
+     fino a 12 m, oltre la direzione si scarta). Se nessuna direzione va bene, il sito si scarta e la scelta
+     si ripete. 30 semi: nessun sito scartato, nessun piano da alzare; scelta e piani 0,23–0,52 s.
+   - *Quota* (`scena.js`): `quotaFinale` = `spianaLuoghi(scavaFiumi(quotaMondo))`, usata dal blocco e dalla
+     Carta zoomata; l'orizzonte applica gli stessi due ultimi passi (ha un suo ramo «solo Carta»).
+     `spianaLuoghi` è un **terrapieno a 25°**: per ogni piano la quota resta tra q − d·tan 25° e
+     q + d·tan 25° (d = distanza dal contorno, rettangolo arrotondato): riporto dove il terreno è più basso,
+     sterro dove è più alto; oltre la scarpata del piano (salto × 2,15 + 10 m, 15–120 m) si torna al terreno
+     naturale in 30 m. Tra due piani vicini vince il più basso, che resta piatto fino al bordo; nel più alto il
+     terreno scende a 25° verso il bordo comune: lì andranno pavimento costruito e muro di contenimento (passi
+     3–4), e il terreno resterà sotto e dietro. *Scartati:* una scarpata a raccordo morbido (smoothstep)
+     sommava la pendenza del versante: 31–44° in scena invece di 25°; un gradino netto tra le terrazze dava,
+     sulla griglia di 7,8 m in diagonale, un bordo seghettato.
+   - *Misure* (5 semi, blocco centrato sulla partenza): scarpate e raccordi 25° (27–28° dove il versante
+     naturale è già così ripido); giuntura con il blocco accanto 0 m; dentro i piani più bassi quota esatta;
+     piatto il 76–95 % dei piani del castello di casata, 42–87 % nella sede maggiore (salti fino a ~20 m tra
+     rocca e borgo). Verifica dei luoghi con il terrapieno (piani presenti, sopra l'acqua, scarpate ≤ 26°):
+     30 semi su 30.
+   - *Partenza:* 35 m fuori dalla porta del borgo (fine dell'ultima terrazza), rivolti alla rocca. F3: piani
+     con le quote, salto massimo, scarpate, lavoro medio, acqua vicina.
+   Limiti: finché non ci sono muri, tra una terrazza e l'altra c'è una rampa a 25° (si sale) e sulle rampe in
+   diagonale resta una lieve seghettatura della griglia; contorni rettangolari (forme irregolari con il borgo).
 3. **Rocca sul mondo generato.** `castle3d.js` generalizzato, misure dalla classe, oggetto del mondo posato
    nel blocco; partenza davanti alla porta della rocca (provvisoria). *Prova:* come M4 (giro attorno, ingresso
    dalla porta, nessuna compenetrazione, camera mai coperta) su un sito di valle e uno d'altura; Tavullia

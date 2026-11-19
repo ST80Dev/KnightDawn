@@ -18,7 +18,7 @@
 // Coordinate locali della Scena: x verso est, z verso sud, centro del blocco in (0, 0).
 
 import * as THREE from 'three';
-import { quotaMondo, quotaCarta, scavaFiumi, livelloLago, tracciatiFiumi, SCENA, OTTAVE_DETTAGLIO } from '../mondo/scena.js';
+import { quotaMondo, quotaCarta, scavaFiumi, spianaLuoghi, livelloLago, tracciatiFiumi, SCENA, OTTAVE_DETTAGLIO } from '../mondo/scena.js';
 import { creaNastro, materialeAcqua, SOPRA_PELO } from './acqua.js';
 import { derivaSeme } from '../mondo/rumore.js';
 import { coloreMondo } from './terrain.js';
@@ -247,7 +247,8 @@ export function creaOrizzonte(carta, cx, cz, terrain, coloreAcqua, stagione = 0)
     const base = nessuno && !carta.massicci?.length ? quotaCarta(carta, cx + x, cz + z)
       : quotaMondo(carta, cx + x, cz + z, seme, tutti ? null : pesi);
     // Le valli dei fiumi anche nell'orizzonte: stessa funzione del blocco (al bordo le quote coincidono).
-    const h = scavaFiumi(carta, cx + x, cz + z, base);
+    // e i terrapieni dei luoghi (M7): come quotaFinale, che però non ha il ramo «solo Carta» qui sopra.
+    const h = spianaLuoghi(carta, cx + x, cz + z, scavaFiumi(carta, cx + x, cz + z, base));
     if (h < minimo) minimo = h;
     const r = Math.hypot(x, z), E = O.esagera;
     return (h > 0 ? h * (1 + E.quanto * smooth(E.da, E.a, r)) : h) - abbassamento(r);

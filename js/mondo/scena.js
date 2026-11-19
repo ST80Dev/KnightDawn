@@ -591,6 +591,69 @@ export function scavaFiumi(carta, x, z, h0, esito = _esito) {
   return h;
 }
 
+// ─── Terrapieni di rocche e borghi (M7, passo 2) ──────────────────────────
+// I piani stanno in carta.luoghi[].piani (calcolati una volta nel Worker, js/mondo/luoghi.js): rettangoli
+// arrotondati con una quota, raccordati al terreno da una scarpata larga s. Funzione pura delle coordinate:
+// blocchi vicini, orizzonte e Carta zoomata combaciano. I piani stanno fuori dalla fascia dei fiumi, quindi
+// l'ordine con scavaFiumi non conta. Solo operazioni esatte (decidono la forma del mondo).
+
+/** Distanza con segno (m) dal contorno di un piano: negativa dentro. */
+export function distanzaPiano(p, x, z) {
+  const dx = x - p.cx, dz = z - p.cz;
+  const lu = dx * p.ux + dz * p.uz, lv = -dx * p.uz + dz * p.ux;
+  const qx = (lu < 0 ? -lu : lu) - (p.a - p.r), qy = (lv < 0 ? -lv : lv) - (p.b - p.r);
+  const ex = qx > 0 ? qx : 0, ey = qy > 0 ? qy : 0;
+  const m = qx > qy ? qx : qy;
+  return Math.sqrt(ex * ex + ey * ey) + (m < 0 ? m : 0) - p.r;
+}
+
+// Terrapieno come quelli veri: dal contorno di ogni piano il terreno può scostarsi dal piano al più di
+// TERRAPIENO.pendenza (tangente di 25°) per metro: riporto dove il terreno è più basso, sterro dove è più alto
+// (h dentro [q − d·T, q + d·T] per ogni piano). Tra due piani vicini i vincoli si contraddicono vicino al
+// contorno comune: vince il piano più basso (resta piatto fino al bordo) e nel più alto il terreno scende a 25°
+// verso il bordo. Lì il piano più alto avrà il suo pavimento costruito (`quotaSuolo`, come il cortile di M4) e il
+// muro di contenimento (passi 3–4): il terreno resta sotto il pavimento e dietro il muro, mai sopra. Su un versante più ripido di 25° il cono non raggiunge mai il terreno: oltre la larghezza
+// della scarpata del piano (p.s) si torna al terreno naturale in TERRAPIENO.ritorno m.
+export const TERRAPIENO = { pendenza: 0.4663076581549986, ritorno: 30 };
+
+/** Quota h del punto con i terrapieni dei luoghi: dentro un piano la sua quota, fuori scarpate a 25° al più. */
+export function spianaLuoghi(carta, x, z, h) {
+  const L = carta.luoghi;
+  if (!L) return h;
+  const T = TERRAPIENO.pendenza;
+  for (let k = 0; k < L.length; k++) {
+    const l = L[k], P = l.piani;
+    if (!P) continue;
+    const ex = x - l.x, ez = z - l.z;
+    if (ex * ex + ez * ez > l.raggioPiani * l.raggioPiani) continue;
+    let lo = -Infinity, hi = Infinity, ritorno = 0;
+    for (let j = 0; j < P.length; j++) {
+      const p = P[j];
+      let d = distanzaPiano(p, x, z);
+      // Peso del piano: 1 fino alla sua scarpata, poi scende fino a zero in TERRAPIENO.ritorno m.
+      const f = 1 - smoothstep(p.s, p.s + TERRAPIENO.ritorno, d);
+      if (f > ritorno) ritorno = f;
+      if (f <= 0) continue;
+      if (d < 0) d = 0;
+      const a = p.q - d * T, b = p.q + d * T;
+      if (a > lo) lo = a;
+      if (b < hi) hi = b;
+    }
+    if (ritorno <= 0) continue;
+    const c = lo <= hi ? (h < lo ? lo : h > hi ? hi : h) : hi;
+    return h + ritorno * (c - h);                    // i siti distano chilometri: al più uno tocca il punto
+  }
+  return h;
+}
+
+/**
+ * Quota finale del mondo nel punto (x, z): rilievo (quotaMondo), fiumi e laghi (scavaFiumi), terrapieni dei luoghi
+ * (spianaLuoghi). Unico punto usato da blocco, orizzonte e Carta zoomata.
+ */
+export function quotaFinale(carta, x, z, seedDettaglio = derivaSeme(carta.seme, 101), esito = _esito, pesi = null) {
+  return spianaLuoghi(carta, x, z, scavaFiumi(carta, x, z, quotaMondo(carta, x, z, seedDettaglio, pesi), esito));
+}
+
 const _lago = { peso: 0, livello: NaN };
 
 /**
@@ -701,7 +764,7 @@ export function generaScena(carta, cx, cz) {
     const z = cz - half + r * cell;
     for (let c = 0; c < n; c++) {
       const x = cx - half + c * cell, i = r * n + c;
-      heights[i] = scavaFiumi(carta, x, z, quotaMondo(carta, x, z, seed), esito);
+      heights[i] = quotaFinale(carta, x, z, seed, esito);
       fiume[i] = esito.livello;
       lago[i] = livelloLago(carta, x, z);
     }

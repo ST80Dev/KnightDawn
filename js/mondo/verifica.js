@@ -338,6 +338,13 @@ export function verificaLuoghi(carta, limiti = { asprezza: 0.2, bordo: 7, fiume:
     if (!(l.fiume.distanza >= (l.carattere === 'valle' ? 0.35 : limiti.fiume))) errori.push(`${nome} a ${l.fiume.distanza.toFixed(2)} km da un fiume`);
     if (l.dislivelli.rocca > limiti.rocca || l.dislivelli.borgo > limiti.borgo) errori.push(`${nome}: troppo lavoro di terra`);
     if (l.pendenza > limiti.pendenza) errori.push(`${nome}: pendenza ${l.pendenza.toFixed(1)}°`);
+    // Passo 2 (terrapieno): piani presenti, scarpate percorribili, piano più basso sopra l'acqua vicina.
+    if (!l.piani || !l.piani.length) errori.push(`${nome} senza terrapieno`);
+    else {
+      const basso = Math.min(...l.piani.map((p) => p.q));
+      if (l.terrapieno.pelo !== null && basso < l.terrapieno.pelo + 6 - 0.01) errori.push(`${nome}: borgo a ${(basso - l.terrapieno.pelo).toFixed(1)} m sull'acqua`);
+      if (l.terrapieno.pendenza > 26) errori.push(`${nome}: scarpate a ${l.terrapieno.pendenza.toFixed(0)}°`);
+    }
   }
   let dMin = Infinity;
   for (let a = 0; a < L.length; a++) for (let b = a + 1; b < L.length; b++) {
