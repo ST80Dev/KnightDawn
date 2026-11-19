@@ -1647,6 +1647,16 @@ nuovo: serve la conferma (regola 2).
 - **Colore**: strato `strada` di `materialeSuolo` (scostamento con segno dall'asse, semilarghezza, distanza):
   terra battuta per pixel con bordo frastagliato, solchi delle ruote ed erba al centro sulle strade da carro; solo
   nel blocco. **Carta**: rami per classe (mulattiere e sentieri tratteggiati).
+- **Correzioni dopo la prova dell'utente** (seme 570549):
+  - *Strada che restava su un altopiano tutto gobbe senza scendere a fondovalle*: la quota della Carta è una per km;
+    ora il costo conta anche il rilievo vero dentro la cella (`ruvidezza`: pendenza media di quotaMondo su campioni a
+    200 m; fondovalle 1–3 %, altopiani aspri 20–40 %; costo × (1 + 0,5·(ruvido/p0)²), al più ×25; 170 ms nel Worker).
+    Le strade seguono le valli. `VERSIONE_GENERATORE` `…+strade-2`.
+  - *Sulla Carta niente tornanti*: la Carta zoomata (finestra ≤ 24 km) cerca e disegna il tracciato fine delle Scene.
+  - *Strade larghe, a cunei e spigoli fuori dal castello*: il colore del terreno per vertice (7,8 m) non disegna una
+    carreggiata di 1–4,5 m. Ora la strada è un **nastro** suo (`creaNastroStrada` in `js/3d/acqua.js`): 5 vertici per
+    sezione (bordi, solchi, centro), un punto ogni 2 m, appoggiato sul terreno disegnato + 25 cm (con 6 cm spariva
+    sotto le pieghe dei triangoli). Lo strato `strada` del suolo è tolto (anche dallo shader: meno costo per pixel).
 - **Vegetazione**: `distanzaStrada(carta, x, z)` è pronta; l'esclusione degli alberi dalla carreggiata è della
   sessione della vegetazione (passo 3 di questo piano).
 

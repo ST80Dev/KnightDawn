@@ -13,7 +13,7 @@
 import { gradienteD, derivaSeme, smoothstep, ridged } from './rumore.js';
 import { ACQUA, profiloMassicci } from './carta.js';
 import { tracciaPercorso, lettoMonotono, PERCORSO } from './fiumi.js';
-import { spianaStrade, raffinaStrade } from './strade.js';   // import circolare: usate solo dentro le funzioni
+import { spianaStrade, raffinaStrade, stradeBlocco } from './strade.js';   // import circolare: usate solo dentro le funzioni
 
 export const SCENA = { lato: 2000, celle: 256 };   // 2×2 km, 257×257 vertici (come Tavullia)
 
@@ -301,6 +301,9 @@ const FIUMI_SCENA = {
   // Tratti tra punti fissi (js/mondo/fiumi.js): sorgente, foce e confluenze. Alla confluenza il punto fisso
   // sta nel punto più basso del terreno in una griglia di 7×7 punti a `scosta` m attorno al tracciato.
   tratti: { scosta: 80, zona: 6000, tieni: 6, fondo: 4 },
+  // Alla sorgente la valle nasce piano: i versanti scavano in proporzione alla distanza dalla sorgente lungo il
+  // corso (pieni da `sorgente` m). Senza, attorno alla sorgente c'era una conca chiusa a ferro di cavallo.
+  sorgente: 1500,
 };
 
 const _fiumi = new WeakMap();
@@ -401,8 +404,9 @@ function puntiFissi(carta, curve) {
     let prev = Infinity, kPrev = 0;
     for (const k of ord) {
       let x = cv.x[k], z = cv.z[k], L = cv.letto[k];
-      // Sorgente: mai sopra il terreno vero della Scena (la Carta levigata sta spesso più in alto del fondo).
-      if (k === 0) L = Math.min(L, quota(x, z) - cv.prof[k] - F.sponda.altezza);
+      // Sorgente: sul terreno vero della Scena (appena sotto). Prima valeva anche il letto della Carta, che può stare
+      // decine di metri sotto il terreno: il torrente nasceva in fondo a una conca chiusa (segnalato dall'utente).
+      if (k === 0) L = quota(x, z) - cv.prof[k] - F.sponda.altezza;
       if (k === m - 1 && foce[ci]) {
         const f = fissi[foce[ci][0]].get(foce[ci][1]);
         if (f) { x = f.x; z = f.z; L = f.L; }
@@ -596,6 +600,11 @@ export function scavaFiumi(carta, x, z, h0, esito = _esito) {
     if (x < rx0 - R || x > rx1 + R || z < rz0 - R || z > rz1 + R) continue;
     const segmenti = cv.celle.get(chiaveCella);
     if (!segmenti) continue;
+    // Primo tratto di un corso d'acqua: distanza dalla sorgente lungo il percorso (per la valle che nasce piano).
+    if (pronto.tratti[lista[k]].ka === 0 && !cv.daSorgente) {
+      cv.daSorgente = new Float64Array(cv.x.length);
+      for (let i = 1; i < cv.x.length; i++) cv.daSorgente[i] = cv.daSorgente[i - 1] + Math.hypot(cv.x[i] - cv.x[i - 1], cv.z[i] - cv.z[i - 1]);
+    }
     for (const i of segmenti) {
     const ax = cv.x[i], az = cv.z[i], bx = cv.x[i + 1], bz = cv.z[i + 1];
     if ((ax < x - R && bx < x - R) || (ax > x + R && bx > x + R) || (az < z - R && bz < z - R) || (az > z + R && bz > z + R)) continue;
@@ -616,8 +625,12 @@ export function scavaFiumi(carta, x, z, h0, esito = _esito) {
       if (d - w < migliore) { migliore = d - w; mL = pelo; mW = w; mB = letto; mProf = prof; mD = d; }
     } else {
       if (Number.isNaN(dettaglio)) dettaglio = h0 - quotaCarta(carta, x, z);
-      const c = pelo + F.sponda.altezza + fuori * (F.versante + F.curva * (fuori / Rv) * (fuori / Rv))
+      let c = pelo + F.sponda.altezza + fuori * (F.versante + F.curva * (fuori / Rv) * (fuori / Rv))
         + dettaglio * smoothstep(0, 0.6 * Rv, fuori);
+      if (cv.daSorgente && c < h0) {
+        const ds = cv.daSorgente[i] + (cv.daSorgente[i + 1] - cv.daSorgente[i]) * t;
+        if (ds < F.sorgente) c = h0 - (h0 - c) * smoothstep(0, F.sorgente, ds);
+      }
       if (c < cap) cap = c;
       if (fuori < fuoriMin) { fuoriMin = fuori; peloArgine = pelo; Rargine = Rv; }
     }
@@ -841,5 +854,15 @@ export function generaScena(carta, cx, cz) {
     seme: carta.seme, centroMondo: { x: cx, z: cz },
     ms: performance.now() - t0, msFiumi, msStrade,
   };
-  return { meta, heights, acqua: { fiume, lago, tracciati } };
+  // Strade nel blocco (nastro della carreggiata, js/3d/acqua.js) e quota del terreno disegnato (triangoli NO–SE come
+  // terrain.getHeight) per appoggiarlo.
+  const strade = stradeBlocco(carta, cx, cz, half);
+  const altezza = (x, z) => {
+    let fx = (x + half) / cell, fz = (z + half) / cell;
+    fx = Math.min(Math.max(fx, 0), n - 1); fz = Math.min(Math.max(fz, 0), n - 1);
+    const c = Math.min(Math.floor(fx), n - 2), r = Math.min(Math.floor(fz), n - 2), u = fx - c, v = fz - r;
+    const a = heights[r * n + c], b = heights[r * n + c + 1], d = heights[(r + 1) * n + c], e = heights[(r + 1) * n + c + 1];
+    return u + v <= 1 ? a + (b - a) * u + (d - a) * v : e + (d - e) * (1 - u) + (b - e) * (1 - v);
+  };
+  return { meta, heights, acqua: { fiume, lago, tracciati, strade, altezza } };
 }
