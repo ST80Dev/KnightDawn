@@ -1471,6 +1471,26 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      non sulla carreggiata, massi e affioramenti nemmeno a 1 m; erba non sulla carreggiata, felci non entro 2 m. La
      Carta arriva a `posizionaVegetazione` (`carta`). Seme 855588, 570549, 171289, 7: nessun oggetto sulla carreggiata,
      nessun albero entro 2 m, zona comune tra blocchi identica.
+   - *Terreno vario senza oggetti* (richiesta dell'utente: «meno erba e felci; colorazione varia e chiaroscuri marcati
+     da vicino anche senza pendenze, senza sprecare FPS in oggetti»; poi «niente vento, non vogliamo l'iperrealismo» e
+     «se l'erba è più rada allunga il raggio oltre 50 m: il bordo del cerchio si vede»). Nello shader del suolo
+     (`materialeSuolo`, blocco «Vegetazione»), entro ~150 m: chiazze secche (ocra) e cupe (verde scuro) su 4–16 m e
+     luminosità che oscilla di ±38 % su 4 m; **micro-rilievo finto** della normale (gobbe ~4 m, zolle ~2 m, ciuffi ~1 m)
+     su prato e sottobosco: la luce del sole fa il chiaroscuro anche sul piano e cambia con l'ora (stesso schema della
+     neve della sessione grafica). Lettiera con meno muschio (con il rumore a texture dominava il verde oliva). Erba
+     ~4 volte più rada su una griglia di 1,1 m ma fino a **70 m** (felci 70 m, ciottoli 50 m), più chiara; fili e fronde
+     con la normale che non si capovolge sul retro (prima il retro restava nero); **niente vento**.
+   - *Ombre finte e piede scuro* (richiesta dell'utente: «gli oggetti sembrano staccati dal terreno, su due piani»; nel
+     gioco non c'è nessuna ombra proiettata, e senza ombra l'occhio non vede il contatto). Scelta con l'utente tra tre
+     strade (ombre a macchia nel terreno, piede scuro, ombre vere di Three.js entro ~40 m): le prime due, che costano
+     una lettura di texture per pixel; le ombre vere restano un'opzione per dopo (secondo disegno della scena, 5–8 ms).
+     In `vegetazione3d.js` (`creaOmbre`, `FORMA_OMBRA`): una texture di 1024² sul blocco (~2 m per pixel) con l'ombra di
+     ogni albero, cespuglio e roccia, macchia sfumata spostata dalla parte opposta al sole e allungata col sole basso
+     (fino a 4 volte l'altezza), sovrapposte con il massimo (il bosco fitto fa penombra continua); ridisegnata quando il
+     sole si sposta di 5°, a pezzi di 6 000 oggetti per fotogramma su una seconda tela, poi scambiata (la prima volta
+     tutta subito). Una texture di 2048² (~1 m) con il **piede**: alone scuro fisso attorno al punto di contatto. Lo
+     shader del suolo (`uOmbre`, `uPiede`, `uOmbreForza` in `materialeSuolo`) scurisce il colore del massimo dei due;
+     le ombre del sole si spengono di notte e con il tasto V. Più scura anche la base delle rocce e dei ciuffi d'erba.
 3. **Collisioni.** Tronchi, massi e affioramenti come ostacoli a griglia. *Prova:* si attraversa un bosco fitto
    scivolando tra i tronchi senza incastrarsi; la camera resta usabile nel bosco.
 4. **Arbusti e rocce.** Cespugli (macchia, margini, sottobosco), arbusti d'alta quota, sassi, massi, affioramenti
