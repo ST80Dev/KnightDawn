@@ -267,6 +267,30 @@ const ottaveGLSL = (lista, varNome) => lista.map(([s, a]) =>
  * muschio) e fango vicino all'acqua; la terra nuda a chiazze nei prati c'è ovunque (anche negli anelli). `mezzo`:
  * metà lato del blocco, negli ultimi 120 m lettiera e fango sfumano (l'orizzonte non li ha).
  */
+// Rumore del suolo da texture (prestazioni, docs/GRAFICA_3D.md): una griglia 256×256 di valori casuali generata qui,
+// letta con un solo campionamento bilineare spostato con la curva smoothstep (i + u + 0.5) / 256. È lo stesso rumore
+// a valori di prima (valori diversi, stessa statistica) ma costa una lettura invece di 4 hash e 4 mod. Vale per le
+// scale finché 256 celle dividono il periodo di 8192 m (scale ≤ 32 m): oltre, la
+// texture si ripeterebbe prima del periodo e i blocchi non combacerebbero, quindi lì resta il calcolo con l'hash.
+const LATO_RUMORE = 256;
+let _texRumore = null;
+function textureRumore() {
+  if (_texRumore) return _texRumore;
+  const dati = new Uint8Array(LATO_RUMORE * LATO_RUMORE);
+  let x = 0x9e3779b9;                                   // xorshift32 con seme fisso: stesso disegno a ogni avvio
+  for (let i = 0; i < dati.length; i++) {
+    x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
+    dati[i] = (x >>> 24) & 255;
+  }
+  const t = new THREE.DataTexture(dati, LATO_RUMORE, LATO_RUMORE, THREE.RedFormat, THREE.UnsignedByteType);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.magFilter = t.minFilter = THREE.LinearFilter;
+  t.generateMipmaps = false;
+  t.needsUpdate = true;
+  _texRumore = t;
+  return t;
+}
+
 export function materialeSuolo(cx, cz, mezzo = 1e9) {
   const P = SUOLO.periodo;
   const mat = new THREE.MeshLambertMaterial();
@@ -281,6 +305,7 @@ export function materialeSuolo(cx, cz, mezzo = 1e9) {
     uDettaglioNeve: { value: new THREE.Vector3(...DETTAGLIO_NEVE) },
     uCentro: { value: new THREE.Vector2(((cx % P) + P) % P, ((cz % P) + P) % P) },
     uMezzo: { value: mezzo },
+    uRumore: { value: textureRumore() },
   };
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uniformi);
@@ -324,10 +349,13 @@ float hashSuolo(vec2 p) {
   p3 += dot(p3, p3.yzx + 33.33);
   return fract((p3.x + p3.y) * p3.z);
 }
-// Rumore a valori, periodico su ${P} m (la scala è una potenza di 2).
+uniform sampler2D uRumore;
+// Rumore a valori, periodico su ${P} m (la scala è una potenza di 2). Fino a ${P / LATO_RUMORE} m di scala: una lettura
+// della texture (vedi textureRumore); oltre, hash.
 float rumoreSuolo(vec2 p, float scala) {
   float per = ${P.toFixed(1)} / scala;
   vec2 q = p / scala, i = floor(q), f = fract(q), u = f * f * (3.0 - 2.0 * f);
+  if (scala <= ${(P / LATO_RUMORE).toFixed(1)}) return texture2D(uRumore, (i + u + 0.5) / ${LATO_RUMORE.toFixed(1)}).r;
   float a = hashSuolo(mod(i, per)), b = hashSuolo(mod(i + vec2(1.0, 0.0), per));
   float c = hashSuolo(mod(i + vec2(0.0, 1.0), per)), d = hashSuolo(mod(i + vec2(1.0, 1.0), per));
   return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
@@ -369,11 +397,13 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
     vec3 c = mix(cPrato, cRoccia * (1.0 + 0.5 * dettaglio), roccia);
     // Strada di terra battuta (js/mondo/strade.js): bordo frastagliato di qualche decimetro, solchi delle ruote
     // ed erba al centro sulle strade da carro; si spegne con la distanza come il resto del dettaglio.
+    // fwidth fuori dal ramo: le derivate dentro un ramo non uniforme non sono definite.
+    float aS = abs(vStrada.x);
+    float bordoS = vStrada.y > 0.0 && dist < ${(2 * SUOLO.spegni[1]).toFixed(1)}
+      ? (rumoreSuolo(p + 91.0, 2.0) - 0.5) * 0.5 * spegniSuolo(2.0, dist) : 0.0;
+    float xS = (vStrada.y + bordoS - aS) / max(vStrada.y, 0.3);
+    float eS = max(fwidth(xS) * 0.75, 0.02);
     if (vStrada.y > 0.0) {
-      float aS = abs(vStrada.x);
-      float bordoS = (rumoreSuolo(p + 91.0, 2.0) - 0.5) * 0.5 * spegniSuolo(2.0, dist);
-      float xS = (vStrada.y + bordoS - aS) / max(vStrada.y, 0.3);
-      float eS = max(fwidth(xS) * 0.75, 0.02);
       // Alle estremità e nelle curve strette lo scostamento cambia segno tra due vertici e l'interpolazione
       // inventerebbe un cuneo di strada: la distanza senza segno (che interpolata sovrastima, mai sottostima) lo esclude.
       float suStrada = smoothstep(-eS, eS, xS) * (1.0 - smoothstep(vStrada.y + 5.0, vStrada.y + 7.0, vStrada.z));
