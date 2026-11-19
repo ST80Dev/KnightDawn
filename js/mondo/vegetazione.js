@@ -161,8 +161,9 @@ export const TIPI = [
   { nome: 'arbusto alto', gruppo: 'arbusti', passo: 4, scala: [0.6, 1.3] },
   { nome: 'sterpo', gruppo: 'arbusti', passo: 5, scala: [0.6, 1.2] },
   { nome: 'canne', gruppo: 'acqua', passo: 3, scala: [0.7, 1.3] },
-  { nome: 'sasso', gruppo: 'rocce', passo: 5, scala: [0.25, 1.6] },
-  { nome: 'masso', gruppo: 'rocce', passo: 20, scala: [0.7, 1.8] },
+  // Rocce (richiesta dell'utente): misure molto varie, tante piccole e poche enormi (`curva`: esponente della scala).
+  { nome: 'sasso', gruppo: 'rocce', passo: 4, scala: [0.2, 2.2], curva: 2 },
+  { nome: 'masso', gruppo: 'rocce', passo: 16, scala: [0.4, 3.4], curva: 2.5 },
   { nome: 'affioramento', gruppo: 'rocce', passo: 40, scala: [0.7, 1.5] },
   { nome: 'tronco', gruppo: 'bosco', passo: 15, scala: [0.7, 1.2] },
 ];
@@ -183,6 +184,8 @@ export const VEGETAZIONE = {
   riva: { celle: [1, 3], densita: 0.22, canne: 0.35 },             // celle di 7,8 m dall'acqua
   spianata: 20,                          // m oltre la scarpata dei terrapieni: niente alberi né arbusti
   acquaCelle: 4,                         // distanza dall'acqua misurata fino a 4 celle
+  // Solo vicino al cavaliere (erbaAttorno): probabilità per cella di 0,6 m (erba) e di 2 m (felci).
+  vicino: { erba: 0.75, felce: 0.45, ciottolo: 1, passoErba: 0.6, passoFelci: 2, passoCiottoli: 1.5 },
 };
 
 const _cop = nuovaCopertura();
@@ -235,10 +238,24 @@ function densitaVertice(cp, pend, pf, distAcqua, x, z, semeBordo, D, i) {
   D.canne[i] = (distAcqua >= 1 && distAcqua <= 2 && cp.T > 4 ? V.riva.canne : 0) + 0.1 * palude * asciutto;
   // Rocce: dove il colore dipinge roccia, ghiaioni e chiazze; ai piedi delle pareti; poche ovunque.
   const piede = smoothstep(30, 45, pf);
-  D.sasso[i] = asciutto * (1 - 0.7 * cp.neve) * (0.015 + 0.25 * cp.roccia + 1.4 * cp.ghiaia + 0.15 * piede);
-  D.masso[i] = asciutto * (1 - 0.5 * cp.neve) * (0.015 + 2 * cp.ghiaia + 0.3 * cp.roccia * cp.alto + 0.25 * piede);
+  // Frane: macchie (rumore su ~200 m) ai piedi dei pendii ripidi in montagna e sopra il limite degli alberi, con massi
+  // più fitti e più grandi (fino a ~8 m) da girarci attorno.
+  const monte = Math.max(cp.alto, cp.monte);
+  D.frana[i] = asciutto * smoothstep(22, 38, pf) * monte * smoothstep(0.05, 0.35, fbm(x, z, semeBordo ^ 0x1b873593, 200, 2));
+  D.sasso[i] = asciutto * (1 - 0.7 * cp.neve) * (0.015 + 0.25 * cp.roccia + 1.4 * cp.ghiaia + 0.15 * piede + 0.12 * monte
+    + 0.3 * D.frana[i]);
+  D.masso[i] = asciutto * (1 - 0.5 * cp.neve) * (0.015 + 2 * cp.ghiaia + 0.3 * cp.roccia * cp.alto + 0.25 * piede
+    + 0.05 * monte + 0.7 * D.frana[i]);
+  D.ciottolo[i] = asciutto * (1 - 0.8 * cp.neve) * Math.min(0.5, 0.02 + 0.3 * cp.roccia + 1.2 * cp.ghiaia + 0.15 * monte
+    + 0.2 * piede) * V.vicino.ciottolo;
   D.affioramento[i] = asciutto * (0.7 * cp.chiazze + 0.1 * cp.roccia);
   D.tronco[i] = asciutto * 0.06 * foresta * limite;
+  // Vicino al cavaliere (erbaAttorno): ciuffi d'erba nei prati, felci nel sottobosco umido. E per il suolo (shader del
+  // terreno): quanto bosco c'è sopra (lettiera).
+  D.foresta[i] = foresta * limite * (1 - cp.roccia);
+  D.erba[i] = asciutto * neve * (1 - cp.roccia) * Math.max(0, 1 - 2 * cp.ghiaia) * (1 - 0.95 * foresta) * (1 - 0.7 * sabbia)
+    * (1 - smoothstep(38, 46, pf)) * V.vicino.erba;
+  D.felce[i] = asciutto * neve * foresta * limite * smoothstep(0.3, 0.55, cp.umidita) * V.vicino.felce;
 }
 
 /**
@@ -285,7 +302,7 @@ export function posizionaVegetazione(o) {
   // Densità per vertice.
   const D = {};
   for (const k of ['alberi', 'limite', 'conifera', 'pino', 'secco', 'riva', 'cespuglio', 'alto', 'sterpo', 'canne',
-    'sasso', 'masso', 'affioramento', 'tronco']) D[k] = new Float32Array(n);
+    'sasso', 'masso', 'affioramento', 'tronco', 'foresta', 'erba', 'felce', 'frana', 'ciottolo']) D[k] = new Float32Array(n);
   const kz = Math.max(1, Math.round(COPERTURA.scalaPendenza / (2 * cell)));   // pendenza di zona, come il colore
   const semeBordo = derivaSeme(seme, 401);
   for (let r = 0; r < cols; r++) {
@@ -347,7 +364,7 @@ export function posizionaVegetazione(o) {
   for (const t of TIPI) buffer[t.nome] = [];
   const emetti = (t, ix, iz, sm, lx, lz, y, fattoreScala) => {
     const h = hash2(ix, iz, sm ^ 0x2545f491);
-    const s = t.scala[0] + (t.scala[1] - t.scala[0]) * ((h & 0xffff) / 65536);
+    const s = t.scala[0] + (t.scala[1] - t.scala[0]) * ((h & 0xffff) / 65536) ** (t.curva || 1);
     buffer[t.nome].push(lx, y, lz, s * fattoreScala, ((h >>> 16) & 0x3ff) / 1024 * 2 * Math.PI, (h >>> 26) / 64);
   };
 
@@ -400,7 +417,7 @@ export function posizionaVegetazione(o) {
       if (pf > V.pendenza.pareti) return;
       const oltre = oltreScarpata(X, Z);
       if (oltre < 0 || (vegetale && oltre < V.spianata)) return;
-      emetti(t, ix, iz, sm, lx, lz, quota(), 1);
+      emetti(t, ix, iz, sm, lx, lz, quota(), t.nome === 'masso' ? 1 + 1.2 * campo(D.frana) : 1);
     });
   });
 
@@ -409,5 +426,48 @@ export function posizionaVegetazione(o) {
     const b = buffer[t.nome];
     tipi[t.nome] = { dati: Float32Array.from(b), n: b.length / STRIDE, gruppo: t.gruppo };
   }
-  return { tipi, ms: performance.now() - t0, msCampi };
+  // Suolo per lo shader del terreno: per vertice [bosco sopra, vicinanza dell'acqua (1 nell'acqua, 0 oltre 4 celle)].
+  // Niente lettiera nella spianata attorno a rocca e borgo (lì non ci sono alberi): sfuma in 30 m.
+  const suolo = new Float32Array(n * 2);
+  for (let i = 0; i < n; i++) {
+    const r = (i / cols) | 0, c = i - r * cols;
+    const oltre = piani.length ? oltreScarpata(cx - half + c * cell, cz - half + r * cell) : Infinity;
+    suolo[i * 2] = D.foresta[i] * smoothstep(V.spianata, V.spianata + 30, oltre);
+    suolo[i * 2 + 1] = dist[i] === 0 ? 1 : Math.max(0, 1 - (dist[i] - 1) / (V.acquaCelle - 1));
+  }
+
+  /**
+   * Erba, felci e ciottoli in un cerchio attorno a (lx, lz) locali, raggio per tipo ({erba, felce, ciottolo}) o unico: stesse regole (griglie del mondo, hash) del resto,
+   * quindi tornando in un punto si ritrovano gli stessi ciuffi. Formato come `tipi` (STRIDE per oggetto).
+   */
+  const sE = derivaSeme(seme, 450), sF = derivaSeme(seme, 451), sC = derivaSeme(seme, 452);
+  function erbaAttorno(lx0, lz0, raggi) {
+    const esito = {};
+    for (const [nome, P, sm, A] of [['erba', V.vicino.passoErba, sE, D.erba], ['felce', V.vicino.passoFelci, sF, D.felce],
+      ['ciottolo', V.vicino.passoCiottoli, sC, D.ciottolo]]) {
+      const b = [], r = typeof raggi === 'number' ? raggi : raggi[nome] ?? 0;
+      if (r <= 0) { esito[nome] = { dati: new Float32Array(0), n: 0 }; continue; }
+      const X0 = cx + lx0, Z0 = cz + lz0;
+      const i0 = Math.floor((X0 - r) / P), i1 = Math.floor((X0 + r) / P);
+      const j0 = Math.floor((Z0 - r) / P), j1 = Math.floor((Z0 + r) / P);
+      for (let iz = j0; iz <= j1; iz++) {
+        for (let ix = i0; ix <= i1; ix++) {
+          const hj = hash2(ix, iz, sm ^ 0x9e3779b9);
+          const X = (ix + (hj & 0xffff) / 65536) * P, Z = (iz + (hj >>> 16) / 65536) * P;
+          const lx = X - cx, lz = Z - cz, dx = lx - lx0, dz = lz - lz0;
+          if (dx * dx + dz * dz > r * r || lx < -half || lx > half || lz < -half || lz > half) continue;
+          trova(lx, lz);
+          if (hash2(ix, iz, sm) / 4294967296 >= campo(A) || !asciutta()) continue;
+          const oltre = oltreScarpata(X, Z);
+          if (oltre < 0 || (nome === 'felce' && oltre < V.spianata)) continue;
+          const h = hash2(ix, iz, sm ^ 0x2545f491);
+          b.push(lx, quota(), lz, 0.7 + 0.6 * ((h & 0xffff) / 65536), ((h >>> 16) & 0x3ff) / 1024 * 2 * Math.PI, (h >>> 26) / 64);
+        }
+      }
+      esito[nome] = { dati: Float32Array.from(b), n: b.length / STRIDE };
+    }
+    return esito;
+  }
+
+  return { tipi, ms: performance.now() - t0, msCampi, suolo, erbaAttorno };
 }

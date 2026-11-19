@@ -244,8 +244,12 @@ const ottaveGLSL = (lista, varNome) => lista.map(([s, a]) =>
  * Materiale del terreno del mondo generato a colore per pixel. La geometria deve avere gli attributi `base` (vec3)
  * e `strati` (vec4: roccia, neve, variazione, tono della roccia), oltre a `color` (colore per vertice completo, per
  * chi lo legge). (cx, cz): coordinate del mondo dell'origine della mesh.
+ * Vegetazione: se la geometria ha anche `aSuolo` (vec2 per vertice: bosco sopra, vicinanza dell'acqua; lo aggiunge
+ * vegetazione3d.js al blocco) sul prato compaiono lettiera sotto il bosco (marrone chiaro e scuro, quasi nero,
+ * muschio) e fango vicino all'acqua; la terra nuda a chiazze nei prati c'è ovunque (anche negli anelli). `mezzo`:
+ * metà lato del blocco, negli ultimi 120 m lettiera e fango sfumano (l'orizzonte non li ha).
  */
-export function materialeSuolo(cx, cz) {
+export function materialeSuolo(cx, cz, mezzo = 1e9) {
   const P = SUOLO.periodo;
   const mat = new THREE.MeshLambertMaterial();
   const uniformi = {
@@ -253,6 +257,8 @@ export function materialeSuolo(cx, cz) {
     uRoccia: { value: COLORE_ROCCIA.clone() },
     uRocciaScura: { value: COLORE_ROCCIA_SCURA.clone() },
     uNeve: { value: COLORE_NEVE.clone() },
+    uCentro: { value: new THREE.Vector2(((cx % P) + P) % P, ((cz % P) + P) % P) },
+    uMezzo: { value: mezzo },
   };
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uniformi);
@@ -260,6 +266,8 @@ export function materialeSuolo(cx, cz) {
       .replace('#include <common>', `#include <common>
 attribute vec3 base;
 attribute vec4 strati;
+attribute vec2 aSuolo;
+varying vec2 vSuolo;
 uniform vec2 uOrigine;
 varying vec3 vBase;
 varying vec4 vStrati;
@@ -267,15 +275,19 @@ varying vec2 vMondo;`)
       .replace('#include <project_vertex>', `#include <project_vertex>
   vBase = base;
   vStrati = strati;
+  vSuolo = aSuolo;
   vMondo = (modelMatrix * vec4(transformed, 1.0)).xz + uOrigine;`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform vec3 uRoccia;
 uniform vec3 uRocciaScura;
 uniform vec3 uNeve;
+uniform vec2 uCentro;
+uniform float uMezzo;
 varying vec3 vBase;
 varying vec4 vStrati;
 varying vec2 vMondo;
+varying vec2 vSuolo;
 float hashSuolo(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);
@@ -306,7 +318,24 @@ ${ottaveGLSL(SUOLO.dettaglio, 'dettaglio')}
 ${ottaveGLSL(SUOLO.venature, 'venature')}
     float roccia = sogliaSuolo(vStrati.x + bordo);
     vec3 cRoccia = mix(uRoccia, uRocciaScura, clamp(vStrati.w + venature, 0.0, 1.0)) * vStrati.z;
-    vec3 c = mix(vBase * (1.0 + dettaglio), cRoccia * (1.0 + 0.5 * dettaglio), roccia);
+    vec3 cPrato = vBase * (1.0 + dettaglio);
+    {
+      // Vegetazione: terra nuda a chiazze nei prati; lettiera sotto il bosco e fango vicino all'acqua (solo nel blocco).
+      float prato = smoothstep(0.3, 0.6, (vBase.g - vBase.b) / max(vBase.g, 0.001));
+      vec2 loc = abs(vMondo - uCentro);
+      loc = min(loc, ${P.toFixed(1)} - loc);
+      float blocco = 1.0 - smoothstep(uMezzo - 120.0, uMezzo, max(loc.x, loc.y));
+      float r1 = rumoreSuolo(p, 32.0), r2 = rumoreSuolo(p, 8.0), r3 = rumoreSuolo(p, 2.0), r4 = rumoreSuolo(p + 911.0, 16.0);
+      float terra = smoothstep(0.62, 0.78, r1 * 0.6 + r2 * 0.4) * prato;
+      cPrato = mix(cPrato, vec3(0.19, 0.125, 0.06) * (0.8 + 0.4 * r3), terra * 0.5);
+      vec3 lett = mix(vec3(0.011, 0.0065, 0.003), vec3(0.06, 0.036, 0.016), smoothstep(0.3, 0.8, r2));
+      lett = mix(lett, vec3(0.003, 0.003, 0.002), smoothstep(0.55, 0.8, r3 * 0.5 + r2 * 0.5) * 0.85);
+      lett = mix(lett, vec3(0.012, 0.03, 0.007), smoothstep(0.45, 0.68, r4) * 0.85);
+      lett *= 0.6 + 0.8 * r3;
+      cPrato = mix(cPrato, lett, vSuolo.x * 0.95 * prato * blocco);
+      cPrato = mix(cPrato, vec3(0.07, 0.055, 0.035) * (0.8 + 0.4 * r2), smoothstep(0.3, 1.0, vSuolo.y) * 0.6 * blocco);
+    }
+    vec3 c = mix(cPrato, cRoccia * (1.0 + 0.5 * dettaglio), roccia);
     // La neve ha un bordo suo (rumore spostato), non quello della roccia.
     float neve = sogliaSuolo(vStrati.y + 0.8 * bordo + (rumoreSuolo(p + 517.0, 16.0) - 0.5) * 0.12 * spegniSuolo(16.0, dist));
     c = mix(c, uNeve * (1.0 + 0.3 * dettaglio), neve);
@@ -378,7 +407,7 @@ function buildSurfaceMondo(heights, cols, rows, cell, half, colore, centro) {
   geo.setIndex(new THREE.BufferAttribute(indici, 1));
   geo.computeBoundingSphere();
   geo.computeBoundingBox();
-  const m = new THREE.Mesh(geo, materialeSuolo(cx, cz));
+  const m = new THREE.Mesh(geo, materialeSuolo(cx, cz, half));
   m.name = 'terreno-superficie';
   return m;
 }
