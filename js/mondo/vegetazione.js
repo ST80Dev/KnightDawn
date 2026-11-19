@@ -155,8 +155,8 @@ export const STRIDE = 6;                 // per oggetto: x, quota, z (locali al 
 /** Parametri del posizionamento ([Ipotesi] da tarare guardando). */
 export const VEGETAZIONE = {
   passoAlberi: 6,                        // m: un albero al più ogni cella di 6×6 m
-  // Bosco fitto: ~0,9 alberi per cella di 6×6 m (≈ 250 alberi per ettaro, chiome che si toccano).
-  bosco: { soglia: [0.32, 0.62], bordo: { lunghezza: 90, ampiezza: 0.12 }, densita: 0.9 },
+  // Bosco: ~0,62 alberi per cella di 6×6 m (≈ 170 alberi per ettaro; 0,9 provato e scartato: troppo carico).
+  bosco: { soglia: [0.32, 0.62], bordo: { lunghezza: 90, ampiezza: 0.12 }, densita: 0.62 },
   // Boschi di versante (deciso con l'utente): a macchie sui pendii di collina e montagna che non si coltivano,
   // sotto il limite degli alberi e dove non è secco. Pendenza «di zona» (come il colore), gradi.
   versante: { pendenza: [15, 22], troppo: [34, 40], lunghezza: 350, soglia: [-0.05, 0.2], umidita: [0.3, 0.45] },
