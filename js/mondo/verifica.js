@@ -317,3 +317,38 @@ function partiSeparate(carta) {
   for (const s of parti.values()) separate += s.size - 1;
   return separate;
 }
+
+/**
+ * Siti delle rocche (M7, `carta.luoghi`): almeno 2, ciascuno su terra (non mare né lago), lontano dalle pareti
+ * dei gruppi montuosi, dai fiumi e dai bordi, con lavoro di terra e pendenza entro i limiti, a ≥ 10 km l'uno
+ * dall'altro (la scelta parte da 20 km e scende a scalini solo se serve). Controlla le celle della Carta da sé,
+ * senza fidarsi delle misure del generatore, tranne quelle che richiedono la quota del mondo.
+ * @returns {{ ok: boolean, testo: string, errori: string[] }}
+ */
+export function verificaLuoghi(carta, limiti = { asprezza: 0.2, bordo: 25, fiume: 0.9, distanza: 10, rocca: 12, borgo: 30, pendenza: 15 }) {
+  const L = carta.luoghi, errori = [];
+  if (!L) return { ok: false, testo: 'Carta senza luoghi', errori: ['Carta senza luoghi'] };
+  if (L.length < 2) errori.push(`solo ${L.length} siti`);
+  const { cols, rows, cella, mare, acque, asprezza } = carta;
+  for (const l of L) {
+    const c = Math.floor(l.x / cella), r = Math.floor(l.z / cella), i = r * cols + c, nome = `sito ${l.id + 1}`;
+    if (c < limiti.bordo || r < limiti.bordo || c >= cols - limiti.bordo || r >= rows - limiti.bordo) errori.push(`${nome} vicino al bordo`);
+    else if (mare[i] || (acque && acque[i] !== ACQUA.TERRA)) errori.push(`${nome} in acqua`);
+    else if (asprezza && asprezza[i] > limiti.asprezza) errori.push(`${nome} sulle pareti`);
+    if (!(l.fiume.distanza >= limiti.fiume)) errori.push(`${nome} a ${l.fiume.distanza.toFixed(2)} km da un fiume`);
+    if (l.dislivelli.rocca > limiti.rocca || l.dislivelli.borgo > limiti.borgo) errori.push(`${nome}: troppo lavoro di terra`);
+    if (l.pendenza > limiti.pendenza) errori.push(`${nome}: pendenza ${l.pendenza.toFixed(1)}°`);
+  }
+  let dMin = Infinity;
+  for (let a = 0; a < L.length; a++) for (let b = a + 1; b < L.length; b++) {
+    dMin = Math.min(dMin, Math.hypot(L[a].x - L[b].x, L[a].z - L[b].z) / cella);
+  }
+  if (dMin < limiti.distanza) errori.push(`siti a ${dMin.toFixed(1)} km`);
+  const caratteri = [...new Set(L.map((l) => l.carattere))].join(', ');
+  const V = carta.valichi ?? [];
+  return {
+    ok: errori.length === 0, errori,
+    testo: errori.length ? errori[0] : `rocche ${L.length} (${caratteri}), distanza minima ${dMin === Infinity ? '-' : dMin.toFixed(0) + ' km'}`
+      + ` · valichi ${V.length}, con sentinella ${V.filter((v) => v.presidio).length}`,
+  };
+}

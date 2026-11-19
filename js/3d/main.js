@@ -231,6 +231,7 @@ function aggiornaStato() {
 let terrain = null;                       // terreno della Scena attuale
 let knight = null;
 let castle = null;                        // solo a Tavullia (fino a «rocca e borgo»)
+let segnaposti = null;                    // M7, passo 1: aste sulle cime delle rocche
 let acqua = null;                         // superficie del mare a quota 0, se la Scena ne ha
 let orizzonte = null;                     // terreno lontano attorno alla Scena (solo mondo generato)
 let acqueScena = null;                    // fiumi e laghi in quota della Scena (mesh)
@@ -404,14 +405,36 @@ function misuraPendenze(t) {
 }
 
 /**
+ * M7, passo 1 (provvisorio): un'asta con bandiera sulla cima di ogni rocca dentro il blocco, finché rocca e
+ * borgo non ci sono. Colore della bandiera secondo la classe.
+ */
+function segnapostiLuoghi(cx, cz, ter) {
+  const half = ter.size / 2, g = new THREE.Group();
+  const colori = { minore: '#c8a030', casata: '#a01c14', maggiore: '#3a2a8c' };
+  for (const l of carta?.luoghi ?? []) {
+    const x = l.x - cx, z = l.z - cz;
+    if (Math.abs(x) > half || Math.abs(z) > half) continue;
+    const y = ter.getHeight(x, z);
+    const asta = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 14, 6), new THREE.MeshLambertMaterial({ color: '#5b3b20' }));
+    asta.position.set(x, y + 7, z);
+    const bandiera = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2, 0.06), new THREE.MeshLambertMaterial({ color: colori[l.classe] }));
+    bandiera.position.set(x + 1.7, y + 12.8, z);
+    g.add(asta, bandiera);
+  }
+  g.name = 'segnaposti-luoghi';
+  return g.children.length ? g : null;
+}
+
+/**
  * Carica una Scena al posto di quella attuale.
  * @param {{tipo:'tavullia'} | {tipo:'mondo', cx:number, cz:number}} desc
  */
 async function caricaScena(desc) {
-  for (const o of [terrain?.mesh, acqua, castle?.object, orizzonte?.oggetto, acqueScena]) {
+  for (const o of [terrain?.mesh, acqua, castle?.object, orizzonte?.oggetto, acqueScena, segnaposti]) {
     if (o) { scene.remove(o); libera(o); }
   }
   castle = null;
+  segnaposti = null;
   acqua = null;
   orizzonte = null;
   acqueScena = null;
@@ -434,6 +457,8 @@ async function caricaScena(desc) {
     acqueScena = creaAcqueScena(dati, meta, COLORE_ACQUA);
     if (acqueScena) scene.add(acqueScena);
     livelliAcqua = { fiume: dati.fiume, lago: dati.lago, cols: meta.cols, cell: meta.cellSize, half: meta.sizeMeters / 2 };
+    segnaposti = segnapostiLuoghi(desc.cx, desc.cz, terrain);
+    if (segnaposti) scene.add(segnaposti);
   }
   scene.add(terrain.mesh);
 
@@ -474,7 +499,10 @@ function posizionaCavaliere(x, z, direzione) {
   }
 }
 
-/** Centro della prima Scena di una nuova partita: collina (250–600 m) la più vicina al centro della Carta. */
+const NOMI_CLASSI = { minore: 'rocca minore', casata: 'castello di casata', maggiore: 'sede maggiore' };
+const PARTENZA_DAL_SITO = 170;   // m dalla cima della rocca verso il borgo: fuori dalla porta del borgo (M7)
+
+/** Centro della prima Scena se la Carta non ha rocche: collina (250–600 m) la più vicina al centro della Carta. */
 function puntoPartenza(c) {
   for (const [a, b] of [[250, 600], [100, Infinity], [1, Infinity]]) {
     let best = null, bd = Infinity;
@@ -514,6 +542,18 @@ async function entraDallaCarta(cartaScelta, x, y) {
   scriviIndirizzo();
   cartaVista.chiudi();
   messaggio(`Scena a ${fmt(x, 2)}, ${fmt(y, 2)} km dall'angolo nord-ovest (seme ${carta.seme}).`);
+  salvaOra();
+}
+
+/** Dalla Carta: la Scena centrata su una rocca (M7), con il cavaliere fuori dalla porta del borgo. */
+async function entraNelSito(cartaScelta, sito) {
+  carta = cartaScelta;
+  await caricaScena({ tipo: 'mondo', cx: sito.x, cz: sito.z });
+  const d = PARTENZA_DAL_SITO;
+  posizionaCavaliere(sito.verso.x * d, sito.verso.z * d, Math.atan2(-sito.verso.x, -sito.verso.z));
+  scriviIndirizzo();
+  cartaVista.chiudi();
+  messaggio(`Rocca ${sito.id + 1} (${NOMI_CLASSI[sito.classe]}), seme ${carta.seme}.`);
   salvaOra();
 }
 
@@ -559,8 +599,18 @@ async function init() {
       await caricaScena({ tipo: 'mondo', cx: sc.cx, cz: sc.cz });
       posizionaCavaliere(sc.x, sc.z, Number.isFinite(sc.direzione) ? sc.direzione : Math.PI);
     } else {
-      await caricaScena({ tipo: 'mondo', ...puntoPartenza(carta) });
-      posizionaCavaliere(0, 0, Math.PI);
+      const sito = carta.luoghi?.find((l) => l.partenza);
+      if (sito) {
+        // M7: Scena centrata sulla rocca di partenza; il garzone sta più in basso, dove sarà la porta del borgo,
+        // rivolto verso la rocca (provvisorio finché non ci sono rocca e borgo).
+        await caricaScena({ tipo: 'mondo', cx: sito.x, cz: sito.z });
+        const d = PARTENZA_DAL_SITO;
+        posizionaCavaliere(sito.verso.x * d, sito.verso.z * d, Math.atan2(-sito.verso.x, -sito.verso.z));
+        messaggio(`Rocca di partenza (${NOMI_CLASSI[sito.classe]}): per ora c'è solo il sito, rocca e borgo arrivano nei prossimi passi.`);
+      } else {
+        await caricaScena({ tipo: 'mondo', ...puntoPartenza(carta) });
+        posizionaCavaliere(0, 0, Math.PI);
+      }
     }
     scriviIndirizzo();
   }
@@ -658,6 +708,9 @@ const cartaVista = createCartaVista(document.body, {
     : null),
   onScegli: (c, x, y) => {
     entraDallaCarta(c, x, y).catch((err) => { console.error('[scena]', err); messaggio(`Errore: ${err.message}`); });
+  },
+  onRocca: (c, sito) => {
+    entraNelSito(c, sito).catch((err) => { console.error('[scena]', err); messaggio(`Errore: ${err.message}`); });
   },
   onTavullia: () => {
     entraTavullia().catch((err) => { console.error('[scena]', err); messaggio(`Errore: ${err.message}`); });
