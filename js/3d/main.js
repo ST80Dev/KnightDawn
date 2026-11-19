@@ -21,6 +21,7 @@ import { creaOrizzonte } from './orizzonte.js';
 import { creaAcqueScena } from './acqua.js';
 import { generaCartaAsincrona, verificaSemi } from '../mondo/generatore.js';
 import { generaScena, centroBlocco, quotaFinale } from '../mondo/scena.js';
+import { distanzaStrada } from '../mondo/strade.js';
 import { posizionaVegetazione, coperturaMondo, coperturaTavullia } from '../mondo/vegetazione.js';
 import { creaVegetazione } from './vegetazione3d.js';
 import { semeDaTesto } from '../mondo/rumore.js';
@@ -144,7 +145,6 @@ function aggiornaCielo() {
   for (const e of emissivi) e.m.emissive.copy(e.base).multiplyScalar(luceRiflessa);
   const ombra = knight && knight.object.getObjectByName('ombra-cavaliere');
   if (ombra) ombra.material.opacity = 0.35 + 0.65 * giorno;
-  if (knight) knight.aggiornaRiflessi(renderer, { sfondo: scene.background, cielo, sole });
 }
 
 // ─── HUD ────────────────────────────────────────────────────────────────
@@ -252,6 +252,7 @@ let scostamento = { x: 0, z: 0 };
 // Suolo calpestabile della Scena attuale: terreno + superfici costruite (cortile, rampa). Cavaliere e
 // camera ricevono questi oggetti una volta sola; cambiando Scena cambia solo ciò a cui rimandano.
 let _suolo = null;
+const _sullaStrada = { d: Infinity, lato: 0, semi: 0, h: 0, classe: '' };
 const suolo = {
   getHeight: (x, z) => _suolo.getHeight(x, z),
   getSlope: (x, z) => _suolo.getSlope(x, z),
@@ -261,6 +262,13 @@ const suolo = {
     if (h <= -PROFONDITA_GUADO) return false;                    // mare
     const l = livelloAcquaIn(x, z);
     return Number.isNaN(l) || l - h <= PROFONDITA_GUADO;          // fiumi profondi e laghi
+  },
+  // Sulla carreggiata di una strada o di un sentiero (js/mondo/strade.js): in salita si rallenta meno.
+  suStrada: (x, z) => {
+    const m = _suolo?.meta?.centroMondo, c = carta;
+    if (!m || !c) return false;
+    distanzaStrada(c, m.x + x, m.z + z, _sullaStrada);
+    return _sullaStrada.d <= _sullaStrada.semi + 0.5;
   },
   get half() { return _suolo.half; },
   get size() { return _suolo.size; },
@@ -533,7 +541,6 @@ function posizionaCavaliere(x, z, direzione) {
   if (!knight) {
     knight = createKnight(suolo, { x, z, direzione }, ostacoli);
     scene.add(knight.object);
-    _oraCielo = -1;                        // ricalcola le luci: servono anche ai riflessi dell'acciaio
   } else {
     Object.assign(knight.stato, { x, z, direzione, velocita: 0, velAngolare: 0, velEffettiva: 0 });
     knight.update(0, { avanti: 0, gira: 0, giroMouse: 0, corsa: false, camminata: false });
@@ -1056,7 +1063,7 @@ function frame(now) {
   }
   aggiornaPannello(now);
   renderer.render(scene, camera);
-  infoFrame.calls = renderer.info.render.calls;          // letti subito: i riflessi del cavaliere disegnano anche loro
+  infoFrame.calls = renderer.info.render.calls;          // letti subito, prima di altri disegni
   infoFrame.triangles = renderer.info.render.triangles;
 }
 

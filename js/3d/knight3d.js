@@ -1,5 +1,5 @@
 // Knight Dawn — cavaliere 3D (milestone M2; collisioni con il castello da M4)
-// Modello simil-realistico costruito via codice (forme tornite, acciaio che riflette il cielo),
+// Modello simil-realistico costruito via codice (forme tornite, metalli satinati),
 // animazione procedurale e movimento sul terreno.
 //
 // Convenzioni del modello: origine ai piedi, asse Y in alto, il cavaliere guarda verso +Z locale.
@@ -30,6 +30,10 @@ export const KNIGHT_CFG = {
   // in ~12–15 minuti di corsetta invece di 20–25. Il limite di pendenza e la fatica (Forza) restano.
   pendenzaKSalita: 0.7,
   fattoreMinSalita: 0.7,
+  // Su strada o sentiero (terrain.suStrada) in salita si rallenta meno che fuori [deciso con l'utente]: fondo
+  // battuto e pendenza costante. In piano e in discesa nessuna differenza.
+  pendenzaKSalitaStrada: 0.35,
+  fattoreMinSalitaStrada: 0.85,
   fattoreMax: 1.1,      // massimo, sulle discese dolci
   margineBordo: 2,      // m dal bordo dell'area
   raggio: 0.4,          // m: ingombro sul piano contro mura e torri (spalle + scudo)
@@ -59,26 +63,28 @@ const ANCA_X = 0.10;            // distanza laterale delle anche dal centro
 const BACINO_MIN = -0.14;       // m: di quanto può abbassarsi al massimo il bacino (no accovacciate)
 const BACINO_MIN_CORSA = -0.05; // m: idem in corsa piena (fase di volo)
 
-// Stile simil-realistico (docs/GRAFICA_3D.md): forme tornite e arrotondate, materiali fisici.
-// L'acciaio riflette un ambiente generato dal cielo della scena (aggiornaRiflessi), che segue il
-// ciclo giorno/notte: senza, il metallo apparirebbe nero.
+// Stile simil-realistico (docs/GRAFICA_3D.md): forme tornite e arrotondate. Metalli satinati
+// (richiesta dell'utente: «omettere così tanto realismo nei riflessi su armatura ed elmo»): niente mappa
+// d'ambiente, solo il luccichio del sole (Phong); stoffa, cuoio e legno opachi (Lambert).
 const COL = {
-  acciaio:     { color: '#c3c8cd', metalness: 0.9, roughness: 0.34 },
-  acciaioScuro:{ color: '#7d838a', metalness: 0.85, roughness: 0.55 },   // giunture, guanti, scarpe
-  maglia:      { color: '#6a6f75', metalness: 0.8, roughness: 0.7 },    // cotta di maglia
-  sopraveste:  { color: PAL.rossoBandiera || '#8a1010', metalness: 0, roughness: 0.88 },
-  mantello:    { color: '#5a1410', metalness: 0, roughness: 0.92 },
-  cuoio:       { color: '#4e2c14', metalness: 0, roughness: 0.68 },
-  ottone:      { color: '#c9a24a', metalness: 0.9, roughness: 0.32 },
-  legno:       { color: '#6b4a2c', metalness: 0, roughness: 0.8 },
-  fessura:     { color: '#0c0906', metalness: 0, roughness: 1 },
+  acciaio:     { tipo: 'metallo', color: '#b3bac1', specular: '#5c6168', shininess: 38 },
+  acciaioScuro:{ tipo: 'metallo', color: '#80868d', specular: '#3a3e43', shininess: 24 },   // giunture, guanti, scarpe
+  maglia:      { tipo: 'metallo', color: '#6c7177', specular: '#2c2f33', shininess: 14 },   // cotta di maglia
+  sopraveste:  { color: PAL.rossoBandiera || '#8a1010' },
+  mantello:    { color: '#5a1410' },
+  cuoio:       { color: '#4e2c14' },
+  ottone:      { tipo: 'metallo', color: '#a8853f', specular: '#4d3d1c', shininess: 30 },
+  legno:       { color: '#6b4a2c' },
+  fessura:     { color: '#0c0906' },
 };
 
 // ─── Costruzione del modello ────────────────────────────────────────────
 
 function materiali() {
   const m = {};
-  for (const [k, p] of Object.entries(COL)) m[k] = new THREE.MeshStandardMaterial(p);
+  for (const [k, { tipo, ...p }] of Object.entries(COL)) {
+    m[k] = tipo === 'metallo' ? new THREE.MeshPhongMaterial(p) : new THREE.MeshLambertMaterial(p);
+  }
   m.mantello.side = THREE.DoubleSide;
   m.sopraveste.side = THREE.DoubleSide;   // la falda è un tronco di cono aperto
   return m;
@@ -470,61 +476,7 @@ function buildModel() {
 
   return {
     root, corpo, busto, testa, mantello: attaccoMantello,
-    gambaD, gambaS, braccioD, braccioS, materiali: m,
-  };
-}
-
-// ─── Riflessi dell'acciaio: ambiente generato dal cielo della scena ─────
-
-/**
- * Ambiente per i riflessi: una sfera con il colore del cielo in alto, dell'orizzonte al centro e del
- * terreno in basso, più un disco luminoso nella direzione del sole. Convertito in mappa d'ambiente
- * (PMREM) e assegnato ai materiali del cavaliere. Si rigenera solo quando la luce cambia davvero.
- */
-function creaRiflessi(materiali) {
-  const scena = new THREE.Scene();
-  const N = 24;
-  const sferaGeo = new THREE.SphereGeometry(10, 32, N);
-  const colori = new Float32Array(sferaGeo.attributes.position.count * 3);
-  sferaGeo.setAttribute('color', new THREE.BufferAttribute(colori, 3));
-  scena.add(new THREE.Mesh(sferaGeo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
-  const discoSole = new THREE.Mesh(new THREE.SphereGeometry(0.9, 12, 8), new THREE.MeshBasicMaterial());
-  scena.add(discoSole);
-
-  let pmrem = null, target = null, ultimaChiave = '';
-  const alto = new THREE.Color(), orizzonte = new THREE.Color(), basso = new THREE.Color(), c = new THREE.Color();
-
-  return function aggiorna(renderer, { sfondo, cielo, sole }) {
-    // Cielo in alto più carico dell'orizzonte; terreno scuro, tinto dalla luce emisferica.
-    orizzonte.copy(sfondo);
-    alto.copy(sfondo).lerp(cielo.color, 0.35).multiplyScalar(0.85);
-    basso.copy(cielo.groundColor).multiplyScalar(0.35 * Math.min(1, cielo.intensity / 0.45));
-    const soleI = sole.intensity;
-    const chiave = [orizzonte.getHexString(), basso.getHexString(), soleI.toFixed(2),
-      sole.position.x.toFixed(0), sole.position.y.toFixed(0), sole.position.z.toFixed(0)].join();
-    if (chiave === ultimaChiave) return;
-    ultimaChiave = chiave;
-
-    const p = sferaGeo.attributes.position;
-    for (let i = 0; i < p.count; i++) {
-      const y = p.getY(i) / 10;                       // -1 basso → 1 alto
-      if (y >= 0) c.copy(orizzonte).lerp(alto, Math.pow(y, 0.6));
-      else c.copy(orizzonte).lerp(basso, Math.min(1, -y * 4));
-      colori[i * 3] = c.r; colori[i * 3 + 1] = c.g; colori[i * 3 + 2] = c.b;
-    }
-    sferaGeo.attributes.color.needsUpdate = true;
-    discoSole.position.copy(sole.position).normalize().multiplyScalar(9);
-    discoSole.material.color.copy(sole.color).multiplyScalar(soleI * 6);
-    discoSole.visible = soleI > 0.05;
-
-    if (!pmrem) pmrem = new THREE.PMREMGenerator(renderer);
-    const nuovo = pmrem.fromScene(scena, 0, 0.1, 50);
-    for (const mat of Object.values(materiali)) {
-      mat.envMap = nuovo.texture;
-      mat.needsUpdate = mat.needsUpdate || !target;   // la prima volta il materiale cambia programma
-    }
-    if (target) target.dispose();
-    target = nuovo;
+    gambaD, gambaS, braccioD, braccioS,
   };
 }
 
@@ -561,7 +513,7 @@ const avvicina = (rate, dt) => 1 - Math.exp(-rate * dt);   // fattore di lerp in
 /**
  * Crea il cavaliere sul terreno.
  * @param {object} terrain  oggetto restituito da loadTerrain (getHeight, getSlope, half; facoltativo
- *   percorribile(x, z) → false dove l'acqua è troppo alta)
+ *   percorribile(x, z) → false dove l'acqua è troppo alta; suStrada(x, z) → true sulla carreggiata)
  * @param {{x:number, z:number, direzione?:number}} start  posizione iniziale; direzione in radianti (0 = +Z, π = nord)
  * @param {Array<{spingiFuori:(x:number, z:number, r:number) => ({x:number, z:number}|null)}>} [ostacoli]
  *   oggetti solidi (es. il castello): spingono il cavaliere fuori dal loro ingombro
@@ -569,7 +521,6 @@ const avvicina = (rate, dt) => 1 - Math.exp(-rate * dt);   // fattore di lerp in
 export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }, ostacoli = []) {
   const cfg = { ...KNIGHT_CFG };
   const mod = buildModel();
-  const riflessi = creaRiflessi(mod.materiali);
   const ombra = buildOmbra();
   const object = new THREE.Group();
   object.add(mod.root, ombra);
@@ -615,9 +566,10 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
 
   /** Fattore di velocità per una pendenza g (tangente) nella direzione di marcia. */
   function fattorePendenza(g) {
-    const salita = g > 0, K = salita ? cfg.pendenzaKSalita : cfg.pendenzaK;
+    const salita = g > 0, strada = salita && terrain.suStrada && terrain.suStrada(stato.x, stato.z);
+    const K = salita ? (strada ? cfg.pendenzaKSalitaStrada : cfg.pendenzaKSalita) : cfg.pendenzaK;
     const f = Math.exp(-K * Math.abs(g + 0.05)) / Math.exp(-K * 0.05);
-    return clamp(f, salita ? cfg.fattoreMinSalita : cfg.fattoreMin, cfg.fattoreMax);
+    return clamp(f, salita ? (strada ? cfg.fattoreMinSalitaStrada : cfg.fattoreMinSalita) : cfg.fattoreMin, cfg.fattoreMax);
   }
 
   // Punto (x, z) spinto fuori da mura e torri: contro un muro il cavaliere ci scivola lungo.
@@ -817,11 +769,6 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     cfg,
     stato,
     update,
-    /**
-     * Aggiorna i riflessi dell'acciaio con la luce attuale (cielo, sole). Da chiamare quando la luce
-     * cambia: si rigenera solo se qualcosa è davvero cambiato.
-     */
-    aggiornaRiflessi: (renderer, luci) => riflessi(renderer, luci),
     /** Punto da inquadrare (petto del cavaliere), in coordinate del mondo. */
     puntoMira(out = new THREE.Vector3()) {
       return out.set(stato.x, stato.y + 1.3, stato.z);
