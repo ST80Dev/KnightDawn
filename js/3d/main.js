@@ -596,7 +596,9 @@ async function init() {
     scriviIndirizzo();
   } else {
     carta = await cartaDelMondo(seme);
-    if (sc && sc.terreno === 'mondo' && sc.seme === seme && finiti(sc.cx, sc.cz, sc.x, sc.z)) {
+    // Un salvataggio del mondo di prima (600×450 km) può stare fuori dalla regione di oggi: si riparte.
+    const dentro = (x, z) => x >= 0 && z >= 0 && x <= carta.cols * carta.cella && z <= carta.rows * carta.cella;
+    if (sc && sc.terreno === 'mondo' && sc.seme === seme && finiti(sc.cx, sc.cz, sc.x, sc.z) && dentro(sc.cx, sc.cz)) {
       await caricaScena({ tipo: 'mondo', cx: sc.cx, cz: sc.cz });
       posizionaCavaliere(sc.x, sc.z, Number.isFinite(sc.direzione) ? sc.direzione : Math.PI);
     } else {

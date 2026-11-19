@@ -17,6 +17,7 @@
 import * as THREE from 'three';
 import { BIOMA, CLIMA, limiteNevi } from '../mondo/carta.js';
 import { fbm, derivaSeme, smoothstep } from '../mondo/rumore.js';
+import { specchio } from '../mondo/scena.js';
 
 const PAL = (typeof PALETTE !== 'undefined') ? PALETTE : {};
 
@@ -202,9 +203,9 @@ export function coloreMondo(carta, stagione = 0) {
     out.setRGB(0, 0, 0);
     let t0 = 0, bosco = 0, neveFissa = 0, monte = 0;
     for (let b = 0; b < 2; b++) {
-      const j = Math.min(rows - 1, Math.max(0, j0 + b));
+      const j = specchio(j0 + b, rows);
       for (let a = 0; a < 2; a++) {
-        const i = Math.min(cols - 1, Math.max(0, i0 + a)), k = j * cols + i;
+        const i = specchio(i0 + a, cols), k = j * cols + i;
         const w = (a ? fu : 1 - fu) * (b ? fv : 1 - fv);
         const bi = bioma ? bioma[k] : BIOMA.PIANURA;
         const col = COLORI_SCENA[bi] || COLORI_SCENA[BIOMA.PIANURA];

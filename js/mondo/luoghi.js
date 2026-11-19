@@ -26,10 +26,10 @@ export const LUOGHI = {
   quotaValico: 1300,              // m: quota massima per i siti vicino a un valico (sbocco di valle in pedemonte)
   biomi: [BIOMA.PIANURA, BIOMA.PIANURA_N, BIOMA.PIANURA_S, BIOMA.FORESTA, BIOMA.COLLINA],
   asprezza: 0.2,                  // oltre: vicino alle pareti dei gruppi montuosi
-  bordo: 25,                      // km dal bordo della Carta
+  bordo: 8,                       // km dal bordo della Carta
   lago: 1.5,                      // km (a celle) dai laghi
-  fiume: { minimo: 0.9, buono: [0.9, 4], fino: 6 },   // km dall'asse del tracciato della Carta
-  valico: { buono: 15, fino: 25 },// km dal valico più vicino (il sito sta più in basso)
+  fiume: { minimo: 0.9, minimoValle: 0.35, buono: [0.9, 4], fino: 6 },   // km dall'asse del tracciato della Carta
+  valico: { buono: 8, fino: 15 },// km dal valico più vicino (il sito sta più in basso)
   riservati: 20,                  // per zona: celle affinate scelte tra quelle vicine a un valico
   candidati: 260,                 // celle affinate (le migliori secondo la stima sulla Carta)
   // Misure del sito (castello di casata, docs/ESPLORAZIONE_3D.md, M7): la classe ne cambierà la grandezza
@@ -41,10 +41,26 @@ export const LUOGHI = {
   scarti: { rocca: 12, borgo: 30, pendenza: 15 },     // m, m, gradi (pendenza media del borgo)
   pesi: { fiume: 70, valico: 60, rocca: 4, borgo: 1.5, pendenza: 3 },
   // Scelta: zona attorno al centro (km), poi distanza minima tra i siti (km), a scalini se non bastano.
-  zona: [90, 140, 220, 400],
-  distanza: [20, 15, 10],
+  zona: [25, 35, 50, 80],
+  distanza: [15, 12, 8],
   numero: 3,
+  // Castello di valle (deciso con l'utente): a ≤ entro km da un crinale almeno sopra m più alto, così di persona
+  // in 15–20 minuti si sale dal castello al crinale per guardare oltre. La partenza è di valle, se c'è.
+  crinale: { entro: 5, sopra: 800 },
 };
+
+/** Distanza (km, a celle) dal punto più vicino della Carta almeno `sopra` m più alto di h, entro `raggio` km. */
+function distanzaCrinale(carta, px, py, h, sopra, raggio) {
+  const { cols, rows, quota } = carta, c0 = Math.floor(px), r0 = Math.floor(py);
+  let d = Infinity;
+  for (let b = -raggio; b <= raggio; b++) for (let a = -raggio; a <= raggio; a++) {
+    const c = c0 + a, r = r0 + b;
+    if (c < 0 || r < 0 || c >= cols || r >= rows || quota[r * cols + c] < h + sopra) continue;
+    const dx = c + 0.5 - px, dy = r + 0.5 - py, e = Math.sqrt(dx * dx + dy * dy);
+    if (e < d) d = e;
+  }
+  return d;
+}
 
 // 8 e 16 direzioni come costanti (niente Math.cos: deve dare lo stesso numero in ogni motore JS).
 const R2 = 0.7071067811865476, C1 = 0.9238795325112867, S1 = 0.3826834323650898;
@@ -278,9 +294,13 @@ function affina(carta, c, r, seed, fiumeVicino, valichi, L) {
     }
   }
   const S = L.scarti;
+  // Castello di valle: crinale (L.crinale.sopra m più alto) entro L.crinale.entro km. Sta su un terrazzo o un dosso
+  // del fondovalle, dominato dai versanti: per lui non valgono la cima e la dominanza.
+  const crinale = distanzaCrinale(carta, bx / C, bz / C, bh, L.crinale.sopra, L.crinale.entro + 1);
+  const valle = crinale <= L.crinale.entro;
   // Una cima vera: niente terreno più alto entro qualche centinaio di metri (altrimenti è un dosso ai piedi di un
   // rilievo più alto, dominato da vicino; con il solo punto più alto della cella capitava spesso).
-  for (const raggio of L.cima.raggi) {
+  if (!valle) for (const raggio of L.cima.raggi) {
     for (const [ux, uz] of DIR16) if (q(bx + ux * raggio, bz + uz * raggio) > bh + L.cima.tolleranza) return null;
   }
   // Rocca: dislivello sul quadrato attorno alla cima.
@@ -335,25 +355,26 @@ function affina(carta, c, r, seed, fiumeVicino, valichi, L) {
   let anello = 0;
   for (const [ux, uz] of DIR16) anello += q(bx + ux * D.raggio, bz + uz * D.raggio);
   const dominanza = bh - anello / 16;
-  if (dominanza < D.minima) return null;
+  if (dominanza < D.minima && !valle) return null;
   // Fiume e valico (km).
   const fv = fiumeVicino(bx / C, bz / C, L.fiume.fino);
-  if (fv.d < L.fiume.minimo) return null;
+  if (fv.d < (valle ? L.fiume.minimoValle : L.fiume.minimo)) return null;   // in una valle stretta il fiume è vicino
   // Il valico conta solo se il sito sta più in basso (allo sbocco della valle, non sopra il passo).
   const vv = valicoVicino(valichi, bx / C, bz / C);
   const dValico = vv.d;
   const bonusFiume = fv.d === Infinity ? 0 : cala(fv.d, L.fiume.buono[1], L.fiume.fino);
   const bonusValico = bh < vv.quota ? cala(dValico, L.valico.buono, L.valico.fino) : 0;
-  if (bonusValico < 0.5 && bh > L.quota[1] + 60) return null;   // sopra i 900 m solo vicino a un valico
+  // sopra i 900 m solo vicino a un valico o sotto un crinale (castello di valle)
+  if (bonusValico < 0.5 && !valle && bh > L.quota[1] + 60) return null;
   const P = L.pesi;
   const punteggio = Math.min(dominanza, D.tetto) + P.fiume * bonusFiume + P.valico * bonusValico
     - P.rocca * dRocca - P.borgo * migliore.dBorgo - P.pendenza * pendenza;
-  const carattere = bonusValico >= 0.5 ? 'valico' : bonusFiume >= 0.5 ? 'fiume' : 'altura';
+  const carattere = valle ? 'valle' : bonusValico >= 0.5 ? 'valico' : bonusFiume >= 0.5 ? 'fiume' : 'altura';
   const [ux, uz] = DIR8[migliore.k];
   return {
     x: bx, z: bz, quota: bh, verso: { x: ux, z: uz }, quotaBorgo: migliore.quota,
     dislivelli: { rocca: dRocca, borgo: migliore.dBorgo }, pendenza, dominanza,
-    fiume: { distanza: fv.d, bacino: fv.bacino }, valico: dValico, carattere, punteggio,
+    fiume: { distanza: fv.d, bacino: fv.bacino }, valico: dValico, crinale, carattere, punteggio,
   };
 }
 
@@ -385,18 +406,21 @@ export function scegliLuoghi(carta, L = LUOGHI) {
       if (mare[i] || (acque && acque[i] !== ACQUA.TERRA) || h < L.quota[0] || h > L.quotaValico) continue;
       valicoVicino(valichi, c + 0.5, r + 0.5, vv);
       const bv = h < vv.quota ? cala(vv.d, L.valico.buono, L.valico.fino) : 0;
-      if (h > L.quota[1] && bv < 0.5) continue;
+      // Castello di valle: crinale (800 m più alto) entro L.crinale.entro km. Anche sopra i 900 m, come i valichi.
+      const dc = distanzaCrinale(carta, c + 0.5, r + 0.5, h, L.crinale.sopra, L.crinale.entro);
+      const bc = dc <= L.crinale.entro ? 1 : 0;
+      if (h > L.quota[1] && bv < 0.5 && !bc) continue;
       if (bioma && !ammesso[bioma[i]]) continue;
       if (asprezza && asprezza[i] > L.asprezza) continue;
       if (dLago[i] < L.lago) continue;
       let m = 0;
       for (const [dx, dy] of anello) m += quota[(r + dy) * cols + c + dx];
       const dom = h - m / anello.length;
-      if (dom <= 0) continue;                              // nemmeno un rialzo alla scala della Carta
+      if (dom <= 0 && !bc) continue;                       // nemmeno un rialzo alla scala della Carta (la valle non lo chiede)
       vicino(c + 0.5, r + 0.5, L.fiume.fino, fv);
       if (fv.d < 0.5) continue;                            // la cella è sul fiume
       const bf = fv.d === Infinity ? 0 : cala(fv.d, L.fiume.buono[1], L.fiume.fino);
-      stime.push({ c, r, bv, s: Math.min(dom, L.dominanza.tetto) + L.pesi.fiume * bf + L.pesi.valico * bv });
+      stime.push({ c, r, bv, bc, s: Math.min(dom, L.dominanza.tetto) + L.pesi.fiume * bf + L.pesi.valico * bv });
     }
   }
   // Le migliori stime per zona (anelli attorno al centro), così ogni scalino della scelta ha candidati.
@@ -409,12 +433,14 @@ export function scegliLuoghi(carta, L = LUOGHI) {
   stime.sort((a, b) => b.s - a.s || a.r - b.r || a.c - b.c);
   const perZona = Math.ceil(L.candidati / L.zona.length);
   const contaZona = new Array(L.zona.length + 1).fill(0), contaValico = new Array(L.zona.length + 1).fill(0);
+  const contaValle = new Array(L.zona.length + 1).fill(0);
   const scelte = [];
   for (const st of stime) {
     const z = zonaDi(st.c, st.r);
     if (z >= L.zona.length) continue;
     // Posti riservati ai siti vicino a un valico: con la sola stima entrerebbero di rado.
     if (st.bv >= 0.5 && contaValico[z] < L.riservati) { contaValico[z]++; scelte.push(st); continue; }
+    if (st.bc && contaValle[z] < L.riservati) { contaValle[z]++; scelte.push(st); continue; }
     if (contaZona[z] >= perZona) continue;
     contaZona[z]++;
     scelte.push(st);
@@ -436,7 +462,8 @@ export function scegliLuoghi(carta, L = LUOGHI) {
       const dmin = L.distanza[di];
       const inZona = validi.filter((s) => s.zona <= zi);
       if (!inZona.length) continue;
-      const presi = [inZona[0]];
+      // La partenza è un castello di valle (crinale vicino), se nella zona ce n'è uno.
+      const presi = [inZona.find((s) => s.carattere === 'valle') ?? inZona[0]];
       const lontano = (s) => presi.every((p) => distanzaKm(p, s) >= dmin);
       // Prima un sito di carattere diverso (fiume, valico, altura), poi i migliori rimasti.
       const diverso = inZona.find((s) => !presi.includes(s) && lontano(s) && !presi.some((p) => p.carattere === s.carattere));
@@ -449,6 +476,18 @@ export function scegliLuoghi(carta, L = LUOGHI) {
     }
   }
   if (!luoghi.length && validi.length) { luoghi = [validi[0]]; scalino = { zona: Infinity, distanza: Infinity }; }
+  // Castello di valle (deciso con l'utente): se nessuno dei siti lo è, il miglior sito di valle (anche fuori zona,
+  // lontano dagli altri) diventa la partenza, al posto del sito più debole.
+  if (luoghi.length && !luoghi.some((l) => l.carattere === 'valle')) {
+    const dmin = scalino && Number.isFinite(scalino.distanza) ? scalino.distanza : L.distanza[L.distanza.length - 1];
+    for (const v of validi) {
+      if (v.carattere !== 'valle') continue;
+      const resto = luoghi.length >= L.numero ? luoghi.slice(0, -1) : luoghi;
+      if (!resto.every((p) => distanzaKm(p, v) >= dmin)) continue;
+      luoghi = [v, ...resto];
+      break;
+    }
+  }
 
   // Classi: la partenza (il primo, il migliore nella zona più vicina al centro) è un castello di casata;
   // degli altri, quello col punteggio più alto è la sede maggiore se i siti sono tre, gli altri rocche minori.
@@ -464,6 +503,8 @@ export function scegliLuoghi(carta, L = LUOGHI) {
   return {
     luoghi, candidati,
     info: { stime: stime.length, affinati: scelte.length, validi: validi.length, valichi: valichi.length,
+      valle: { stime: stime.filter((x) => x.bc).length, affinati: scelte.filter((x) => x.bc).length,
+        validi: validi.filter((x) => x.carattere === 'valle').length },
       scalino, ms: performance.now() - t0 },
   };
 }

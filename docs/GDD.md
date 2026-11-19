@@ -137,15 +137,33 @@ paragone per la credibilità del terreno generato.
   reali); i giorni di viaggio si consumano sulla Carta. Il gioco di persona si ottiene con scene **dense**
   (castello, borgo, dintorni di 1–2 km con cose da fare), non con distanze lunghe a piedi.
 
-**Dimensioni** [TBD, proposta]: circa **600×450 km**, Carta a celle di 1 km. Attraversarlo da nord
-a sud a piedi richiede ~15 giorni di gioco e ~10 minuti reali (vedi §3 *Viaggio*).
+**Dimensioni e densità** [deciso con l'utente, novembre 2026; prima era una proposta di 600×450 km].
+Il mondo è una **regione di ~120×90 km** (Carta a celle di 1 km): a 600×450 km, anche con molti luoghi,
+tra due luoghi d'interesse c'erano ore di cammino e le missioni si sarebbero allungate a dismisura.
+- **Gerarchia di densità** (distanze tipiche): luoghi maggiori (castelli di casata, città, monasteri)
+  ~18 km, **30–40** per mondo; villaggi **60–100**; luoghi speciali (rovine, grotte, accampamenti,
+  monasteri minori) **60–100**; le cose della campagna (cappelle, fonti, pastori, ponti) ogni 0,5–1,5 km e
+  i dettagli e gli incontri ogni 100–300 m si generano dentro le Scene. Si visitano pochi luoghi ben fatti,
+  non migliaia di luoghi generici.
+- **Sessione di persona di 15–20 minuti**: da un castello di fondovalle al crinale per guardare oltre. Due
+  regole, verificate in automatico: in montagna dal fondovalle al crinale ci sono **~3–5 km**; una parte dei
+  castelli sta nei fondovalle o allo sbocco delle valli, **a ≤ 5 km da un crinale** con almeno ~800 m di
+  dislivello.
+- **Spostamenti**: o di persona nella Scena o sulla Carta. Da castello a castello ~4–5 ore di gioco sulla
+  Carta (1,5 Passi di marcia); il mondo intero si attraversa in ~3 giorni di marcia (~30 ore di cammino).
+- **Varietà nella distribuzione, non nel numero**: un mondo ha sempre catena, colline, pianura, costa,
+  laghi, fiumi e il clima dal freddo all'arido, solo meno ripetuti. Si rimpicciolisce la scala d'insieme
+  (forma del continente, numero di catene, fascia del clima), non la scala locale (larghezza delle catene,
+  valli, gruppi montuosi, poggi, laghi, valichi). Accostamenti anche inverosimili a breve distanza sono
+  accettati se rendono il gioco più vario (decade la distanza minima deserto–neve; resta solo che sabbia e
+  neve non si tocchino).
 
 **Modalità reale** [dopo M6, decisa con l'utente a novembre 2026]. Seconda modalità, accanto al mondo
 generato, da giocare sapendo che rispecchia una regione vera: **rilievo reale** (coste, valli, montagne),
 mentre copertura (boschi, rocce, paludi), clima, luoghi, nomi e fazioni sono **generati con le stesse
 regole** del mondo inventato. Non riproduce città, paesi e borghi veri. I fiumi principali coincidono
 con quelli veri (il drenaggio li ritrova nelle valli che hanno scavato); si sceglie quanti mostrarne.
-Il mondo può essere grande quanto quello generato (es. 600×450 km): i dati del terreno si scaricano
+Il mondo può essere più grande di quello generato (anche 600×450 km o più): i dati del terreno si scaricano
 quando servono (tecnica e rischi in `docs/ESPLORAZIONE_3D.md`, «Modalità reale»).
 - **Rinuncia accettata:** si perde parte della scoperta (si sa già dove sono montagne e valichi).
 - **Varietà:** una regione vera ha meno tipi di paesaggio (in Italia niente deserto). Regge se la
@@ -153,8 +171,8 @@ quando servono (tecnica e rischi in `docs/ESPLORAZIONE_3D.md`, «Modalità reale
   Il contenuto legato ai biomi assenti (es. eventi del deserto) in questa modalità non compare.
 - **Distanze accorciate** [proposta dell'utente, novembre 2026]: per viaggiare tra regioni diverse
   (es. l'Europa) senza decine di giorni di gioco, sulla Carta una cella vale *k* km reali ma costa come
-  1 km del mondo generato. Con *k* scelto in modo che la Carta resti di ~600×450 celle, il ritmo di
-  viaggio è lo stesso delle due modalità (Italia *k* ≈ 2, Europa *k* ≈ 6–7). Le Scene restano 1:1: è la
+  1 km del mondo generato. Con *k* scelto in modo che la Carta resti di dimensioni gestibili, il ritmo di
+  viaggio è lo stesso delle due modalità [da ricalcolare dopo il passaggio a 120×90 km]. Le Scene restano 1:1: è la
   stessa distinzione già prevista tra tempo della marcia (Carta) e tempo della presenza (Scene).
 - [TBD] Clima reale oppure «compresso» per latitudine come nel mondo generato (varietà ravvicinata su
   rilievo vero); regione fissa o scelta dal giocatore.
@@ -213,10 +231,10 @@ Regole **nuove** per il 3D e per la varietà ravvicinata:
   - *Forcella*: sella tra le torri di un gruppo montuoso, spesso molto più alta; passarci è **azzardato e
     faticoso**, spesso è nella neve, e **raramente qualcuno la sorveglia**: scorciatoia rischiosa, non strada.
   - Una sella tra due valli più in basso, in collina, non è un valico: è semmai un buon posto per una rocca.
-- **Accostamenti vietati**: niente deserto caldo vicino a neve o ghiacciai, e niente palude in
-  quota. La temperatura di fondo varia solo su grande scala: nella fascia calda le cime restano
-  sotto il limite delle nevi con margine. Distanza minima deserto–neve [TBD, es. 80 km].
-- **Niente distese monotone.** In ogni finestra di ~40×40 km ci sono almeno 3 tipi di paesaggio
+- **Accostamenti vietati**: sabbia e neve non si toccano (almeno qualche km di prateria o roccia in
+  mezzo), niente palude in quota. [Rivisto con l'utente, novembre 2026: niente più distanza minima
+  deserto–neve; nel mondo di 120×90 km la varietà conta più della verosimiglianza.]
+- **Niente distese monotone.** In ogni finestra di ~25×25 km (40 km nel mondo di 600 km) ci sono almeno 3 tipi di paesaggio
   (fuori dalle zone estreme). Nessuna area uniforme supera ~15 km senza un elemento che la
   interrompa: forra, lago, rupe, affioramento roccioso, bosco, palude, massiccio isolato
   [valori TBD, da tarare giocando].
@@ -418,14 +436,13 @@ accampamento) sono azioni atomiche: avanzano il calendario d'un colpo, senza tem
 
 | Distanza nel mondo generato | Esempio | Tempo in-fiction | Tempo reale (15 s / 3 s per Passo) |
 |---|---|---|---|
-| 30–60 km | il massiccio o la palude più vicini | 1–2 giorni | ~1 min / ~15 s |
-| 100–150 km | da una fascia climatica alla vicina | 4–5 giorni | 2–3 min / ~40 s |
-| 300 km | mezzo mondo | ~10 giorni (~25 Passi di marcia + soste) | ~6 min / ~1 min |
-| 450 km | da nord a sud | ~15 giorni | ~10 min / ~2 min |
+| ~18 km | da un castello al vicino | ~1,5 Passi di marcia (~4,5 ore) | ~25 s / ~5 s |
+| 30–45 km | da una fascia climatica alla vicina | 1–1,5 giorni | ~1 min / ~10 s |
+| 90 km | da nord a sud | ~2,5 giorni (~7,5 Passi di marcia + soste) | ~2 min / ~25 s |
+| 120 km | da ovest a est | ~3,5 giorni | ~3 min / ~30 s |
 
-Il tempo reale esclude le soste per gli eventi, che sono il gioco vero. Il mondo 2D (240 tile) si
-attraversava in circa un'ora reale: se ~10 minuti risultano pochi, si allarga il mondo o si rallenta
-la Carta (da tarare giocando). Il calendario (Diario,
+Il tempo reale esclude le soste per gli eventi, che sono il gioco vero. [Mondo di 120×90 km, deciso con
+l'utente: il tempo si passa nei luoghi e nelle Scene, non a marciare sulla Carta.] Il calendario (Diario,
 Stagione, Luce) non si ritocca.
 
 #### Età della Veglia (prologo)

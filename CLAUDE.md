@@ -64,5 +64,5 @@ architettura: quelle stanno in `docs/`. Aggiornare la fase corrente a ogni cambi
 
 ## Fase corrente
 
-**M7, rocca e borgo sul mondo generato**: piano in 8 passi in `docs/ESPLORAZIONE_3D.md`. M0–M5 completate;
+**M7, rocca e borgo sul mondo generato**: piano in 8 passi in `docs/ESPLORAZIONE_3D.md`; mondo regionale di 120×90 km. M0–M5 completate;
 M6 (generatore del mondo) fatta, prova dell'utente in sospeso. La versione 2D resta nella cronologia git (`2c869fa`).
