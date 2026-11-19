@@ -116,7 +116,7 @@ function indiceFiumi(carta) {
 export const VALICHI = {
   // m: quota del valico (deciso con l'utente: un valico vero sta tra ~1000 e ~2000 m; più in basso, in collina,
   // una sella tra due valli è semmai un buon posto per una rocca; più in alto si va verso le forcelle).
-  quota: [1000, 2000],
+  quota: [1000, 2500],            // fino a ~2500 m i valichi alti (deciso con l'utente; li affronta chi gioca)
   sopraFondovalle: 300,           // m: il valico sta almeno così sopra il fondovalle di entrambe le valli
   discesa: 30,                    // km: al più tanti passi di flusso per arrivare al fiume della valle
   deviazione: 25,                 // km: fuori dal valico, le due valli si raggiungono solo con un giro più lungo
@@ -466,9 +466,24 @@ export function scegliLuoghi(carta, L = LUOGHI) {
   };
 }
 
+/**
+ * Valichi della Carta dai passi tra grandi valli contrapposte (carta.valichiCarta, js/mondo/carta.js), nel formato
+ * dei luoghi; se la Carta non li ha (Carte di prima), le selle cercate da trovaValichi.
+ */
+export function valichiDaCarta(carta, V = VALICHI) {
+  if (!carta.valichiCarta) return trovaValichi(carta, V);
+  const seme = derivaSeme(carta.seme, 950);
+  return carta.valichiCarta.map((v, id) => ({
+    id, x: v.x, y: v.y, quota: v.quota, scavo: v.scavo,
+    sopra: v.quota - Math.max(v.valli[0].quota, v.valli[1].quota),
+    deviazione: v.deviazione, valli: v.valli,
+    presidio: hashUnita(Math.floor(v.x), Math.floor(v.y), seme) < V.presidio,
+  }));
+}
+
 /** Aggiunge `carta.valichi`, `carta.luoghi`, `carta.candidatiLuoghi` e le statistiche alla Carta. */
 export function aggiungiLuoghi(carta) {
-  carta.valichi = trovaValichi(carta);
+  carta.valichi = valichiDaCarta(carta);
   const { luoghi, candidati, info } = scegliLuoghi(carta);
   carta.luoghi = luoghi;
   carta.candidatiLuoghi = candidati;
