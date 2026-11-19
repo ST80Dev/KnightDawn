@@ -1,5 +1,6 @@
 // Knight Dawn — cavaliere 3D (milestone M2; collisioni con il castello da M4)
-// Modello low-poly costruito con primitive Three.js, animazione procedurale e movimento sul terreno.
+// Modello simil-realistico costruito via codice (forme tornite, acciaio che riflette il cielo),
+// animazione procedurale e movimento sul terreno.
 //
 // Convenzioni del modello: origine ai piedi, asse Y in alto, il cavaliere guarda verso +Z locale.
 // Il suo lato destro è quindi -X (spada al fianco sinistro, scudo sul braccio sinistro, +X).
@@ -58,37 +59,67 @@ const ANCA_X = 0.10;            // distanza laterale delle anche dal centro
 const BACINO_MIN = -0.14;       // m: di quanto può abbassarsi al massimo il bacino (no accovacciate)
 const BACINO_MIN_CORSA = -0.05; // m: idem in corsa piena (fase di volo)
 
+// Stile simil-realistico (docs/GRAFICA_3D.md): forme tornite e arrotondate, materiali fisici.
+// L'acciaio riflette un ambiente generato dal cielo della scena (aggiornaRiflessi), che segue il
+// ciclo giorno/notte: senza, il metallo apparirebbe nero.
 const COL = {
-  acciaio:     '#8d949b',
-  acciaioScuro:'#575c62',
-  sopraveste:  PAL.rossoBandiera || '#8a1010',
-  mantello:    '#5a1410',
-  cuoio:       PAL.marrTetto || '#6a3a18',
-  oro:         '#c8a030',
-  fessura:     '#16100a',
+  acciaio:     { color: '#c3c8cd', metalness: 0.9, roughness: 0.34 },
+  acciaioScuro:{ color: '#7d838a', metalness: 0.85, roughness: 0.55 },   // giunture, guanti, scarpe
+  maglia:      { color: '#6a6f75', metalness: 0.8, roughness: 0.7 },    // cotta di maglia
+  sopraveste:  { color: PAL.rossoBandiera || '#8a1010', metalness: 0, roughness: 0.88 },
+  mantello:    { color: '#5a1410', metalness: 0, roughness: 0.92 },
+  cuoio:       { color: '#4e2c14', metalness: 0, roughness: 0.68 },
+  ottone:      { color: '#c9a24a', metalness: 0.9, roughness: 0.32 },
+  legno:       { color: '#6b4a2c', metalness: 0, roughness: 0.8 },
+  fessura:     { color: '#0c0906', metalness: 0, roughness: 1 },
 };
 
 // ─── Costruzione del modello ────────────────────────────────────────────
 
 function materiali() {
   const m = {};
-  for (const [k, c] of Object.entries(COL)) {
-    m[k] = new THREE.MeshLambertMaterial({ color: c, flatShading: true });
-  }
+  for (const [k, p] of Object.entries(COL)) m[k] = new THREE.MeshStandardMaterial(p);
   m.mantello.side = THREE.DoubleSide;
+  m.sopraveste.side = THREE.DoubleSide;   // la falda è un tronco di cono aperto
+  return m;
+}
+
+function mesh(geo, mat, x = 0, y = 0, z = 0) {
+  const m = new THREE.Mesh(geo, mat);
+  m.position.set(x, y, z);
   return m;
 }
 
 function box(w, h, d, mat, x = 0, y = 0, z = 0) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-  m.position.set(x, y, z);
-  return m;
+  return mesh(new THREE.BoxGeometry(w, h, d), mat, x, y, z);
 }
 
 function cyl(rTop, rBot, h, seg, mat, x = 0, y = 0, z = 0) {
-  const m = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, h, seg), mat);
-  m.position.set(x, y, z);
-  return m;
+  return mesh(new THREE.CylinderGeometry(rTop, rBot, h, seg), mat, x, y, z);
+}
+
+/**
+ * Solido di rotazione attorno all'asse Y. profilo: [[raggio, y], ...] dall'alto in basso o viceversa.
+ * sx/sz schiacciano la sezione (ellisse); seg = segmenti attorno all'asse.
+ */
+function tornio(profilo, mat, { seg = 20, sx = 1, sz = 1, x = 0, y = 0, z = 0 } = {}) {
+  const geo = new THREE.LatheGeometry(profilo.map(([r, py]) => new THREE.Vector2(r, py)), seg);
+  geo.scale(sx, 1, sz);
+  geo.computeVertexNormals();
+  return mesh(geo, mat, x, y, z);
+}
+
+/** Calotta sferica (cupola) di apertura `apertura` radianti, con il polo verso +Y. */
+function calotta(r, apertura, mat, seg = 18) {
+  return mesh(new THREE.SphereGeometry(r, seg, Math.max(4, Math.round(seg / 2)), 0, Math.PI * 2, 0, apertura), mat);
+}
+
+/** Incurva una geometria come se fosse appoggiata su un cilindro verticale: z -= k·x². */
+function incurva(geo, k) {
+  const p = geo.attributes.position;
+  for (let i = 0; i < p.count; i++) p.setZ(i, p.getZ(i) - k * p.getX(i) * p.getX(i));
+  geo.computeVertexNormals();
+  return geo;
 }
 
 function pivot(x, y, z, ...figli) {
@@ -98,74 +129,269 @@ function pivot(x, y, z, ...figli) {
   return g;
 }
 
+/** Scarpa di ferro (sabaton): lamine sovrapposte sul collo del piede, punta arrotondata, suola di cuoio. */
+function scarpa(m) {
+  const g = new THREE.Group();
+  g.add(box(0.11, 0.02, 0.27, m.cuoio, 0, -PIEDE + 0.01, 0.05));                 // suola
+  const LAMINE = 4;
+  for (let i = 0; i < LAMINE; i++) {
+    const t = i / (LAMINE - 1);
+    const r = 0.06 - 0.012 * t;
+    const lam = new THREE.CylinderGeometry(r, r, 0.065, 14, 1, true, -Math.PI / 2, Math.PI);
+    lam.rotateZ(Math.PI / 2);                                  // asse lungo X, mezzo cilindro verso l'alto
+    const s = mesh(lam, m.acciaioScuro, 0, -PIEDE + 0.02, -0.04 + t * 0.15);
+    s.scale.set(0.9, 0.95 - 0.25 * t, 1);
+    g.add(s);
+  }
+  const punta = calotta(0.05, Math.PI / 2, m.acciaioScuro, 14);
+  punta.rotation.x = Math.PI / 2;                              // cupola in avanti
+  punta.scale.set(0.95, 1.4, 0.55);
+  punta.position.set(0, -PIEDE + 0.02, 0.15);
+  g.add(punta);
+  const tallone = calotta(0.055, Math.PI / 2, m.acciaioScuro, 14);
+  tallone.rotation.x = -Math.PI / 2;
+  tallone.scale.set(0.95, 0.8, 0.9);
+  tallone.position.set(0, -PIEDE + 0.03, -0.06);
+  g.add(tallone);
+  return g;
+}
+
 /** Gamba: anca → coscia → ginocchio → stinco → caviglia → piede. */
 function gamba(m, x) {
-  const caviglia = pivot(0, -STINCO, 0,
-    box(0.14, PIEDE, 0.27, m.acciaioScuro, 0, -PIEDE / 2, 0.05),
-  );
+  const esterno = Math.sign(x) || 1;   // lato esterno della gamba (+X per la sinistra)
+  const caviglia = pivot(0, -STINCO, 0, scarpa(m));
+
+  const ginocchiera = calotta(0.066, 1.3, m.acciaio, 16);
+  ginocchiera.rotation.x = Math.PI / 2;                        // cupola rivolta in avanti
+  ginocchiera.scale.set(1, 1, 0.9);
+  ginocchiera.position.set(0, -0.005, 0.045);
+  const ventaglio = cyl(0.055, 0.055, 0.008, 16, m.acciaio, 0.065 * esterno, 0, 0.02);   // ala esterna
+  ventaglio.rotation.z = Math.PI / 2;
+  ventaglio.scale.set(1, 1, 0.8);
+
   const ginocchio = pivot(0, -COSCIA, 0,
-    box(0.13, STINCO + 0.02, 0.15, m.acciaio, 0, -STINCO / 2, 0),
-    box(0.10, 0.09, 0.05, m.acciaioScuro, 0, 0.0, 0.08),         // ginocchiera
+    // schiniere: polpaccio più largo, caviglia stretta
+    tornio([[0.0, -STINCO + 0.005], [0.048, -STINCO + 0.01], [0.05, -STINCO + 0.06], [0.066, -0.2],
+      [0.072, -0.12], [0.064, -0.04], [0.06, 0.0], [0.0, 0.0]], m.acciaio, { sz: 1.12 }),
+    ginocchiera, ventaglio,
     caviglia,
   );
   const anca = pivot(x, ALTEZZA_ANCA, 0,
-    box(0.15, COSCIA, 0.17, m.acciaio, 0, -COSCIA / 2, 0),
+    // maglia sotto, cosciale sopra (la placca copre davanti e di lato)
+    tornio([[0.0, 0.02], [0.085, 0.02], [0.088, -0.1], [0.075, -0.3], [0.066, -COSCIA + 0.02],
+      [0.0, -COSCIA + 0.02]], m.maglia, { sz: 1.05 }),
+    tornio([[0.093, 0.0], [0.094, -0.1], [0.082, -0.3], [0.072, -COSCIA + 0.05]], m.acciaio,
+      { seg: 20, sz: 1.08 }),
     ginocchio,
   );
   return { anca, ginocchio, caviglia };
 }
 
+/** Guanto di ferro: polsino svasato, dorso a lamine, dita chiuse a pugno, pollice. */
+function guanto(m) {
+  const g = new THREE.Group();
+  g.add(tornio([[0.046, 0.0], [0.05, -0.02], [0.066, -0.07], [0.064, -0.08]], m.acciaioScuro));     // polsino
+  const dorso = new THREE.Mesh(new THREE.SphereGeometry(0.048, 14, 10), m.acciaioScuro);
+  dorso.scale.set(0.75, 1.25, 1.0);
+  dorso.position.set(0, -0.12, 0.005);
+  g.add(dorso);
+  const dita = new THREE.Mesh(new THREE.CapsuleGeometry(0.026, 0.06, 4, 10), m.acciaioScuro);
+  dita.rotation.z = Math.PI / 2;
+  dita.position.set(0, -0.165, 0.03);
+  g.add(dita);
+  const pollice = new THREE.Mesh(new THREE.CapsuleGeometry(0.016, 0.04, 4, 8), m.acciaioScuro);
+  pollice.rotation.x = 0.6;
+  pollice.position.set(0, -0.125, 0.055);
+  g.add(pollice);
+  return g;
+}
+
 /** Braccio: spalla → braccio → gomito → avambraccio → guanto. Restituisce { spalla, gomito }. */
 function braccio(m, x) {
+  const esterno = Math.sign(x) || 1;
+  const cubitiera = calotta(0.06, 1.3, m.acciaio, 16);
+  cubitiera.rotation.x = -Math.PI / 2;                         // cupola rivolta all'indietro (gomito)
+  cubitiera.position.set(0, 0, -0.03);
+  const ala = cyl(0.05, 0.05, 0.008, 16, m.acciaio, 0.058 * esterno, 0, -0.005);
+  ala.rotation.z = Math.PI / 2;
   const gomito = pivot(0, -0.30, 0,
-    box(0.11, 0.26, 0.12, m.acciaio, 0, -0.13, 0),
-    box(0.10, 0.10, 0.11, m.acciaioScuro, 0, -0.30, 0),
+    tornio([[0.0, 0.0], [0.052, 0.0], [0.056, -0.06], [0.05, -0.2], [0.045, -0.25], [0.0, -0.25]],
+      m.acciaio, { sz: 1.05 }),                                // bracciale
+    cubitiera, ala,
+    pivot(0, -0.24, 0, guanto(m)),
   );
   const spalla = pivot(x, 0.42, 0,
-    box(0.12, 0.30, 0.13, m.acciaio, 0, -0.15, 0),
+    tornio([[0.0, 0.02], [0.064, 0.02], [0.068, -0.08], [0.058, -0.28], [0.0, -0.28]], m.acciaio,
+      { sz: 1.05 }),                                           // cannone del braccio
     gomito,
   );
   return { spalla, gomito };
 }
 
-/** Scudo a goccia (heater) rosso con croce d'oro; la faccia guarda verso +Z del gruppo. */
-function scudo(m) {
-  const s = new THREE.Shape();
-  s.moveTo(-0.24, 0.30);
-  s.lineTo(0.24, 0.30);
-  s.lineTo(0.24, 0.05);
-  s.quadraticCurveTo(0.24, -0.18, 0, -0.33);
-  s.quadraticCurveTo(-0.24, -0.18, -0.24, 0.05);
-  s.closePath();
-  const geo = new THREE.ExtrudeGeometry(s, { depth: 0.035, bevelEnabled: false, curveSegments: 3 });
-  geo.translate(0, 0, -0.0175);
+/** Spallaccio a lamine sovrapposte, appoggiato sulla spalla (lato: -1 destra, +1 sinistra). */
+function spallaccio(m, lato) {
   const g = new THREE.Group();
-  g.add(new THREE.Mesh(geo, m.sopraveste));
-  g.add(box(0.08, 0.50, 0.01, m.oro, 0, -0.01, 0.022));     // palo
-  g.add(box(0.44, 0.08, 0.01, m.oro, 0, 0.13, 0.022));      // fascia
+  const LAMINE = 4;
+  for (let i = 0; i < LAMINE; i++) {
+    const c = calotta(0.13 - i * 0.006, 1.05 - i * 0.06, m.acciaio, 20);
+    c.scale.set(1, 0.75, 0.95);
+    c.position.set(0.012 * i * lato, -0.045 * i, 0);
+    c.rotation.z = -lato * (0.35 + i * 0.12);                  // si apre verso l'esterno e in basso
+    g.add(c);
+  }
+  // bordo rinforzato della lamina più alta
+  const bordo = new THREE.Mesh(new THREE.TorusGeometry(0.105, 0.007, 6, 24), m.acciaioScuro);
+  bordo.rotation.x = Math.PI / 2;
+  bordo.scale.set(1, 0.95, 1);
+  bordo.position.set(0, 0.075, 0);
+  bordo.rotation.y = 0;
+  g.add(bordo);
   return g;
+}
+
+/** Elmo: grande elmo a sommità ogivale, con fessure per gli occhi, fori di respirazione e rinforzi in ottone. */
+function elmo(m) {
+  const g = new THREE.Group();
+  const SZ = 1.1;   // un po' più profondo che largo (il viso sporge)
+  g.add(tornio([[0.0, 0.0], [0.122, 0.0], [0.13, 0.05], [0.134, 0.15], [0.13, 0.22], [0.112, 0.27],
+    [0.075, 0.305], [0.03, 0.322], [0.0, 0.325]], m.acciaio, { seg: 28, sz: SZ }));
+  const fronte = 0.134 * SZ;                                   // raggio davanti all'altezza delle fessure
+  for (const sx of [-1, 1]) {                                  // fessure per gli occhi, una per lato
+    const f = box(0.075, 0.016, 0.03, m.fessura, sx * 0.045, 0.172, fronte - 0.01);
+    f.rotation.y = sx * 0.32;
+    g.add(f);
+  }
+  // rinforzi: fascia orizzontale sopra le fessure e croce verticale al centro del viso
+  g.add(tornio([[0.136, 0.205], [0.137, 0.19]], m.ottone, { seg: 28, sz: SZ }));
+  const croce = box(0.026, 0.2, 0.016, m.ottone, 0, 0.09, fronte + 0.002);
+  g.add(croce);
+  const bracci = box(0.18, 0.022, 0.016, m.ottone, 0, 0.11, fronte - 0.006);
+  incurva(bracci.geometry, 1.6);
+  g.add(bracci);
+  // fori di respirazione sulla guancia destra (-X)
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) {
+      const a = -Math.PI / 2 + 0.55 + c * 0.17;                // angolo attorno all'asse, davanti a destra
+      const foro = cyl(0.007, 0.007, 0.012, 6, m.fessura,
+        Math.cos(a) * 0.131, 0.07 + r * 0.03, -Math.sin(a) * 0.131 * SZ);
+      foro.rotation.set(Math.PI / 2, 0, 0);
+      foro.lookAt(foro.position.clone().multiplyScalar(2));
+      foro.rotateX(Math.PI / 2);
+      g.add(foro);
+    }
+  }
+  return g;
+}
+
+/** Scudo a goccia (heater) curvo, con bordo di ferro e croce d'oro; la faccia guarda verso +Z del gruppo. */
+function scudo(m) {
+  const forma = (k) => {
+    const s = new THREE.Shape();
+    s.moveTo(-0.24 * k, 0.30 * k);
+    s.lineTo(0.24 * k, 0.30 * k);
+    s.lineTo(0.24 * k, 0.05 * k);
+    s.quadraticCurveTo(0.24 * k, -0.18 * k, 0, -0.33 * k);
+    s.quadraticCurveTo(-0.24 * k, -0.18 * k, -0.24 * k, 0.05 * k);
+    s.closePath();
+    return s;
+  };
+  const CURVA = 0.9;
+  const tavola = new THREE.ExtrudeGeometry(forma(1), {
+    depth: 0.03, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 1, curveSegments: 10,
+  });
+  tavola.translate(0, 0, -0.015);
+  // suddivisione per poterla incurvare: si ricampiona con molti vertici lungo X
+  const g = new THREE.Group();
+  const facciaGeo = incurva(suddividiX(tavola, 0.03), CURVA);
+  g.add(new THREE.Mesh(facciaGeo, [m.sopraveste, m.legno]));
+  // bordo di ferro: forma esterna meno forma interna
+  const anello = forma(1.0);
+  anello.holes.push(forma(0.93));
+  const bordo = new THREE.ExtrudeGeometry(anello, { depth: 0.04, bevelEnabled: false, curveSegments: 10 });
+  bordo.translate(0, 0, -0.019);
+  g.add(new THREE.Mesh(incurva(suddividiX(bordo, 0.03), CURVA), m.acciaioScuro));
+  // croce d'oro, incurvata come la tavola
+  const palo = new THREE.BoxGeometry(0.075, 0.5, 0.008, 1, 1, 1);
+  palo.translate(0, -0.01, 0.022);
+  g.add(new THREE.Mesh(incurva(palo, CURVA), m.ottone));
+  const fascia = new THREE.BoxGeometry(0.42, 0.075, 0.008, 12, 1, 1);
+  fascia.translate(0, 0.13, 0.022);
+  g.add(new THREE.Mesh(incurva(fascia, CURVA), m.ottone));
+  // umbone al centro
+  const umbone = calotta(0.035, 1.2, m.ottone, 14);
+  umbone.rotation.x = Math.PI / 2;
+  umbone.scale.set(1, 0.5, 1);
+  umbone.position.set(0, 0.13, 0.022);
+  g.add(umbone);
+  return g;
+}
+
+/**
+ * Le facce piane delle ExtrudeGeometry hanno pochi vertici: per incurvarle si spezzano i triangoli
+ * finché nessun lato supera `passo` metri lungo X (suddivisione ricorsiva al punto medio).
+ */
+function suddividiX(geo, passo) {
+  const src = geo.index ? geo.toNonIndexed() : geo;
+  const pos = src.attributes.position;
+  const gruppi = src.groups.length ? src.groups : [{ start: 0, count: pos.count, materialIndex: 0 }];
+  const out = [];
+  const outGruppi = [];
+  const v = (i) => new THREE.Vector3().fromBufferAttribute(pos, i);
+  function spezza(a, b, c, liv) {
+    const lati = [[a, b, c], [b, c, a], [c, a, b]];
+    let peggiore = null, maxL = passo;
+    for (const [p, q, r] of lati) {
+      const l = Math.abs(p.x - q.x);
+      if (l > maxL) { maxL = l; peggiore = [p, q, r]; }
+    }
+    if (!peggiore || liv > 8) { out.push(a, b, c); return 3; }
+    const [p, q, r] = peggiore;
+    const mid = p.clone().add(q).multiplyScalar(0.5);
+    return spezza(p, mid, r, liv + 1) + spezza(mid, q, r, liv + 1);
+  }
+  for (const gr of gruppi) {
+    const inizio = out.length;
+    for (let i = gr.start; i < gr.start + gr.count; i += 3) spezza(v(i), v(i + 1), v(i + 2), 0);
+    outGruppi.push({ start: inizio, count: out.length - inizio, materialIndex: gr.materialIndex });
+  }
+  const res = new THREE.BufferGeometry().setFromPoints(out);
+  for (const gr of outGruppi) res.addGroup(gr.start, gr.count, gr.materialIndex);
+  return res;
 }
 
 /** Spada nel fodero, appesa alla cintura: la lama scende lungo -Y, l'elsa sta sopra l'origine. */
 function spadaNelFodero(m) {
   const g = new THREE.Group();
-  g.add(box(0.06, 0.66, 0.03, m.cuoio, 0, -0.35, 0));                 // fodero
-  g.add(box(0.065, 0.05, 0.035, m.oro, 0, -0.66, 0));                 // puntale
-  g.add(box(0.20, 0.03, 0.04, m.oro, 0, 0.0, 0));                     // guardia
-  g.add(cyl(0.018, 0.018, 0.16, 6, m.cuoio, 0, 0.095, 0));            // impugnatura
-  g.add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.035, 0), m.oro));
-  g.children.at(-1).position.y = 0.19;                                // pomolo
+  const fodero = tornio([[0.0, 0.0], [0.03, 0.0], [0.03, -0.5], [0.022, -0.64], [0.0, -0.66]], m.cuoio,
+    { seg: 12, sz: 0.45 });
+  g.add(fodero);
+  g.add(tornio([[0.032, 0.0], [0.032, -0.05], [0.0, -0.05]], m.ottone, { seg: 12, sz: 0.5 }));       // bocchetta
+  g.add(tornio([[0.0, -0.58], [0.025, -0.58], [0.024, -0.64], [0.0, -0.67]], m.ottone,
+    { seg: 12, sz: 0.5 }));                                                                      // puntale
+  // guardia: barra che si assottiglia verso le estremità
+  const guardia = tornio([[0.0, -0.11], [0.012, -0.1], [0.016, 0.0], [0.012, 0.1], [0.0, 0.11]], m.acciaio,
+    { seg: 10 });
+  guardia.rotation.z = Math.PI / 2;
+  guardia.position.y = 0.01;
+  g.add(guardia);
+  g.add(tornio([[0.017, 0.02], [0.019, 0.09], [0.017, 0.16]], m.cuoio, { seg: 10, y: 0 }));          // impugnatura
+  const pomolo = cyl(0.035, 0.035, 0.022, 18, m.ottone, 0, 0.19, 0);                              // a disco
+  pomolo.rotation.x = Math.PI / 2;
+  g.add(pomolo);
   return g;
 }
 
-/** Mantello: pannello sottile che si allarga verso il basso, appeso alle spalle. */
+/** Mantello: telo che si allarga verso il basso e avvolge un po' la schiena, appeso alle spalle. */
 function mantello(m) {
-  const geo = new THREE.BoxGeometry(0.42, 1.0, 0.025, 1, 2, 1);
-  geo.translate(0, -0.5, 0);
+  const geo = new THREE.PlaneGeometry(0.46, 1.02, 8, 12);
+  geo.translate(0, -0.51, 0);
   const p = geo.attributes.position;
   for (let i = 0; i < p.count; i++) {
-    const t = -p.getY(i);                     // 0 in alto, 1 in basso
-    p.setX(i, p.getX(i) * (1 + 0.32 * t));
+    const t = -p.getY(i);                      // 0 in alto, 1 in basso
+    const x = p.getX(i) * (1 + 0.38 * t);
+    p.setX(i, x);
+    // avvolge la schiena (centro più indietro dei bordi) e fa due pieghe verticali morbide
+    p.setZ(i, 1.1 * x * x - 0.012 * Math.cos(x * 28) * t);
   }
   geo.computeVertexNormals();
   return new THREE.Mesh(geo, m.mantello);
@@ -179,8 +405,9 @@ function buildModel() {
   const corpo = new THREE.Group();           // oscillazione verticale del passo
   root.add(corpo);
 
-  // Bacino (cotta di maglia) e gambe
-  corpo.add(box(0.36, 0.16, 0.24, m.acciaioScuro, 0, 0.93, 0));
+  // Bacino: gonnellino di maglia sotto la sopraveste, e gambe
+  corpo.add(tornio([[0.17, 1.02], [0.19, 0.94], [0.205, 0.84], [0.0, 0.84]], m.maglia,
+    { seg: 20, sz: 0.68 }));
   const gambaD = gamba(m, -ANCA_X);
   const gambaS = gamba(m, ANCA_X);
   corpo.add(gambaD.anca, gambaS.anca);
@@ -188,29 +415,37 @@ function buildModel() {
   // Busto: pivot alla vita, ruota per inclinarsi in corsa
   const busto = pivot(0, 0.98, 0);
   corpo.add(busto);
-  busto.add(box(0.44, 0.50, 0.26, m.sopraveste, 0, 0.24, 0));                      // sopraveste
-  const gonna = cyl(0.21, 0.26, 0.32, 8, m.sopraveste, 0, -0.12, 0);               // falda
-  gonna.scale.z = 0.62;
-  busto.add(gonna);
-  busto.add(box(0.46, 0.06, 0.28, m.cuoio, 0, 0.02, 0));                           // cintura
-  busto.add(box(0.07, 0.06, 0.02, m.oro, 0, 0.02, 0.145));                         // fibbia
-  busto.add(box(0.06, 0.30, 0.01, m.oro, 0, 0.27, 0.133));                         // croce sul petto
-  busto.add(box(0.24, 0.06, 0.01, m.oro, 0, 0.33, 0.133));
-  for (const sx of [-1, 1]) {                                                      // spallacci
-    const sp = new THREE.Mesh(new THREE.SphereGeometry(0.115, 6, 4), m.acciaio);
-    sp.position.set(0.28 * sx, 0.45, 0);
-    sp.scale.y = 0.8;
+  // torso coperto dalla sopraveste: vita, petto ampio, spalle, collo
+  busto.add(tornio([[0.0, -0.02], [0.175, -0.02], [0.185, 0.08], [0.215, 0.24], [0.22, 0.33],
+    [0.2, 0.42], [0.13, 0.5], [0.0, 0.5]], m.sopraveste, { seg: 24, sz: 0.62 }));
+  // falda della sopraveste, aperta in basso (le gambe ci si muovono dentro)
+  busto.add(tornio([[0.185, 0.03], [0.205, -0.08], [0.255, -0.3], [0.265, -0.34]], m.sopraveste,
+    { seg: 24, sz: 0.66 }));
+  // cintura con fibbia
+  const cintura = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.022, 6, 28), m.cuoio);
+  cintura.rotation.x = Math.PI / 2;
+  cintura.scale.set(1, 0.65, 0.8);
+  cintura.position.y = 0.0;
+  busto.add(cintura);
+  busto.add(box(0.06, 0.05, 0.015, m.ottone, 0, 0.0, 0.122));
+  // croce sul petto (passo 2: disegnata nella trama della stoffa)
+  const palo = new THREE.BoxGeometry(0.055, 0.3, 0.008, 1, 4, 1);
+  const fascia = new THREE.BoxGeometry(0.22, 0.055, 0.008, 8, 1, 1);
+  for (const [geo, y] of [[palo, 0.25], [fascia, 0.3]]) {
+    geo.translate(0, y, 0.134);
+    busto.add(new THREE.Mesh(incurva(geo, 1.4), m.ottone));
+  }
+  // spallacci e gorgiera
+  for (const sx of [-1, 1]) {
+    const sp = spallaccio(m, sx);
+    sp.position.set(0.25 * sx, 0.43, 0);
     busto.add(sp);
   }
-  busto.add(cyl(0.09, 0.10, 0.08, 8, m.acciaio, 0, 0.54, 0));                      // gorgiera
+  busto.add(tornio([[0.0, 0.46], [0.13, 0.46], [0.11, 0.52], [0.092, 0.58], [0.0, 0.58]], m.acciaio,
+    { seg: 24, sz: 0.95 }));
 
-  // Testa: elmo chiuso con fessura e croce frontale
-  const testa = pivot(0, 0.56, 0,
-    cyl(0.125, 0.135, 0.27, 8, m.acciaio, 0, 0.135, 0),
-    cyl(0.07, 0.125, 0.04, 8, m.acciaio, 0, 0.29, 0),
-    box(0.19, 0.025, 0.03, m.fessura, 0, 0.165, 0.122),
-    box(0.025, 0.20, 0.02, m.oro, 0, 0.10, 0.132),
-  );
+  // Testa: grande elmo
+  const testa = pivot(0, 0.56, 0, elmo(m));
   busto.add(testa);
 
   // Braccia: destro libero, sinistro regge lo scudo
@@ -219,7 +454,7 @@ function buildModel() {
   busto.add(braccioD.spalla, braccioS.spalla);
   const sc = scudo(m);
   sc.rotation.y = Math.PI / 2;               // faccia verso l'esterno (+X)
-  sc.position.set(0.085, -0.14, 0.04);
+  sc.position.set(0.09, -0.14, 0.04);
   braccioS.gomito.add(sc);
 
   // Spada al fianco sinistro, inclinata con l'elsa in avanti
@@ -230,12 +465,66 @@ function buildModel() {
 
   // Mantello appeso dietro le spalle
   const cappa = mantello(m);
-  const attaccoMantello = pivot(0, 0.47, -0.145, cappa);
+  const attaccoMantello = pivot(0, 0.47, -0.15, cappa);
   busto.add(attaccoMantello);
 
   return {
     root, corpo, busto, testa, mantello: attaccoMantello,
-    gambaD, gambaS, braccioD, braccioS,
+    gambaD, gambaS, braccioD, braccioS, materiali: m,
+  };
+}
+
+// ─── Riflessi dell'acciaio: ambiente generato dal cielo della scena ─────
+
+/**
+ * Ambiente per i riflessi: una sfera con il colore del cielo in alto, dell'orizzonte al centro e del
+ * terreno in basso, più un disco luminoso nella direzione del sole. Convertito in mappa d'ambiente
+ * (PMREM) e assegnato ai materiali del cavaliere. Si rigenera solo quando la luce cambia davvero.
+ */
+function creaRiflessi(materiali) {
+  const scena = new THREE.Scene();
+  const N = 24;
+  const sferaGeo = new THREE.SphereGeometry(10, 32, N);
+  const colori = new Float32Array(sferaGeo.attributes.position.count * 3);
+  sferaGeo.setAttribute('color', new THREE.BufferAttribute(colori, 3));
+  scena.add(new THREE.Mesh(sferaGeo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
+  const discoSole = new THREE.Mesh(new THREE.SphereGeometry(0.9, 12, 8), new THREE.MeshBasicMaterial());
+  scena.add(discoSole);
+
+  let pmrem = null, target = null, ultimaChiave = '';
+  const alto = new THREE.Color(), orizzonte = new THREE.Color(), basso = new THREE.Color(), c = new THREE.Color();
+
+  return function aggiorna(renderer, { sfondo, cielo, sole }) {
+    // Cielo in alto più carico dell'orizzonte; terreno scuro, tinto dalla luce emisferica.
+    orizzonte.copy(sfondo);
+    alto.copy(sfondo).lerp(cielo.color, 0.35).multiplyScalar(0.85);
+    basso.copy(cielo.groundColor).multiplyScalar(0.35 * Math.min(1, cielo.intensity / 0.45));
+    const soleI = sole.intensity;
+    const chiave = [orizzonte.getHexString(), basso.getHexString(), soleI.toFixed(2),
+      sole.position.x.toFixed(0), sole.position.y.toFixed(0), sole.position.z.toFixed(0)].join();
+    if (chiave === ultimaChiave) return;
+    ultimaChiave = chiave;
+
+    const p = sferaGeo.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const y = p.getY(i) / 10;                       // -1 basso → 1 alto
+      if (y >= 0) c.copy(orizzonte).lerp(alto, Math.pow(y, 0.6));
+      else c.copy(orizzonte).lerp(basso, Math.min(1, -y * 4));
+      colori[i * 3] = c.r; colori[i * 3 + 1] = c.g; colori[i * 3 + 2] = c.b;
+    }
+    sferaGeo.attributes.color.needsUpdate = true;
+    discoSole.position.copy(sole.position).normalize().multiplyScalar(9);
+    discoSole.material.color.copy(sole.color).multiplyScalar(soleI * 6);
+    discoSole.visible = soleI > 0.05;
+
+    if (!pmrem) pmrem = new THREE.PMREMGenerator(renderer);
+    const nuovo = pmrem.fromScene(scena, 0, 0.1, 50);
+    for (const mat of Object.values(materiali)) {
+      mat.envMap = nuovo.texture;
+      mat.needsUpdate = mat.needsUpdate || !target;   // la prima volta il materiale cambia programma
+    }
+    if (target) target.dispose();
+    target = nuovo;
   };
 }
 
@@ -280,6 +569,7 @@ const avvicina = (rate, dt) => 1 - Math.exp(-rate * dt);   // fattore di lerp in
 export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }, ostacoli = []) {
   const cfg = { ...KNIGHT_CFG };
   const mod = buildModel();
+  const riflessi = creaRiflessi(mod.materiali);
   const ombra = buildOmbra();
   const object = new THREE.Group();
   object.add(mod.root, ombra);
@@ -527,6 +817,11 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     cfg,
     stato,
     update,
+    /**
+     * Aggiorna i riflessi dell'acciaio con la luce attuale (cielo, sole). Da chiamare quando la luce
+     * cambia: si rigenera solo se qualcosa è davvero cambiato.
+     */
+    aggiornaRiflessi: (renderer, luci) => riflessi(renderer, luci),
     /** Punto da inquadrare (petto del cavaliere), in coordinate del mondo. */
     puntoMira(out = new THREE.Vector3()) {
       return out.set(stato.x, stato.y + 1.3, stato.z);
