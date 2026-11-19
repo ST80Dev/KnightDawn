@@ -57,9 +57,40 @@ function quoteLisce(carta) {
       if (acque[i] === ACQUA.LAGO) { base[i] = livelloAcqua[i]; fondo[i] = livelloAcqua[i] - quota[i]; }
     }
   }
+  if (carta.mare) correggiCosta(carta, base);
   q = { base, fondo };
   _liscia.set(carta, q);
   return q;
+}
+
+// La B-spline cubica non interpola: al centro di una cella vale 4/9 della cella e il resto delle vicine. Un braccio
+// di mare largo 1–2 km (celle a −40 m) fra terre a 100–200 m saliva sopra lo zero: nella Scena era terra, sulla
+// Carta mare, e la Carta non lasciava sceglierlo [segnalato dall'utente]. Comanda la Carta: si abbassano i punti di
+// controllo del mare (e si alzano quelli della terra) finché al centro di ogni cella il segno è quello della Carta.
+const COSTA_SCENA = { mare: 15, terra: 3, giri: 12 };   // m sotto/sopra lo zero al centro della cella
+
+function correggiCosta(carta, base) {
+  const { cols, rows, mare } = carta, K = COSTA_SCENA, W = [1 / 6, 4 / 6, 1 / 6];
+  const valore = (x, y) => {
+    let s = 0;
+    for (let b = -1; b <= 1; b++) {
+      const j = specchio(y + b, rows);
+      for (let a = -1; a <= 1; a++) s += W[a + 1] * W[b + 1] * base[j * cols + specchio(x + a, cols)];
+    }
+    return s;
+  };
+  for (let giro = 0; giro < K.giri; giro++) {
+    let cambiate = 0;
+    for (let y = 0; y < rows; y++) {
+      for (let x = 0; x < cols; x++) {
+        const i = y * cols + x, v = valore(x, y);
+        // Si corregge di poco più del necessario (le vicine si muovono anch'esse): converge in pochi giri.
+        if (mare[i] && v > -K.mare) { base[i] -= 1.2 * (v + K.mare) / (W[1] * W[1]); cambiate++; }
+        else if (!mare[i] && v < K.terra) { base[i] += 1.2 * (K.terra - v) / (W[1] * W[1]); cambiate++; }
+      }
+    }
+    if (!cambiate) break;
+  }
 }
 
 /**

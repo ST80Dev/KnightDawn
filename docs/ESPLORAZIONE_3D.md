@@ -571,6 +571,12 @@ sono slittati di uno. Nelle note dei passi 1–4 «passo 5/6/7» vanno letti com
      per le celle di lago e toglie poi la profondità interpolata tra le celle (a riva il terreno resta quello
      dei dintorni); in più, nella fascia attorno al lago, il terreno sale fino al livello + 0,5 m. Il letto
      dei fiumi vicino ai laghi segue la stessa riva; un immissario arriva al livello del lago.
+   - *Bracci di mare che nella Scena erano terra.* La B-spline non interpola: un braccio di mare largo 1–2 km
+     (celle a −40 m) fra terre alte saliva sopra lo zero; nella Scena era terra percorribile, sulla Carta mare
+     (non si poteva scegliere). Misurato: 44 celle di mare su 2133 (seme 48213) più che a metà terra. Comanda la
+     Carta: `correggiCosta` (scena.js) abbassa i punti di controllo del mare (al centro della cella ≤ −15 m) e
+     alza quelli della terra (≥ +3 m), in pochi giri, 3–5 ms. Ora 0 celle di mare a metà terra su 3 semi; terra
+     a metà mare 0–8 celle (resti di riva). Fiumi, giunture e terrapieni invariati.
    - *Rilievo fine a labirinto e fiumi tra gole o su terrapieni.* Misurato: il fiume non sale rispetto alla
      Carta (1 m in mediana, 26 m all'1 % in pedemonte); è il rilievo fine della Scena, generato senza sapere
      dei fiumi, a mettere colline (66 m nel 10 % dei punti, 155 m nell'1 %) o conche sul tracciato. Prima
