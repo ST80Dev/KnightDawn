@@ -31,6 +31,7 @@ instabile durante lo sviluppo. In alternativa in locale con `python -m http.serv
 | Sistema | Documento |
 |---|---|
 | Scene 3D, terreno, generatore del mondo, milestone attuali | `docs/ESPLORAZIONE_3D.md` ⭐ |
+| Stile grafico 3D, materiali, cavaliere | `docs/GRAFICA_3D.md` |
 | Visione, mondo e regole di generazione, tempo, meccaniche | `docs/GDD.md` |
 | Combattimento | `docs/COMBAT.md` |
 | Eventi | `docs/EVENTS.md` |
