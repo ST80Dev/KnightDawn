@@ -57,6 +57,15 @@ Nel codice di oggi [Probabile, da confermare con le misure del passo 1]:
    Mostra anche il nome della scheda (`WEBGL_debug_renderer_info`). **Percorso di prova**: un tasto fa percorrere alla
    camera un tragitto fisso di ~30 s (pianura, bosco fitto, rocca) e riporta medie e picchi: numeri confrontabili prima
    e dopo ogni modifica.
+   **Stato: fatto, da provare dall'utente** (`js/3d/prestazioni.js`, agganci in `main.js`). Con `F3` aperto:
+   - il pannello mostra scheda, timer GPU sì/no, profondità invertita possibile sì/no, MSAA, profondità logaritmica,
+     tempi CPU (logica, invio comandi) e GPU del fotogramma (media e picco) contro il budget;
+   - `F4` → «misura per gruppi»: ms GPU di terreno, vegetazione, edifici, personaggi, resto (⚠ se oltre il budget);
+     l'immagine è identica a quella normale (verificato pixel per pixel);
+   - `F9` (o `?prova` nell'indirizzo, parte da solo 3 s dopo la Scena): percorso di prova di ~35 s (giro dello
+     sguardo dalla vista di gioco 12 s, giro dalla vista alta 5 s; due volte, normale e per gruppi; tempo di gioco
+     fermo), poi un riquadro con i numeri da copiare. Prova di riferimento: `?seme=570549&prova` (partenza nel bosco).
+   In headless (SwiftShader) i timer GPU non ci sono: «profondità invertita possibile: sì» c'è già lì.
 2. **Fondamenta del renderer** (guadagni grandi, senza toccare i contenuti):
    - togliere la profondità logaritmica: provare `reversedDepthBuffer` (presente in three r187, richiede
      `EXT_clip_control`); se la precisione non basta, due passate (lontano: orizzonte con near ~300 m; poi si azzera la
