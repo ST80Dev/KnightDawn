@@ -145,11 +145,20 @@ export function creaNastroStrada(t, mat, altezza) {
       col.set([c.r, c.g, c.b], (i * k + j) * 3);
     }
   }
+  // Triangoli sempre rivolti verso l'alto (senso antiorario visto da sopra). Prima si giravano solo le normali, ma
+  // il materiale a due facce, vedendo il retro dei triangoli, le rigirava di nuovo verso il basso: la strada era
+  // illuminata da sotto e usciva quasi nera, «un nastro di stoffa» (segnalazione dell'utente).
   const indici = [];
+  const giu = (a, b, c) => {
+    const ux = pos[b * 3] - pos[a * 3], uz = pos[b * 3 + 2] - pos[a * 3 + 2];
+    const vx = pos[c * 3] - pos[a * 3], vz = pos[c * 3 + 2] - pos[a * 3 + 2];
+    return uz * vx - ux * vz < 0;          // componente Y del prodotto vettoriale
+  };
   for (let i = 0; i < m - 1; i++) {
     for (let j = 0; j < k - 1; j++) {
       const p = i * k + j, q = p + k;
-      indici.push(p, q, p + 1, p + 1, q, q + 1);
+      if (giu(p, q, p + 1)) indici.push(p, p + 1, q, p + 1, q + 1, q);
+      else indici.push(p, q, p + 1, p + 1, q, q + 1);
     }
   }
   const geo = new THREE.BufferGeometry();
@@ -157,10 +166,7 @@ export function creaNastroStrada(t, mat, altezza) {
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.setIndex(indici);
   geo.computeVertexNormals();
-  // Il verso dei triangoli dipende dalla direzione della strada: normali verso l'alto.
-  const n = geo.attributes.normal;
-  for (let i = 0; i < n.count; i++) if (n.getY(i) < 0) n.setXYZ(i, -n.getX(i), -n.getY(i), -n.getZ(i));
-  mat.side = THREE.DoubleSide;
+  mat.side = THREE.FrontSide;
   const mesh = new THREE.Mesh(geo, mat);
   mesh.name = 'strada';
   return mesh;
