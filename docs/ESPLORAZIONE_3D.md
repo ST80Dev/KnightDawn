@@ -1535,6 +1535,12 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      (fino a −35 %); **legno morto** (5 % di alberi secchi anche nei boschi); **rive** con ghiaia e sassi. Da fare: campi,
      orti, siepi e muretti (shader del suolo e luoghi, con le sessioni M1, M6 e M7), alvei con ghiaia nell'acqua,
      fiori, biomi meno curati (palude, tundra, deserto); le cose della campagna con la milestone dei luoghi.
+   - *Suolo della campagna* (segnalato dalla sessione delle prestazioni: macchie scure dove il bosco è stato
+     diradato): il colore del terreno (`coloreMondo`) dipingeva il verde cupo del bosco dalla copertura anche dove
+     gli alberi non ci sono più → nella campagna (`campagnaMondo`) il bosco passa al colore del prato (~13 ms in più
+     per blocco vicino a un luogo, solo al caricamento). La lettiera (`aSuolo`) segue gli alberi davvero piantati
+     (chiome sfocate su 3×3 vertici) e non solo la copertura: nel bosco fitto resta quasi uguale (media da 0,94 a
+     0,91), attorno alla rocca del seme 570549 i vertici con lettiera > 0,3 scendono da 14 500 a 3 500.
 3. **Collisioni.** Tronchi, massi e affioramenti come ostacoli a griglia. *Prova:* si attraversa un bosco fitto
    scivolando tra i tronchi senza incastrarsi; la camera resta usabile nel bosco.
 4. **Arbusti e rocce.** Cespugli (macchia, margini, sottobosco), arbusti d'alta quota, sassi, massi, affioramenti
