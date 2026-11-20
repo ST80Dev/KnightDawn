@@ -103,7 +103,7 @@ export function creaAcqueScena(acqua, meta, colore, centro) {
   // Strade (js/mondo/strade.js): nastro della carreggiata sul terreno disegnato.
   if (acqua.strade?.length && acqua.altezza) {
     const ms = materialeStrada(centro);
-    for (const t of acqua.strade) gruppo.add(creaNastroStrada(t, ms, acqua.altezza));
+    acqua.strade.forEach((t, n) => gruppo.add(creaNastroStrada(t, ms, acqua.altezza, acqua.quoteStrade?.[n])));
   }
   return gruppo.children.length ? gruppo : null;
 }
@@ -115,6 +115,7 @@ const STRADA = {
   colore: '#a89272', solchi: 0.85, centro: '#7f8a4c',
   sezione: [-1, -0.45, 0, 0.45, 1],            // vertici attraverso la carreggiata (× semilarghezza)
   sopra: [0.08, 0.2, 0.25, 0.2, 0.08],         // m sopra il terreno disegnato per ciascun vertice: il bordo tocca terra
+  scarto: 0.3,                                 // m: quanto la quota della strada può staccarsi dal terreno disegnato
   // Bordo e superficie (shader, docs/GRAFICA_3D.md): il bordo si mangia fino al 22% della semilarghezza con un rumore
   // del mondo e sfuma nell'erba calpestata; chiazze di tono (2–6 m) e ghiaia scura entro 30 m dalla camera.
   erbaPestata: '#80804e', mangiaBordo: 0.22, periodo: 8192,
@@ -187,9 +188,10 @@ float rumoreStrada(vec2 p) {
 
 /**
  * Nastro di una strada lungo [x, z, semilarghezza, …] (coordinate locali): 5 vertici per sezione (bordi, solchi delle
- * ruote, centro), ciascuno alla quota del terreno disegnato `altezza(x, z)` più STRADA.sopra.
+ * ruote, centro), ciascuno alla quota del terreno disegnato `altezza(x, z)` (o della strada, `quote[i]`, se data) più
+ * STRADA.sopra.
  */
-export function creaNastroStrada(t, mat, altezza) {
+export function creaNastroStrada(t, mat, altezza, quote = null) {
   const m = t.length / 3, S = STRADA.sezione, k = S.length;
   const pos = new Float32Array(m * k * 3), col = new Float32Array(m * k * 3), trasv = new Float32Array(m * k);
   const base = new THREE.Color(STRADA.colore), erba = new THREE.Color(STRADA.centro), c = new THREE.Color();
@@ -202,7 +204,12 @@ export function creaNastroStrada(t, mat, altezza) {
     const variazione = 0.92 + 0.16 * (Math.sin(x * 0.37 + z * 0.23) * 0.5 + 0.5);
     for (let j = 0; j < k; j++) {
       const px = x - tz * w * S[j], pz = z + tx * w * S[j];
-      pos.set([px, altezza(px, pz) + STRADA.sopra[j], pz], (i * k + j) * 3);
+      // Con la quota della strada (generaScena: acqua.quoteStrade) il nastro è piano in larghezza, come la
+      // carreggiata spianata; resta entro ±STRADA.scarto dal terreno disegnato (negli alvei la quota è quella del
+      // futuro ponte o guado: niente nastro sospeso sull'acqua, niente nastro sepolto).
+      const suolo = altezza(px, pz);
+      const h = quote ? Math.min(Math.max(quote[i], suolo - STRADA.scarto), suolo + STRADA.scarto) : suolo;
+      pos.set([px, h + STRADA.sopra[j], pz], (i * k + j) * 3);
       trasv[i * k + j] = S[j];
       c.copy(base);
       if (w > 1.2 && Math.abs(S[j]) === 0.45) c.multiplyScalar(STRADA.solchi);     // solchi delle ruote
