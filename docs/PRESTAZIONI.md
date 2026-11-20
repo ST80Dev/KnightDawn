@@ -66,7 +66,13 @@ Nel codice di oggi [Probabile, da confermare con le misure del passo 1]:
      sguardo dalla vista di gioco 12 s, giro dalla vista alta 5 s; due volte, normale e per gruppi; tempo di gioco
      fermo), poi un riquadro con i numeri da copiare. Prova di riferimento: `?seme=570549&prova` (partenza nel bosco).
    In headless (SwiftShader) i timer GPU non ci sono: «profondità invertita possibile: sì» c'è già lì.
-2. **Fondamenta del renderer** (guadagni grandi, senza toccare i contenuti):
+2. **Fondamenta del renderer** — *prima si misura*: parametri facoltativi del percorso di prova (senza parametri il gioco
+   non cambia): `&profondita=log` (predefinita) | `invertita` | `normale`, `&msaa=0`, `&centro=x,z` (partenza in un
+   punto scelto, m del mondo; bosco fitto del seme 570549: `&centro=99937,43289`). [Probabile] la profondità invertita
+   dà precisione solo con un buffer di profondità in virgola mobile: con quello del canvas (24 bit interi) e la scena da
+   0,2 m a 130 km può far sfarfallare il lontano; le prove dicono quanto vale il guadagno prima di riscrivere il
+   renderer (profondità invertita su un render target a 32 bit, o due passate lontano/vicino).
+   Seguito: (guadagni grandi, senza toccare i contenuti):
    - togliere la profondità logaritmica: provare `reversedDepthBuffer` (presente in three r187, richiede
      `EXT_clip_control`); se la precisione non basta, due passate (lontano: orizzonte con near ~300 m; poi si azzera la
      profondità e si disegna il vicino con far ~3 km);

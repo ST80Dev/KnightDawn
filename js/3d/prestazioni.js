@@ -34,6 +34,8 @@ export function creaProfilatore(renderer) {
     clipControl: supportate.includes('EXT_clip_control'),     // serve per la profondità invertita
     campioniMSAA: gl.getParameter(gl.SAMPLES),
     profonditaLog: !!renderer.capabilities.logarithmicDepthBuffer,
+    profonditaInvertita: !!renderer.capabilities.reversedDepthBuffer,
+    antialias: !!renderer.getContextAttributes()?.antialias,
   };
 
   // ─── Query dei tempi GPU (una sola attiva alla volta; i risultati arrivano qualche fotogramma dopo) ───
