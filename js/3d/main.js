@@ -40,7 +40,11 @@ const NEBBIA_ORIZZONTE = [10000, 170000];
 const LONTANO = 130000;                   // m: distanza massima disegnata dalla camera
 const PARAMETRI = new URL(window.location.href).searchParams;
 const TAVULLIA = PARAMETRI.get('terreno') === 'tavullia';
-const PROVA_PRESTAZIONI = PARAMETRI.has('prova');             // percorso di prova: niente salvataggi (vedi init)   // scena di prova (terreno reale, castello)
+const PROVA_PRESTAZIONI = PARAMETRI.has('prova');             // percorso di prova: niente salvataggi (vedi init)
+const CENTRO_PROVA = (() => {                                   // ?centro=x,z (m del mondo) per il percorso di prova
+  const v = (PARAMETRI.get('centro') || '').split(',').map(Number);
+  return v.length === 2 && v.every(Number.isFinite) ? v : null;
+})();   // scena di prova (terreno reale, castello)
 const COLORE_ACQUA = '#4d7282';
 const PROFONDITA_GUADO = 0.9;             // m d'acqua oltre i quali il cavaliere non entra (fiumi piccoli: si guadano)
 
@@ -48,7 +52,14 @@ const PROFONDITA_GUADO = 0.9;             // m d'acqua oltre i quali il cavalier
 const canvas = document.getElementById('scena');
 // Buffer di profondità logaritmico: dal cavaliere a pochi metri fino all'orizzonte a ~110 km senza che le
 // superfici lontane (costa e mare, versanti vicini) si contendano i pixel.
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
+// Prove di prestazioni (docs/PRESTAZIONI.md, passo 2): ?profondita=log (predefinita) | invertita | normale e ?msaa=0
+// per misurare quanto costano profondità logaritmica e MSAA sulla scheda vera. «invertita» e «normale» possono far
+// sfarfallare le superfici lontane o sovrapposte (strade, fiumi): servono solo a misurare.
+const PROFONDITA = ['invertita', 'normale'].includes(PARAMETRI.get('profondita')) ? PARAMETRI.get('profondita') : 'log';
+const renderer = new THREE.WebGLRenderer({
+  canvas, antialias: PARAMETRI.get('msaa') !== '0',
+  logarithmicDepthBuffer: PROFONDITA === 'log', reversedDepthBuffer: PROFONDITA === 'invertita',
+});
 const profilatore = creaProfilatore(renderer);   // tempi GPU/CPU (docs/PRESTAZIONI.md, passo 1)
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -683,6 +694,10 @@ async function init() {
         posizionaCavaliere(p.x, p.z, p.direzione);
         messaggio('Il punto salvato era dentro le mura di una rocca: si riparte fuori dalla porta del borgo.');
       }
+    } else if (PROVA_PRESTAZIONI && CENTRO_PROVA) {
+      // Percorso di prova in un punto scelto (?centro=x,z in metri del mondo): cavaliere al centro del blocco.
+      await caricaScena({ tipo: 'mondo', cx: CENTRO_PROVA[0], cz: CENTRO_PROVA[1] });
+      posizionaCavaliere(0, 0, Math.PI);
     } else {
       const sito = carta.luoghi?.find((l) => l.partenza);
       if (sito) {
@@ -971,7 +986,8 @@ function fineDelPercorso() {
     `Knight Dawn — percorso di prova (${new Date().toISOString().slice(0, 16).replace('T', ' ')})`,
     `scheda: ${P.scheda}`,
     `timer GPU: ${P.timerGPU ? 'sì' : 'no'} · profondità invertita possibile: ${P.clipControl ? 'sì' : 'no'}`
-      + ` · MSAA ${P.campioniMSAA}× · profondità logaritmica: ${P.profonditaLog ? 'sì' : 'no'} · ${buf.x}×${buf.y} pixel`,
+      + ` · MSAA ${P.campioniMSAA}× · profondità: ${P.profonditaLog ? 'logaritmica' : P.profonditaInvertita ? 'invertita' : 'normale'}`
+      + ` · ${buf.x}×${buf.y} pixel`,
     `scena: ${scenaAttuale?.tipo === 'mondo' ? `seme ${carta?.seme}, centro ${scenaAttuale.cx}, ${scenaAttuale.cz}` : scenaAttuale?.tipo}`
       + ` · vegetazione ${vegetazioneVisibile ? 'accesa' : 'spenta'}`,
     st ? `FPS medio ${fmt(st.fps, 1)} (${fmt(st.msMedio, 1)} ms) · 1% peggiori ${fmt(st.fps1, 1)} FPS`
@@ -1081,7 +1097,7 @@ function aggiornaPannello(now) {
     + ` · ${ri.calls} chiamate · ${fmt(ri.triangles / 1000)} mila triangoli · ${buf.x}×${buf.y} pixel`;
   const P = profilatore.info;
   testo += `\nscheda: ${P.scheda}\n  timer GPU: ${P.timerGPU ? 'sì' : 'no'} · profondità invertita possibile: ${P.clipControl ? 'sì' : 'no'}`
-    + ` · MSAA ${P.campioniMSAA}× · profondità logaritmica: ${P.profonditaLog ? 'sì' : 'no'}`;
+    + ` · MSAA ${P.campioniMSAA}× · profondità: ${P.profonditaLog ? 'logaritmica' : P.profonditaInvertita ? 'invertita' : 'normale'}`;
   testo += `\nCPU: logica ${fmt(ri.msLogica, 1)} ms · invio comandi ${fmt(ri.msInvio, 1)} ms`;
   if (msCottura != null) testo += ` · suolo cotto in ${fmt(msCottura)} ms`;
   if (!P.timerGPU) testo += '\nGPU: timer non disponibili su questa scheda o browser (usare F4)';
