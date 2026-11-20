@@ -1523,7 +1523,10 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      cella; niente alberi in laghi e mare; una chiamata. Prima versione: seme 570549 ~137 000 sagome lontane, e la
      sessione delle prestazioni ha misurato che da sole raddoppiavano il fotogramma in headless (2190 contro 610 ms).
      **Ridotte** (obiettivo ≤ 20–30 000): raggio 3 km; oltre 1,3 km il bosco si dirada fino all'8 % a 3 km, con
-     alberi più grandi a compensare (scala fino a ×2,8) perché la massa resti; cella di base 10 m. Seme 570549:
+     alberi più grandi a compensare (scala fino a ×2,8) perché la massa resti; cella di base 10 m. **Corretto**
+     (l'utente: «gli alberi lontani sono molto grandi in proporzione»): la scala cresceva anche con la cella, ×1,3 al
+     bordo e fino a ×6 a 3 km; ora le sagome lontane hanno le stesse taglie degli alberi del blocco e il bosco lontano
+     si legge più rado. Seme 570549:
      ~28 000 sagome lontane (63 ms) più ~12 500 nel blocco; seme 855588: ~13 000 più ~3 400. Nessun vuoto al bordo
      del blocco. Da rimisurare (sessione delle prestazioni, poi la scheda dell'utente con `?prova`).
    - *Collisioni (passo 3)*: tronchi, massi, affioramenti, tronchi caduti (tre cerchi) e sassi di scala ≥ 1,1 come
