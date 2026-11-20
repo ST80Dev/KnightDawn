@@ -271,26 +271,35 @@ TEXTURE_NERA.needsUpdate = true;
 // texture si ripeterebbe prima del periodo e i blocchi non combacerebbero, quindi lì resta il calcolo con l'hash.
 const LATO_RUMORE = 256;
 let _texRumore = null;
-function textureRumore() {
-  if (_texRumore) return _texRumore;
-  const dati = new Uint8Array(LATO_RUMORE * LATO_RUMORE);
-  let x = 0x9e3779b9;                                   // xorshift32 con seme fisso: stesso disegno a ogni avvio
+function textureRumore(lato = LATO_RUMORE, seme = 0x9e3779b9) {
+  if (lato === LATO_RUMORE && _texRumore) return _texRumore;
+  const dati = new Uint8Array(lato * lato);
+  let x = seme;                                         // xorshift32 con seme fisso: stesso disegno a ogni avvio
   for (let i = 0; i < dati.length; i++) {
     x ^= x << 13; x ^= x >>> 17; x ^= x << 5;
     dati[i] = (x >>> 24) & 255;
   }
-  const t = new THREE.DataTexture(dati, LATO_RUMORE, LATO_RUMORE, THREE.RedFormat, THREE.UnsignedByteType);
+  const t = new THREE.DataTexture(dati, lato, lato, THREE.RedFormat, THREE.UnsignedByteType);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.magFilter = t.minFilter = THREE.LinearFilter;
   t.generateMipmaps = false;
   t.needsUpdate = true;
-  _texRumore = t;
+  if (lato === LATO_RUMORE) _texRumore = t;
   return t;
 }
+// Scale grandi (128 e 512 m): una texture con esattamente periodo/scala celle (64 e 16), così anche lì una lettura
+// invece di 4 hash e il periodo resta 8192 m (prestazioni: servivano soprattutto agli anelli dell'orizzonte).
+let _texRumore128 = null, _texRumore512 = null;
+const textureRumore128 = () => _texRumore128 || (_texRumore128 = textureRumore(SUOLO.periodo / 128, 0x2545f491));
+const textureRumore512 = () => _texRumore512 || (_texRumore512 = textureRumore(SUOLO.periodo / 512, 0x6c078965));
 
 export function materialeSuolo(cx, cz, mezzo = 1e9) {
   const P = SUOLO.periodo;
   const mat = new THREE.MeshLambertMaterial();
+  // Anelli dell'orizzonte (chiamati senza `mezzo`, da orizzonte.js): oltre 1 km i rumori sotto i 32 m, la lettiera, la
+  // terra nuda e il bordo frastagliato della neve non si vedono ma costavano quanto nel blocco (misura: gli anelli
+  // pesavano più del blocco). Modalità ridotta SUOLO_LONTANO.
+  if (mezzo >= 1e8) mat.defines = { SUOLO_LONTANO: '' };
   const uniformi = {
     uOrigine: { value: new THREE.Vector2(((cx % P) + P) % P, ((cz % P) + P) % P) },
     uRoccia: { value: COLORE_ROCCIA.clone() },
@@ -302,12 +311,16 @@ export function materialeSuolo(cx, cz, mezzo = 1e9) {
     uCentro: { value: new THREE.Vector2(((cx % P) + P) % P, ((cz % P) + P) % P) },
     uMezzo: { value: mezzo },
     uRumore: { value: textureRumore() },
+    uRumore128: { value: textureRumore128() },
+    uRumore512: { value: textureRumore512() },
     // Vegetazione: ombre finte degli oggetti (r: ombra del sole, ridisegnata quando il sole si sposta) e piede scuro
     // attorno al punto di contatto (r, fisso), in coordinate del blocco; forza (sole, piede). Le imposta
     // vegetazione3d.js tramite mat.userData.uniformi; negli anelli restano spente.
     uOmbre: { value: TEXTURE_NERA },
     uPiede: { value: TEXTURE_NERA },
     uOmbreForza: { value: new THREE.Vector2(0, 0) },
+    // Prestazioni (docs/PRESTAZIONI.md, passo 3): colore del blocco «cotto» in una texture al caricamento (cuociSuolo).
+    uCotto: { value: TEXTURE_NERA },
   };
   mat.userData.uniformi = uniformi;
   mat.onBeforeCompile = (sh) => {
@@ -342,6 +355,7 @@ uniform float uMezzo;
 uniform sampler2D uOmbre;
 uniform sampler2D uPiede;
 uniform vec2 uOmbreForza;
+uniform sampler2D uCotto;
 varying vec3 vBase;
 varying vec4 vStrati;
 varying vec2 vMondo;
@@ -352,12 +366,16 @@ float hashSuolo(vec2 p) {
   return fract((p3.x + p3.y) * p3.z);
 }
 uniform sampler2D uRumore;
+uniform sampler2D uRumore128;
+uniform sampler2D uRumore512;
 // Rumore a valori, periodico su ${P} m (la scala è una potenza di 2). Fino a ${P / LATO_RUMORE} m di scala: una lettura
 // della texture (vedi textureRumore); oltre, hash.
 float rumoreSuolo(vec2 p, float scala) {
   float per = ${P.toFixed(1)} / scala;
   vec2 q = p / scala, i = floor(q), f = fract(q), u = f * f * (3.0 - 2.0 * f);
   if (scala <= ${(P / LATO_RUMORE).toFixed(1)}) return texture2D(uRumore, (i + u + 0.5) / ${LATO_RUMORE.toFixed(1)}).r;
+  if (scala == 128.0) return texture2D(uRumore128, (i + u + 0.5) / ${(P / 128).toFixed(1)}).r;
+  if (scala == 512.0) return texture2D(uRumore512, (i + u + 0.5) / ${(P / 512).toFixed(1)}).r;
   float a = hashSuolo(mod(i, per)), b = hashSuolo(mod(i + vec2(1.0, 0.0), per));
   float c = hashSuolo(mod(i + vec2(0.0, 1.0), per)), d = hashSuolo(mod(i + vec2(1.0, 1.0), per));
   return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
@@ -370,13 +388,42 @@ float sogliaSuolo(float x) {
   return smoothstep(0.5 - e, 0.5 + e, x);
 }`)
       .replace('#include <color_fragment>', `#include <color_fragment>
+#ifdef SUOLO_COTTO
   {
+    // Colore cotto (cuociSuolo): una lettura. Alfa = 0,5 + 0,5·neve − 0,5·prato (servono al dettaglio della normale).
+    vec2 dB = vMondo - uCentro;
+    dB -= ${P.toFixed(1)} * floor(dB / ${P.toFixed(1)} + 0.5);
+    vec4 cotto = texture2D(uCotto, vec2(dB.x / (2.0 * uMezzo) + 0.5, 0.5 - dB.y / (2.0 * uMezzo)));
+    vec3 c = pow(cotto.rgb, vec3(2.2));
+    kdNeve = clamp((cotto.a - 0.5) * 2.0, 0.0, 1.0);
+    kdPrato = clamp((0.5 - cotto.a) * 2.0, 0.0, 1.0);
+    if (uOmbreForza.x + uOmbreForza.y > 0.0) {
+      vec2 uvO = dB / (2.0 * uMezzo) + 0.5;
+      if (uvO.x > 0.0 && uvO.y > 0.0 && uvO.x < 1.0 && uvO.y < 1.0) {
+        float om = texture2D(uOmbre, uvO).r * uOmbreForza.x;
+        float pi = texture2D(uPiede, uvO).r * uOmbreForza.y;
+        c *= 1.0 - max(om, pi);
+      }
+    }
+    diffuseColor.rgb = c;
+  }
+#else
+  {
+#ifdef SUOLO_CUOCI
+    float dist = 0.0;   // cottura: dettaglio pieno; da lontano lo filtrano le mipmap
+#else
     float dist = length(vViewPosition);
+#endif
     vec2 p = vMondo;
     float bordo = 0.0, dettaglio = 0.0, venature = 0.0;
+#ifdef SUOLO_LONTANO
+${ottaveGLSL(SUOLO.bordo.filter(([sc]) => sc >= 32), 'bordo')}
+${ottaveGLSL(SUOLO.dettaglio.filter(([sc]) => sc >= 32), 'dettaglio')}
+#else
 ${ottaveGLSL(SUOLO.bordo, 'bordo')}
 ${ottaveGLSL(SUOLO.dettaglio, 'dettaglio')}
 ${ottaveGLSL(SUOLO.venature, 'venature')}
+#endif
     float roccia = sogliaSuolo(vStrati.x + bordo);
     vec3 cRoccia = mix(uRoccia, uRocciaScura, clamp(vStrati.w + venature, 0.0, 1.0)) * vStrati.z;
     vec3 cPrato = vBase * (1.0 + dettaglio);
@@ -389,7 +436,11 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
       // Prestazioni: niente rumori dove non servono. Terra nuda solo sul prato entro 3 km; lettiera e fango solo dove
       // il blocco li porta (aSuolo, 0 negli anelli); la grana di 2 m solo vicino.
       float suoloV = max(vSuolo.x, vSuolo.y) * blocco;
+#ifdef SUOLO_LONTANO
+      if (false) {
+#else
       if (prato > 0.01 && dist < 3000.0 || suoloV > 0.01) {
+#endif
         float r1 = rumoreSuolo(p, 32.0), r2 = rumoreSuolo(p, 8.0);
         float r3 = dist < 400.0 ? rumoreSuolo(p, 2.0) : 0.5, r4 = 1.0 - r1;
         float terra = smoothstep(0.62, 0.78, r1 * 0.6 + r2 * 0.4) * prato;
@@ -423,7 +474,11 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
     // Rumore del bordo della neve solo dove la neve può esserci e non è già spento. fwidth (in sogliaSuolo)
     // resta fuori dai rami: le derivate dentro un ramo non uniforme non sono definite.
     float bordoNeve = 0.0;
+#ifndef SUOLO_LONTANO
     if (vStrati.y > 0.05 && dist < ${(16 * SUOLO.spegni[1]).toFixed(1)})
+#else
+    if (false)
+#endif
       bordoNeve = (rumoreSuolo(p + 517.0, 16.0) - 0.5) * 0.12 * spegniSuolo(16.0, dist);
     float neve = sogliaSuolo(vStrati.y + 0.8 * bordo + bordoNeve);
     // Sui versanti la neve vira all'azzurro-grigio: pendenza dalla normale del pixel (vista → mondo).
@@ -434,6 +489,7 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
     kdNeve = neve;
     kdPrato *= 1.0 - neve;
     // Vegetazione: ombre finte di alberi, cespugli e rocce, e piede scuro attorno al punto di contatto (solo nel blocco).
+#ifndef SUOLO_CUOCI
     if (uOmbreForza.x + uOmbreForza.y > 0.0) {
       vec2 dB = vMondo - uCentro;
       dB -= ${P.toFixed(1)} * floor(dB / ${P.toFixed(1)} + 0.5);
@@ -444,8 +500,15 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
         c *= 1.0 - max(om, pi);
       }
     }
+#endif
     diffuseColor.rgb = c;
-  }`)
+  }
+#endif`)
+      .replace('#include <opaque_fragment>', `#ifdef SUOLO_CUOCI
+  gl_FragColor = vec4(pow(max(diffuseColor.rgb, 0.0), vec3(1.0 / 2.2)), 0.5 + 0.5 * kdNeve - 0.5 * kdPrato);
+#else
+#include <opaque_fragment>
+#endif`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
   {
     // Cumuli larghi (~8 m), onde del vento allungate, grana fine (~1 m): inclinano la normale dove c'è neve.
@@ -464,6 +527,9 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
     // del sole fa da sé il chiaroscuro anche dove il terreno è piano; al tramonto e di notte cambia con lei.
     // Prestazioni (dopo il CONTEXT_LOST segnalato): solo entro 80 m, differenze in avanti (3 valutazioni, non 4).
     float wPrato = kdPrato * 1.1 * (1.0 - smoothstep(40.0, 80.0, length(vViewPosition)));
+#ifdef SENZA_RILIEVO
+    wPrato = 0.0;
+#endif
     if (wPrato > 0.001) {
       const float e = 0.15;
       vec2 p = vMondo;
@@ -478,6 +544,66 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
   };
   mat.customProgramCacheKey = () => 'suolo-mondo';
   return mat;
+}
+
+// ─── Colore del blocco cotto in una texture (prestazioni, docs/PRESTAZIONI.md passo 3) ───────────────────
+// Misura sulla scheda di riferimento (Intel UHD 730): lo shader del suolo costava 16,7 ms su 24,7 per fotogramma, con
+// 20–30 letture di rumore per pixel. Al caricamento della Scena il blocco si disegna una volta dall'alto, senza luce,
+// in una texture di LATO_COTTO² (circa 1 m per pixel su 2 km) con tutto il colore (rumori, roccia, neve, lettiera,
+// chiazze); poi il materiale del blocco passa alla modalità SUOLO_COTTO: una lettura per pixel. Restano calcolati al
+// momento le ombre finte della vegetazione (si spostano col sole) e il micro-rilievo della normale vicino alla camera.
+// Da lontano le mipmap fanno il lavoro che faceva lo spegnimento delle ottave.
+const LATO_COTTO = 2048;
+let _cotto = null;                         // texture del blocco attuale: si libera quando si cuoce il successivo
+
+/**
+ * Cuoce il colore del blocco e passa il suo materiale alla modalità cotta. Da chiamare dopo createTerrain del mondo
+ * generato (serve il renderer). Restituisce i ms impiegati, o null se il terreno non ha il materiale del suolo.
+ */
+export function cuociSuolo(renderer, terrain) {
+  const sup = terrain?.mesh?.getObjectByName('terreno-superficie');
+  const mat = sup?.material;
+  if (!mat?.userData?.uniformi?.uCotto) return null;
+  const t0 = performance.now();
+  const half = terrain.half;
+  const rt = new THREE.WebGLRenderTarget(LATO_COTTO, LATO_COTTO, {
+    generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter,
+    depthBuffer: false,
+  });
+  rt.texture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+  // Materiale di cottura: lo stesso shader con SUOLO_CUOCI (dettaglio pieno, colore senza luce, niente nebbia).
+  // (un materiale nuovo, non mat.clone(): clone copierebbe userData via JSON, texture comprese)
+  const cuoci = new THREE.MeshLambertMaterial();
+  cuoci.onBeforeCompile = mat.onBeforeCompile;   // stesse uniformi (chiusura di materialeSuolo)
+  cuoci.customProgramCacheKey = () => 'suolo-mondo-cuoci';
+  cuoci.defines = { ...(mat.defines || {}), SUOLO_CUOCI: '' };
+  cuoci.fog = false;
+  cuoci.depthTest = false;
+  cuoci.depthWrite = false;
+  const scena = new THREE.Scene();
+  const copia = new THREE.Mesh(sup.geometry, cuoci);
+  sup.updateWorldMatrix(true, false);
+  copia.matrixAutoUpdate = false;
+  copia.matrix.copy(sup.matrixWorld);
+  scena.add(copia);
+  // Vista dall'alto: destra = +x, alto = −z (quindi v = 0,5 − z / lato, come legge SUOLO_COTTO).
+  const cam = new THREE.OrthographicCamera(-half, half, half, -half, 1, 40000);
+  cam.position.set(0, 20000, 0);
+  cam.up.set(0, 0, -1);
+  cam.lookAt(0, 0, 0);
+  const prima = renderer.getRenderTarget(), autoClear = renderer.autoClear;
+  renderer.autoClear = true;
+  renderer.setRenderTarget(rt);
+  renderer.render(scena, cam);
+  renderer.setRenderTarget(prima);
+  renderer.autoClear = autoClear;
+  cuoci.dispose();
+  if (_cotto) _cotto.dispose();
+  _cotto = rt;
+  mat.userData.uniformi.uCotto.value = rt.texture;
+  mat.defines = { ...(mat.defines || {}), SUOLO_COTTO: '' };
+  mat.needsUpdate = true;
+  return performance.now() - t0;
 }
 
 /** Contenitore degli strati di coloreMondo (da riusare). */

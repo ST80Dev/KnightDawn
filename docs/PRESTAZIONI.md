@@ -76,6 +76,15 @@ Nel codice di oggi [Probabile, da confermare con le misure del passo 1]:
 3. **Terreno.** Shader a livelli per distanza (vicino ricco, medio semplice, lontano solo colore) e materiale ridotto per
    gli anelli dell'orizzonte. Colore e dettaglio del blocco **cotti in una texture al caricamento** (es. 2048² sui 2 km,
    ~1 m per pixel, generata dal codice): una lettura invece di decine; il rumore fine resta solo entro ~50 m.
+   **Stato: prima parte fatta, da misurare dall'utente** (`terrain.js`: `cuociSuolo`, modalità `SUOLO_COTTO`,
+   `SUOLO_CUOCI`, `SUOLO_LONTANO`). Al caricamento della Scena, dopo la vegetazione (che aggiunge `aSuolo`), il blocco
+   si disegna una volta dall'alto in una texture 2048² con mipmap (~21 MB): nel gioco una lettura per pixel; restano
+   calcolati le ombre finte e il micro-rilievo di prato e neve vicino. Gli anelli dell'orizzonte (materiale senza
+   `mezzo`) usano la modalità ridotta: solo rumori da 32 m in su, niente lettiera, terra nuda, bordo fine della neve.
+   Rumori da 128 e 512 m da texture di 64² e 16² (periodo 8192 m invariato). Effetto visibile: le chiazze ocra e scure
+   del prato, prima solo entro 60–180 m, ora sono cotte ovunque (prati un po' più variegati da lontano, nessun anello
+   di comparsa). In headless (rendering software, dove le texture costano molto più che su una scheda vera): blocco
+   −25/30 %, anelli −10/15 %; il micro-rilievo del prato vale ~¼ del blocco cotto. Sulla scheda vera: percorso di prova.
 4. **Vegetazione.** **Impostor** per gli alberi oltre la media distanza: immagini dell'albero procedurale generate al
    caricamento in un atlante (resta tutto codice, nessun asset esterno), su due piani incrociati o rivolti alla camera.
    Densità e distanze dai preset.

@@ -12,7 +12,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { loadTerrain, componiSuolo, createTerrain, coloreMondo } from './terrain.js';
+import { loadTerrain, componiSuolo, createTerrain, coloreMondo, cuociSuolo } from './terrain.js';
 import { createKnight } from './knight3d.js';
 import { createFollowCamera } from './camera.js';
 import { createCastle, CLASSI_ROCCA } from './castle3d.js';
@@ -501,6 +501,9 @@ async function caricaScena(desc) {
       copertura: coperturaMondo(carta, Calendar.stagione), seme: carta.seme, carta,
       piani: (carta.luoghi || []).flatMap((l) => l.piani || []), mare: true,
     }), terrain);
+    // Colore del blocco in una texture (docs/PRESTAZIONI.md, passo 3): dopo la vegetazione, che aggiunge al terreno
+    // l'attributo aSuolo (lettiera sotto il bosco, fango vicino all'acqua) letto dalla cottura.
+    msCottura = cuociSuolo(renderer, terrain);
   }
   if (desc.tipo === 'tavullia') {
     // Profilo fisso di collina temperata; niente vegetazione sul colle del castello e sulla rampa.
@@ -926,6 +929,7 @@ function gruppoDi(o) {
 }
 
 // ─── Percorso di prova (F9 con F3 aperto, o ?prova nell'indirizzo) ───────
+let msCottura = null;                    // ms della cottura del colore del blocco (F3)
 let percorso = null;
 let percorsoNormale = null;               // istantanea alla fine del giro normale
 let provaAutomatica = PARAMETRI.has('prova');
@@ -1043,6 +1047,7 @@ function aggiornaPannello(now) {
   testo += `\nscheda: ${P.scheda}\n  timer GPU: ${P.timerGPU ? 'sì' : 'no'} · profondità invertita possibile: ${P.clipControl ? 'sì' : 'no'}`
     + ` · MSAA ${P.campioniMSAA}× · profondità logaritmica: ${P.profonditaLog ? 'sì' : 'no'}`;
   testo += `\nCPU: logica ${fmt(ri.msLogica, 1)} ms · invio comandi ${fmt(ri.msInvio, 1)} ms`;
+  if (msCottura != null) testo += ` · suolo cotto in ${fmt(msCottura)} ms`;
   if (!P.timerGPU) testo += '\nGPU: timer non disponibili su questa scheda o browser (usare F4)';
   else if ((percorso ? percorso.modo : provaPrestazioni === 1 ? 'gruppi' : 'normale') === 'gruppi') {
     testo += '\nGPU per gruppo: ' + GRUPPI.map((g) => {
