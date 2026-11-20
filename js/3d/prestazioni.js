@@ -11,9 +11,12 @@
 
 import * as THREE from 'three';
 
-export const GRUPPI = ['terreno', 'vegetazione', 'edifici', 'personaggi', 'resto'];
-/** Budget provvisori in ms di GPU (docs/PRESTAZIONI.md, «Obiettivi e budget»). */
+export const GRUPPI = ['terreno', 'veg. sagome lontane', 'veg. sagome', 'veg. erba', 'veg. resto', 'edifici',
+  'personaggi', 'resto'];
+/** Budget provvisori in ms di GPU (docs/PRESTAZIONI.md, «Obiettivi e budget»); la vegetazione ha un budget complessivo. */
 export const BUDGET_GPU = { terreno: 4, vegetazione: 4, edifici: 2, personaggi: 2, resto: 1.5, totale: 13.5 };
+/** Budget di un gruppo (i gruppi «veg. …» condividono quello della vegetazione: null = vedi la somma). */
+export const budgetDi = (g) => (g.startsWith('veg.') ? null : BUDGET_GPU[g]);
 
 const CAMPIONI = 90;                       // media mobile sugli ultimi ~1,5 s a 60 FPS
 
@@ -75,7 +78,7 @@ export function creaProfilatore(renderer) {
   const salvati = [];
   /**
    * Disegna il fotogramma. modo 'normale': una passata (tempo «totale»); 'gruppi': una passata per gruppo.
-   * @param {(o: THREE.Object3D) => string|null} gruppoDi  gruppo di un figlio diretto della scena (null = «resto»)
+   * @param {(o: THREE.Object3D) => string|null} gruppoDi  gruppo di un oggetto disegnabile (null = «resto»)
    * @returns {{calls:number, triangles:number, msInvio:number}}
    */
   function disegna(scene, camera, modo, gruppoDi) {
@@ -86,8 +89,11 @@ export function creaProfilatore(renderer) {
       misura('totale', () => renderer.render(scene, camera));
       calls = renderer.info.render.calls; triangles = renderer.info.render.triangles;
     } else {
+      // Gli oggetti disegnabili visibili (mesh, punti, linee, sprite), con il loro gruppo.
       salvati.length = 0;
-      for (const o of scene.children) salvati.push(o.visible);
+      scene.traverseVisible((o) => {
+        if (o.isMesh || o.isPoints || o.isLine || o.isSprite) salvati.push(o, gruppoDi(o) || 'resto');
+      });
       // Uno sfondo a colore fa ripulire lo schermo a ogni render (anche con autoClear spento): si tiene solo nella
       // prima passata, poi si toglie, così ogni gruppo si disegna sopra i precedenti con la loro profondità.
       const autoClear = renderer.autoClear, sfondo = scene.background;
@@ -95,16 +101,14 @@ export function creaProfilatore(renderer) {
       renderer.autoClear = false;
       for (const g of GRUPPI) {
         if (g !== GRUPPI[0]) scene.background = null;
-        scene.children.forEach((o, i) => {
-          // Le luci restano accese in tutte le passate; gli oggetti già nascosti restano nascosti.
-          o.visible = salvati[i] && (o.isLight || (gruppoDi(o) || 'resto') === g);
-        });
+        // Le luci non si toccano; gli oggetti già nascosti restano nascosti (non sono nella lista).
+        for (let i = 0; i < salvati.length; i += 2) salvati[i].visible = salvati[i + 1] === g;
         misura(g, () => renderer.render(scene, camera));
         calls += renderer.info.render.calls; triangles += renderer.info.render.triangles;
       }
       renderer.autoClear = autoClear;
       scene.background = sfondo;
-      scene.children.forEach((o, i) => { o.visible = salvati[i]; });
+      for (let i = 0; i < salvati.length; i += 2) salvati[i].visible = true;
     }
     return { calls, triangles, msInvio: performance.now() - t0 };
   }
@@ -129,6 +133,7 @@ const ATTESA_INIZIALE = 1.5;               // s di assestamento (compilazione, p
  */
 export function creaPercorso(centro) {
   const tempi = [];                        // durata dei fotogrammi (ms) nel giro normale
+  const cpu = [];                          // ms di processore per fotogramma (logica + invio) nel giro normale
   let t = -ATTESA_INIZIALE;
   let finito = false;
   return {
@@ -157,13 +162,19 @@ export function creaPercorso(centro) {
       camera.lookAt(mira);
       return { mira, azzera };
     },
+    /** ms di processore di questo fotogramma (logica + invio dei comandi). */
+    registraCPU(ms) { if (t >= 0 && t < DURATA_GIRO) cpu.push(ms); },
     /** Statistiche dei fotogrammi del giro normale. */
     statistiche() {
       const v = tempi.slice().sort((a, b) => a - b);
       if (!v.length) return null;
       const media = v.reduce((s, x) => s + x, 0) / v.length;
       const p99 = v[Math.min(v.length - 1, Math.floor(v.length * 0.99))];
-      return { fotogrammi: v.length, fps: 1000 / media, msMedio: media, fps1: 1000 / p99, msPeggiore: v[v.length - 1] };
+      const c = cpu.slice().sort((a, b) => a - b);
+      const cpuMedia = c.length ? c.reduce((s, x) => s + x, 0) / c.length : NaN;
+      const cpu99 = c.length ? c[Math.min(c.length - 1, Math.floor(c.length * 0.99))] : NaN;
+      return { fotogrammi: v.length, fps: 1000 / media, msMedio: media, fps1: 1000 / p99, msPeggiore: v[v.length - 1],
+        cpuMedia, cpu99, cpuMax: c.length ? c[c.length - 1] : NaN };
     },
   };
 }

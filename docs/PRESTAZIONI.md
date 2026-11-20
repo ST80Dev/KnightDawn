@@ -149,6 +149,12 @@ Scheda Intel UHD 730 (il browser Brave nasconde il nome), 1920×935, seme 570549
 | Data | Versione | FPS medio | 1% peggiori | GPU totale | Terreno | Vegetazione | Edifici | Personaggi | Resto | Chiamate | Triangoli |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | 20/11/2026 | main dopo #122–#123 (riferimento) | 38,0 | 19,9 | 24,7 | **16,7** | 4,9 | 0,1 | 0,1 | 1,8 | 301 | 859 mila |
+| 20/11/2026 | main dopo #124–#125 (terreno cotto, sagome) ⚠ | 43,8 | 20,0 | 17,5 | 5,5 | **10,8** | 0,0 | 0,1 | 1,0 | 127 | 1222 mila |
+
+⚠ Seconda riga: la prova era partita dal salvataggio dell'utente (scena centrata a 99937, 43289), non dalla partenza
+standard: la vegetazione non è confrontabile. Da allora `?prova` non legge né scrive salvataggi (parte sempre dalla
+partenza del seme) e il riquadro separa la vegetazione (sagome lontane, sagome nel blocco, erba, resto) e riporta i
+tempi del processore (media, 1% peggiori, massimo).
 
 Lettura: la GPU è il collo di bottiglia (24,7 ms su 26,3 ms di fotogramma); il **terreno** vale due terzi. Edifici e
 personaggi costano ~0,1 ms: unire le geometrie (passo 5) non è urgente. Ordine dei passi rivisto: prima terreno
