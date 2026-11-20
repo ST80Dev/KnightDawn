@@ -486,7 +486,7 @@ async function caricaScena(desc) {
   } else {
     const { meta, heights, acqua: dati } = generaScena(carta, desc.cx, desc.cz);
     terrain = createTerrain(meta, heights, false, coloreMondo(carta, Calendar.stagione));
-    acqueScena = creaAcqueScena(dati, meta, COLORE_ACQUA, { x: desc.cx, z: desc.cz });
+    acqueScena = creaAcqueScena(dati, meta, COLORE_ACQUA, meta.centroMondo);
     if (acqueScena) scene.add(acqueScena);
     livelliAcqua = { fiume: dati.fiume, lago: dati.lago, cols: meta.cols, cell: meta.cellSize, half: meta.sizeMeters / 2 };
     rocche = costruisciRocche(desc.cx, desc.cz, terrain);
