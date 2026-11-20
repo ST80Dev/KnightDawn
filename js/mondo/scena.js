@@ -856,7 +856,8 @@ export function generaScena(carta, cx, cz) {
   };
   // Strade nel blocco (nastro della carreggiata, js/3d/acqua.js) e quota del terreno disegnato (triangoli NO–SE come
   // terrain.getHeight) per appoggiarlo.
-  const strade = stradeBlocco(carta, cx, cz, half);
+  const quoteStrade = [];
+  const strade = stradeBlocco(carta, cx, cz, half, 2, quoteStrade);
   const altezza = (x, z) => {
     let fx = (x + half) / cell, fz = (z + half) / cell;
     fx = Math.min(Math.max(fx, 0), n - 1); fz = Math.min(Math.max(fz, 0), n - 1);
@@ -864,5 +865,5 @@ export function generaScena(carta, cx, cz) {
     const a = heights[r * n + c], b = heights[r * n + c + 1], d = heights[(r + 1) * n + c], e = heights[(r + 1) * n + c + 1];
     return u + v <= 1 ? a + (b - a) * u + (d - a) * v : e + (d - e) * (1 - u) + (b - e) * (1 - v);
   };
-  return { meta, heights, acqua: { fiume, lago, tracciati, strade, altezza } };
+  return { meta, heights, acqua: { fiume, lago, tracciati, strade, quoteStrade, altezza } };
 }

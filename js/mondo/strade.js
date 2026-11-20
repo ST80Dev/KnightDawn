@@ -21,10 +21,14 @@ import { smoothstep } from './rumore.js';
 export const STRADE = {
   // Classi [Ipotesi del piano, da tarare guardando]: pendenza comoda p0, massima pmax, semilarghezza (m).
   classi: {
-    maestra: { p0: 0.05, pmax: 0.10, semi: 2.25, nome: 'strada maestra' },
-    carrareccia: { p0: 0.07, pmax: 0.14, semi: 1.5, nome: 'carrareccia' },
-    mulattiera: { p0: 0.12, pmax: 0.25, semi: 1.0, nome: 'mulattiera' },
-    sentiero: { p0: 0.20, pmax: 0.45, semi: 0.6, nome: 'sentiero' },
+    // banchina (m per lato): oltre la carreggiata il terreno resta alla quota della strada prima della scarpata
+    // [richiesto dall'utente: «la strada scavi un piano nel rilievo», niente carreggiata inclinata di traverso]. Con
+    // la griglia del blocco a 7,8 m, carreggiata + banchina ≥ ~7 m per le strade da carro: almeno una fila di
+    // vertici piana per lato. Stretta per mulattiere e sentieri (non scavano terrazze).
+    maestra: { p0: 0.05, pmax: 0.10, semi: 2.25, banchina: 5, nome: 'strada maestra' },
+    carrareccia: { p0: 0.07, pmax: 0.14, semi: 1.5, banchina: 5, nome: 'carrareccia' },
+    mulattiera: { p0: 0.12, pmax: 0.25, semi: 1.0, banchina: 2.5, nome: 'mulattiera' },
+    sentiero: { p0: 0.20, pmax: 0.45, semi: 0.6, banchina: 1.2, nome: 'sentiero' },
   },
   carta: {
     tornanti: 1.2,              // un dislivello oltre pmax costa come la strada a tornanti (× questo)
@@ -511,7 +515,7 @@ function stradeScena(carta) {
       });
     }
   }
-  s = { tratti, indice: new Map(), raggio: Math.max(...Object.values(STRADE.classi).map((k) => k.semi)) + S.raccordo + S.ritorno };
+  s = { tratti, indice: new Map(), raggio: Math.max(...Object.values(STRADE.classi).map((k) => k.semi + k.banchina)) + S.raccordo + S.ritorno };
   _scena.set(carta, s);
   return s;
 }
@@ -712,7 +716,7 @@ export function distanzaStrada(carta, x, z, out = { d: Infinity, lato: 0, semi: 
     t = t < 0 ? 0 : t > 1 ? 1 : t;
     const dx = x - ax - vx * t, dz = z - az - vz * t, d = Math.sqrt(dx * dx + dz * dz);
     if (d < out.d) {
-      out.d = d; out.semi = f.semi; out.classe = tr.classe;
+      out.d = d; out.semi = f.semi; out.classe = tr.classe; out.banchina = STRADE.classi[tr.classe].banchina;
       out.h = f.h[i] + (f.h[i + 1] - f.h[i]) * t;
       out.lato = (vx * (z - az) - vz * (x - ax)) >= 0 ? d : -d;
     }
@@ -730,7 +734,7 @@ export function spianaStrade(carta, x, z, h, esito) {
   if (esito && !Number.isNaN(esito.livello)) return h;
   distanzaStrada(carta, x, z, _d);
   if (_d.d === Infinity) return h;
-  const S = STRADE.scena, e = Math.max(0, _d.d - _d.semi);
+  const S = STRADE.scena, e = Math.max(0, _d.d - _d.semi - _d.banchina);   // carreggiata e banchina piane
   const f = 1 - smoothstep(S.raccordo, S.raccordo + S.ritorno, e);
   if (f <= 0) return h;
   const lo = _d.h - e * S.scarpata, hi = _d.h + e * S.scarpata;
@@ -760,8 +764,11 @@ export function percorsiStrade(carta, x0, z0, x1, z1) {
 /**
  * Strade nel blocco (coordinate locali, centro (cx, cz), lato 2·half): per ogni tratto raffinato i pezzi dentro il
  * blocco come Float32Array [x, z, semilarghezza, …], un punto ogni ~`passo` m. Per il nastro della carreggiata.
+ * Se `quote` è un array, per ogni pezzo vi aggiunge un Float32Array con la quota della strada in ogni punto (la stessa
+ * a cui spianaStrade porta carreggiata e banchina: il nastro può stare piano in larghezza). Nell'alveo dei fiumi è la
+ * quota del ponte o del guado che verrà (il profilo salta l'acqua), non il terreno.
  */
-export function stradeBlocco(carta, cx, cz, half, passo = 2) {
+export function stradeBlocco(carta, cx, cz, half, passo = 2, quote = null) {
   if (!carta.strade) return [];
   const out = [];
   for (const tr of stradeScena(carta).tratti) {
@@ -769,8 +776,11 @@ export function stradeBlocco(carta, cx, cz, half, passo = 2) {
     if (!f) continue;
     const [a0, b0, a1, b1] = tr.riquadro;
     if (a1 < cx - half || a0 > cx + half || b1 < cz - half || b0 > cz + half) continue;
-    let pezzo = [];
-    const chiudi = () => { if (pezzo.length >= 6) out.push(Float32Array.from(pezzo)); pezzo = []; };
+    let pezzo = [], hs = [];
+    const chiudi = () => {
+      if (pezzo.length >= 6) { out.push(Float32Array.from(pezzo)); if (quote) quote.push(Float32Array.from(hs)); }
+      pezzo = []; hs = [];
+    };
     for (let i = 0; i < f.x.length; i++) {
       const n = i === 0 ? 1 : Math.max(1, Math.round(Math.hypot(f.x[i] - f.x[i - 1], f.z[i] - f.z[i - 1]) / passo));
       for (let k = 1; k <= n; k++) {
@@ -779,6 +789,7 @@ export function stradeBlocco(carta, cx, cz, half, passo = 2) {
         const z = (i === 0 ? f.z[0] : f.z[i - 1] + (f.z[i] - f.z[i - 1]) * t) - cz;
         if (Math.abs(x) > half - 1 || Math.abs(z) > half - 1) { chiudi(); continue; }
         pezzo.push(x, z, f.semi);
+        hs.push(i === 0 ? f.h[0] : f.h[i - 1] + (f.h[i] - f.h[i - 1]) * t);
       }
     }
     chiudi();
