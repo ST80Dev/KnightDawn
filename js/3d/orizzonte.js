@@ -226,7 +226,7 @@ function acqueOrizzonte(carta, cx, cz, anelli, colore) {
  * @param {object} terrain  il blocco della Scena
  * @param {string} coloreAcqua
  * @param {number} stagione  indice del calendario (colori e limite delle nevi)
- * @returns {{ oggetto: THREE.Group, acqua: THREE.Mesh|null, triangoli: number, ms: number }}
+ * @returns {{ oggetto: THREE.Group, acqua: THREE.Mesh|null, triangoli: number, ms: number, quota: Function }}
  */
 export function creaOrizzonte(carta, cx, cz, terrain, coloreAcqua, stagione = 0) {
   const t0 = performance.now();
@@ -294,5 +294,6 @@ export function creaOrizzonte(carta, cx, cz, terrain, coloreAcqua, stagione = 0)
   const acque = acqueOrizzonte(carta, cx, cz, anelli, coloreAcqua);
   if (acque) oggetto.add(acque);
   const triangoli = geometrie.reduce((t, g) => t + g.index.count / 3, 0);
-  return { oggetto, acqua, triangoli, ms: performance.now() - t0 };
+  // quota(x, z): superficie disegnata degli anelli in coordinate locali (la usa la vegetazione per il bosco lontano).
+  return { oggetto, acqua, triangoli, ms: performance.now() - t0, quota: (x, z) => superficie(anelli, x, z) };
 }

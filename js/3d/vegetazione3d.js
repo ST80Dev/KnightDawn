@@ -8,7 +8,7 @@
 // deformate a codice, colori per vertice, un materiale per livello; nessun asset esterno (regola 6).
 
 import * as THREE from 'three';
-import { STRIDE } from '../mondo/vegetazione.js';
+import { STRIDE, SAGOME, boscoLontano } from '../mondo/vegetazione.js';
 
 // ─── Costruzione delle geometrie ─────────────────────────────────────────
 
@@ -341,8 +341,7 @@ function creaModelli() {
   M.latifoglia = [
     { fino: 60, varianti: [quercia(), faggio(), castagno()] },
     { fino: 300, varianti: [latMedio(4.2, 3.1, 7.6), latMedio(3.2, 4.2, 9.2)] },
-    { fino: Infinity, varianti: [unisci([fusto(0.42, 0.3, 5.5, 3, COL.corteccia),
-      ...chioma({ y: 7.8, a: 3.8, b: 3.3, ciuffi: 1, raggio: [3.4, 3.4], dettaglio: 0, scuro: F[0], chiaro: F[1], rnd, morbido: 0.95, pieno: 0 })])] },
+    { fino: Infinity, sagoma: [SAGOME.latifogliaTonda, SAGOME.latifogliaOvale] },
   ];
 
   // Conifere: abete (largo, a palchi) e abete slanciato.
@@ -358,7 +357,7 @@ function creaModelli() {
     { fino: 300, varianti: [unisci([fusto(0.3, 0.15, 3, 3, COL.corteccia),
       palco(3.0, 7.5, 1.4, COL.ago[0], COL.ago[1], rnd, { lati: 6, segmenti: 1, punte: 0.15 }),
       palco(1.8, 7.0, 6.5, COL.ago[0], COL.ago[1], rnd, { lati: 6, segmenti: 1, punte: 0.15 })])] },
-    { fino: Infinity, varianti: [unisci([palco(2.8, 13.5, 0.6, COL.ago[0], COL.ago[1], rnd, { lati: 5, segmenti: 1, punte: 0 })])] },
+    { fino: Infinity, sagoma: [SAGOME.conifera] },
   ];
 
   // Pino domestico: ombrello piatto, o a due ripiani.
@@ -373,8 +372,7 @@ function creaModelli() {
     ] },
     { fino: 300, varianti: [unisci([fusto(0.34, 0.22, 9.2, 4, COL.cortecciaPino, { inclinaZ: 0.06 }),
       ...chioma({ x: 0.5, y: 10.2, a: 4.2, b: 1.3, ciuffi: 3, raggio: [1.8, 2.3], dettaglio: 0, scuro: P[0], chiaro: P[1], rnd, morbido: 0.85 })])] },
-    { fino: Infinity, varianti: [unisci([fusto(0.36, 0.26, 9, 3, COL.cortecciaPino),
-      ...chioma({ x: 0.5, y: 10.2, a: 4.0, b: 1.2, ciuffi: 1, raggio: [3.6, 3.6], dettaglio: 0, scuro: P[0], chiaro: P[1], rnd, morbido: 0.95, pieno: 0 })])] },
+    { fino: Infinity, sagoma: [SAGOME.pino] },
   ];
 
   // Albero di riva (pioppo): colonna alta e stretta, verde più chiaro, corteccia chiara.
@@ -384,15 +382,14 @@ function creaModelli() {
       ...chioma({ y: 10.5, a: 2.0, b: 5.4, ciuffi: 28, raggio: [0.65, 1.05], scuro: R[0], chiaro: R[1], rnd })])] },
     { fino: 300, varianti: [unisci([fusto(0.34, 0.2, 6, 4, COL.cortecciaBetulla),
       ...chioma({ y: 10.5, a: 1.9, b: 5.2, ciuffi: 3, raggio: [1.6, 2.0], dettaglio: 0, scuro: R[0], chiaro: R[1], rnd, morbido: 0.85, pieno: 0.4 })])] },
-    { fino: Infinity, varianti: [unisci([fusto(0.35, 0.25, 6, 3, COL.cortecciaBetulla),
-      ...chioma({ y: 10.5, a: 1.8, b: 5.0, ciuffi: 1, raggio: [2.0, 2.0], dettaglio: 0, scuro: R[0], chiaro: R[1], rnd, morbido: 0.95, pieno: 0 })])] },
+    { fino: Infinity, sagoma: [SAGOME.riva] },
   ];
 
   // Albero secco: fusto e rami spogli.
   M.secco = [
     { fino: 60, varianti: [unisci([fusto(0.3, 0.1, 7.5, 7, COL.cortecciaChiara), ...rami(6, 2.8, 3.0, COL.cortecciaChiara, rnd)])] },
     { fino: 300, varianti: [unisci([fusto(0.3, 0.12, 7, 4, COL.cortecciaChiara), ...rami(2, 3.5, 2.8, COL.cortecciaChiara, rnd)])] },
-    { fino: Infinity, varianti: [unisci([fusto(0.32, 0.15, 7, 3, COL.cortecciaChiara)])] },
+    { fino: Infinity, sagoma: [SAGOME.secco] },
   ];
 
   // Cespugli: ciuffi su una cupola bassa (due forme da vicino).
@@ -448,8 +445,176 @@ function creaModelli() {
   const moncone = fusto(0.09, 0.05, 0.8, 4, COL.corteccia, { x: -1.2, y: 0.4, inclinaZ: 0.7, sotto: 0 });
   M.tronco = [{ fino: 250, varianti: [unisci([tronco, moncone])] }];
 
+  // Sorgenti dell'atlante delle sagome (nell'ordine di SAGOME): i modelli vicini.
+  M.sorgentiSagome = [M.latifoglia[0].varianti[0], M.latifoglia[0].varianti[1], M.conifera[0].varianti[0],
+    M.pino[0].varianti[0], M.riva[0].varianti[0], M.secco[0].varianti[0]];
   return M;
 }
+
+// ─── Sagome (impostor) degli alberi lontani ─────────────────────────────
+// Concordato con l'utente e con la sessione delle prestazioni: oltre la media distanza (e negli ultimi 150 m verso il
+// bordo del blocco) gli alberi sono sagome, cioè due triangoli rivolti alla camera con l'immagine dell'albero vero,
+// disegnata dal codice al caricamento in un atlante; le stesse sagome continuano il bosco negli anelli dell'orizzonte
+// fino a ~4 km (boscoLontano), così il bosco non finisce al bordo del blocco. Alpha test, niente trasparenza ordinata.
+
+const ATLANTE = { tessera: 256, tessere: 8 };   // 2048×256 RGBA (2 MB)
+
+/**
+ * Atlante delle sagome: ogni modello disegnato di lato, con luce dall'alto, in una tessera quadrata.
+ * @returns {{ texture: THREE.Texture, lato: number[], target: THREE.WebGLRenderTarget }}  lato: misura (m) della tessera
+ */
+function creaAtlante(renderer, geometrie) {
+  const { tessera: T, tessere: N } = ATLANTE;
+  const target = new THREE.WebGLRenderTarget(T * N, T, {
+    generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter,
+  });
+  const scena = new THREE.Scene();
+  scena.add(new THREE.HemisphereLight('#dfe9f0', '#5a5040', 1.6));
+  const luce = new THREE.DirectionalLight('#fff4e0', 2.2);
+  luce.position.set(0.5, 1, 0.8);
+  scena.add(luce);
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
+  const prima = { target: renderer.getRenderTarget(), alpha: renderer.getClearAlpha(), auto: renderer.autoClear };
+  const colore = new THREE.Color();
+  renderer.getClearColor(colore);
+  renderer.setRenderTarget(target);
+  renderer.setClearColor(0x000000, 0);
+  renderer.clear();
+  renderer.autoClear = false;
+  const lato = [];
+  geometrie.forEach((geo, i) => {
+    geo.computeBoundingBox();
+    const b = geo.boundingBox;
+    const S = Math.max(b.max.x - b.min.x, b.max.z - b.min.z, b.max.y) * 1.04;   // tessera quadrata, base a terra
+    lato.push(S);
+    camera.left = -S / 2; camera.right = S / 2; camera.bottom = 0; camera.top = S;
+    camera.position.set(0, 0, 100); camera.lookAt(0, 0, 0);
+    camera.updateProjectionMatrix();
+    const m = new THREE.Mesh(geo, mat);
+    scena.add(m);
+    target.viewport.set(i * T, 0, T, T);
+    target.scissor.set(i * T, 0, T, T);
+    target.scissorTest = true;
+    renderer.setRenderTarget(target);
+    renderer.render(scena, camera);
+    scena.remove(m);
+  });
+  target.scissorTest = false;
+  renderer.setRenderTarget(prima.target);
+  renderer.setClearColor(colore, prima.alpha);
+  renderer.autoClear = prima.auto;
+  mat.dispose();
+  return { texture: target.texture, lato, target };
+}
+
+/** Materiale delle sagome: rivolte alla camera attorno all'asse verticale, luce come il terreno (normale in alto). */
+function materialeSagome(texture) {
+  const mat = new THREE.MeshLambertMaterial({ map: texture, alphaTest: 0.5 });
+  mat.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aTessera;')
+      .replace('#include <uv_vertex>', `#include <uv_vertex>
+  vMapUv = vec2((uv.x + aTessera) / ${ATLANTE.tessere.toFixed(1)}, uv.y);`)
+      .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\n  objectNormal = vec3(0.0, 1.0, 0.0);')
+      .replace('#include <project_vertex>', `
+  vec3 kdC = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+  float kdS = length(instanceMatrix[0].xyz);
+  vec3 kdV = cameraPosition - kdC; kdV.y = 0.0;
+  vec3 kdR = normalize(vec3(kdV.z, 0.0, -kdV.x) + vec3(1e-4, 0.0, 0.0));
+  vec4 mvPosition = viewMatrix * vec4(kdC + kdR * position.x * kdS + vec3(0.0, position.y * kdS, 0.0), 1.0);
+  gl_Position = projectionMatrix * mvPosition;`);
+  };
+  mat.customProgramCacheKey = () => 'kd-sagome-1';
+  return mat;
+}
+
+/** Quadrato di lato 1, base a terra al centro (x −0,5…0,5, y 0…1). */
+function quadSagoma() {
+  const g = new THREE.PlaneGeometry(1, 1);
+  g.translate(0, 0.5, 0);
+  return g;
+}
+
+/** InstancedMesh di sagome con capacità `n` (matrici scritte a mano: posizione e scala). */
+function meshSagome(materiale, n, nome) {
+  const m = new THREE.InstancedMesh(quadSagoma(), materiale, Math.max(1, n));
+  m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  const t = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, n)), 1);
+  t.setUsage(THREE.DynamicDrawUsage);
+  m.geometry.setAttribute('aTessera', t);
+  m.frustumCulled = false;
+  m.count = 0; m.visible = false;
+  m.name = nome;
+  return m;
+}
+
+/** Scrive in `a` (matrici) al posto j una sagoma in (x, y, z) di lato s. */
+function scriviSagoma(a, j, x, y, z, s) {
+  const o = j * 16;
+  a[o] = s; a[o + 1] = 0; a[o + 2] = 0; a[o + 3] = 0;
+  a[o + 4] = 0; a[o + 5] = s; a[o + 6] = 0; a[o + 7] = 0;
+  a[o + 8] = 0; a[o + 9] = 0; a[o + 10] = s; a[o + 11] = 0;
+  a[o + 12] = x; a[o + 13] = y; a[o + 14] = z; a[o + 15] = 1;
+}
+const SAGOMA_BORDO = { fascia: 150, oltre: 120 };
+
+// ─── Collisioni (passo 3; deciso con l'utente: tronchi, massi, affioramenti e sassi grandi bloccano; arbusti, erba e
+// sassi piccoli si attraversano) ───
+// Cerchi sul piano in una griglia di 16 m: si controllano solo le celle attorno al cavaliere. Raggio per tipo al
+// modello di scala 1 (m), moltiplicato per la scala dell'istanza; il tronco caduto è una fila di tre cerchi.
+const COLLISIONI = { cella: 16, sassoMinimo: 1.1,
+  raggio: { latifoglia: 0.42, conifera: 0.34, pino: 0.38, riva: 0.4, secco: 0.32, masso: 1.05, affioramento: 2.3,
+    sasso: 0.3, tronco: 0.32 } };
+
+function creaCollisioni(pos) {
+  const C = COLLISIONI, celle = new Map();
+  const aggiungi = (x, z, r) => {
+    const i0 = Math.floor((x - r) / C.cella), i1 = Math.floor((x + r) / C.cella);
+    const j0 = Math.floor((z - r) / C.cella), j1 = Math.floor((z + r) / C.cella);
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const k = i * 100003 + j;
+      let l = celle.get(k);
+      if (!l) celle.set(k, (l = []));
+      l.push(x, z, r);
+    }
+  };
+  let n = 0;
+  for (const [nome, t] of Object.entries(pos.tipi)) {
+    const r0 = C.raggio[nome];
+    if (!r0) continue;
+    for (let k = 0; k < t.n; k++) {
+      const o = k * STRIDE, x = t.dati[o], z = t.dati[o + 2], s = t.dati[o + 3], rot = t.dati[o + 4], v = t.dati[o + 5];
+      if (nome === 'sasso' && s < C.sassoMinimo) continue;           // i sassi piccoli si attraversano
+      if (t.gruppo === 'rocce') {
+        const largo = 0.7 + 0.8 * ((v * 3.71) % 1), lungo = 0.7 + 0.7 * ((v * 7.13) % 1);   // come le istanze
+        aggiungi(x, z, r0 * s * (largo + lungo) / 2);
+      } else if (nome === 'tronco') {
+        for (const d of [0.6, 2.5, 4.4]) aggiungi(x + Math.cos(rot) * d * s, z - Math.sin(rot) * d * s, r0 * s);
+      } else aggiungi(x, z, r0 * Math.max(0.6, s));
+      n++;
+    }
+  }
+  /** Punto (x, z) spinto fuori dai tronchi e dalle rocce (raggio del cavaliere), o null se libero. */
+  function spingiFuori(x, z, raggio) {
+    const l = celle.get(Math.floor(x / C.cella) * 100003 + Math.floor(z / C.cella));
+    if (!l) return null;
+    let mosso = false;
+    for (let iter = 0; iter < 3; iter++) {
+      let qui = false;
+      for (let k = 0; k < l.length; k += 3) {
+        const ex = x - l[k], ez = z - l[k + 1], min = l[k + 2] + raggio, d2 = ex * ex + ez * ez;
+        if (d2 >= min * min) continue;
+        const d = Math.sqrt(d2);
+        if (d > 1e-6) { x = l[k] + ex / d * min; z = l[k + 1] + ez / d * min; } else x = l[k] + min;
+        qui = mosso = true;
+      }
+      if (!qui) break;
+    }
+    return mosso ? { x, z } : null;
+  }
+  return { spingiFuori, n };
+}   // m: vicino al bordo del blocco, oltre questa distanza, sagome
 
 // ─── Istanze ─────────────────────────────────────────────────────────────
 
@@ -656,7 +821,7 @@ function creaOmbre(oggetti, forme, half) {
   return { sole, piede, passo, oggetti: n };
 }
 
-export function creaVegetazione(pos, terrain = null) {
+export function creaVegetazione(pos, terrain = null, renderer = null) {
   const t0 = performance.now();
   const oggetto = new THREE.Group();
   oggetto.name = 'vegetazione';
@@ -677,6 +842,17 @@ export function creaVegetazione(pos, terrain = null) {
     uVisuale: { value: 0 },                   // 0 finché non arriva la posizione del cavaliere
     uVisCfg: { value: new THREE.Vector4(VISUALE.prima, VISUALE.dopo, VISUALE.largo, VISUALE.vicino) },
   };
+
+  // Sagome: atlante (serve il renderer) e mesh delle sagome del blocco, comune a tutti gli alberi.
+  let atlante = null, matSagome = null, sagomeBlocco = null;
+  if (renderer) {
+    atlante = creaAtlante(renderer, modelli.sorgentiSagome);
+    matSagome = materialeSagome(atlante.texture);
+    const nAlberi = Object.values(pos.tipi).filter((t) => t.gruppo === 'alberi').reduce((s, t) => s + t.n, 0);
+    sagomeBlocco = meshSagome(matSagome, nAlberi, 'vegetazione-sagome');
+    oggetto.add(sagomeBlocco);
+  }
+  const halfBlocco = terrain ? terrain.half : 1000;
 
   const tipi = [];
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), p = new THREE.Vector3();
@@ -710,7 +886,19 @@ export function creaVegetazione(pos, terrain = null) {
       } else _c.setRGB(b, b, b).lerp(GIALLO, giallo * ((v * 5) % 1));
       colori[k * 3] = _c.r; colori[k * 3 + 1] = _c.g; colori[k * 3 + 2] = _c.b;
     }
-    const mesh = livelli.map((L) => L.varianti.map((geo, vi) => {
+    // Sagome per albero (livello lontano): posizione, lato e tessera.
+    const lSagoma = livelli.findIndex((L) => L.sagoma);
+    let sag = null;
+    if (lSagoma >= 0 && atlante) {
+      const tess = livelli[lSagoma].sagoma;
+      sag = new Float32Array(t.n * 5);
+      for (let k = 0; k < t.n; k++) {
+        const o = k * STRIDE, ti = tess[Math.floor(varia[k] * tess.length)];
+        const alto = 0.72 + 0.56 * ((t.dati[o + 5] * 17.31) % 1);
+        sag.set([t.dati[o], t.dati[o + 1], t.dati[o + 2], atlante.lato[ti] * t.dati[o + 3] * alto, ti], k * 5);
+      }
+    }
+    const mesh = livelli.map((L) => (L.sagoma ? [] : L.varianti).map((geo, vi) => {
       const m = new THREE.InstancedMesh(geo,
         conVisuale(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: !!L.piatto }), uniVis, 'pieno',
           raggioOrizzontale(geo)), t.n);
@@ -724,7 +912,7 @@ export function creaVegetazione(pos, terrain = null) {
       oggetto.add(m);
       return m;
     }));
-    tipi.push({ nome, n: t.n, livelli, mesh, matrici, colori, xz, varia });
+    tipi.push({ nome, n: t.n, livelli, mesh, matrici, colori, xz, varia, lSagoma, sag });
   }
 
   // Ombre finte e piede scuro nello shader del suolo (solo il mondo generato: materialeSuolo).
@@ -834,6 +1022,10 @@ export function creaVegetazione(pos, terrain = null) {
     if (ultimo && Math.hypot(cx - ultimo.x, cz - ultimo.z) < RIASSEGNA_DOPO) return;
     const t1 = performance.now();
     ultimo = { x: cx, z: cz };
+    let nSag = 0;
+    const aS = sagomeBlocco ? sagomeBlocco.instanceMatrix.array : null;
+    const tS = sagomeBlocco ? sagomeBlocco.geometry.attributes.aTessera.array : null;
+    const bordoMin = halfBlocco - SAGOMA_BORDO.fascia, oltre2 = SAGOMA_BORDO.oltre * SAGOMA_BORDO.oltre;
     for (const T of tipi) {
       const L = T.livelli, nL = L.length, fino2 = L.map((l) => l.fino * l.fino);
       const conta = T.mesh.map((ms) => new Array(ms.length).fill(0));
@@ -844,6 +1036,17 @@ export function creaVegetazione(pos, terrain = null) {
         let l = 0;
         while (l < nL && d2 > fino2[l]) l++;
         if (l === nL) continue;                    // oltre l'ultima distanza: non si disegna
+        // Verso il bordo del blocco, già a media distanza, sagome: continuano senza stacchi quelle dell'orizzonte.
+        if (T.sag && l !== T.lSagoma && d2 > oltre2
+          && Math.max(Math.abs(T.xz[k * 2]), Math.abs(T.xz[k * 2 + 1])) > bordoMin) l = T.lSagoma;
+        if (l === T.lSagoma) {
+          if (T.sag) {
+            const o = k * 5;
+            scriviSagoma(aS, nSag, T.sag[o], T.sag[o + 1], T.sag[o + 2], T.sag[o + 3]);
+            tS[nSag++] = T.sag[o + 4];
+          }
+          continue;
+        }
         const vi = Math.floor(T.varia[k] * T.mesh[l].length);
         const j = conta[l][vi]++;
         am[l][vi].set(T.matrici.subarray(k * 16, k * 16 + 16), j * 16);
@@ -860,7 +1063,36 @@ export function creaVegetazione(pos, terrain = null) {
         m.instanceColor.needsUpdate = true;
       }));
     }
+    if (sagomeBlocco) {
+      sagomeBlocco.count = nSag; sagomeBlocco.visible = nSag > 0;
+      sagomeBlocco.instanceMatrix.clearUpdateRanges(); sagomeBlocco.instanceMatrix.addUpdateRange(0, nSag * 16);
+      sagomeBlocco.instanceMatrix.needsUpdate = true;
+      const at = sagomeBlocco.geometry.attributes.aTessera;
+      at.clearUpdateRanges(); at.addUpdateRange(0, nSag); at.needsUpdate = true;
+    }
     msAggiorna = performance.now() - t1;
+  }
+
+  /**
+   * Bosco lontano negli anelli dell'orizzonte (fino a ~4 km): sagome statiche. `quota(x, z)` dell'orizzonte.
+   */
+  let lontano = null, msLontano = 0;
+  function aggiungiLontano(carta, cx, cz, quota, stagione = 0) {
+    if (!matSagome || !quota) return;
+    const b = boscoLontano(carta, cx, cz, halfBlocco, quota, stagione);
+    const t2 = performance.now();
+    lontano = meshSagome(matSagome, b.n, 'vegetazione-sagome-lontane');
+    const a = lontano.instanceMatrix.array, ta = lontano.geometry.attributes.aTessera.array;
+    for (let k = 0; k < b.n; k++) {
+      const o = k * 5, ti = b.dati[o + 4];
+      scriviSagoma(a, k, b.dati[o], b.dati[o + 1], b.dati[o + 2], atlante.lato[ti] * b.dati[o + 3]);
+      ta[k] = ti;
+    }
+    lontano.count = b.n; lontano.visible = b.n > 0;
+    lontano.instanceMatrix.needsUpdate = true;
+    lontano.geometry.attributes.aTessera.needsUpdate = true;
+    oggetto.add(lontano);
+    msLontano = b.ms + performance.now() - t2;
   }
 
   /** Istanze disegnate, chiamate e triangoli della vegetazione (F3). */
@@ -875,9 +1107,13 @@ export function creaVegetazione(pos, terrain = null) {
       ciottoli: vicini.ciottolo.mesh.count };
   }
 
+  const collisioni = creaCollisioni(pos);
   const conteggi = Object.fromEntries(Object.entries(pos.tipi).map(([k, t]) => [k, t.n]));
   return {
-    oggetto, aggiorna, statistiche, conteggi,
+    oggetto, aggiorna, statistiche, conteggi, aggiungiLontano,
+    /** Ostacolo per il cavaliere (stessa interfaccia delle mura del castello). */
+    spingiFuori: collisioni.spingiFuori, ostacoli: collisioni.n,
+    get lontano() { return lontano ? { n: lontano.count, ms: msLontano } : null; },
     /**
      * Visuale pulita: posizione del cavaliere (x, y, z) da tenere libera dalla vegetazione, o null per spegnerla
      * (camera libera di debug).
