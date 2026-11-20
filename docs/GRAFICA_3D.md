@@ -69,6 +69,15 @@ Problema segnalato dall'utente: sulla neve, soprattutto vicino al cavaliere, non
      (~1 m), pieno fino a 50 m dalla camera, spento a 150 m (`DETTAGLIO_NEVE`). Solo luce.
 - Estensione naturale: lo stesso meccanismo (normale inclinata nello shader) per prato, terra e roccia.
 
+### Strade (`creaNastroStrada` e `materialeStrada` in `js/3d/acqua.js`, sessione M6) — fatto, da provare dall'utente
+
+Segnalazione dell'utente: «sembra un nastro di stoffa appoggiato sul rilievo», «era meglio di colore più chiaro».
+- Bug: triangoli rivolti verso il basso e materiale a due facce → strada illuminata da sotto, quasi nera. Ora ogni
+  quad ha il verso giusto (FrontSide).
+- Colore più chiaro (`#a89272`); bordi a +0,08 m e centro a +0,25 m sul terreno disegnato (il bordo tocca terra).
+- Shader: bordo frastagliato (fino al 22% della semilarghezza, rumore del mondo con periodo 8192 m, quindi uguale tra
+  blocchi) che sfuma nell'erba calpestata; chiazze di tono; sassolini tondi entro 30 m. Costo trascurabile (pochi pixel).
+
 ## Prestazioni
 
 Budget, misure, cause note e piano della milestone «Prestazioni»: `docs/PRESTAZIONI.md` (scheda di riferimento:

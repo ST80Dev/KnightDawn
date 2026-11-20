@@ -25,6 +25,7 @@ import { distanzaStrada } from '../mondo/strade.js';
 import { posizionaVegetazione, coperturaMondo, coperturaTavullia } from '../mondo/vegetazione.js';
 import { creaVegetazione } from './vegetazione3d.js';
 import { semeDaTesto } from '../mondo/rumore.js';
+import { creaProfilatore, creaPercorso, GRUPPI, BUDGET_GPU } from './prestazioni.js';
 
 // Nebbia sulla distanza vera dalla camera, non sulla profondità lungo l'asse di vista (come fa Three.js):
 // con la profondità, un monte al bordo dello schermo riceveva meno nebbia e spariva girandosi verso di lui.
@@ -47,6 +48,7 @@ const canvas = document.getElementById('scena');
 // Buffer di profondità logaritmico: dal cavaliere a pochi metri fino all'orizzonte a ~110 km senza che le
 // superfici lontane (costa e mare, versanti vicini) si contendano i pixel.
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
+const profilatore = creaProfilatore(renderer);   // tempi GPU/CPU (docs/PRESTAZIONI.md, passo 1)
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 
@@ -484,7 +486,7 @@ async function caricaScena(desc) {
   } else {
     const { meta, heights, acqua: dati } = generaScena(carta, desc.cx, desc.cz);
     terrain = createTerrain(meta, heights, false, coloreMondo(carta, Calendar.stagione));
-    acqueScena = creaAcqueScena(dati, meta, COLORE_ACQUA);
+    acqueScena = creaAcqueScena(dati, meta, COLORE_ACQUA, meta.centroMondo);
     if (acqueScena) scene.add(acqueScena);
     livelliAcqua = { fiume: dati.fiume, lago: dati.lago, cols: meta.cols, cell: meta.cellSize, half: meta.sizeMeters / 2 };
     rocche = costruisciRocche(desc.cx, desc.cz, terrain);
@@ -877,14 +879,17 @@ window.addEventListener('keydown', (e) => {
   } else if (e.code === 'F4' && !fpsEl.hidden) {
     e.preventDefault();
     applicaProva((provaPrestazioni + 1) % PROVE_PRESTAZIONI.length);
+  } else if (e.code === 'F9' && !fpsEl.hidden) {
+    e.preventDefault();
+    avviaPercorso();
   }
 });
 
 // ─── Prova prestazioni (F4 con il pannello F3 aperto) ───────────────────
 // Spegne un pezzo alla volta per vedere, sulla scheda video vera, dove si perdono gli FPS (in headless il rendering
 // è software e non fa testo). Solo diagnostica: non cambia nulla finché non si preme F4.
-const PROVE_PRESTAZIONI = ['normale', 'suolo semplice (senza colore per pixel)', 'senza vegetazione',
-  'senza orizzonte', 'senza rocche', 'risoluzione ×0,6'];
+const PROVE_PRESTAZIONI = ['normale', 'misura per gruppi', 'suolo semplice (senza colore per pixel)',
+  'senza vegetazione', 'senza orizzonte', 'senza rocche', 'risoluzione ×0,6'];
 let provaPrestazioni = 0;
 const _materialiSuolo = new Map();
 function applicaProva(n) {
@@ -895,7 +900,8 @@ function applicaProva(n) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   provaPrestazioni = n;
   switch (n) {
-    case 1:
+    case 1: break;                         // «misura per gruppi»: cambia solo il modo di disegno (frame)
+    case 2:
       scene.traverse((c) => {
         if (c.isMesh && c.material?.customProgramCacheKey?.() === 'suolo-mondo') {
           _materialiSuolo.set(c, c.material);
@@ -903,11 +909,82 @@ function applicaProva(n) {
         }
       });
       break;
-    case 2: if (vegetazione) vegetazione.oggetto.visible = false; break;
-    case 3: if (orizzonte) orizzonte.oggetto.visible = false; break;
-    case 4: for (const o of rocchePresenti) o.visible = false; break;
-    case 5: renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * 0.6); break;
+    case 3: if (vegetazione) vegetazione.oggetto.visible = false; break;
+    case 4: if (orizzonte) orizzonte.oggetto.visible = false; break;
+    case 5: for (const o of rocchePresenti) o.visible = false; break;
+    case 6: renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * 0.6); break;
   }
+}
+
+/** Gruppo di un figlio diretto della scena per il profilatore (null = «resto»). */
+function gruppoDi(o) {
+  if ((terrain && o === terrain.mesh) || (orizzonte && o === orizzonte.oggetto)) return 'terreno';
+  if (vegetazione && o === vegetazione.oggetto) return 'vegetazione';
+  if ((castle && o === castle.object) || rocche.some((r) => r.object === o)) return 'edifici';
+  if (knight && o === knight.object) return 'personaggi';
+  return null;
+}
+
+// ─── Percorso di prova (F9 con F3 aperto, o ?prova nell'indirizzo) ───────
+let percorso = null;
+let percorsoNormale = null;               // istantanea alla fine del giro normale
+let provaAutomatica = PARAMETRI.has('prova');
+let attesaProva = 0;
+function avviaPercorso() {
+  if (!knight || percorso) return;
+  if (modoCamera === 'libera') cambiaModoCamera();
+  const k = knight.stato;
+  percorso = creaPercorso({ x: k.x, y: k.y, z: k.z, direzione: k.direzione });
+  percorsoNormale = null;
+  profilatore.azzera();
+  fpsEl.hidden = false;
+  messaggio('Percorso di prova: circa 35 secondi, non toccare nulla.', 6000);
+}
+const fmtMs = (m) => (m ? `${fmt(m.media, 1)} ms (picco ${fmt(m.max, 1)})` : 'n/d');
+function fineDelPercorso() {
+  const st = percorso.statistiche();
+  const P = profilatore.info, buf = renderer.getDrawingBufferSize(_dimBuffer);
+  const righe = [
+    `Knight Dawn — percorso di prova (${new Date().toISOString().slice(0, 16).replace('T', ' ')})`,
+    `scheda: ${P.scheda}`,
+    `timer GPU: ${P.timerGPU ? 'sì' : 'no'} · profondità invertita possibile: ${P.clipControl ? 'sì' : 'no'}`
+      + ` · MSAA ${P.campioniMSAA}× · profondità logaritmica: ${P.profonditaLog ? 'sì' : 'no'} · ${buf.x}×${buf.y} pixel`,
+    `scena: ${scenaAttuale?.tipo === 'mondo' ? `seme ${carta?.seme}, centro ${scenaAttuale.cx}, ${scenaAttuale.cz}` : scenaAttuale?.tipo}`
+      + ` · vegetazione ${vegetazioneVisibile ? 'accesa' : 'spenta'}`,
+    st ? `FPS medio ${fmt(st.fps, 1)} (${fmt(st.msMedio, 1)} ms) · 1% peggiori ${fmt(st.fps1, 1)} FPS`
+      + ` · fotogramma peggiore ${fmt(st.msPeggiore, 1)} ms · ${st.fotogrammi} fotogrammi` : 'FPS: n/d',
+    `GPU totale: ${fmtMs(percorsoNormale?.totale)} · budget ${fmt(BUDGET_GPU.totale, 1)} ms`,
+    `chiamate ${percorsoNormale?.calls ?? 'n/d'} · ${fmt((percorsoNormale?.triangles ?? 0) / 1000)} mila triangoli`,
+    'GPU per gruppo (ripartizione):',
+    ...GRUPPI.map((g) => {
+      const m = profilatore.media(g);
+      return `  ${g}: ${fmtMs(m)} · budget ${fmt(BUDGET_GPU[g], 1)}${m && m.media > BUDGET_GPU[g] ? '  ⚠ oltre il budget' : ''}`;
+    }),
+  ];
+  percorso = null;
+  mostraRisultati(righe.join('\n'));
+}
+function mostraRisultati(testo) {
+  console.log(testo);
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:50;'
+    + 'background:rgba(26,14,4,0.95);border:1px solid #8a6030;padding:14px;color:#d8c8a0;font:13px Georgia,serif;'
+    + 'max-width:92vw';
+  box.innerHTML = '<div style="margin-bottom:8px">Risultati del percorso di prova — copiali e mandali in chat</div>';
+  const area = document.createElement('textarea');
+  area.readOnly = true;
+  area.value = testo;
+  area.style.cssText = 'width:min(760px,88vw);height:260px;font:12px ui-monospace,Consolas,monospace;'
+    + 'background:#120c04;color:#d8c8a0;border:1px solid #5a3a18';
+  const copia = document.createElement('button');
+  copia.textContent = 'Copia';
+  copia.onclick = () => { area.select(); navigator.clipboard?.writeText(testo).catch(() => document.execCommand('copy')); copia.textContent = 'Copiato'; };
+  const chiudi = document.createElement('button');
+  chiudi.textContent = 'Chiudi';
+  chiudi.onclick = () => box.remove();
+  for (const b of [copia, chiudi]) b.style.cssText = 'margin:8px 8px 0 0;padding:4px 12px';
+  box.append(area, document.createElement('br'), copia, chiudi);
+  document.body.appendChild(box);
 }
 
 const mouse = new THREE.Vector2();
@@ -948,7 +1025,7 @@ function puntoSottoCursore() {
 const fmt = (n, d = 0) => n.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d });
 
 const _dimBuffer = new THREE.Vector2();
-const infoFrame = { calls: 0, triangles: 0 };
+const infoFrame = { calls: 0, triangles: 0, msInvio: 0, msLogica: 0 };
 function aggiornaPannello(now) {
   fpsFrame++;
   const dt = now - fpsT0;
@@ -960,8 +1037,19 @@ function aggiornaPannello(now) {
   if (fpsEl.hidden) return;
   let testo = rigaFps;
   const ri = infoFrame, buf = renderer.getDrawingBufferSize(_dimBuffer);
-  testo += `\nprestazioni (F4 cambia): ${PROVE_PRESTAZIONI[provaPrestazioni]} · ${ri.calls} chiamate`
-    + ` · ${fmt(ri.triangles / 1000)} mila triangoli · ${buf.x}×${buf.y} pixel`;
+  testo += `\nprestazioni (F4 cambia, F9 percorso di prova): ${percorso ? 'PERCORSO DI PROVA in corso' : PROVE_PRESTAZIONI[provaPrestazioni]}`
+    + ` · ${ri.calls} chiamate · ${fmt(ri.triangles / 1000)} mila triangoli · ${buf.x}×${buf.y} pixel`;
+  const P = profilatore.info;
+  testo += `\nscheda: ${P.scheda}\n  timer GPU: ${P.timerGPU ? 'sì' : 'no'} · profondità invertita possibile: ${P.clipControl ? 'sì' : 'no'}`
+    + ` · MSAA ${P.campioniMSAA}× · profondità logaritmica: ${P.profonditaLog ? 'sì' : 'no'}`;
+  testo += `\nCPU: logica ${fmt(ri.msLogica, 1)} ms · invio comandi ${fmt(ri.msInvio, 1)} ms`;
+  if (!P.timerGPU) testo += '\nGPU: timer non disponibili su questa scheda o browser (usare F4)';
+  else if ((percorso ? percorso.modo : provaPrestazioni === 1 ? 'gruppi' : 'normale') === 'gruppi') {
+    testo += '\nGPU per gruppo: ' + GRUPPI.map((g) => {
+      const m = profilatore.media(g);
+      return `${g} ${m ? fmt(m.media, 1) : '…'}${m && m.media > BUDGET_GPU[g] ? '⚠' : ''}`;
+    }).join(' · ') + ' ms';
+  } else testo += `\nGPU: ${fmtMs(profilatore.media('totale'))} · budget ${fmt(BUDGET_GPU.totale, 1)} ms`;
   if (knight) {
     const k = knight.stato;
     testo += `\ncavaliere: x ${fmt(k.x)} · z ${fmt(k.z)} · quota ${fmt(k.y, 1)} m`
@@ -1029,11 +1117,16 @@ const DT_MAX = 0.1;                        // s: dopo una pausa (scheda in backg
 let tPrec = performance.now();
 function frame(now) {
   requestAnimationFrame(frame);
-  const dt = THREE.MathUtils.clamp((now - tPrec) / 1000, 0, DT_MAX);
+  const t0 = performance.now();
+  const dtReale = Math.max(0, (now - tPrec) / 1000);
+  const dt = THREE.MathUtils.clamp(dtReale, 0, DT_MAX);
   tPrec = now;
   if (cartaVista.aperta) return;           // la Carta copre tutto: niente tempo di gioco, niente disegno
+  if (provaAutomatica && knight && caricamento.hidden && (attesaProva += dt) > 3) { provaAutomatica = false; avviaPercorso(); }
   if (knight) {
-    if (!inPausa) {
+    if (percorso) {
+      // Percorso di prova: tempo di gioco fermo, la camera segue il giro fisso.
+    } else if (!inPausa) {
       knight.update(dt, leggiInput());
       contaPercorso();
       const passi = Calendar.avanzaTempoReale(dt);
@@ -1046,7 +1139,17 @@ function frame(now) {
     for (const r of rocche) r.aggiornaLuci(now / 1000, 1 - _luceGiorno);
     aggiornaStato();
     aggiornaIndicatoreAndatura();
-    if (modoCamera === 'segui') {
+    if (percorso) {
+      const r = percorso.aggiorna(dtReale, camera, (x, z) => suolo.getHeight(x, z));
+      if (r.azzera) {
+        if (percorso.modo === 'gruppi') {
+          percorsoNormale = { totale: profilatore.media('totale'), calls: infoFrame.calls, triangles: infoFrame.triangles };
+        }
+        profilatore.azzera();
+      }
+      if (r.mira) aggiornaNebbia(r.mira);
+      if (percorso.finito) fineDelPercorso();
+    } else if (modoCamera === 'segui') {
       cam.update(dt);
       aggiornaNebbia(cam.mira);
     } else {
@@ -1058,13 +1161,16 @@ function frame(now) {
   if (vegetazione && vegetazioneVisibile) {
     vegetazione.aggiorna(camera.position.x, camera.position.z, sole.position, _luceGiorno);
     // Visuale pulita: ciò che sta tra camera e cavaliere si dirada (solo con la camera alle spalle)
-    if (knight && modoCamera === 'segui') vegetazione.visuale(knight.stato.x, knight.stato.y, knight.stato.z);
+    if (knight && modoCamera === 'segui' && !percorso) vegetazione.visuale(knight.stato.x, knight.stato.y, knight.stato.z);
     else vegetazione.visuale(null);
   }
   aggiornaPannello(now);
-  renderer.render(scene, camera);
-  infoFrame.calls = renderer.info.render.calls;          // letti subito, prima di altri disegni
-  infoFrame.triangles = renderer.info.render.triangles;
+  infoFrame.msLogica = performance.now() - t0;
+  const modoDisegno = percorso ? percorso.modo : provaPrestazioni === 1 ? 'gruppi' : 'normale';
+  const r = profilatore.disegna(scene, camera, modoDisegno, gruppoDi);
+  infoFrame.calls = r.calls;
+  infoFrame.triangles = r.triangles;
+  infoFrame.msInvio = r.msInvio;
 }
 
 camera.position.set(0, 300, 900);          // vista provvisoria mentre il terreno si carica
