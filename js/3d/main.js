@@ -991,6 +991,16 @@ function fineDelPercorso() {
         + (v > BUDGET_GPU.vegetazione ? '  ⚠ oltre il budget' : '');
     })(),
   ];
+  // Gli oggetti più pesanti (triangoli disegnati, istanze comprese): per capire se qualcosa si duplica.
+  const pesi = [];
+  scene.traverseVisible((o) => {
+    if (!o.isMesh || !o.geometry) return;
+    const g = o.geometry, n = (g.index ? g.index.count : g.attributes.position?.count || 0) / 3;
+    pesi.push({ nome: o.name || o.parent?.name || '(senza nome)', ist: o.isInstancedMesh ? o.count : 1, tri: n * (o.isInstancedMesh ? o.count : 1) });
+  });
+  pesi.sort((a, b) => b.tri - a.tri);
+  righe.push(`oggetti visibili: ${pesi.length} (chiamate ≈ oggetti nel campo visivo) · i più pesanti:`);
+  for (const p of pesi.slice(0, 12)) righe.push(`  ${p.nome}: ${fmt(p.tri / 1000)} mila triangoli${p.ist > 1 ? ` · ${p.ist} istanze` : ''}`);
   percorso = null;
   mostraRisultati(righe.join('\n'));
 }
