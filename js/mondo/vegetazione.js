@@ -13,7 +13,7 @@
 
 import { BIOMA, CLIMA, limiteNevi } from './carta.js';
 import { fbm, derivaSeme, smoothstep, hash2 } from './rumore.js';
-import { specchio, distanzaPiano } from './scena.js';
+import { specchio, distanzaPiano, livelloLago } from './scena.js';
 import { distanzaStrada } from './strade.js';
 
 // ─── 1. Copertura del terreno (condivisa con il colore) ───────────────────
@@ -198,10 +198,26 @@ export const VEGETAZIONE = {
 const _cop = nuovaCopertura();
 
 /**
+ * Campagna attorno ai luoghi (rocche e borghi, carta.luoghi): nel Medioevo i primi 1–2 km erano coltivati e
+ * disboscati. Distanza dal luogo più vicino con un bordo irregolare (rumore su ~600 m, ±300 m).
+ */
+export const CAMPAGNA = { raggio: [700, 1600], bordo: { lunghezza: 600, ampiezza: 300 } };
+function coltivatoIn(luoghi, x, z, seme) {
+  if (!luoghi || !luoghi.length) return 0;
+  let d = Infinity;
+  for (const l of luoghi) { const dd = Math.hypot(x - l.x, z - l.z); if (dd < d) d = dd; }
+  if (d > CAMPAGNA.raggio[1] + CAMPAGNA.bordo.ampiezza) return 0;
+  d += CAMPAGNA.bordo.ampiezza * fbm(x, z, seme, CAMPAGNA.bordo.lunghezza, 2);
+  return 1 - smoothstep(CAMPAGNA.raggio[0], CAMPAGNA.raggio[1], d);
+}
+const CAMPI = ['alberi', 'limite', 'conifera', 'pino', 'secco', 'riva', 'cespuglio', 'alto', 'sterpo', 'canne',
+  'sasso', 'masso', 'affioramento', 'tronco', 'foresta', 'erba', 'felce', 'frana', 'ciottolo'];
+
+/**
  * Densità per vertice della griglia del blocco: per ogni tipo la probabilità che una cella della sua griglia abbia
  * un oggetto, più i pesi delle specie di albero. `pend` è la pendenza «di zona» (come il colore), `pf` quella fine.
  */
-function densitaVertice(cp, pend, pf, distAcqua, x, z, semeBordo, D, i) {
+function densitaVertice(cp, pend, pf, distAcqua, x, z, semeBordo, D, i, coltivato = 0) {
   const V = VEGETAZIONE;
   const prato = 1 - Math.max(cp.roccia, cp.neve, cp.ghiaia * 2);
   let sabbia = 0, palude = 0, nordSud = 0;
@@ -221,18 +237,19 @@ function densitaVertice(cp, pend, pf, distAcqua, x, z, semeBordo, D, i) {
     versante *= smoothstep(W.umidita[0], W.umidita[1], cp.umidita) * (1 - sabbia) * (1 - palude) * (1 - cp.neveFissa)
       * smoothstep(W.soglia[0], W.soglia[1], fbm(x, z, semeBordo ^ 0x3c6ef372, W.lunghezza, 2));
   }
-  const foresta = Math.max(smoothstep(V.bosco.soglia[0], V.bosco.soglia[1], vista + e), versante);
+  // Campagna attorno a rocche e borghi (coltivato 0–1): il bosco è disboscato, restano alberi isolati e siepi.
+  const foresta = Math.max(smoothstep(V.bosco.soglia[0], V.bosco.soglia[1], vista + e), versante) * (1 - 0.92 * coltivato);
   const limite = smoothstep(CLIMA.bosco + V.limiteAlberi[0], CLIMA.bosco + V.limiteAlberi[1], cp.T);
   const ripido = 1 - smoothstep(V.pendenza.alberi[0], V.pendenza.alberi[1], pf);
   const riva = distAcqua >= V.riva.celle[0] && distAcqua <= V.riva.celle[1] && cp.T > 3 ? 1 : 0;
-  const isolati = (V.isolati.base + V.isolati.umidita * cp.umidita) * (1 - foresta) * prato * (1 - 0.8 * sabbia);
+  const isolati = (V.isolati.base + V.isolati.umidita * cp.umidita) * (1 + 2 * coltivato) * (1 - foresta) * prato * (1 - 0.8 * sabbia);
   const asciutto = distAcqua >= 1 ? 1 : 0;
   D.alberi[i] = asciutto * (1 - cp.neveFissa) * (1 - cp.roccia) * (1 - 0.8 * cp.ghiaia) * ripido * limite
     * Math.max(V.bosco.densita * foresta, isolati, riva * V.riva.densita, 0.04 * palude);
   D.limite[i] = limite;
   D.conifera[i] = Math.max(smoothstep(8, 3, cp.T), 0.6 * cp.monte);
   D.pino[i] = smoothstep(12, 16, cp.T) * smoothstep(0.55, 0.35, cp.umidita);
-  D.secco[i] = 0.5 * palude + 0.15 * sabbia;
+  D.secco[i] = 0.5 * palude + 0.15 * sabbia + 0.05 * foresta;   // legno morto: qualche albero secco anche nel bosco
   D.riva[i] = riva * 0.8;
   // Arbusti: macchia sui pendii (dove il colore la dipinge), margini e sottobosco, prati; sopra il limite degli
   // alberi ginepri e mughi; nel secco sterpi.
@@ -249,12 +266,13 @@ function densitaVertice(cp, pend, pf, distAcqua, x, z, semeBordo, D, i) {
   // più fitti e più grandi (fino a ~8 m) da girarci attorno.
   const monte = Math.max(cp.alto, cp.monte);
   D.frana[i] = asciutto * smoothstep(22, 38, pf) * monte * smoothstep(0.05, 0.35, fbm(x, z, semeBordo ^ 0x1b873593, 200, 2));
+  const sponda = distAcqua >= 1 && distAcqua <= 2 ? 1 : 0;           // ghiaia e sassi sulle rive
   D.sasso[i] = asciutto * (1 - 0.7 * cp.neve) * (0.015 + 0.25 * cp.roccia + 1.4 * cp.ghiaia + 0.15 * piede + 0.12 * monte
-    + 0.3 * D.frana[i]);
+    + 0.3 * D.frana[i] + 0.2 * sponda);
   D.masso[i] = asciutto * (1 - 0.5 * cp.neve) * (0.015 + 2 * cp.ghiaia + 0.3 * cp.roccia * cp.alto + 0.25 * piede
     + 0.05 * monte + 0.7 * D.frana[i]);
   D.ciottolo[i] = asciutto * (1 - 0.8 * cp.neve) * Math.min(0.5, 0.02 + 0.3 * cp.roccia + 1.2 * cp.ghiaia + 0.15 * monte
-    + 0.2 * piede) * V.vicino.ciottolo;
+    + 0.2 * piede + 0.35 * sponda) * V.vicino.ciottolo;
   D.affioramento[i] = asciutto * (0.7 * cp.chiazze + 0.1 * cp.roccia);
   D.tronco[i] = asciutto * 0.06 * foresta * limite;
   // Vicino al cavaliere (erbaAttorno): ciuffi d'erba nei prati, felci nel sottobosco umido. E per il suolo (shader del
@@ -309,10 +327,10 @@ export function posizionaVegetazione(o) {
 
   // Densità per vertice.
   const D = {};
-  for (const k of ['alberi', 'limite', 'conifera', 'pino', 'secco', 'riva', 'cespuglio', 'alto', 'sterpo', 'canne',
-    'sasso', 'masso', 'affioramento', 'tronco', 'foresta', 'erba', 'felce', 'frana', 'ciottolo']) D[k] = new Float32Array(n);
+  for (const k of CAMPI) D[k] = new Float32Array(n);
   const kz = Math.max(1, Math.round(COPERTURA.scalaPendenza / (2 * cell)));   // pendenza di zona, come il colore
-  const semeBordo = derivaSeme(seme, 401);
+  const semeBordo = derivaSeme(seme, 401), semeCampagna = derivaSeme(seme, 402);
+  const luoghi = o.carta?.luoghi || null;
   for (let r = 0; r < cols; r++) {
     for (let c = 0; c < cols; c++) {
       const i = r * cols + c;
@@ -322,7 +340,7 @@ export function posizionaVegetazione(o) {
       const pf = Math.atan(Math.hypot(fx, fz)) * 180 / Math.PI;
       const x = cx - half + c * cell, z = cz - half + r * cell;
       copertura(_cop, x, z, heights[i], pend);
-      densitaVertice(_cop, pend, pf, dist[i], x, z, semeBordo, D, i);
+      densitaVertice(_cop, pend, pf, dist[i], x, z, semeBordo, D, i, coltivatoIn(luoghi, x, z, semeCampagna));
     }
   }
   const msCampi = performance.now() - t0;
@@ -417,7 +435,9 @@ export function posizionaVegetazione(o) {
     const tot = wl + wc + wp + ws + wr;
     let v = (hash2(ix, iz, sA ^ 0x68e31da4) / 4294967296) * tot;
     const tipo = (v -= wr) < 0 ? T.riva : (v -= ws) < 0 ? T.secco : (v -= wc) < 0 ? T.conifera : (v -= wp) < 0 ? T.pino : T.latifoglia;
-    emetti(tipo, ix, iz, sA, lx, lz, quota(), 0.55 + 0.45 * campo(D.limite));
+    // Margine del bosco: alberi più giovani e bassi dove il bosco sfuma nel prato.
+    const fo = campo(D.foresta), giovani = 4 * fo * (1 - fo);
+    emetti(tipo, ix, iz, sA, lx, lz, quota(), (0.55 + 0.45 * campo(D.limite)) * (1 - 0.35 * giovani));
   });
   // Gli altri tipi: ognuno la sua griglia.
   const regole = {
@@ -492,3 +512,106 @@ export function posizionaVegetazione(o) {
 
   return { tipi, ms: performance.now() - t0, msCampi, suolo, erbaAttorno };
 }
+
+// ─── Bosco lontano (sagome negli anelli dell'orizzonte) ──────────────────
+
+/** Tessere dell'atlante delle sagome (js/3d/vegetazione3d.js): una per forma d'albero. */
+export const SAGOME = { latifogliaTonda: 0, latifogliaOvale: 1, conifera: 2, pino: 3, riva: 4, secco: 5 };
+
+/** Parametri del bosco lontano ([Ipotesi] da tarare guardando e misurando). */
+export const BOSCO_LONTANO = {
+  griglia: 50,          // m: passo della griglia grossolana su cui si valutano copertura e quota
+  raggio: 3000,         // m (in quadrato, dal centro del blocco): oltre, il bosco resta un colore
+  // Prestazioni (misura della sessione M1: 137 000 sagome con alpha test raddoppiavano il fotogramma): oltre `da` m
+  // la densità cala fino a `fino` a `a` m, e le sagome diventano più grandi («ciuffi di bosco»: scala / √densità).
+  dirada: { da: 1300, a: 3000, fino: 0.08, scalaMax: 2.8 },
+  // La cella degli alberi cresce con la distanza (6 m al bordo del blocco, 12 m a 2 km, 24 m a 4 km): la densità
+  // cala come 1/d² e la scala cresce come la radice della cella, così da lontano la chioma resta piena.
+  // Cella di partenza 10 m (il blocco ne ha 6): alberi un po' più grandi, √(10/6), per non lasciare un vuoto al bordo.
+  cella: 10, cellaBlocco: 6, esponenteScala: 0.5,
+};
+
+/**
+ * Alberi degli anelli dell'orizzonte attorno al blocco centrato in (cx, cz) del mondo: stesse regole del bosco del
+ * blocco (densitaVertice, coperturaMondo) valutate su una griglia grossolana, tra il bordo del blocco (`half`) e
+ * BOSCO_LONTANO.raggio. `quota(x, z)` (coordinate locali) dà la quota della superficie disegnata degli anelli.
+ * @returns {{ dati: Float32Array, n: number, ms: number }}  per albero: x, quota, z (locali), scala, tessera (SAGOME)
+ */
+export function boscoLontano(carta, cx, cz, half, quota, stagione = 0) {
+  const t0 = performance.now();
+  const B = BOSCO_LONTANO, G = B.griglia, R = B.raggio;
+  const copertura = coperturaMondo(carta, stagione), semeBordo = derivaSeme(carta.seme, 401);
+  const semeCampagna = derivaSeme(carta.seme, 402);
+  // Griglia grossolana su [-R, R]² (locali): quote, poi densità e pesi delle specie.
+  const ng = Math.ceil(2 * R / G) + 1, n = ng * ng;
+  const H = new Float32Array(n);
+  for (let r = 0; r < ng; r++) {
+    for (let c = 0; c < ng; c++) {
+      const x = -R + c * G, z = -R + r * G;
+      const h = Math.max(Math.abs(x), Math.abs(z)) < half ? NaN : quota(x, z);
+      H[r * ng + c] = h;
+    }
+  }
+  const D = {};
+  for (const k of CAMPI) D[k] = new Float32Array(1);
+  const alb = new Float32Array(n), con = new Float32Array(n), pin = new Float32Array(n), sec = new Float32Array(n);
+  const lim = new Float32Array(n);
+  const Hc = (c, r) => H[Math.min(ng - 1, Math.max(0, r)) * ng + Math.min(ng - 1, Math.max(0, c))];
+  for (let r = 0; r < ng; r++) {
+    for (let c = 0; c < ng; c++) {
+      const i = r * ng + c, h = H[i];
+      if (Number.isNaN(h)) continue;
+      const x = -R + c * G, z = -R + r * G;
+      // Laghi e mare: niente alberi.
+      if (h < 0.5 || !Number.isNaN(livelloLago(carta, cx + x, cz + z))) continue;
+      const hx = Hc(c + 1, r) - Hc(c - 1, r), hz = Hc(c, r + 1) - Hc(c, r - 1);
+      const g = Number.isNaN(hx) || Number.isNaN(hz) ? 0 : Math.hypot(hx, hz) / (2 * G);
+      const pend = Math.atan(g) * 180 / Math.PI;
+      copertura(_cop, cx + x, cz + z, h, pend);
+      densitaVertice(_cop, pend, pend, VEGETAZIONE.acquaCelle, cx + x, cz + z, semeBordo, D, 0,
+        coltivatoIn(carta.luoghi, cx + x, cz + z, semeCampagna));
+      alb[i] = D.alberi[0]; con[i] = D.conifera[0]; pin[i] = D.pino[0]; sec[i] = D.secco[0]; lim[i] = D.limite[0];
+    }
+  }
+  const campo = (A, x, z) => {
+    let fx = (x + R) / G, fz = (z + R) / G;
+    const c = Math.min(ng - 2, Math.max(0, Math.floor(fx))), r = Math.min(ng - 2, Math.max(0, Math.floor(fz)));
+    fx -= c; fz -= r;
+    const i = r * ng + c;
+    return (A[i] * (1 - fx) + A[i + 1] * fx) * (1 - fz) + (A[i + ng] * (1 - fx) + A[i + ng + 1] * fx) * fz;
+  };
+  // Alberi: bande di distanza con cella 6·2^k; dentro la banda si accetta con (cella banda / cella voluta)².
+  const out = [], sA = derivaSeme(carta.seme, 470);
+  for (let k = 0, d0 = half; d0 < R; k++, d0 *= 2) {
+    const d1 = Math.min(R, d0 * 2), P = B.cella * 2 ** k;
+    const i0 = Math.floor((cx - d1) / P), i1 = Math.ceil((cx + d1) / P);
+    const j0 = Math.floor((cz - d1) / P), j1 = Math.ceil((cz + d1) / P);
+    for (let iz = j0; iz <= j1; iz++) {
+      for (let ix = i0; ix <= i1; ix++) {
+        const hj = hash2(ix, iz, sA ^ 0x9e3779b9);
+        const X = (ix + (hj & 0xffff) / 65536) * P, Z = (iz + (hj >>> 16) / 65536) * P;
+        const x = X - cx, z = Z - cz, d = Math.max(Math.abs(x), Math.abs(z));
+        if (d < d0 || d >= d1) continue;
+        const voluta = B.cella * d / half;                       // cella «continua» a questa distanza
+        const t = Math.min(1, Math.max(0, (d - B.dirada.da) / (B.dirada.a - B.dirada.da)));
+        const dirada = 1 - (1 - B.dirada.fino) * t;
+        const p = campo(alb, x, z) * (P / voluta) * (P / voluta) * dirada;
+        if (hash2(ix, iz, sA) / 4294967296 >= p) continue;
+        const y = quota(x, z);
+        if (Number.isNaN(y)) continue;
+        const wc = campo(con, x, z), wp = campo(pin, x, z), ws = campo(sec, x, z);
+        const wl = Math.max(0, 1 - wc - wp);
+        const h2 = hash2(ix, iz, sA ^ 0x68e31da4);
+        let v = (h2 / 4294967296) * (wl + wc + wp + ws);
+        const tessera = (v -= ws) < 0 ? SAGOME.secco : (v -= wc) < 0 ? SAGOME.conifera : (v -= wp) < 0 ? SAGOME.pino
+          : (h2 & 1 ? SAGOME.latifogliaTonda : SAGOME.latifogliaOvale);
+        const eta = 0.45 + 1.0 * ((h2 >>> 8) & 0xff) / 255;
+        const scala = eta * (0.55 + 0.45 * campo(lim, x, z)) * (voluta / B.cellaBlocco) ** B.esponenteScala
+          * Math.min(B.dirada.scalaMax, 1 / Math.sqrt(dirada));
+        out.push(x, y, z, scala, tessera);
+      }
+    }
+  }
+  return { dati: Float32Array.from(out), n: out.length / 5, ms: performance.now() - t0 };
+}
+
