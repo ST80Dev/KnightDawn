@@ -514,6 +514,7 @@ async function caricaScena(desc) {
   }
   vegetazione.oggetto.visible = vegetazioneVisibile;
   scene.add(vegetazione.oggetto);
+  ostacoli.push(vegetazione);              // tronchi, massi, affioramenti e sassi grandi
   scene.add(terrain.mesh);
 
   if (desc.tipo === 'mondo') {

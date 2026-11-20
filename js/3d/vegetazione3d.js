@@ -557,7 +557,64 @@ function scriviSagoma(a, j, x, y, z, s) {
   a[o + 8] = 0; a[o + 9] = 0; a[o + 10] = s; a[o + 11] = 0;
   a[o + 12] = x; a[o + 13] = y; a[o + 14] = z; a[o + 15] = 1;
 }
-const SAGOMA_BORDO = { fascia: 150, oltre: 120 };   // m: vicino al bordo del blocco, oltre questa distanza, sagome
+const SAGOMA_BORDO = { fascia: 150, oltre: 120 };
+
+// ─── Collisioni (passo 3; deciso con l'utente: tronchi, massi, affioramenti e sassi grandi bloccano; arbusti, erba e
+// sassi piccoli si attraversano) ───
+// Cerchi sul piano in una griglia di 16 m: si controllano solo le celle attorno al cavaliere. Raggio per tipo al
+// modello di scala 1 (m), moltiplicato per la scala dell'istanza; il tronco caduto è una fila di tre cerchi.
+const COLLISIONI = { cella: 16, sassoMinimo: 1.1,
+  raggio: { latifoglia: 0.42, conifera: 0.34, pino: 0.38, riva: 0.4, secco: 0.32, masso: 1.05, affioramento: 2.3,
+    sasso: 0.3, tronco: 0.32 } };
+
+function creaCollisioni(pos) {
+  const C = COLLISIONI, celle = new Map();
+  const aggiungi = (x, z, r) => {
+    const i0 = Math.floor((x - r) / C.cella), i1 = Math.floor((x + r) / C.cella);
+    const j0 = Math.floor((z - r) / C.cella), j1 = Math.floor((z + r) / C.cella);
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const k = i * 100003 + j;
+      let l = celle.get(k);
+      if (!l) celle.set(k, (l = []));
+      l.push(x, z, r);
+    }
+  };
+  let n = 0;
+  for (const [nome, t] of Object.entries(pos.tipi)) {
+    const r0 = C.raggio[nome];
+    if (!r0) continue;
+    for (let k = 0; k < t.n; k++) {
+      const o = k * STRIDE, x = t.dati[o], z = t.dati[o + 2], s = t.dati[o + 3], rot = t.dati[o + 4], v = t.dati[o + 5];
+      if (nome === 'sasso' && s < C.sassoMinimo) continue;           // i sassi piccoli si attraversano
+      if (t.gruppo === 'rocce') {
+        const largo = 0.7 + 0.8 * ((v * 3.71) % 1), lungo = 0.7 + 0.7 * ((v * 7.13) % 1);   // come le istanze
+        aggiungi(x, z, r0 * s * (largo + lungo) / 2);
+      } else if (nome === 'tronco') {
+        for (const d of [0.6, 2.5, 4.4]) aggiungi(x + Math.cos(rot) * d * s, z - Math.sin(rot) * d * s, r0 * s);
+      } else aggiungi(x, z, r0 * Math.max(0.6, s));
+      n++;
+    }
+  }
+  /** Punto (x, z) spinto fuori dai tronchi e dalle rocce (raggio del cavaliere), o null se libero. */
+  function spingiFuori(x, z, raggio) {
+    const l = celle.get(Math.floor(x / C.cella) * 100003 + Math.floor(z / C.cella));
+    if (!l) return null;
+    let mosso = false;
+    for (let iter = 0; iter < 3; iter++) {
+      let qui = false;
+      for (let k = 0; k < l.length; k += 3) {
+        const ex = x - l[k], ez = z - l[k + 1], min = l[k + 2] + raggio, d2 = ex * ex + ez * ez;
+        if (d2 >= min * min) continue;
+        const d = Math.sqrt(d2);
+        if (d > 1e-6) { x = l[k] + ex / d * min; z = l[k + 1] + ez / d * min; } else x = l[k] + min;
+        qui = mosso = true;
+      }
+      if (!qui) break;
+    }
+    return mosso ? { x, z } : null;
+  }
+  return { spingiFuori, n };
+}   // m: vicino al bordo del blocco, oltre questa distanza, sagome
 
 // ─── Istanze ─────────────────────────────────────────────────────────────
 
@@ -1050,9 +1107,12 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
       ciottoli: vicini.ciottolo.mesh.count };
   }
 
+  const collisioni = creaCollisioni(pos);
   const conteggi = Object.fromEntries(Object.entries(pos.tipi).map(([k, t]) => [k, t.n]));
   return {
     oggetto, aggiorna, statistiche, conteggi, aggiungiLontano,
+    /** Ostacolo per il cavaliere (stessa interfaccia delle mura del castello). */
+    spingiFuori: collisioni.spingiFuori, ostacoli: collisioni.n,
     get lontano() { return lontano ? { n: lontano.count, ms: msLontano } : null; },
     /**
      * Visuale pulita: posizione del cavaliere (x, y, z) da tenere libera dalla vegetazione, o null per spegnerla
