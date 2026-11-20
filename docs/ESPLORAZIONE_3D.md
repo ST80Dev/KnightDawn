@@ -1520,8 +1520,12 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      `js/mondo/vegetazione.js`): stesse regole del bosco del blocco valutate su una griglia di 50 m sulla quota
      disegnata degli anelli (`quota` esposta da `creaOrizzonte`, una riga in `orizzonte.js`), cella degli alberi che
      cresce con la distanza (6 m al bordo del blocco, 12 m a 2 km: densità come 1/d²) e scala come la radice della
-     cella; niente alberi in laghi e mare; una chiamata. Seme 855588: ~79 000 sagome lontane in ~150 ms; vegetazione
-     da 23 a 16 chiamate e da ~730 000 a ~310 000 triangoli. Da misurare sulla scheda dell'utente (`?prova`).
+     cella; niente alberi in laghi e mare; una chiamata. Prima versione: seme 570549 ~137 000 sagome lontane, e la
+     sessione delle prestazioni ha misurato che da sole raddoppiavano il fotogramma in headless (2190 contro 610 ms).
+     **Ridotte** (obiettivo ≤ 20–30 000): raggio 3 km; oltre 1,3 km il bosco si dirada fino all'8 % a 3 km, con
+     alberi più grandi a compensare (scala fino a ×2,8) perché la massa resti; cella di base 10 m. Seme 570549:
+     ~28 000 sagome lontane (63 ms) più ~12 500 nel blocco; seme 855588: ~13 000 più ~3 400. Nessun vuoto al bordo
+     del blocco. Da rimisurare (sessione delle prestazioni, poi la scheda dell'utente con `?prova`).
    - *Collisioni (passo 3)*: tronchi, massi, affioramenti, tronchi caduti (tre cerchi) e sassi di scala ≥ 1,1 come
      cerchi in una griglia di 16 m, ostacolo per il cavaliere come le mura (`spingiFuori`). Prova: correndo contro un
      tronco il cavaliere si ferma a 0,6–0,8 m dal centro e ci scivola attorno.

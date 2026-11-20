@@ -521,10 +521,14 @@ export const SAGOME = { latifogliaTonda: 0, latifogliaOvale: 1, conifera: 2, pin
 /** Parametri del bosco lontano ([Ipotesi] da tarare guardando e misurando). */
 export const BOSCO_LONTANO = {
   griglia: 50,          // m: passo della griglia grossolana su cui si valutano copertura e quota
-  raggio: 4000,         // m (in quadrato, dal centro del blocco): oltre, il bosco resta un colore
+  raggio: 3000,         // m (in quadrato, dal centro del blocco): oltre, il bosco resta un colore
+  // Prestazioni (misura della sessione M1: 137 000 sagome con alpha test raddoppiavano il fotogramma): oltre `da` m
+  // la densità cala fino a `fino` a `a` m, e le sagome diventano più grandi («ciuffi di bosco»: scala / √densità).
+  dirada: { da: 1300, a: 3000, fino: 0.08, scalaMax: 2.8 },
   // La cella degli alberi cresce con la distanza (6 m al bordo del blocco, 12 m a 2 km, 24 m a 4 km): la densità
   // cala come 1/d² e la scala cresce come la radice della cella, così da lontano la chioma resta piena.
-  cella: 6, esponenteScala: 0.5,
+  // Cella di partenza 10 m (il blocco ne ha 6): alberi un po' più grandi, √(10/6), per non lasciare un vuoto al bordo.
+  cella: 10, cellaBlocco: 6, esponenteScala: 0.5,
 };
 
 /**
@@ -589,7 +593,9 @@ export function boscoLontano(carta, cx, cz, half, quota, stagione = 0) {
         const x = X - cx, z = Z - cz, d = Math.max(Math.abs(x), Math.abs(z));
         if (d < d0 || d >= d1) continue;
         const voluta = B.cella * d / half;                       // cella «continua» a questa distanza
-        const p = campo(alb, x, z) * (P / voluta) * (P / voluta);
+        const t = Math.min(1, Math.max(0, (d - B.dirada.da) / (B.dirada.a - B.dirada.da)));
+        const dirada = 1 - (1 - B.dirada.fino) * t;
+        const p = campo(alb, x, z) * (P / voluta) * (P / voluta) * dirada;
         if (hash2(ix, iz, sA) / 4294967296 >= p) continue;
         const y = quota(x, z);
         if (Number.isNaN(y)) continue;
@@ -600,7 +606,8 @@ export function boscoLontano(carta, cx, cz, half, quota, stagione = 0) {
         const tessera = (v -= ws) < 0 ? SAGOME.secco : (v -= wc) < 0 ? SAGOME.conifera : (v -= wp) < 0 ? SAGOME.pino
           : (h2 & 1 ? SAGOME.latifogliaTonda : SAGOME.latifogliaOvale);
         const eta = 0.45 + 1.0 * ((h2 >>> 8) & 0xff) / 255;
-        const scala = eta * (0.55 + 0.45 * campo(lim, x, z)) * (voluta / B.cella) ** B.esponenteScala;
+        const scala = eta * (0.55 + 0.45 * campo(lim, x, z)) * (voluta / B.cellaBlocco) ** B.esponenteScala
+          * Math.min(B.dirada.scalaMax, 1 / Math.sqrt(dirada));
         out.push(x, y, z, scala, tessera);
       }
     }
