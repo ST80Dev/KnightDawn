@@ -189,7 +189,7 @@ Regole già definite nel 2D (`WORLD_GEN.md` e `world.js`, commit `2c869fa`), che
   frastagliati da un rumore, quindi niente bande nette.
 - **Catene montuose come creste** (rumore *ridged*), non altopiani a blob, con roccia ai piedi e
   colline ai fianchi.
-- **Quote per quantile**: mare (10–22 %) e, sulla terra, pianura (25–35 %), collina (45–55 %),
+- **Quote per quantile**: mare (5–11 %, mediana ~8 % [rivisto con l'utente, novembre 2026: prima 10–22 %; nel mondo di 120×90 km il mare aperto era spazio sprecato, i bracci di mare interni restano]) e, sulla terra, pianura (25–35 %), collina (45–55 %),
   pedemonte (8–12 %) e montagna (4,5–10 %) sono quote fisse della superficie [rivisto con l'utente a
   novembre 2026: più collina che pianura, per salire e guardare lontano]. Ogni mondo ha abbastanza mare e montagna, ma con forma sempre diversa
   (coste, isole, istmi, canali).
