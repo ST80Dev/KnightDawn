@@ -25,7 +25,7 @@ import { distanzaStrada } from '../mondo/strade.js';
 import { posizionaVegetazione, coperturaMondo, coperturaTavullia } from '../mondo/vegetazione.js';
 import { creaVegetazione } from './vegetazione3d.js';
 import { semeDaTesto } from '../mondo/rumore.js';
-import { creaProfilatore, creaPercorso, GRUPPI, BUDGET_GPU } from './prestazioni.js';
+import { creaProfilatore, creaPercorso, GRUPPI, BUDGET_GPU, budgetDi } from './prestazioni.js';
 
 // Nebbia sulla distanza vera dalla camera, non sulla profondità lungo l'asse di vista (come fa Three.js):
 // con la profondità, un monte al bordo dello schermo riceveva meno nebbia e spariva girandosi verso di lui.
@@ -39,7 +39,8 @@ const NEBBIA = [900, 4000];               // m: inizio e fine della nebbia linea
 const NEBBIA_ORIZZONTE = [10000, 170000];
 const LONTANO = 130000;                   // m: distanza massima disegnata dalla camera
 const PARAMETRI = new URL(window.location.href).searchParams;
-const TAVULLIA = PARAMETRI.get('terreno') === 'tavullia';   // scena di prova (terreno reale, castello)
+const TAVULLIA = PARAMETRI.get('terreno') === 'tavullia';
+const PROVA_PRESTAZIONI = PARAMETRI.has('prova');             // percorso di prova: niente salvataggi (vedi init)   // scena di prova (terreno reale, castello)
 const COLORE_ACQUA = '#4d7282';
 const PROFONDITA_GUADO = 0.9;             // m d'acqua oltre i quali il cavaliere non entra (fiumi piccoli: si guadano)
 
@@ -640,7 +641,10 @@ async function entraTavullia() {
 
 async function init() {
   // Partita ripresa dal salvataggio automatico, se c'è; altrimenti nuova.
-  const ripresa = await Save.load(Save.AUTOSAVE_SLOT);
+  // Percorso di prova (?prova): niente salvataggio letto né scritto, così parte sempre dalla partenza standard del
+  // seme (misure confrontabili) e non tocca la partita dell'utente.
+  if (PROVA_PRESTAZIONI) nonSalvare = true;
+  const ripresa = PROVA_PRESTAZIONI ? null : await Save.load(Save.AUTOSAVE_SLOT);
   if (!ripresa) nuovaPartitaDati();
   const sc = ripresa ? Save.scenaSalvata : null;
   const finiti = (...v) => v.every(Number.isFinite);
@@ -702,7 +706,7 @@ async function init() {
       ? { terreno: 'tavullia', seme: carta?.seme, x: k.x, z: k.z, direzione: k.direzione }
       : { terreno: 'mondo', seme: carta.seme, cx: scenaAttuale.cx, cz: scenaAttuale.cz, x: k.x, z: k.z, direzione: k.direzione };
   };
-  Save.startAutosave();
+  if (!PROVA_PRESTAZIONI) Save.startAutosave();
   window.addEventListener('pagehide', salvaOra);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') salvaOra();
@@ -922,12 +926,24 @@ function applicaProva(n) {
   }
 }
 
-/** Gruppo di un figlio diretto della scena per il profilatore (null = «resto»). */
+/**
+ * Gruppo di un oggetto disegnabile per il profilatore (null = «resto»). La vegetazione si divide per tipo di mesh
+ * (sagome lontane, sagome nel blocco, erba, resto) dal nome, ovunque sia appesa.
+ */
 function gruppoDi(o) {
-  if ((terrain && o === terrain.mesh) || (orizzonte && o === orizzonte.oggetto)) return 'terreno';
-  if (vegetazione && o === vegetazione.oggetto) return 'vegetazione';
-  if ((castle && o === castle.object) || rocche.some((r) => r.object === o)) return 'edifici';
-  if (knight && o === knight.object) return 'personaggi';
+  const nome = o.name || '';
+  if (nome.startsWith('vegetazione')) {
+    if (nome.includes('sagome-lontane')) return 'veg. sagome lontane';
+    if (nome.includes('sagome')) return 'veg. sagome';
+    if (nome.includes('erba')) return 'veg. erba';
+    return 'veg. resto';
+  }
+  let top = o;
+  while (top.parent && top.parent !== scene) top = top.parent;
+  if ((terrain && top === terrain.mesh) || (orizzonte && top === orizzonte.oggetto)) return 'terreno';
+  if (vegetazione && top === vegetazione.oggetto) return 'veg. resto';
+  if ((castle && top === castle.object) || rocche.some((r) => r.object === top)) return 'edifici';
+  if (knight && top === knight.object) return 'personaggi';
   return null;
 }
 
@@ -935,7 +951,7 @@ function gruppoDi(o) {
 let msCottura = null;                    // ms della cottura del colore del blocco (F3)
 let percorso = null;
 let percorsoNormale = null;               // istantanea alla fine del giro normale
-let provaAutomatica = PARAMETRI.has('prova');
+let provaAutomatica = PROVA_PRESTAZIONI;
 let attesaProva = 0;
 function avviaPercorso() {
   if (!knight || percorso) return;
@@ -960,13 +976,20 @@ function fineDelPercorso() {
       + ` · vegetazione ${vegetazioneVisibile ? 'accesa' : 'spenta'}`,
     st ? `FPS medio ${fmt(st.fps, 1)} (${fmt(st.msMedio, 1)} ms) · 1% peggiori ${fmt(st.fps1, 1)} FPS`
       + ` · fotogramma peggiore ${fmt(st.msPeggiore, 1)} ms · ${st.fotogrammi} fotogrammi` : 'FPS: n/d',
+    st && Number.isFinite(st.cpuMedia) ? `CPU per fotogramma (logica + invio): media ${fmt(st.cpuMedia, 1)} ms · 1% peggiori`
+      + ` ${fmt(st.cpu99, 1)} ms · massimo ${fmt(st.cpuMax, 1)} ms` : 'CPU: n/d',
     `GPU totale: ${fmtMs(percorsoNormale?.totale)} · budget ${fmt(BUDGET_GPU.totale, 1)} ms`,
     `chiamate ${percorsoNormale?.calls ?? 'n/d'} · ${fmt((percorsoNormale?.triangles ?? 0) / 1000)} mila triangoli`,
     'GPU per gruppo (ripartizione):',
     ...GRUPPI.map((g) => {
-      const m = profilatore.media(g);
-      return `  ${g}: ${fmtMs(m)} · budget ${fmt(BUDGET_GPU[g], 1)}${m && m.media > BUDGET_GPU[g] ? '  ⚠ oltre il budget' : ''}`;
+      const m = profilatore.media(g), b = budgetDi(g);
+      return `  ${g}: ${fmtMs(m)}${b != null ? ` · budget ${fmt(b, 1)}${m && m.media > b ? '  ⚠ oltre il budget' : ''}` : ''}`;
     }),
+    (() => {
+      const v = GRUPPI.filter((g) => g.startsWith('veg.')).reduce((s, g) => s + (profilatore.media(g)?.media || 0), 0);
+      return `  vegetazione in tutto: ${fmt(v, 1)} ms · budget ${fmt(BUDGET_GPU.vegetazione, 1)}`
+        + (v > BUDGET_GPU.vegetazione ? '  ⚠ oltre il budget' : '');
+    })(),
   ];
   percorso = null;
   mostraRisultati(righe.join('\n'));
@@ -1055,7 +1078,8 @@ function aggiornaPannello(now) {
   else if ((percorso ? percorso.modo : provaPrestazioni === 1 ? 'gruppi' : 'normale') === 'gruppi') {
     testo += '\nGPU per gruppo: ' + GRUPPI.map((g) => {
       const m = profilatore.media(g);
-      return `${g} ${m ? fmt(m.media, 1) : '…'}${m && m.media > BUDGET_GPU[g] ? '⚠' : ''}`;
+      const b = budgetDi(g);
+      return `${g} ${m ? fmt(m.media, 1) : '…'}${m && b != null && m.media > b ? '⚠' : ''}`;
     }).join(' · ') + ' ms';
   } else testo += `\nGPU: ${fmtMs(profilatore.media('totale'))} · budget ${fmt(BUDGET_GPU.totale, 1)} ms`;
   if (knight) {
@@ -1180,6 +1204,7 @@ function frame(now) {
   infoFrame.calls = r.calls;
   infoFrame.triangles = r.triangles;
   infoFrame.msInvio = r.msInvio;
+  if (percorso) percorso.registraCPU(infoFrame.msLogica + r.msInvio);
 }
 
 camera.position.set(0, 300, 900);          // vista provvisoria mentre il terreno si carica
