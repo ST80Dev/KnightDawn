@@ -135,4 +135,12 @@ Nel codice di oggi [Probabile, da confermare con le misure del passo 1]:
 
 ## Risultati del percorso di prova
 
-(vuoto: si riempie dal passo 1)
+Scheda Intel UHD 730 (il browser Brave nasconde il nome), 1920×935, seme 570549 (`?seme=570549&prova`).
+
+| Data | Versione | FPS medio | 1% peggiori | GPU totale | Terreno | Vegetazione | Edifici | Personaggi | Resto | Chiamate | Triangoli |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 20/11/2026 | main dopo #122–#123 (riferimento) | 38,0 | 19,9 | 24,7 | **16,7** | 4,9 | 0,1 | 0,1 | 1,8 | 301 | 859 mila |
+
+Lettura: la GPU è il collo di bottiglia (24,7 ms su 26,3 ms di fotogramma); il **terreno** vale due terzi. Edifici e
+personaggi costano ~0,1 ms: unire le geometrie (passo 5) non è urgente. Ordine dei passi rivisto: prima terreno
+(passo 3) e profondità (passo 2), poi vegetazione.
