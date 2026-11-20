@@ -17,7 +17,7 @@
 import * as THREE from 'three';
 import { BIOMA, CLIMA } from '../mondo/carta.js';
 import { smoothstep } from '../mondo/rumore.js';
-import { COPERTURA, coperturaMondo, nuovaCopertura } from '../mondo/vegetazione.js';
+import { COPERTURA, coperturaMondo, nuovaCopertura, campagnaMondo } from '../mondo/vegetazione.js';
 
 const PAL = (typeof PALETTE !== 'undefined') ? PALETTE : {};
 
@@ -186,6 +186,7 @@ export const COLORI_MONDO = COPERTURA;
 export function coloreMondo(carta, stagione = 0) {
   const K = COLORI_MONDO;
   const copertura = coperturaMondo(carta, stagione), cp = nuovaCopertura();
+  const campagna = campagnaMondo(carta);
   const c = new THREE.Color();
   // `strati` (facoltativo): per il materiale a colore per pixel (materialeSuolo) scrive il colore prima di roccia e
   // neve (base, già con la variazione di luminosità), i pesi di roccia e neve, la variazione e il tono della roccia.
@@ -201,6 +202,10 @@ export function coloreMondo(carta, stagione = 0) {
     if (bosco > 0) {
       if (cp.radura > 0) out.lerp(COLORE_RADURA, cp.radura * bosco * 0.8);
       if (cp.T < CLIMA.bosco + 1) out.lerp(COLORE_ALPEGGIO, bosco * cp.alpeggio);
+      // Campagna attorno a rocche e borghi: il bosco è disboscato (vegetazione.js), quindi niente verde cupo del
+      // bosco dove gli alberi non ci sono più; resta il prato.
+      const coltivato = campagna(x, z);
+      if (coltivato > 0) out.lerp(COLORE_RADURA, coltivato * bosco * (1 - cp.radura * 0.8) * 0.85);
     }
     // Toni ampi (più verde o più secco) e macchia più scura sui pendii: il rilievo si legge anche da lontano.
     const tono = cp.tono;
