@@ -547,12 +547,12 @@ export const BOSCO_LONTANO = {
   griglia: 50,          // m: passo della griglia grossolana su cui si valutano copertura e quota
   raggio: 3000,         // m (in quadrato, dal centro del blocco): oltre, il bosco resta un colore
   // Prestazioni (misura della sessione M1: 137 000 sagome con alpha test raddoppiavano il fotogramma): oltre `da` m
-  // la densità cala fino a `fino` a `a` m, e le sagome diventano più grandi («ciuffi di bosco»: scala / √densità).
-  dirada: { da: 1300, a: 3000, fino: 0.08, scalaMax: 2.8 },
-  // La cella degli alberi cresce con la distanza (6 m al bordo del blocco, 12 m a 2 km, 24 m a 4 km): la densità
-  // cala come 1/d² e la scala cresce come la radice della cella, così da lontano la chioma resta piena.
-  // Cella di partenza 10 m (il blocco ne ha 6): alberi un po' più grandi, √(10/6), per non lasciare un vuoto al bordo.
-  cella: 10, cellaBlocco: 6, esponenteScala: 0.5,
+  // la densità cala fino a `fino` a `a` m.
+  dirada: { da: 1300, a: 3000, fino: 0.08 },
+  // La cella degli alberi cresce con la distanza (10 m al bordo del blocco, 20 m a 2 km): la densità cala come 1/d².
+  // Gli alberi restano della stessa taglia di quelli del blocco (l'utente: «gli alberi lontani sono molto grandi in
+  // proporzione»): prima la scala cresceva con la cella e col diradamento, fino a ×6 a 3 km.
+  cella: 10,
 };
 
 /**
@@ -629,9 +629,9 @@ export function boscoLontano(carta, cx, cz, half, quota, stagione = 0) {
         let v = (h2 / 4294967296) * (wl + wc + wp + ws);
         const tessera = (v -= ws) < 0 ? SAGOME.secco : (v -= wc) < 0 ? SAGOME.conifera : (v -= wp) < 0 ? SAGOME.pino
           : (h2 & 1 ? SAGOME.latifogliaTonda : SAGOME.latifogliaOvale);
-        const eta = 0.45 + 1.0 * ((h2 >>> 8) & 0xff) / 255;
-        const scala = eta * (0.55 + 0.45 * campo(lim, x, z)) * (voluta / B.cellaBlocco) ** B.esponenteScala
-          * Math.min(B.dirada.scalaMax, 1 / Math.sqrt(dirada));
+        // Stessa distribuzione di taglie del blocco (TIPI: [0,45, 1,45] con curva 1,4) e stesso limite degli alberi.
+        const eta = 0.45 + 1.0 * (((h2 >>> 8) & 0xff) / 256) ** 1.4;
+        const scala = eta * (0.55 + 0.45 * campo(lim, x, z));
         out.push(x, y, z, scala, tessera);
       }
     }
