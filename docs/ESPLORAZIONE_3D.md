@@ -1509,6 +1509,28 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      non succedeva). Ora le ombre si calcolano in JavaScript su array di byte (ellissi sfumate, massimo), caricati come
      texture a un canale (`DataTexture` R8): nessuna operazione di tela. Il micro-rilievo del prato si ferma a 80 m
      (prima 150) e usa differenze in avanti (9 letture di texture invece di 12).
+   - *Sagome degli alberi lontani e bosco oltre il blocco* (richiesta dell'utente: «uno stacco troppo netto tra la
+     vegetazione della cella del cavaliere e il nulla delle celle vicine»; concordato con la sessione delle prestazioni,
+     `docs/PRESTAZIONI.md` passo 4; prima misura sulla scheda dell'utente: vegetazione 4,9 ms GPU contro 4,0 di budget).
+     Al caricamento si disegna dal codice un **atlante** (2048×256, 8 tessere da 256) con i modelli vicini di quercia,
+     faggio, abete, pino, pioppo e albero secco; le **sagome** sono due triangoli rivolti alla camera attorno all'asse
+     verticale, alpha test, luce come il terreno (`materialeSagome`). Nel blocco prendono il posto del livello lontano
+     (oltre 300 m) e, negli ultimi 150 m verso il bordo, già oltre 120 m dalla camera: una sola chiamata per tutti gli
+     alberi lontani (prima una per tipo). Negli **anelli dell'orizzonte** fino a 4 km (`boscoLontano` in
+     `js/mondo/vegetazione.js`): stesse regole del bosco del blocco valutate su una griglia di 50 m sulla quota
+     disegnata degli anelli (`quota` esposta da `creaOrizzonte`, una riga in `orizzonte.js`), cella degli alberi che
+     cresce con la distanza (6 m al bordo del blocco, 12 m a 2 km: densità come 1/d²) e scala come la radice della
+     cella; niente alberi in laghi e mare; una chiamata. Seme 855588: ~79 000 sagome lontane in ~150 ms; vegetazione
+     da 23 a 16 chiamate e da ~730 000 a ~310 000 triangoli. Da misurare sulla scheda dell'utente (`?prova`).
+   - *Collisioni (passo 3)*: tronchi, massi, affioramenti, tronchi caduti (tre cerchi) e sassi di scala ≥ 1,1 come
+     cerchi in una griglia di 16 m, ostacolo per il cavaliere come le mura (`spingiFuori`). Prova: correndo contro un
+     tronco il cavaliere si ferma a 0,6–0,8 m dal centro e ci scivola attorno.
+   - *Elementi che mancavano* (proposti all'utente, primi passi): **campagna attorno a rocche e borghi** (bosco
+     disboscato al 92 % entro 0,7–1,6 km dal luogo, bordo irregolare ±300 m, il triplo degli alberi isolati; anche nel
+     bosco lontano; seme 570549 da 78 000 a 45 000 oggetti); **margine del bosco** con alberi più giovani e bassi
+     (fino a −35 %); **legno morto** (5 % di alberi secchi anche nei boschi); **rive** con ghiaia e sassi. Da fare: campi,
+     orti, siepi e muretti (shader del suolo e luoghi, con le sessioni M1, M6 e M7), alvei con ghiaia nell'acqua,
+     fiori, biomi meno curati (palude, tundra, deserto); le cose della campagna con la milestone dei luoghi.
 3. **Collisioni.** Tronchi, massi e affioramenti come ostacoli a griglia. *Prova:* si attraversa un bosco fitto
    scivolando tra i tronchi senza incastrarsi; la camera resta usabile nel bosco.
 4. **Arbusti e rocce.** Cespugli (macchia, margini, sottobosco), arbusti d'alta quota, sassi, massi, affioramenti
