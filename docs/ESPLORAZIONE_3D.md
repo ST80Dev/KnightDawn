@@ -1675,6 +1675,12 @@ nuovo: serve la conferma (regola 2).
     carreggiata di 1–4,5 m. Ora la strada è un **nastro** suo (`creaNastroStrada` in `js/3d/acqua.js`): 5 vertici per
     sezione (bordi, solchi, centro), un punto ogni 2 m, appoggiato sul terreno disegnato + 25 cm (con 6 cm spariva
     sotto le pieghe dei triangoli). Lo strato `strada` del suolo è tolto (anche dallo shader: meno costo per pixel).
+  - *Carreggiata inclinata di traverso* («non esistono strade con pendenze diagonali così»): la carreggiata era più
+    stretta di una cella del blocco (7,8 m) e il terreno disegnato la attraversava in pendio. Ora c'è una **banchina**
+    piana oltre la carreggiata prima della scarpata (5 m per lato per strade maestre e carrarecce, 2,5 per le
+    mulattiere, 1,2 per i sentieri). Pendenza di traverso del terreno disegnato sulla carreggiata, mediana: seme 570549
+    da 18 % a 0,8 %, 855588 (molti tornanti) da 21 % a 11,5 %, 48213 da 2,1 % a 0,3 %. `generaScena` dà anche
+    `acqua.quoteStrade` (quota della strada per punto) per il nastro piano in larghezza.
 - **Vegetazione**: `distanzaStrada(carta, x, z)` è pronta; l'esclusione degli alberi dalla carreggiata è della
   sessione della vegetazione (passo 3 di questo piano).
 
