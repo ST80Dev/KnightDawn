@@ -500,7 +500,7 @@ async function caricaScena(desc) {
       heights, cols: meta.cols, cell: meta.cellSize, cx: desc.cx, cz: desc.cz, acqua: dati,
       copertura: coperturaMondo(carta, Calendar.stagione), seme: carta.seme, carta,
       piani: (carta.luoghi || []).flatMap((l) => l.piani || []), mare: true,
-    }), terrain);
+    }), terrain, renderer);
     // Colore del blocco in una texture (docs/PRESTAZIONI.md, passo 3): dopo la vegetazione, che aggiunge al terreno
     // l'attributo aSuolo (lettiera sotto il bosco, fango vicino all'acqua) letto dalla cottura.
     msCottura = cuociSuolo(renderer, terrain);
@@ -513,10 +513,11 @@ async function caricaScena(desc) {
       copertura: coperturaTavullia(), seme: 7,
       piani: [{ cx: C.x, cz: C.z, ux: 1, uz: 0, a: C.lato / 2 + 9, b: C.lato / 2 + 9, r: 4, s: 10 }],
       mare: terrain.minElev < 0,
-    }), terrain);
+    }), terrain, renderer);
   }
   vegetazione.oggetto.visible = vegetazioneVisibile;
   scene.add(vegetazione.oggetto);
+  ostacoli.push(vegetazione);              // tronchi, massi, affioramenti e sassi grandi
   scene.add(terrain.mesh);
 
   if (desc.tipo === 'mondo') {
@@ -527,6 +528,8 @@ async function caricaScena(desc) {
     if (pareti) pareti.visible = false;
     acqua = orizzonte.acqua;
     if (acqua) scene.add(acqua);
+    // Bosco lontano: sagome degli alberi negli anelli fino a ~4 km (niente stacco al bordo del blocco).
+    vegetazione?.aggiungiLontano(carta, desc.cx, desc.cz, orizzonte.quota, Calendar.stagione);
   } else if (terrain.minElev < 0) {
     acqua = new THREE.Mesh(
       new THREE.PlaneGeometry(terrain.size, terrain.size).rotateX(-Math.PI / 2),
@@ -1100,6 +1103,7 @@ function aggiornaPannello(now) {
         + ` · costruzione ${fmt(v.msCostruzione)} ms · livelli ${fmt(st.msAggiorna, 1)} ms${vegetazioneVisibile ? '' : ' · nascosta'}`
         + `\n  vicino: erba ${fmt(st.erba)} ciuffi · felci ${fmt(st.felci)} · ciottoli ${fmt(st.ciottoli)} · ${fmt(st.msVicino, 1)} ms`
         + ` · ombre di ${fmt(st.ombre)} oggetti · ${fmt(st.msOmbre, 1)} ms`
+        + (v.lontano ? ` · bosco lontano ${fmt(v.lontano.n)} sagome · ${fmt(v.lontano.ms)} ms` : '')
         + `\n  ${Object.entries(v.conteggi).filter(([, n]) => n).map(([k, n]) => `${k} ${fmt(n)}`).join(' · ')}`
         + `\ndisegno: ${fmt(renderer.info.render.calls)} chiamate · ${fmt(renderer.info.render.triangles)} triangoli`;
     }
