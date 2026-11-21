@@ -21,6 +21,7 @@ import * as THREE from 'three';
 import { quotaMondo, quotaCarta, scavaFiumi, spianaLuoghi, livelloLago, tracciatiFiumi, SCENA, OTTAVE_DETTAGLIO } from '../mondo/scena.js';
 import { creaNastro, materialeAcqua, SOPRA_PELO } from './acqua.js';
 import { derivaSeme } from '../mondo/rumore.js';
+import { ACQUA } from '../mondo/carta.js';
 import { coloreMondo, materialeSuolo, nuoviStrati } from './terrain.js';
 
 export const ORIZZONTE = {
@@ -200,6 +201,11 @@ function acqueOrizzonte(carta, cx, cz, anelli, colore) {
   }
   // Laghi: una cella degli anelli è lago se l'indicatore lo è in un angolo o al centro (come nel blocco).
   const pos = [];
+  // Un vertice è dentro il lago solo se la sua cella della Carta è lago (l'indicatore sfumato sborda oltre la riva).
+  const cellaLago = (x, z) => {
+    const i = Math.floor(z / carta.cella) * carta.cols + Math.floor(x / carta.cella);
+    return x >= 0 && z >= 0 && x < carta.cols * carta.cella && z < carta.rows * carta.cella && carta.acque?.[i] === ACQUA.LAGO;
+  };
   for (const A of anelli) {
     for (let r = 0; r < A.n; r++) {
       const z0 = -A.raggio + r * A.passo, z1 = z0 + A.passo;
@@ -212,8 +218,18 @@ function acqueOrizzonte(carta, cx, cz, anelli, colore) {
           if (!Number.isNaN(livello)) break;
         }
         if (Number.isNaN(livello)) continue;
-        const v = (x, z) => { const r = Math.hypot(x, z);   // come il terreno
-          return [x, esagerata(livello, r) - abbassamento(r), z]; };
+        // Ogni angolo fuori dal lago scende sotto la superficie disegnata: la cella copre anche terreno oltre la riva o
+        // a valle dell'emissario, e il quadrato piatto restava sospeso (da lontano, trattini nel cielo; segnalato
+        // dall'utente tramite M1). Dentro il lago resta al livello.
+        const v = (x, z) => {
+          const r = Math.hypot(x, z);   // come il terreno
+          let y = esagerata(livello, r) - abbassamento(r);
+          if (!cellaLago(cx + x, cz + z)) {
+            const t = superficie(anelli, x, z);
+            if (!Number.isNaN(t)) y = Math.min(y, t - 1);
+          }
+          return [x, y, z];
+        };
         pos.push(...v(x0, z0), ...v(x0, z1), ...v(x1, z0), ...v(x1, z0), ...v(x0, z1), ...v(x1, z1));
       }
     }
