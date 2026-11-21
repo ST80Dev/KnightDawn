@@ -252,7 +252,7 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
       assoluta della sommità); `spingiFuori(x, z, r, yPiedi, superabile)` ignora ciò che ha la cima entro
       yPiedi + superabile. Senza `cima` un ostacolo è un muro alto (tutti quelli di prima). Con la cima: parapetti
       delle rampe di rocca e Tavullia, cataste, botti, recinti (`edifici3d.js`), rocce, tronchi caduti e muretti a
-      secco (`vegetazione3d.js`, sommità per tipo e per istanza). Le rocce entro mezzo metro fanno anche suolo
+      secco (`vegetazione3d.js`, sommità per tipo e per istanza). Le rocce entro 40 cm fanno anche suolo
       (`quotaOstacoli`, terzo argomento di `componiSuolo`): ci si sale sopra. Effetto collaterale voluto: una roccia
       **sotto** un ponte non ferma più chi cammina sull'impalcato. Le altezze si leggono dagli ostacoli stessi
       (`spingiFuori` con `superabile` crescente), così lo scavalcamento vale per ogni modulo senza conoscerne le forme.

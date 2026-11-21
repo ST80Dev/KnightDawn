@@ -867,7 +867,7 @@ const COLLISIONI = { cella: 16, sassoMinimo: 1.1,
 // dell'istanza), tronco caduto, muretto. Serve a gradini e scavalcamento (knight3d.js): sotto ~0,4 m ci si sale sopra,
 // fino a ~1,2 m si scavalca, oltre è un muro. Gli alberi non hanno sommità (contano sempre).
 const SOMMITA = { sasso: 0.3, masso: 1.2, affioramento: 1.15, tronco: 0.52, muretto: 0.88 };
-const CALPESTABILE = 0.5;   // m: sommità sopra la base fin dove ci si può stare sopra (gradino)
+const CALPESTABILE = 0.4;   // m: sommità sopra la base fin dove ci si sale sopra (come cfg.gradino in knight3d.js)
 
 function* creaCollisioni(pos, stanco = () => false, pausa = null) {
   const C = COLLISIONI, celle = new Map();
