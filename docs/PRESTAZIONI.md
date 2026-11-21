@@ -1,4 +1,11 @@
-# Milestone «Prestazioni» — piano (approvato, fase corrente)
+# Milestone «Prestazioni» — chiusa (novembre 2026)
+
+> **Chiusa dall'utente il 21/11/2026.** Risultato sulla scheda di riferimento (Intel UHD 730, 1884×917): partenza standard
+> da 38 a ~76 FPS; bosco fitto, il caso peggiore, 83 FPS (1% peggiori 49,8, fotogramma peggiore 20 ms), GPU 10,9 ms su
+> 15,5 di budget. Da qui in avanti il documento vale come **regola**: budget (sotto), regole per i contenuti nuovi
+> (passo 6) e percorso di prova per ogni PR che aggiunge cose disegnate. La sessione «M1 - grafica» resta il riferimento
+> per le prestazioni. Rimasti aperti, senza urgenza: terreno 4,4 ms (budget 4,5), passi 4–5 in parte (unire il cavaliere
+> per snodo prima di moltiplicare personaggi simili).
 
 > Richiesta dell'utente (novembre 2026): «senza continuare a mettere toppe e togliere cose man mano, come possiamo avere
 > una cosa più realistica da qui in avanti, se con questi elementi siamo già a 30 FPS? Con cavallo, personaggi ed
