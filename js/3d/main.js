@@ -12,7 +12,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { loadTerrain, componiSuolo, createTerrain, coloreMondo, cuociSuolo } from './terrain.js';
+import { loadTerrain, componiSuolo, createTerrainAPezzi, coloreMondo, cuociSuolo } from './terrain.js';
 import { createKnight } from './knight3d.js';
 import { createCavallo } from './cavallo3d.js';
 import { createFollowCamera } from './camera.js';
@@ -21,34 +21,19 @@ import { createRocca } from './rocca3d.js';
 import { creaCaseCampagna, quotaFinestre } from './edifici3d.js';
 import { createBorgo } from './borgo3d.js';
 import { createCartaVista } from './cartaVista.js';
-import { creaOrizzonte } from './orizzonte.js';
+import { creaOrizzonteAPezzi } from './orizzonte.js';
 import { creaAcqueScena, creaPonti } from './acqua.js';
+import { vicinoAlBordo, trasla } from './blocchi.js';
 import { generaCartaAsincrona, verificaSemi } from '../mondo/generatore.js';
-import { generaScena, centroBlocco, quotaFinale } from '../mondo/scena.js';
+import { generaScenaAPezzi, centroBlocco, quotaFinale } from '../mondo/scena.js';
 import { distanzaStrada } from '../mondo/strade.js';
 import { posizionaVegetazione, coperturaMondo, coperturaTavullia } from '../mondo/vegetazione.js';
 import { creaVegetazione } from './vegetazione3d.js';
 import { creaAbitanti } from './abitanti3d.js';
-import { semeDaTesto } from '../mondo/rumore.js';
+import { semeDaTesto, completa } from '../mondo/rumore.js';
+import { creaCielo, posizioneSole, visibilitaDelGiorno } from './cielo.js';
 import { creaProfilatore, creaPercorso, GRUPPI, FAMIGLIE, BUDGET_GPU, budgetDi, creaQualita } from './prestazioni.js';
 
-// Nebbia sulla distanza vera dalla camera, non sulla profondità lungo l'asse di vista (come fa Three.js):
-// con la profondità, un monte al bordo dello schermo riceveva meno nebbia e spariva girandosi verso di lui.
-THREE.ShaderChunk.fog_vertex = '#ifdef USE_FOG\n\tvFogDepth = length( mvPosition.xyz );\n#endif';
-
-const COLORE_CIELO = '#c4d4d6';           // azzurro-pergamena, uguale alla nebbia
-const NEBBIA = [900, 4000];               // m: inizio e fine della nebbia lineare (foschia leggera)
-// Con l'orizzonte (mondo generato) la foschia dipende dal giorno (visibilitaDelGiorno): inizio a 1,5 km, fine
-// (`far`, m) tirata per giorno. Nebbia lineare addolcita (smoothstep di Three.js): con far 65 km a 20 km si perde
-// ~25 % del contrasto, a 35 km ~55 %, a 50 km ~85 % (sagome dei monti alti ancora leggibili). Giornate limpide
-// (dopo la pioggia, col vento) fino a far 150 km: a 80 km ~55 %, a 100 km ~75 %. Quando ci sarà il meteo, il tiro
-// del giorno verrà da lì.
-const NEBBIA_ORIZZONTE_INIZIO = 1500;
-const VISIBILITA = [                       // [probabilità, far minimo, far massimo] (m)
-  [0.15, 40000, 50000],                    // foschia densa, afa
-  [0.60, 55000, 75000],                    // di norma
-  [0.25, 110000, 150000],                  // limpida
-];
 const LONTANO = 130000;                   // m: distanza massima disegnata dalla camera
 const PARAMETRI = new URL(window.location.href).searchParams;
 const TAVULLIA = PARAMETRI.get('terreno') === 'tavullia';
@@ -90,8 +75,9 @@ const profilatore = creaProfilatore(renderer);   // tempi GPU/CPU (docs/PRESTAZI
 renderer.setSize(window.innerWidth, window.innerHeight);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(COLORE_CIELO);
-scene.fog = new THREE.Fog(COLORE_CIELO, NEBBIA[0], NEBBIA[1]);
+// Cielo: luci del giorno e della notte, colore del cielo, nebbia (cielo.js).
+const cieloScena = creaCielo(scene);
+const { sole } = cieloScena;
 
 // Qualità (F2, ?qualita=basso|medio|alto, ricordata nel browser) e risoluzione adattiva: prestazioni.js.
 /** Micro-rilievo di prato e neve nello shader del suolo: spento nella qualità bassa. */
@@ -112,51 +98,6 @@ qualita.imposta(qualita.chiave);
 
 const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.2, LONTANO);
 
-// ─── Luci: sole che segue l'ora del giorno, luna, luce emisferica cielo/terra ───
-// Di giorno sole forte e luce ambiente contenuta: il rilievo collinare si legge dal chiaroscuro.
-// Il colore "da terra" è la luce riflessa dal suolo: schiarisce le pareti verticali in ombra (mura,
-// cavaliere) e quasi non tocca il terreno, le cui facce guardano in alto.
-// Di notte una luna fredda e fissa (alta a sud-est) lascia il paesaggio scuro ma leggibile.
-const cielo = new THREE.HemisphereLight('#dce8ec', '#8a7550', 0.45);
-scene.add(cielo);
-const sole = new THREE.DirectionalLight('#fff0d4', 3.4);
-sole.position.set(-700, 420, 500);
-scene.add(sole);
-const luna = new THREE.DirectionalLight('#9fb4dc', 0);
-luna.position.set(600, 700, 750);
-scene.add(luna);
-
-// Ciclo del giorno (valori provvisori, senza stagioni): alba alle 5, tramonto alle 20, sole al
-// massimo a 55° verso le 12:30. Di notte la "quota" del sole scende sotto l'orizzonte fino a −35°.
-const CICLO = {
-  alba: 5, tramonto: 20, altezzaMax: 55, profonditaNotte: 35,
-  soleMax: 3.4, lunaMax: 0.45,
-  emisferaGiorno: 0.45, emisferaNotte: 0.16,
-  // Di notte si vede bene solo vicino: la nebbia (color notte) si stringe attorno a ciò che si guarda.
-  // Metri oltre la distanza camera–bersaglio: nitido fino a vicinoNotte, buio pieno a lontanoNotte.
-  vicinoNotte: 15, lontanoNotte: 110,
-  colori: {
-    cieloGiorno: new THREE.Color('#c4d4d6'), cieloNotte: new THREE.Color('#0b1019'),
-    cieloCrepuscolo: new THREE.Color('#d9a882'),
-    soleGiorno: new THREE.Color('#fff0d4'), soleBasso: new THREE.Color('#ffb070'),
-    emisferaCieloGiorno: new THREE.Color('#dce8ec'), emisferaCieloNotte: new THREE.Color('#5a6c94'),
-    emisferaTerraGiorno: new THREE.Color('#8a7550'), emisferaTerraNotte: new THREE.Color('#2c2a2a'),
-  },
-};
-const _gradi = Math.PI / 180;
-const smoothstep = (a, b, x) => THREE.MathUtils.smoothstep(x, a, b);
-
-/** Posizione del sole (gradi) per un'ora del giorno 0–24: { altezza, azimut } (azimut da nord, orario). */
-function posizioneSole(ora) {
-  const { alba, tramonto, altezzaMax, profonditaNotte } = CICLO;
-  if (ora >= alba && ora <= tramonto) {
-    const t = (ora - alba) / (tramonto - alba);
-    return { altezza: altezzaMax * Math.sin(Math.PI * t), azimut: 70 + 220 * t };
-  }
-  const t = ((ora - tramonto + 24) % 24) / (24 - (tramonto - alba));
-  return { altezza: -profonditaNotte * Math.sin(Math.PI * t), azimut: 290 + 140 * t };
-}
-
 // Le pareti del castello hanno una piccola luce propria (luce riflessa): di notte va abbassata,
 // altrimenti brillano. Si raccolgono una volta i materiali con emissive e la loro intensità di base.
 let emissivi = [];
@@ -169,34 +110,15 @@ function raccogliEmissivi(radice) {
   });
 }
 
-const _col = new THREE.Color();
-let _oraCielo = -1;
-let _luceGiorno = 1;                       // 0 notte → 1 giorno: la usa anche la nebbia
+/** Cielo e luci dell'ora; poi le luci proprie di mura e castello e le ombre finte di cavaliere e cavallo. */
+// Copia di cieloScena.luceGiorno (0 notte → 1 giorno) con il nome di prima del passo 0: altre sessioni la usano
+// già nei loro branch (luci lontane, luci di rocche e borghi), così le loro unioni restano valide.
+let _luceGiorno = 1;
 function aggiornaCielo() {
-  const ora = Calendar.oraDelGiorno();
-  if (Math.abs(ora - _oraCielo) < 0.002) return;          // ~7 s di gioco: niente da ridisegnare
-  _oraCielo = ora;
-  const { altezza, azimut } = posizioneSole(ora);
-  const C = CICLO.colori;
-  const giorno = smoothstep(-5, 8, altezza);               // 0 notte → 1 pieno giorno
-  _luceGiorno = giorno;
-  const crepuscolo = Math.max(0, 1 - Math.abs(altezza - 1) / 9) * smoothstep(-8, -2, altezza);
-
-  const a = altezza * _gradi, z = azimut * _gradi;
-  sole.position.set(Math.sin(z) * Math.cos(a), Math.max(Math.sin(a), 0.02), -Math.cos(z) * Math.cos(a))
-    .multiplyScalar(1000);
-  sole.intensity = CICLO.soleMax * smoothstep(-2, 10, altezza);
-  sole.color.copy(C.soleGiorno).lerp(C.soleBasso, 1 - smoothstep(4, 20, altezza));
-  luna.intensity = CICLO.lunaMax * (1 - giorno);
-
-  cielo.intensity = THREE.MathUtils.lerp(CICLO.emisferaNotte, CICLO.emisferaGiorno, giorno);
-  cielo.color.copy(C.emisferaCieloNotte).lerp(C.emisferaCieloGiorno, giorno);
-  cielo.groundColor.copy(C.emisferaTerraNotte).lerp(C.emisferaTerraGiorno, giorno);
-
-  _col.copy(C.cieloNotte).lerp(C.cieloGiorno, giorno).lerp(C.cieloCrepuscolo, crepuscolo * 0.75);
-  scene.background.copy(_col);
-  scene.fog.color.copy(_col);
-
+  const cambiato = cieloScena.aggiorna(Calendar.oraDelGiorno());
+  _luceGiorno = cieloScena.luceGiorno;
+  if (!cambiato) return;
+  const giorno = _luceGiorno;
   const luceRiflessa = 0.2 + 0.8 * giorno;
   for (const e of emissivi) e.m.emissive.copy(e.base).multiplyScalar(luceRiflessa);
   const ombra = knight && knight.object.getObjectByName('ombra-cavaliere');
@@ -633,27 +555,19 @@ function costruisciRocche(cx, cz, ter) {
   return out;
 }
 
-/**
- * Carica una Scena al posto di quella attuale.
- * @param {{tipo:'tavullia'} | {tipo:'mondo', cx:number, cz:number}} desc
- */
-async function caricaScena(desc) {
-  chiudiCronista();
+/** Toglie dalla scena gli oggetti della Scena attuale; se `subito` li libera ora, altrimenti a pezzi (M7, passo 9). */
+function togliScenaAttuale(subito = true) {
   for (const o of [terrain?.mesh, acqua, castle?.object, orizzonte?.oggetto, acqueScena, vegetazione?.oggetto,
     ...rocche.map((r) => r.object), gruppoPonti, campagna?.object, abitanti?.object]) {
-    if (o) { scene.remove(o); libera(o); }
+    if (!o) continue;
+    scene.remove(o);
+    if (subito) libera(o); else daLiberare.push(o);
   }
   rocche = [];
   campagna = null;
   abitanti = null;
   ponti = []; gruppoPonti = null;
   vegetazione = null;
-  scostamento = { x: 0, z: 0 };
-  if (desc.tipo === 'mondo') {
-    const cx = centroBlocco(desc.cx), cz = centroBlocco(desc.cz);
-    scostamento = { x: desc.cx - cx, z: desc.cz - cz };
-    desc = { ...desc, cx, cz };
-  }
   castle = null;
   acqua = null;
   orizzonte = null;
@@ -662,7 +576,147 @@ async function caricaScena(desc) {
   emissivi = [];
   ostacoli.length = 0;
   occlusori.length = 0;
+}
+const daLiberare = [];                    // oggetti del blocco vecchio da liberare uno per fotogramma (passo 9)
 
+/**
+ * Scena del mondo centrata in (desc.cx, desc.cz), preparata a pezzi senza toccare quella attuale (M7, passo 9): un
+ * generatore che fa yield tra un lavoro e l'altro e restituisce gli oggetti pronti per applicaMondo.
+ */
+function* preparaMondo(desc) {
+  const cx = centroBlocco(desc.cx), cz = centroBlocco(desc.cz);
+  const { meta, heights, acqua: dati } = yield* generaScenaAPezzi(carta, cx, cz);
+  const ter = yield* createTerrainAPezzi(meta, heights, false, coloreMondo(carta, Calendar.stagione));
+  yield 'terreno';
+  const acque = creaAcqueScena(dati, meta, COLORE_ACQUA, meta.centroMondo);
+  const pp = creaPonti(dati.attraversamenti, dati.altezza);
+  yield 'acque e ponti';
+  const roc = costruisciRocche(cx, cz, ter);
+  yield 'rocche';
+  const posVeg = posizionaVegetazione({
+    heights, cols: meta.cols, cell: meta.cellSize, cx, cz, acqua: dati,
+    copertura: coperturaMondo(carta, Calendar.stagione), seme: carta.seme, carta,
+    piani: (carta.luoghi || []).flatMap((l) => l.piani || []), mare: true,
+  });
+  yield 'posizione vegetazione';
+  const veg = creaVegetazione(posVeg, ter, renderer);
+  yield 'vegetazione';
+  // Case di campagna (passo 5) sui siti della vegetazione (aia e orto già liberi attorno).
+  let camp = null;
+  if (posVeg.case?.length) {
+    const half = ter.size / 2;
+    const suoloC = { getHeight: (x, z) => (Math.abs(x) <= half && Math.abs(z) <= half ? ter.getHeight(x, z) : quotaFinale(carta, x + cx, z + cz)) };
+    camp = creaCaseCampagna(suoloC, posVeg.case, cx, cz, carta.seme);
+    yield 'case';
+  }
+  // Colore del blocco in una texture (docs/PRESTAZIONI.md, passo 3): dopo la vegetazione, che aggiunge al terreno
+  // l'attributo aSuolo (lettiera sotto il bosco, fango vicino all'acqua) letto dalla cottura.
+  const msCot = cuociSuolo(renderer, ter);
+  // I materiali nuovi nascono con il rilievo; il terreno qui non è ancora nella scena, si cerca in lui.
+  if (qualita.chiave === 'basso') applicaRilievo(false, ter.mesh);
+  yield 'cottura';
+  // Orizzonte: terreno lontano fino a ~110 km. Le pareti laterali del blocco si vedrebbero dall'esterno.
+  const oriz = yield* creaOrizzonteAPezzi(carta, cx, cz, ter, COLORE_ACQUA, Calendar.stagione);
+  // Bosco lontano: sagome degli alberi negli anelli fino a ~4 km (niente stacco al bordo del blocco).
+  yield 'orizzonte: luoghi';
+  veg?.aggiungiLontano(carta, cx, cz, oriz.quota, Calendar.stagione);
+  yield 'bosco lontano';
+  // Shader e texture pronti prima dello scambio (note di M1): niente compilazioni né caricamenti nel suo fotogramma.
+  yield* preparaScheda([ter.mesh, acque, pp.gruppo, ...roc.map((r) => r.object), veg.oggetto, camp?.object,
+    oriz.oggetto, oriz.acqua]);
+  return { desc: { ...desc, cx, cz }, scostamento: { x: desc.cx - cx, z: desc.cz - cz }, meta, dati, ter, acque, pp, roc,
+    veg, camp, msCot, oriz };
+}
+
+/**
+ * Compila in parallelo i materiali degli oggetti non ancora in scena, con le luci della scena (compileAsync: fa yield
+ * della promessa e avanzaBlocco aspetta senza fermare i fotogrammi), poi carica sulla scheda le loro texture, una per pezzo.
+ * Le geometrie salgono al primo disegno.
+ */
+function* preparaScheda(oggetti) {
+  const texture = new Set();
+  const raccogli = (v) => { if (v?.isTexture) texture.add(v); };
+  for (const o of oggetti) {
+    if (!o) continue;
+    yield renderer.compileAsync(o, camera, scene);
+    o.traverse((m) => {
+      for (const mat of [m.material].flat()) {
+        if (!mat) continue;
+        for (const v of Object.values(mat)) raccogli(v);
+        for (const u of Object.values(mat.uniforms || {})) raccogli(u?.value);
+      }
+    });
+  }
+  for (const t of texture) {
+    renderer.initTexture(t);
+    yield 'texture';
+  }
+}
+
+/** Mette in scena una Scena del mondo preparata da preparaMondo (la scena attuale è già stata tolta). */
+function applicaMondo(p) {
+  scostamento = p.scostamento;
+  terrain = p.ter;
+  acqueScena = p.acque;
+  if (acqueScena) scene.add(acqueScena);
+  ({ gruppo: gruppoPonti, ponti } = p.pp);
+  scene.add(gruppoPonti);
+  ostacoli.push(...ponti);
+  occlusori.push(...ponti.flatMap((q) => q.solidi));
+  const { meta, dati } = p;
+  livelliAcqua = { fiume: dati.fiume, lago: dati.lago, cols: meta.cols, cell: meta.cellSize, half: meta.sizeMeters / 2 };
+  rocche = p.roc;
+  for (const r of rocche) {
+    scene.add(r.object);
+    raccogliEmissivi(r.object);
+    ostacoli.push(r);
+    occlusori.push(...r.solidi);
+  }
+  vegetazione = p.veg;
+  campagna = p.camp;
+  if (campagna) {
+    scene.add(campagna.object);
+    raccogliEmissivi(campagna.object);
+    ostacoli.push(campagna);
+    occlusori.push(...campagna.solidi);
+  }
+  msCottura = p.msCot;
+  vegetazione.oggetto.visible = vegetazioneVisibile;
+  scene.add(vegetazione.oggetto);
+  ostacoli.push(vegetazione);              // tronchi, massi, affioramenti e sassi grandi
+  scene.add(terrain.mesh);
+  orizzonte = p.oriz;
+  scene.add(orizzonte.oggetto);
+  const pareti = terrain.mesh.getObjectByName('terreno-bordo');
+  if (pareti) pareti.visible = false;
+  acqua = orizzonte.acqua;
+  if (acqua) scene.add(acqua);
+  _suolo = componiSuolo(terrain, [...rocche, ...ponti]);
+  // Persone ai loro posti e per le strade (passo 7), sul suolo composto. Al cambio di blocco (scambiaBlocco) si rifanno
+  // con rocche e borghi, già nelle coordinate del blocco nuovo: non serve spostarle (abitanti.sposta resta per altri usi).
+  if (rocche.length) {
+    abitanti = creaAbitanti({ rocche, quota: (x, z) => suolo.getHeight(x, z), seme: carta.seme });
+    scene.add(abitanti.object);
+    ostacoli.push(abitanti);
+  }
+  scenaAttuale = p.desc;
+  statPendenze = misuraPendenze(terrain);
+  cieloScena.invalida();                   // ricalcola le luci
+}
+
+/**
+ * Carica una Scena al posto di quella attuale.
+ * @param {{tipo:'tavullia'} | {tipo:'mondo', cx:number, cz:number}} desc
+ */
+async function caricaScena(desc) {
+  chiudiCronista();
+  preparazione = null;                    // un cambio di blocco in corso non vale più
+  togliScenaAttuale(true);
+  scostamento = { x: 0, z: 0 };
+  if (desc.tipo === 'mondo') {
+    applicaMondo(completa(preparaMondo(desc)));
+    return;
+  }
   if (desc.tipo === 'tavullia') {
     terrain = await loadTerrain('tavullia');
     if (terrain.isFallback) avvisoHud('Dati del terreno reale non trovati: terreno procedurale di prova.');
@@ -671,44 +725,6 @@ async function caricaScena(desc) {
     raccogliEmissivi(castle.object);
     ostacoli.push(castle);
     occlusori.push(...castle.solidi);
-  } else {
-    const { meta, heights, acqua: dati } = generaScena(carta, desc.cx, desc.cz);
-    terrain = createTerrain(meta, heights, false, coloreMondo(carta, Calendar.stagione));
-    acqueScena = creaAcqueScena(dati, meta, COLORE_ACQUA, meta.centroMondo);
-    if (acqueScena) scene.add(acqueScena);
-    ({ gruppo: gruppoPonti, ponti } = creaPonti(dati.attraversamenti, dati.altezza));
-    scene.add(gruppoPonti);
-    ostacoli.push(...ponti);
-    occlusori.push(...ponti.flatMap((p) => p.solidi));
-    livelliAcqua = { fiume: dati.fiume, lago: dati.lago, cols: meta.cols, cell: meta.cellSize, half: meta.sizeMeters / 2 };
-    rocche = costruisciRocche(desc.cx, desc.cz, terrain);
-    for (const r of rocche) {
-      scene.add(r.object);
-      raccogliEmissivi(r.object);
-      ostacoli.push(r);
-      occlusori.push(...r.solidi);
-    }
-    const posVeg = posizionaVegetazione({
-      heights, cols: meta.cols, cell: meta.cellSize, cx: desc.cx, cz: desc.cz, acqua: dati,
-      copertura: coperturaMondo(carta, Calendar.stagione), seme: carta.seme, carta,
-      piani: (carta.luoghi || []).flatMap((l) => l.piani || []), mare: true,
-    });
-    vegetazione = creaVegetazione(posVeg, terrain, renderer);
-    // Case di campagna (passo 5) sui siti della vegetazione (aia e orto già liberi attorno).
-    if (posVeg.case?.length) {
-      const half = terrain.size / 2, cx0 = desc.cx, cz0 = desc.cz;
-      const suoloC = { getHeight: (x, z) => (Math.abs(x) <= half && Math.abs(z) <= half ? terrain.getHeight(x, z) : quotaFinale(carta, x + cx0, z + cz0)) };
-      campagna = creaCaseCampagna(suoloC, posVeg.case, desc.cx, desc.cz, carta.seme);
-      scene.add(campagna.object);
-      raccogliEmissivi(campagna.object);
-      ostacoli.push(campagna);
-      occlusori.push(...campagna.solidi);
-    }
-    // Colore del blocco in una texture (docs/PRESTAZIONI.md, passo 3): dopo la vegetazione, che aggiunge al terreno
-    // l'attributo aSuolo (lettiera sotto il bosco, fango vicino all'acqua) letto dalla cottura.
-    msCottura = cuociSuolo(renderer, terrain);
-    // I materiali nuovi nascono con il rilievo; il terreno qui non è ancora nella scena, si cerca in lui.
-    if (qualita.chiave === 'basso') applicaRilievo(false, terrain.mesh);
   }
   if (desc.tipo === 'tavullia') {
     // Profilo fisso di collina temperata; niente vegetazione sul colle del castello e sulla rampa.
@@ -725,17 +741,7 @@ async function caricaScena(desc) {
   ostacoli.push(vegetazione);              // tronchi, massi, affioramenti e sassi grandi
   scene.add(terrain.mesh);
 
-  if (desc.tipo === 'mondo') {
-    // Orizzonte: terreno lontano fino a ~110 km. Le pareti laterali del blocco si vedrebbero dall'esterno.
-    orizzonte = creaOrizzonte(carta, desc.cx, desc.cz, terrain, COLORE_ACQUA, Calendar.stagione);
-    scene.add(orizzonte.oggetto);
-    const pareti = terrain.mesh.getObjectByName('terreno-bordo');
-    if (pareti) pareti.visible = false;
-    acqua = orizzonte.acqua;
-    if (acqua) scene.add(acqua);
-    // Bosco lontano: sagome degli alberi negli anelli fino a ~4 km (niente stacco al bordo del blocco).
-    vegetazione?.aggiungiLontano(carta, desc.cx, desc.cz, orizzonte.quota, Calendar.stagione);
-  } else if (terrain.minElev < 0) {
+  if (terrain.minElev < 0) {
     acqua = new THREE.Mesh(
       new THREE.PlaneGeometry(terrain.size, terrain.size).rotateX(-Math.PI / 2),
       new THREE.MeshLambertMaterial({ color: COLORE_ACQUA, transparent: true, opacity: 0.88 }));
@@ -743,14 +749,9 @@ async function caricaScena(desc) {
     scene.add(acqua);
   }
   _suolo = componiSuolo(terrain, castle ? [castle] : [...rocche, ...ponti]);
-  if (rocche.length) {                     // persone ai loro posti e per le strade (passo 7), sul suolo composto
-    abitanti = creaAbitanti({ rocche, quota: (x, z) => suolo.getHeight(x, z), seme: carta.seme });
-    scene.add(abitanti.object);
-    ostacoli.push(abitanti);
-  }
   scenaAttuale = desc;
   statPendenze = misuraPendenze(terrain);
-  _oraCielo = -1;                          // ricalcola le luci (anche quelle proprie del castello)
+  cieloScena.invalida();                   // ricalcola le luci (anche quelle proprie del castello)
 }
 
 /** Mette il cavaliere in (x, z) locali della Scena attuale; lo crea la prima volta. */
@@ -955,6 +956,9 @@ async function init() {
     get rocche() { return rocche; }, get campagna() { return campagna; }, get abitanti() { return abitanti; },
     get vegetazione() { return vegetazione; }, get cavallo() { return cavallo; },
     caricaScena, posizionaCavaliere,
+    /** M7, passo 9: ricentra il blocco (su { x, z } del mondo, o sul cavaliere) — per il percorso di prova. */
+    cambiaBlocco: (x, z) => cambiaBlocco(Number.isFinite(x) && Number.isFinite(z) ? { x, z } : null),
+    get cambiBlocco() { return { quanti: cambiBlocco, ms: msCambioBlocco, totale: msTotaleBlocco, inCorso: !!preparazione, ultimo: ultimoCambio }; },
   };
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no'
@@ -990,39 +994,14 @@ function vincolaCameraLibera() {
   if (camera.position.y < minY) camera.position.y = minY;
 }
 
-// Nebbia: da vicino nasconde il bordo del mondo; allontanandosi si ritira per la vista d'insieme.
-// Di notte la nebbia, del colore del cielo notturno, si stringe: si vede bene solo attorno al punto
-// osservato. Le luci di case, castello e fuochi (future) dovranno ignorarla per restare visibili da lontano.
-/** `far` della foschia (m) per il giorno `g` (intero) del seme: tiro deterministico, stesso giorno = stessa vista. */
-function farDelGiorno(seme, g) {
-  let h = (Math.imul(seme | 0, 0x9e3779b1) ^ Math.imul(g | 0, 0x85ebca6b)) >>> 0;
-  h = Math.imul(h ^ (h >>> 16), 0x7feb352d) >>> 0;
-  h = Math.imul(h ^ (h >>> 15), 0x846ca68b) >>> 0;
-  const r = ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-  let soglia = 0;
-  for (const [p, min, max] of VISIBILITA) {
-    soglia += p;
-    if (r < soglia) return min + (max - min) * ((r - soglia + p) / p);
-  }
-  return VISIBILITA.at(-1)[2];
-}
-
-/** Visibilità del momento: interpola tra il giorno corrente e il successivo, così cambia piano e senza scatti. */
-function visibilitaDelGiorno() {
-  const giorni = (Calendar.passiTotali + Calendar.frazione) / CALENDAR.PASSI_PER_GIORNO;
-  const g = Math.floor(giorni), f = giorni - g;
-  const seme = carta?.seme ?? 0;
-  return THREE.MathUtils.lerp(farDelGiorno(seme, g), farDelGiorno(seme, g + 1), f * f * (3 - 2 * f));
-}
-
+/** Nebbia attorno al punto osservato (cielo.js); con l'orizzonte la foschia dipende dal giorno. */
 function aggiornaNebbia(puntoOsservato) {
-  const dist = camera.position.distanceTo(puntoOsservato);
-  const nebbia = orizzonte ? [NEBBIA_ORIZZONTE_INIZIO, visibilitaDelGiorno()] : NEBBIA;
-  const nearGiorno = Math.max(nebbia[0], dist * 0.9);
-  const farGiorno = Math.max(nebbia[1], nearGiorno + 3000);
-  const g = _luceGiorno * _luceGiorno;     // la vista si allunga solo quando la luce è davvero tornata
-  scene.fog.near = THREE.MathUtils.lerp(dist + CICLO.vicinoNotte, nearGiorno, g);
-  scene.fog.far = THREE.MathUtils.lerp(dist + CICLO.lontanoNotte, farGiorno, g);
+  cieloScena.aggiornaNebbia(camera, puntoOsservato, !!orizzonte, carta?.seme ?? 0, giorniDiGioco());
+}
+
+/** Giorni di gioco trascorsi, con la frazione. */
+function giorniDiGioco() {
+  return (Calendar.passiTotali + Calendar.frazione) / CALENDAR.PASSI_PER_GIORNO;
 }
 
 // ─── Tastiera ───────────────────────────────────────────────────────────
@@ -1196,6 +1175,7 @@ function gruppoDi(o) {
   }
   let top = o;
   while (top.parent && top.parent !== scene) top = top.parent;
+  if ((top.name || '').startsWith('cielo')) return 'cielo';
   if (terrain && top === terrain.mesh) return 'ter. blocco';
   if (orizzonte && top === orizzonte.oggetto) return 'ter. orizzonte';
   if (vegetazione && top === vegetazione.oggetto) return 'veg. resto';
@@ -1206,6 +1186,86 @@ function gruppoDi(o) {
 
 // ─── Percorso di prova (F9 con F3 aperto, o ?prova nell'indirizzo) ───────
 let msCottura = null;                    // ms della cottura del colore del blocco (F3)
+let msCambioBlocco = null, cambiBlocco = 0;   // M7, passo 9: fotogramma più lungo dell'ultimo cambio di blocco e quanti (F3)
+let msTotaleBlocco = null;                // ms dall'inizio della preparazione allo scambio (F3)
+let ultimoCambio = null;                  // dettagli dell'ultimo cambio (kd.cambiBlocco)
+let tScambio = null;                      // quando è avvenuto lo scambio: il fotogramma dopo misura il disegno che segue
+let preparazione = null;                  // { gen, t0, picco } preparazione del blocco nuovo in sottofondo
+// Finché il cambio non resta sotto ~50 ms per fotogramma, solo con ?blocchi nell'indirizzo: senza, il cavaliere si
+// ferma al bordo come prima.
+const SEGUI_BLOCCO = PARAMETRI.has('blocchi');
+const MS_PREPARAZIONE = 4;                // ms per fotogramma dati alla preparazione del blocco nuovo
+
+/** Mette in scena il blocco preparato: cavaliere, cavallo e camera restano nello stesso punto del mondo. */
+function scambiaBlocco(p) {
+  const c0 = terrain.meta.centroMondo, k = knight.stato;
+  togliScenaAttuale(false);               // il blocco vecchio si libera a pezzi nei fotogrammi seguenti
+  applicaMondo(p);
+  const c1 = terrain.meta.centroMondo;
+  scostamento = { x: 0, z: 0 };
+  trasla(c0.x - c1.x, c0.z - c1.z, [k, cavallo?.stato, _prec], [camera.position]);
+  if (cavallo && !ostacoli.includes(cavallo)) ostacoli.push(cavallo);
+  cam?.riattiva();
+  cambiBlocco++;
+}
+
+/**
+ * M7, passo 9 (js/3d/blocchi.js): il blocco si ricentra sul cavaliere quando si avvicina al bordo. Il blocco nuovo si
+ * prepara in sottofondo, pochi ms per fotogramma (avanzaBlocco), mentre si continua a giocare su quello attuale; pronto,
+ * si scambia. `dove` (facoltativo): punto del mondo { x, z } su cui centrare, subito e tutto in una volta (comando
+ * kd.cambiaBlocco per il percorso di prova).
+ */
+function cambiaBlocco(dove = null) {
+  if (!knight || scenaAttuale?.tipo !== 'mondo') return;
+  const c0 = terrain.meta.centroMondo, k = knight.stato;
+  if (dove) {
+    preparazione = null;
+    const t0 = performance.now();
+    scambiaBlocco(completa(preparaMondo({ tipo: 'mondo', cx: dove.x, cz: dove.z })));
+    msCambioBlocco = performance.now() - t0;
+    return;
+  }
+  if (preparazione) return;
+  preparazione = { gen: preparaMondo({ tipo: 'mondo', cx: c0.x + k.x, cz: c0.z + k.z }), t0: performance.now(), picco: 0, n: 0, lunghi: [] };
+}
+
+/** Un fotogramma di lavoro sul cambio di blocco: un oggetto vecchio da liberare, qualche ms di preparazione. */
+function avanzaBlocco() {
+  const vecchio = daLiberare.pop();
+  if (vecchio) libera(vecchio);
+  if (!preparazione) return;
+  const t0 = performance.now(), fine = t0 + MS_PREPARAZIONE;
+  const P = preparazione;
+  if (P.attesa) return;                   // compilazione in parallelo non ancora finita
+  let r, t = t0;
+  do {
+    r = P.gen.next();
+    if (typeof r.value?.then === 'function') {
+      P.attesa = true;
+      r.value.then(() => { P.attesa = false; }, () => { P.attesa = false; });
+      r.value = 'compilazione';
+    }
+    const t1 = performance.now();
+    // I pezzi più lunghi, per capire dove spezzare ancora (kd.cambiBlocco.ultimo.lunghi).
+    const nome = typeof r.value === 'string' ? r.value : `dopo ${P.ultimo ?? 'inizio'}`;
+    if (typeof r.value === 'string') P.ultimo = r.value;
+    if (t1 - t > 8) P.lunghi.push(`${nome} ${Math.round(t1 - t)}`);
+    P.n++;
+    t = t1;
+  } while (!r.done && !P.attesa && t < fine);
+  if (r.done) {
+    scambiaBlocco(r.value);
+    P.scambio = performance.now() - t;
+  }
+  P.picco = Math.max(P.picco, performance.now() - t0);
+  if (r.done) {
+    msCambioBlocco = P.picco;
+    msTotaleBlocco = performance.now() - P.t0;
+    ultimoCambio = { picco: P.picco, totale: msTotaleBlocco, pezzi: P.n, lunghi: P.lunghi, scambio: P.scambio };
+    tScambio = performance.now();
+    preparazione = null;
+  }
+}
 let percorso = null;
 let percorsoNormale = null;               // istantanea alla fine del giro normale
 let provaAutomatica = PROVA_PRESTAZIONI;
@@ -1215,7 +1275,8 @@ function avviaPercorso() {
   qualita.azzeraAdattiva();               // misure confrontabili: risoluzione piena del preset, ferma durante il giro
   if (modoCamera === 'libera') cambiaModoCamera();
   const k = knight.stato;
-  percorso = creaPercorso({ x: k.x, y: k.y, z: k.z, direzione: k.direzione });
+  percorso = creaPercorso({ x: k.x, y: k.y, z: k.z, direzione: k.direzione },
+    { maxFotogramma: PARAMETRI.has('lento') ? Infinity : undefined });
   percorsoNormale = null;
   profilatore.azzera();
   fpsEl.hidden = false;
@@ -1255,9 +1316,9 @@ function fineDelPercorso() {
       const m = profilatore.media(g), b = budgetDi(g);
       return `  ${g}: ${fmtMs(m)}${b != null ? ` · budget ${fmt(b, 1)}${m && m.media > b ? '  ⚠ oltre il budget' : ''}` : ''}`;
     }),
-    ...Object.entries(FAMIGLIE).map(([pre, chiave]) => {
-      const v = GRUPPI.filter((g) => g.startsWith(pre)).reduce((s, g) => s + (profilatore.media(g)?.media || 0), 0);
-      return `  ${chiave} in tutto: ${fmt(v, 1)} ms · budget ${fmt(BUDGET_GPU[chiave], 1)}`
+    ...Object.entries(FAMIGLIE).map(([chiave, gruppi]) => {
+      const v = gruppi.reduce((s, g) => s + (profilatore.media(g)?.media || 0), 0);
+      return `  ${chiave === 'resto' ? 'acqua, cielo ed effetti' : chiave} in tutto: ${fmt(v, 1)} ms · budget ${fmt(BUDGET_GPU[chiave], 1)}`
         + (v > BUDGET_GPU[chiave] + 0.05 ? '  ⚠ oltre il budget' : '');
     }),
   ];
@@ -1362,6 +1423,9 @@ function aggiornaPannello(now) {
     + (qualita.adatta < 1 ? ` (adattiva ×${fmt(qualita.adatta, 2)})` : '');
   testo += `\nCPU: logica ${fmt(ri.msLogica, 1)} ms · invio comandi ${fmt(ri.msInvio, 1)} ms`;
   if (msCottura != null) testo += ` · suolo cotto in ${fmt(msCottura)} ms`;
+  if (msCambioBlocco != null) testo += ` · cambi di blocco ${cambiBlocco} (l'ultimo: fotogramma più lungo ${fmt(msCambioBlocco)} ms`
+    + (ultimoCambio?.disegno != null ? `, disegno dopo lo scambio ${fmt(ultimoCambio.disegno)} ms` : '')
+    + (msTotaleBlocco != null ? `, in tutto ${fmt(msTotaleBlocco / 1000, 1)} s)` : ')');
   if (!P.timerGPU) testo += '\nGPU: timer non disponibili su questa scheda o browser (usare F4)';
   else if ((percorso ? percorso.modo : provaPrestazioni === 1 ? 'gruppi' : 'normale') === 'gruppi') {
     testo += '\nGPU per gruppo: ' + GRUPPI.map((g) => {
@@ -1383,7 +1447,7 @@ function aggiornaPannello(now) {
       + ` · ${Calendar.eNotte() ? 'notte 1:' + TEMPO_SCENA.RAPPORTO_NOTTE : 'giorno 1:' + TEMPO_SCENA.RAPPORTO_GIORNO}`
       + (inPausa ? ' · in pausa' : '')
       + ` · sole ${fmt(posizioneSole(ora).altezza)}° · Forza ${fmt(Knight.forza.cur, 2)}`
-      + (orizzonte ? ` · foschia fino a ${fmt(visibilitaDelGiorno() / 1000)} km` : '');
+      + (orizzonte ? ` · foschia fino a ${fmt(visibilitaDelGiorno(carta?.seme ?? 0, giorniDiGioco()) / 1000)} km` : '');
     const pelo = livelloAcquaIn(k.x, k.z);
     if (!Number.isNaN(pelo)) testo += `\nacqua: pelo a ${fmt(pelo, 1)} m · profondità ${fmt(Math.max(0, pelo - k.y), 1)} m`;
     testo += `\ncamera: ${modoCamera === 'segui' ? 'alle spalle' : 'libera (C per tornare)'}`;
@@ -1465,6 +1529,11 @@ function frame(now) {
   const dtReale = Math.max(0, (now - tPrec) / 1000);
   const dt = THREE.MathUtils.clamp(dtReale, 0, DT_MAX);
   tPrec = now;
+  if (tScambio != null && ultimoCambio) {
+    // Dallo scambio all'inizio di questo fotogramma: il disegno del blocco nuovo (geometrie sulla scheda) compreso.
+    ultimoCambio.disegno = t0 - tScambio;
+    tScambio = null;
+  }
   if (cartaVista.aperta) return;           // la Carta copre tutto: niente tempo di gioco, niente disegno
   if (provaAutomatica && knight && caricamento.hidden && (attesaProva += dt) > 3) { provaAutomatica = false; avviaPercorso(); }
   if (knight) {
@@ -1472,6 +1541,8 @@ function frame(now) {
       // Percorso di prova: tempo di gioco fermo, la camera segue il giro fisso.
     } else if (!inPausa && !cronista) {
       knight.update(dt, leggiInput());
+      if (SEGUI_BLOCCO && scenaAttuale?.tipo === 'mondo' && vicinoAlBordo(knight.stato.x, knight.stato.z, terrain.size / 2)) cambiaBlocco();
+      avanzaBlocco();
       contaPercorso();
       const passi = Calendar.avanzaTempoReale(dt);
       if (knight.stato.velEffettiva < FERMO) Knight.riposaPassi(passi);
@@ -1490,6 +1561,7 @@ function frame(now) {
       campagna?.aggiornaLuci(now / 1000, 1 - _luceGiorno, quota);
       luciVicine(now / 1000, 1 - _luceGiorno);
     }
+    orizzonte?.luciLontane?.(1 - _luceGiorno);   // M7, passo 8: luci dei borghi lontani (orizzonte.js)
     tt = segna('cielo e luci', tt);
     aggiornaStato();
     aggiornaIndicatoreAndatura();
