@@ -239,6 +239,44 @@ function chiomaAMasse({ x = 0, y, z = 0, a, b, c = a, masse, ciuffi, raggio, det
   return parti;
 }
 
+/**
+ * Albero ramificato (richiesta dell'utente: «rami e foglie mischiati in modo naturale anche più in basso, buchi di
+ * foglie che fanno vedere i rami anche in alto; non un disegno da bambini»). Fusto fino a `fusto` m, poi una cima
+ * (`cima`) che prosegue; `rami` rami principali che partono dal fusto tra `parte`[0] e `parte`[1] della sua altezza,
+ * inclinati tra `inc` gradi dall'orizzontale, lunghi `lungo`; ognuno con 2 rametti. Le foglie sono ciuffetti lungo i rami
+ * (a metà, verso la punta, sulle punte dei rametti) e lungo la cima: vuoti a tutte le altezze, rami visibili dentro.
+ * Restituisce le parti da unire (il fusto a parte).
+ */
+function ramificato({ fusto: hF, cima, rami: nR, parte, inc, lungo, r0, colRamo, ciuffi, rCiuffo, raggio, dettaglio,
+  scuro, chiaro, rnd, piatto = 1 }) {
+  const parti = [];
+  const foglie = (x, y, z, k = 1) => parti.push(...chioma({ x, y, z, a: rCiuffo * k * (0.8 + 0.4 * rnd()),
+    b: rCiuffo * k * piatto * (0.65 + 0.3 * rnd()), c: rCiuffo * k * (0.8 + 0.4 * rnd()), ciuffi, raggio, dettaglio,
+    scuro, chiaro, rnd, pieno: 0.3, sotto: 0.35, morbido: 0.55 }));
+  // Cima: prosegue il fusto, un po' storta, con ciuffetti lungo tutta la sua lunghezza.
+  const tx = (rnd() - 0.5) * 0.8, tz = (rnd() - 0.5) * 0.8;
+  parti.push(ramoVerso(0, hF - 0.3, 0, tx, hF + cima, tz, r0 * 0.75, r0 * 0.2, colRamo, 5));
+  for (const t of [0.45, 0.75, 1.0]) foglie(tx * t + (rnd() - 0.5) * 0.6, hF + cima * t, tz * t + (rnd() - 0.5) * 0.6, t === 1 ? 1.1 : 0.85);
+  for (let k = 0; k < nR; k++) {
+    const an = (k / nR) * Math.PI * 2 + (rnd() - 0.5) * 1.1;
+    const y0 = hF * (parte[0] + (parte[1] - parte[0]) * ((k * 0.618 + rnd() * 0.3) % 1));
+    const el = (inc[0] + (inc[1] - inc[0]) * rnd()) * Math.PI / 180, L = lungo * (0.75 + 0.5 * rnd());
+    const ex = Math.cos(an) * Math.cos(el) * L, ey = y0 + Math.sin(el) * L, ez = Math.sin(an) * Math.cos(el) * L;
+    parti.push(ramoVerso(0, y0, 0, ex, ey, ez, r0 * 0.55, r0 * 0.15, colRamo, 4));
+    // Ciuffetti lungo il ramo e in punta.
+    for (const t of [0.55, 1.0]) if (t === 1 || rnd() < 0.75) foglie(ex * t, y0 + (ey - y0) * t + 0.15, ez * t, t === 1 ? 1.0 : 0.75);
+    // Due rametti, verso fuori e un po' in su, con ciuffo in punta.
+    for (let j = 0; j < 2; j++) {
+      const t = 0.4 + 0.35 * j + rnd() * 0.1, bx = ex * t, by = y0 + (ey - y0) * t, bz = ez * t;
+      const a2 = an + (j ? 1 : -1) * (0.5 + 0.6 * rnd()), l2 = L * (0.35 + 0.25 * rnd());
+      const cx2 = bx + Math.cos(a2) * l2, cy2 = by + l2 * (0.2 + 0.5 * rnd()), cz2 = bz + Math.sin(a2) * l2;
+      parti.push(ramoVerso(bx, by, bz, cx2, cy2, cz2, r0 * 0.18, r0 * 0.06, colRamo, 3));
+      foglie(cx2, cy2 + 0.1, cz2, 0.8);
+    }
+  }
+  return parti;
+}
+
 function rami(n, y0, lunghezza, colore, rnd) {
   return Array.from({ length: n }, (_, k) => {
     const a = (k / n) * Math.PI * 2 + rnd() * 0.8, inc = 0.55 + rnd() * 0.35;
@@ -358,36 +396,35 @@ function creaModelli() {
   // Latifoglie: quercia (larga e bassa), faggio (ovale e alto), castagno (irregolare, a due masse).
   // `det`: dettaglio dei ciuffi (1 = 80 triangoli, 0 = 20). Ogni specie ha il suo generatore: i due livelli vicini
   // hanno la stessa forma (stessi ciuffi negli stessi punti), cambia solo quanto sono sfaccettati.
-  // Chiome a masse con vuoti (stessi triangoli di prima: masse × ciuffi ≈ 30 ciuffi per albero).
+  // Alberi ramificati: foglie lungo i rami a tutte le altezze, vuoti e rami visibili (≈ 30–34 ciuffi come prima).
   const quercia = (det) => { const r = casuale(311); return unisci([
-    fusto(0.46, 0.3, 5.0, 8, COL.corteccia), ...rami(2, 3.6, 2.6, COL.corteccia, r),
-    ...chiomaAMasse({ y: 7.4, a: 4.6, b: 3.0, masse: 7, ciuffi: 4, raggio: [0.75, 1.3], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r,
-      da: [0, 4.6, 0], rRamo: 0.16 }),
+    fusto(0.46, 0.3, 4.2, 8, COL.corteccia),
+    ...ramificato({ fusto: 4.2, cima: 4.4, rami: 5, parte: [0.55, 1.0], inc: [18, 42], lungo: 4.4, r0: 0.5,
+      colRamo: COL.corteccia, ciuffi: 2, rCiuffo: 1.05, raggio: [0.42, 0.68], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r, piatto: 0.85 }),
   ]); };
   const faggio = (det) => { const r = casuale(312); return unisci([
-    fusto(0.36, 0.22, 6.5, 8, COL.cortecciaChiara), ...rami(2, 4.8, 2.4, COL.cortecciaChiara, r),
-    ...chiomaAMasse({ y: 9.2, a: 3.3, b: 4.4, masse: 7, ciuffi: 4, raggio: [0.7, 1.2], dettaglio: det, scuro: FF[0], chiaro: FF[1], rnd: r,
-      da: [0, 6.0, 0], colRamo: COL.cortecciaChiara, rRamo: 0.13, alto: 0.4 }),
+    fusto(0.36, 0.22, 4.6, 8, COL.cortecciaChiara),
+    ...ramificato({ fusto: 4.6, cima: 6.2, rami: 5, parte: [0.5, 1.0], inc: [40, 65], lungo: 3.6, r0: 0.4,
+      colRamo: COL.cortecciaChiara, ciuffi: 2, rCiuffo: 0.95, raggio: [0.4, 0.64], dettaglio: det, scuro: FF[0], chiaro: FF[1], rnd: r }),
   ]); };
   const castagno = (det) => { const r = casuale(313); return unisci([
-    fusto(0.42, 0.26, 5.2, 8, COL.corteccia, { inclinaZ: -0.05 }), ...rami(2, 3.8, 2.6, COL.corteccia, r),
-    ...chiomaAMasse({ x: 0.6, y: 7.8, a: 3.6, b: 2.9, masse: 5, ciuffi: 4, raggio: [0.7, 1.2], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r,
-      da: [0, 4.8, 0], rRamo: 0.14 }),
-    ...chiomaAMasse({ x: -2.4, y: 6.4, z: 0.6, a: 2.2, b: 1.8, masse: 2, ciuffi: 4, raggio: [0.65, 1.0], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r,
-      da: [0, 4.2, 0], rRamo: 0.12 }),
+    fusto(0.42, 0.26, 3.8, 8, COL.corteccia, { inclinaZ: -0.05 }),
+    ...ramificato({ fusto: 3.8, cima: 4.6, rami: 5, parte: [0.45, 1.0], inc: [22, 55], lungo: 4.0, r0: 0.46,
+      colRamo: COL.corteccia, ciuffi: 2, rCiuffo: 1.0, raggio: [0.42, 0.66], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r }),
   ]); };
   // Livelli (prestazioni, dopo la misura dell'utente: 28–30 FPS nel bosco; «meno definizione a centinaia di metri a
   // favore del realismo entro i 50 m»): vicino fino a 60 m, più ricco; medio fino a 300 m
   // con 3 ciuffi semplici (~70 triangoli); lontano un ciuffo solo e un fusto a 3 lati (~26).
   const latMedio = (a, b, y) => unisci([
     fusto(0.4, 0.26, y - b * 0.6, 4, COL.corteccia),
-    ...chiomaAMasse({ y, a, b, masse: 4, ciuffi: 1, raggio: [1.3, 1.75], dettaglio: 0, scuro: F[0], chiaro: F[1], rnd }),
+    ...chiomaAMasse({ y, a, b, masse: 3, ciuffi: 1, raggio: [1.5, 1.95], dettaglio: 0, scuro: F[0], chiaro: F[1], rnd }),
   ]);
   M.latifoglia = [
     // Misura nel bosco fitto (UHD 730): ~135 latifoglie entro 60 m da ~2450 triangoli valevano gran parte dei 6 ms
     // della vegetazione. Ciuffi pieni entro 25 m; da 25 a 60 m stessa chioma a ciuffi semplici (~650 triangoli).
-    { fino: 25, varianti: [quercia(1), faggio(1), castagno(1)] },
-    { fino: 60, varianti: [quercia(0), faggio(0), castagno(0)] },
+    // Alberi ramificati (~46 ciuffi in gruppi da 2): pieni entro 18 m, ciuffi semplici fino a 50 m (stessa forma).
+    { fino: 18, varianti: [quercia(1), faggio(1), castagno(1)] },
+    { fino: 50, varianti: [quercia(0), faggio(0), castagno(0)] },
     // Medio fino a 200 m (prima 300; misura nel bosco fitto dopo la Carta rigenerata: vegetazione 7,2 ms contro 6,5 di
     // budget, ~4400 latifoglie medie per ~300 000 triangoli); oltre, sagome.
     { fino: 200, varianti: [latMedio(4.2, 3.1, 7.6), latMedio(3.2, 4.2, 9.2)] },
@@ -428,9 +465,9 @@ function creaModelli() {
   // Albero di riva (pioppo): colonna alta e stretta, verde più chiaro, corteccia chiara.
   const R = COL.fogliaRiva;
   M.riva = [
-    { fino: 60, varianti: [unisci([fusto(0.38, 0.14, 14, 8, COL.cortecciaBetulla), ...rami(3, 5, 3.0, COL.cortecciaBetulla, rnd),
-      ...chiomaAMasse({ y: 10.3, a: 2.2, b: 5.4, c: 2.1, masse: 7, ciuffi: 4, raggio: [0.6, 1.0], scuro: R[0], chiaro: R[1], rnd,
-        da: [0, 6.5, 0], colRamo: COL.cortecciaBetulla, rRamo: 0.1, alto: 0.2 })])] },
+    { fino: 60, varianti: [unisci([fusto(0.38, 0.22, 5.5, 8, COL.cortecciaBetulla),
+      ...ramificato({ fusto: 5.5, cima: 9.5, rami: 6, parte: [0.6, 1.0], inc: [55, 75], lungo: 3.2, r0: 0.3,
+        colRamo: COL.cortecciaBetulla, ciuffi: 2, rCiuffo: 0.8, raggio: [0.36, 0.56], dettaglio: 1, scuro: R[0], chiaro: R[1], rnd })])] },
     { fino: 300, varianti: [unisci([fusto(0.34, 0.2, 6, 4, COL.cortecciaBetulla),
       ...chiomaAMasse({ y: 10.3, a: 2.0, b: 5.2, masse: 5, ciuffi: 1, raggio: [1.0, 1.4], dettaglio: 0, scuro: R[0], chiaro: R[1], rnd })])] },
     { fino: Infinity, sagoma: [SAGOME.riva] },
