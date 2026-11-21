@@ -17,7 +17,7 @@
 import * as THREE from 'three';
 import { BIOMA, CLIMA } from '../mondo/carta.js';
 import { smoothstep } from '../mondo/rumore.js';
-import { COPERTURA, coperturaMondo, nuovaCopertura, campagnaMondo } from '../mondo/vegetazione.js';
+import { COPERTURA, coperturaMondo, nuovaCopertura, campagnaMondo, PARCELLE, PERM_CAMPI } from '../mondo/vegetazione.js';
 
 const PAL = (typeof PALETTE !== 'undefined') ? PALETTE : {};
 
@@ -259,6 +259,9 @@ const ottaveGLSL = (lista, varNome) => lista.map(([s, a]) =>
 /** Texture nera 1×1: ombre spente (anelli dell'orizzonte, prima che la vegetazione le disegni). */
 const TEXTURE_NERA = new THREE.DataTexture(new Uint8Array([0]), 1, 1, THREE.RedFormat, THREE.UnsignedByteType);
 TEXTURE_NERA.needsUpdate = true;
+const TEXTURE_PERM_CAMPI = new THREE.DataTexture(PERM_CAMPI, 256, 1, THREE.RedFormat, THREE.UnsignedByteType);
+TEXTURE_PERM_CAMPI.magFilter = TEXTURE_PERM_CAMPI.minFilter = THREE.NearestFilter;
+TEXTURE_PERM_CAMPI.needsUpdate = true;
 
 /**
  * Materiale del terreno del mondo generato a colore per pixel. La geometria deve avere gli attributi `base` (vec3)
@@ -326,10 +329,9 @@ export function materialeSuolo(cx, cz, mezzo = 1e9) {
     uOmbreForza: { value: new THREE.Vector2(0, 0) },
     // Prestazioni (docs/PRESTAZIONI.md, passo 3): colore del blocco «cotto» in una texture al caricamento (cuociSuolo).
     uCotto: { value: TEXTURE_NERA },
-    // Campi coltivati (vegetazione.js, CAMPI_COLTIVATI): origine del luogo (avvolta come vMondo) e verso dei solchi;
-    // raggio degli orti attorno al luogo. Li imposta vegetazione3d.js; la maschera è la terza componente di aSuolo.
-    uCampi: { value: new THREE.Vector4(0, 0, 1, 0) },
-    uOrti: { value: 0 },
+    // Campi coltivati (vegetazione.js, PARCELLE): permutazione condivisa. La maschera è la terza componente di aSuolo,
+    // le coordinate dei campi l'attributo aCampi (li aggiunge vegetazione3d.js).
+    uPermCampi: { value: TEXTURE_PERM_CAMPI },
   };
   mat.userData.uniformi = uniformi;
   mat.onBeforeCompile = (sh) => {
@@ -340,6 +342,8 @@ attribute vec3 base;
 attribute vec4 strati;
 attribute vec3 aSuolo;
 varying vec3 vSuolo;
+attribute vec4 aCampi;
+varying vec4 vCampi;
 uniform vec2 uOrigine;
 varying vec3 vBase;
 varying vec4 vStrati;
@@ -348,6 +352,7 @@ varying vec2 vMondo;`)
   vBase = base;
   vStrati = strati;
   vSuolo = aSuolo;
+  vCampi = aCampi;
   vMondo = (modelMatrix * vec4(transformed, 1.0)).xz + uOrigine;`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
@@ -369,8 +374,11 @@ varying vec3 vBase;
 varying vec4 vStrati;
 varying vec2 vMondo;
 varying vec3 vSuolo;
-uniform vec4 uCampi;
-uniform float uOrti;
+varying vec4 vCampi;
+uniform sampler2D uPermCampi;
+// Permutazione dei campi (PERM_CAMPI): interi esatti, uguali a quelli di vegetazione.js.
+float permC(float x) { return floor(texture2D(uPermCampi, vec2((mod(x, 256.0) + 0.5) / 256.0, 0.5)).r * 255.0 + 0.5); }
+float hashC(float a, float b) { return permC(permC(b) + a); }
 float hashSuolo(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);
@@ -465,26 +473,27 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
           cPrato = mix(cPrato, vec3(0.07, 0.055, 0.035) * (0.8 + 0.4 * r2), smoothstep(0.3, 1.0, vSuolo.y) * 0.6 * blocco);
         }
         if (vSuolo.z > 0.01) {
-          // Campi coltivati attorno ai luoghi (niente stagioni): strisce lungo il verso del borgo, larghe 20–55 m e
-          // lunghe 70–190 m, un po' piegate (rumore su 128 m); vicino al luogo orti più piccoli. Ogni appezzamento
-          // sceglie arato, seminato, grano, prato da sfalcio o maggese; tra uno e l'altro una capezzagna erbosa.
-          // Dove la campagna finisce si fermano appezzamenti interi (soglia per appezzamento), non un bordo sfumato.
-          vec2 dC = vMondo - uCampi.xy;
-          dC -= ${P.toFixed(1)} * floor(dC / ${P.toFixed(1)} + 0.5);
-          vec2 q = vec2(dot(dC, uCampi.zw), dot(dC, vec2(-uCampi.w, uCampi.z)));
-          q += (vec2(rumoreSuolo(p, 128.0), rumoreSuolo(p + 71.0, 128.0)) - 0.5) * 50.0;
-          float orto = 1.0 - step(uOrti + 60.0 * (r1 - 0.5), length(dC));
-          float banda = mix(110.0, 36.0, orto);
-          float hb = hashSuolo(vec2(floor(q.y / banda), 7.0 + orto));
-          float W = banda / (2.0 + floor(hb * (3.0 - orto)));
+          // Campi coltivati attorno ai luoghi (niente stagioni; disegno in PARCELLE, js/mondo/vegetazione.js, che lo
+          // calcola uguale per mettere le siepi): strisce lungo il verso del borgo larghe 20–55 m e lunghe 70–190 m;
+          // vicino al luogo orti più piccoli. Ogni appezzamento sceglie arato, seminato, grano, fieno o maggese; tra uno
+          // e l'altro una capezzagna erbosa; sui lati con la siepe una striscia scura (da lontano la siepe si legge
+          // anche dove i cespugli non si disegnano più). Dove la campagna finisce si fermano appezzamenti interi.
+          // Strade: ogni lato ha appezzamenti suoi (righe spostate) e i campi finiscono al margine, con erba.
+          float latoS = vCampi.w < 0.0 ? 1.0 : 0.0, margineS = abs(vCampi.w);
+          vec2 q = vCampi.xy + vec2(0.0, latoS * ${PARCELLE.strada.lato.toFixed(1)});
+          float orto = vCampi.z < 0.0 ? 1.0 : 0.0;
+          float banda = mix(${PARCELLE.banda[0].toFixed(1)}, ${PARCELLE.banda[1].toFixed(1)}, orto);
+          float extra = mix(${PARCELLE.extra[0].toFixed(1)}, ${PARCELLE.extra[1].toFixed(1)}, orto);
+          float W = banda / (2.0 + floor(hashC(floor(q.y / banda), 7.0 + orto) * extra / 256.0));
           float j = floor(q.y / W);
-          float hj = hashSuolo(vec2(j, 3.0 + orto));
-          float L = mix(70.0 + 120.0 * hj, 18.0 + 22.0 * hj, orto);
-          float u = q.x + hj * 500.0;
+          float hj = hashC(j, 3.0 + orto) / 255.0;
+          float L = orto > 0.5 ? ${PARCELLE.lungo[1][0].toFixed(1)} + ${PARCELLE.lungo[1][1].toFixed(1)} * hj
+            : ${PARCELLE.lungo[0][0].toFixed(1)} + ${PARCELLE.lungo[0][1].toFixed(1)} * hj;
+          float u = q.x + hj * ${PARCELLE.spostamento.toFixed(1)};
           float i = floor(u / L);
-          float h = hashSuolo(vec2(i, j) + 17.0), h2 = hashSuolo(vec2(i, j) + 41.0);
+          float h = hashC(i, j + 17.0) / 255.0, h2 = hashC(i, j + 41.0) / 255.0;
           float fu = u - i * L, fv = q.y - j * W;
-          float bordoC = min(min(fu, L - fu), min(fv, W - fv));
+          float bordoC = min(min(min(fu, L - fu), min(fv, W - fv)), margineS - ${PARCELLE.strada.margine[0].toFixed(1)});
           float solchi = 0.5 + 0.5 * sin(fv * 6.2832 / mix(2.4, 1.3, orto));
           vec3 cC;
           if (orto > 0.5) cC = h < 0.35 ? vec3(0.15, 0.095, 0.05) * (0.85 + 0.2 * solchi)
@@ -496,7 +505,14 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
           else cC = mix(cPrato, vec3(0.2, 0.14, 0.07), 0.45);                                          // maggese
           cC *= 0.86 + 0.28 * r2;
           cC = mix(cC, cPrato * 0.85, 1.0 - smoothstep(0.8, 1.8, bordoC));                             // capezzagna
-          float dentro = smoothstep(0.0, 0.06, vSuolo.z - (0.12 + 0.6 * h2));
+          if (orto < 0.5) {
+            // Siepi (non i filari d'alberi: quelli hanno le loro ombre finte), come in posizionaVegetazione.
+            float sL = hashC(i, j + 59.0) < ${(PARCELLE.siepi.lungo * 256).toFixed(1)} && hashC(i, j + 97.0) >= ${(PARCELLE.siepi.filari * 256).toFixed(1)} ? fv : 1e4;
+            float sC = hashC(i, j + 83.0) < ${(PARCELLE.siepi.traverso * 256).toFixed(1)} && hashC(i, j + 98.0) >= ${(PARCELLE.siepi.filari * 256).toFixed(1)} && fv > 2.0 ? fu : 1e4;
+            float siepe = 1.0 - smoothstep(${PARCELLE.siepi.striscia[0].toFixed(1)}, ${PARCELLE.siepi.striscia[1].toFixed(1)}, min(sL, sC));
+            cC = mix(cC, vec3(0.035, 0.055, 0.02) * (0.7 + 0.6 * r2), siepe);
+          }
+          float dentro = smoothstep(0.0, 0.06, vSuolo.z - (0.12 + 0.6 * h2)) * step(0.3, margineS);
           cPrato = mix(cPrato, cC, dentro * blocco);
         }
         // Colori vari e chiaroscuri da vicino (richiesta dell'utente: «colorazione varia e chiaroscuri marcati nel
