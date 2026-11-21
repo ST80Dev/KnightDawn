@@ -17,7 +17,7 @@
 // quelle del blocco) e porta i punti nel blocco con X(u, v), Z(u, v); le direzioni con la stessa rotazione (ux, uz).
 
 import * as THREE from 'three';
-import { prisma, unisci, rifinisci, materialeMuro, tonoDelLuogo } from './rocca3d.js';
+import { prisma, unisci, rifinisci, materialeMuro, tonoDelLuogo, texturaAlone } from './rocca3d.js';
 
 const COL = {
   pietra: '#aa9d87', intonaco: '#d2c6ad', tetto: '#ffffff', paglia: '#a8946a', legno: '#4a3220', finestra: '#1e1915',
@@ -49,6 +49,20 @@ const IRREGOLARE = { fuoriSquadra: 0.08, alto: [0.32, 0.6], lungo: [0.45, 0.95],
   // Cantonali solo su una parte degli spigoli e a tratti (utente: spigoli tutti pieni sembravano restauri di oggi).
   spigolo: 0.3, tratto: [0.3, 0.8], buco: 0.3 };
 export const DETTAGLIO = { lontano: 160, zona: 60 };
+// Luci notturne (M7, passo 7): finestre accese (emissive, quota secondo l'ora), torce a muro (fiamme a istanze e
+// aloni in un solo oggetto per kit) e sorgenti per le PointLight più vicine al cavaliere (main.js).
+export const LUCI = {
+  finestra: [1.0, 0.52, 0.18], forzaFinestra: 0.9,
+  torcia: { colore: '#ff9a40', intensita: 14, distanza: 14, alone: 2.2, altezza: 2.4 },
+  forgia: { colore: '#ff6a20', intensita: 22, distanza: 12 },
+};
+/** Quota di finestre accese secondo l'ora (0–24): sera la metà, notte fonda poche, all'alba qualcuna. */
+export function quotaFinestre(ora) {
+  if (ora >= 17 && ora < 21) return 0.5;
+  if (ora >= 21) return 0.3;
+  if (ora < 4.5) return 0.08;
+  return 0.25;
+}
 // Piede degli edifici: fascia di terra larga `largo` m, un sasso ogni ~passoSassi m con probabilità `sassi`, sassi
 // di `sasso` m.
 const BASE = { largo: [0.35, 0.65], passoSassi: 1.1, sassi: 0.45, sasso: [0.18, 0.5] };
@@ -262,6 +276,13 @@ function esaedro(sopra, sotto) {
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
+/** Costruzione a pezzi (M7 passo 9): un pezzo dura al più ~PEZZO_MS ms prima di cedere il passo (yield). */
+export const PEZZO_MS = 3;
+/** Porta a termine un generatore «a pezzi» in un colpo e ne restituisce il risultato. */
+export function completaPezzi(gen) {
+  for (;;) { const r = gen.next(); if (r.done) return r.value; }
+}
+
 /**
  * Crea un kit di edifici.
  * @param {object} o
@@ -285,6 +306,19 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     legno: new THREE.MeshLambertMaterial({ color: COL.legno, flatShading: true }),
     finestra: new THREE.MeshLambertMaterial({ color: COL.finestra }),
   };
+  // Finestre accese: colore per istanza r = soglia (0–1); accesa se r < uQuota, quando è buio (uAccese).
+  // Il colore per istanza non tinge la finestra (via color_fragment); nel frammento r187 lo segnala USE_COLOR.
+  const uLuci = { uAccese: { value: 0 }, uQuota: { value: 0 } };
+  mat.finestra.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, uLuci);
+    sh.fragmentShader = 'uniform float uAccese;\nuniform float uQuota;\n' + sh.fragmentShader.replace('#include <color_fragment>', '').replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+      #ifdef USE_COLOR
+        totalEmissiveRadiance += uAccese * step(vColor.r, uQuota) * vec3(${LUCI.finestra.map((x) => x.toFixed(2)).join(', ')}) * ${LUCI.forzaFinestra.toFixed(2)};
+      #endif`);
+  };
+  mat.finestra.customProgramCacheKey = () => 'finestra-accesa';
+  const torce = [];                                    // { u, v, y, fu, fv }
+  const sorgenti = [];                                 // { x, y, z, colore, intensita, distanza } nel blocco
   mat.legno.emissive.set(COL.legno).multiplyScalar(LUCE_RIFLESSA * 0.5);
   const parti = { pietra: [], intonaco: [], tetto: [], paglia: [], legno: [] };
   const scegli = (tabella) => { let x = rnd(); for (const [k, p] of Object.entries(tabella)) { if ((x -= p) < 0) return k; } return Object.keys(tabella)[0]; };
@@ -641,6 +675,13 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
         scatole.push({ cu: (A[0] + B[0]) / 2, cv: (A[1] + B[1]) / 2, au: du, av: dv, hl: l / 2, hw: 0.12 });
       }
     }
+    // Torce alla porta di taverna e stalla; il fabbro ha la forgia (luce bassa e rossa dalla porta).
+    if (tipo === 'taverna' || tipo === 'stalla' || tipo === 'cappella' || tipo === 'salaArmi') {
+      const t = (tipo === 'stalla' ? 1.8 : 1.1);
+      torcia(u + s[0] * t + f[0] * (E.fondo / 2 + 0.02), v + s[1] * t + f[1] * (E.fondo / 2 + 0.02), (r.pavimento ?? terreno(u, v)) + LUCI.torcia.altezza, fu, fv,
+        tipo === 'cappella' || tipo === 'salaArmi' ? null : LUCI.torcia);
+    }
+    if (tipo === 'fabbro') sorgenti.push({ u: u + f[0] * (E.fondo / 2 + 0.8), v: v + f[1] * (E.fondo / 2 + 0.8), y: (r.pavimento ?? terreno(u, v)) + 1.2, ...LUCI.forgia });
     if (tipo === 'taverna') {                           // insegna a bandiera sulla facciata
       const t = E.largo / 2 - 1.2, pu = u + s[0] * t + f[0] * (E.fondo / 2 + 0.7), pv = v + s[1] * t + f[1] * (E.fondo / 2 + 0.7);
       const R1 = rett([pu, pv], s, f, 0.04, 0.6), y = r.pavimento + 3.3;
@@ -652,6 +693,18 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     edifici.push({ tipo, nome: E.nome, porta });
     const largo = E.largo + (E.recinto ? E.recinto + 1 : 0) * 2 + (E.tettoia ? E.tettoia + 0.4 : 0) * 2;
     return { largo, fondo: E.fondo };
+  }
+
+  /** Torcia a muro (staffa e manico uniti nel legno; fiamma e alone in chiudi()), rivolta verso f; con `luce` una sorgente. */
+  function torcia(u, v, y, fu, fv, luce = LUCI.torcia) {
+    const f = [fu, fv], s = [-fv, fu];
+    const Rs = rett([u + fu * 0.2, v + fv * 0.2], s, f, 0.05, 0.2);
+    parti.legno.push(prisma(q4(Rs), q4(Rs), y - 0.05, y + 0.05));
+    const Rm = rett([u + fu * 0.35, v + fv * 0.35], s, f, 0.04, 0.04);
+    parti.legno.push(prisma(q4(Rm), q4(Rm), y, y + 0.6));
+    const fx = u + fu * 0.38, fz = v + fv * 0.38;
+    torce.push({ u: fx, v: fz, y: y + 0.75 });
+    if (luce) sorgenti.push({ u: u + fu * 1.2, v: v + fv * 1.2, y: y + 0.9, ...luce });
   }
 
   /** Pozzo: vera di pietra, due pilastrini, trave e tettuccio. */
@@ -719,7 +772,8 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
   }
 
   /** Chiude il kit: oggetti da disegnare, collisioni, sagome per la camera, misure. */
-  function chiudi() {
+  /** Chiude il kit: unisce i volumi, crea dettagli, torce e sagome. Generatore: cede il passo tra un pezzo e l'altro. */
+  function* chiudiAPezzi() {
     const object = new THREE.Group();
     object.name = nome;
     const solidi = [];
@@ -732,6 +786,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
       const m = new THREE.Mesh(geo, mat[k]);
       m.name = `${nome}-${k}`;
       object.add(m);
+      yield;
     }
     if (piedi.length) {                                  // fasce di terra al piede degli edifici
       const pos = [], uv = [], idx = [];
@@ -768,6 +823,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
       m.name = `${nome}-piede`;
       object.add(m);
     }
+    yield;
     {
       const geo = unisci(sagome);                         // invisibile: solo per il raycast della camera
       if (geo) {
@@ -813,6 +869,11 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
         const L = lista.filter((d) => d.tipo === tipo);
         if (!L.length) continue;
         const im = new THREE.InstancedMesh(geoD[tipo], matD[tipo], L.length);
+        if (tipo === 'finestra') {                        // soglia di accensione per finestra (le celle mai)
+          const cc = new THREE.Color();
+          L.forEach((d, i) => im.setColorAt(i, cc.setRGB(d.sy > 1.5 ? 1 : rnd() * 0.999, 1, 1)));
+          im.instanceColor.needsUpdate = true;
+        }
         L.forEach((d, i) => {
           const nx = ux * d.fu - uz * d.fv, nz = uz * d.fu + ux * d.fv;
           q.setFromAxisAngle(yAx, Math.atan2(nx, nz));
@@ -829,6 +890,46 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
       lod.addLevel(g, 0);
       lod.addLevel(new THREE.Object3D(), DETTAGLIO.lontano);
       object.add(lod);
+      yield;
+    }
+    // Fiamme (coni a istanze) e aloni (punti) delle torce: due oggetti per tutto il kit.
+    let fiamme = null, aloni = null;
+    if (torce.length) {
+      const geoF = new THREE.ConeGeometry(0.1, 0.38, 6);
+      fiamme = new THREE.InstancedMesh(geoF, new THREE.MeshBasicMaterial({ color: '#ffcf70', fog: false }), torce.length);
+      fiamme.name = `${nome}-fiamme`;
+      const pos = [];
+      torce.forEach((t, i) => {
+        fiamme.setMatrixAt(i, m4.compose(p3.set(X(t.u, t.v), t.y, Z(t.u, t.v)), q.identity(), sc.set(1, 1, 1)));
+        pos.push(X(t.u, t.v), t.y, Z(t.u, t.v));
+      });
+      fiamme.instanceMatrix.needsUpdate = true;
+      fiamme.computeBoundingSphere();
+      const ga = new THREE.BufferGeometry();
+      ga.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      aloni = new THREE.Points(ga, new THREE.PointsMaterial({ map: texturaAlone(), size: LUCI.torcia.alone, sizeAttenuation: true,
+        transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+      aloni.name = `${nome}-aloni`;
+      fiamme.visible = aloni.visible = false;
+      object.add(fiamme, aloni);
+    }
+    for (const sg of sorgenti) { sg.x = X(sg.u, sg.v); sg.z = Z(sg.u, sg.v); }
+    /** Luci della notte: buio 0–1, quota di finestre accese (quotaFinestre), t in s per il tremolio. */
+    function aggiornaLuci(t, buio, quota = 0.3) {
+      const f = Math.min(1, Math.max(0, (buio - 0.15) / 0.5));
+      uLuci.uAccese.value = f;
+      uLuci.uQuota.value = quota;
+      if (!fiamme) return;
+      const accese = f > 0;
+      fiamme.visible = aloni.visible = accese;
+      if (!accese) return;
+      torce.forEach((tc, i) => {
+        const k = 0.85 + 0.12 * Math.sin(t * 13.1 + i * 2.1) + 0.06 * Math.sin(t * 23.7 + i);
+        fiamme.setMatrixAt(i, m4.compose(p3.set(X(tc.u, tc.v), tc.y, Z(tc.u, tc.v)), q.identity(), sc.set(1, k, 1)));
+      });
+      fiamme.instanceMatrix.needsUpdate = true;
+      aloni.material.opacity = f;
+      aloni.material.size = LUCI.torcia.alone * (0.92 + 0.08 * Math.sin(t * 11.3));
     }
     object.updateMatrixWorld(true);
     let triangoli = 0, chiamate = 0;
@@ -837,10 +938,16 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
       chiamate++;
       triangoli += (m.isInstancedMesh ? m.count : 1) * (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3;
     });
-    return { object, solidi, scatole, edifici, misure: { case: case_, edifici: edifici.length, istanze, zone: zone.size, chiamate, triangoli } };
+    // Porte degli edifici nominati anche nel blocco (x, z) con la normale verso fuori (nx, nz): per «Entra» (M7, passo 6).
+    for (const e of edifici) {
+      const p = e.porta;
+      Object.assign(p, { x: X(p.u, p.v), z: Z(p.u, p.v), nx: ux * p.fu - uz * p.fv, nz: uz * p.fu + ux * p.fv });
+    }
+    return { object, solidi, scatole, edifici, sorgenti, aggiornaLuci, misure: { case: case_, edifici: edifici.length, istanze, zone: zone.size, chiamate, triangoli } };
   }
 
-  return { casa, edificio, pozzo, banco, loggia, corpo, chiudi, rnd, rett, pagliaio, catasta, botte };
+  const chiudi = () => completaPezzi(chiudiAPezzi());
+  return { casa, edificio, pozzo, banco, loggia, corpo, chiudi, chiudiAPezzi, rnd, rett, pagliaio, catasta, botte, torcia };
 }
 
 // ─── Lotti ────────────────────────────────────────────────────────────────
@@ -905,5 +1012,5 @@ export function creaCaseCampagna(suolo, siti, cx, cz, seme = 7) {
     return { x: u, z: v };
   }
   return { tipo: 'campagna', object: r.object, solidi: r.solidi, spingiFuori, quotaSuolo: () => null, dentro: () => false,
-    aggiornaLuci() {}, misure: r.misure, edifici: r.edifici };
+    aggiornaLuci: r.aggiornaLuci, sorgenti: r.sorgenti, misure: r.misure, edifici: r.edifici };
 }
