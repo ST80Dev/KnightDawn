@@ -18,7 +18,7 @@
 import * as THREE from 'three';
 import { prisma, unisci, dentroPoligono, distanzaContorno, areaPoligono, normaleLato, localeDelLuogo, creaSpinta,
   scatolaLato, geoTorrePorta, geoGhiera, materialeMuro, rifinisci, tonoDelLuogo } from './rocca3d.js';
-import { creaKit, siToccano, EDIFICI } from './edifici3d.js';
+import { creaKit, siToccano, EDIFICI, PEZZO_MS, completaPezzi } from './edifici3d.js';
 
 /** Misure secondo la classe del luogo. vicoli: quanti vicoli trasversali. */
 export const CLASSI_BORGO = {
@@ -158,6 +158,11 @@ function ricampiona(p, passo) {
 
 // ─── Borgo ──────────────────────────────────────────────────────────────
 
+/** Versione sincrona: costruisce il borgo in un colpo (stesso risultato di createBorgoAPezzi). */
+export function createBorgo(suolo, luogo, ox, oz, rocca) {
+  return completaPezzi(createBorgoAPezzi(suolo, luogo, ox, oz, rocca));
+}
+
 /**
  * Costruisce il borgo murato di un luogo.
  * @param {{getHeight:(x:number, z:number) => number}} suolo  quota del terreno in coordinate del blocco
@@ -166,7 +171,7 @@ function ricampiona(p, passo) {
  * @param {number} oz
  * @param {{ piede:number[], poligono:number[][] }} rocca  la rocca (rocca3d.js): piede della sua rampa, contorno (locali)
  */
-export function createBorgo(suolo, luogo, ox, oz, rocca) {
+export function* createBorgoAPezzi(suolo, luogo, ox, oz, rocca) {
   const K = CLASSI_BORGO[luogo.classe] ?? CLASSI_BORGO.casata;
   const ux = luogo.verso.x, uz = luogo.verso.z;
   const B = luogo.piani[1];
@@ -204,6 +209,7 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
   const parti = { mattone: [], scuro: [], pietra: [], legno: [] };
   const scatole = [];                              // collisioni in locale (rocca3d.js, creaSpinta)
 
+  yield;
   // ─── Porta: sul lato della catena più vicino al punto scelto dal generatore ───
   const [pu, pv] = luogo.porta ? localeDelLuogo(luogo, [[luogo.porta.x, luogo.porta.z]])[0] : BL[1];
   let latoPorta = 1, dP = Infinity;
@@ -221,6 +227,7 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
   const gm = [gA[0] + ge[0] * tP, gA[1] + ge[1] * tP];
   const loc = (e, d) => [gm[0] + ge[0] * e + gn[0] * d, gm[1] + ge[1] * e + gn[1] * d];
 
+  yield;
   // ─── Cinta, a gradoni sul pendio ───
   // Ogni lato della catena in tratti di ~TRATTO m: base sotto il terreno esterno, cima H sopra il terreno interno più
   // alto del tratto; scarpa all'esterno. n = normale esterna; il muro sta tra il bordo e SP verso l'interno.
@@ -262,6 +269,7 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
     } else lato(a, b, n);
   }
 
+  yield;
   // ─── Torri quadrate: sui vertici della catena (non quelli della rocca) e lungo i lati ogni ~passoTorri ───
   const lt = K.torre / 2;
   const posti = [];                                // { u, v, au, av }: centro e asse
@@ -301,6 +309,7 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
     torri++;
   }
 
+  yield;
   // ─── Torre-porta del borgo: il passaggio segue il terreno ───
   let gMin = Infinity, gMax = -Infinity;
   for (let d = SPOR - prof + 1; d <= SPOR + 1e-6; d += 0.5) {
@@ -331,6 +340,7 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
     }
   }
 
+  yield;
   // ─── Rampa fuori dalla porta: dal passaggio al terreno (il terrapieno a 25° scende sotto) ───
   const qSoglia = terreno(...loc(0, SPOR));
   let lungaPorta = RAMPA_PORTA.minima;
@@ -374,6 +384,7 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
     }
   }
 
+  yield;
   // ─── Strade interne ───
   // Polilinee in (u, v). Via principale: dalla porta (fuori, sulla rampa) al piede della rampa della rocca; se il
   // pendio supera STRADE.pendenzaVia sale a tornanti. Via lungo le mura: anello a `rientro` m dalla cinta (lascia posto
@@ -507,6 +518,7 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
     return geo;
   })();
 
+  yield;
   // ─── Edifici e case (passo 5) ───
   // Lotti rettangolari lungo le strade (facciata sulla via, colmo parallelo), anche col retro contro le mura nella
   // fascia lasciata dall'anello. Prima gli edifici nominati lungo la via principale dalla porta, poi la piazza, poi
@@ -521,6 +533,7 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
       kit.torcia(tu, tv, yT, gn[0], gn[1], lato < 0 ? undefined : null);
     }
   }
+  yield;
   const lotti = [];
   const segmenti = [], CS = 8, gSeg = new Map();
   for (const st of strade) {
@@ -582,7 +595,8 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
   };
   const lotto = (c, f, largo, fondo) => ({ c, f, s: [-f[1], f[0]], a: largo / 2, b: fondo / 2 });
   /** Cammina lungo una strada su un lato e prova i lotti; `prossimo()` dà le misure (null: basta). */
-  function lungo(st, lato, prossimo, posa, { da = 0, passoVuoto = 1 } = {}) {
+  // Generatore: cede il passo (yield) quando il pezzo supera PEZZO_MS, senza cambiare l'ordine delle scelte casuali.
+  function* lungo(st, lato, prossimo, posa, { da = 0, passoVuoto = 1 } = {}) {
     const P = st.punti, w = STRADE[st.tipo].larghezza / 2;
     let i = da;
     while (i < P.length - 2) {
@@ -596,6 +610,7 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
         lotti.push(L);
         posa(L, spec);
         i += Math.max(1, Math.ceil((spec.largo + (kit.rnd() < 0.25 ? 2 + kit.rnd() * 3 : 0)) / STRADE.passo));
+        if (performance.now() - inizioPezzo > PEZZO_MS) { yield; inizioPezzo = performance.now(); }
       } else i += passoVuoto;
     }
   }
@@ -610,9 +625,10 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
   }
   // Edifici nominati lungo la via principale, dalla porta.
   const daFare = [...K.edifici];
+  let inizioPezzo = performance.now();
   if (via) {
     for (const lato of [1, -1]) {
-      lungo(via, lato, () => (daFare.length ? { ...EDIFICI[daFare[0]], largo: EDIFICI[daFare[0]].largo + (EDIFICI[daFare[0]].recinto ? 2 * EDIFICI[daFare[0]].recinto + 2 : 0) + (EDIFICI[daFare[0]].tettoia ? 2 * EDIFICI[daFare[0]].tettoia + 1 : 0) } : null),
+      yield* lungo(via, lato, () => (daFare.length ? { ...EDIFICI[daFare[0]], largo: EDIFICI[daFare[0]].largo + (EDIFICI[daFare[0]].recinto ? 2 * EDIFICI[daFare[0]].recinto + 2 : 0) + (EDIFICI[daFare[0]].tettoia ? 2 * EDIFICI[daFare[0]].tettoia + 1 : 0) } : null),
         (L) => { const tipo = daFare.shift(); kit.edificio(tipo, { u: L.c[0], v: L.c[1], fu: L.f[0], fv: L.f[1] }); }, { da: 3 });
     }
   }
@@ -620,7 +636,7 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
     if (!daFare.length) break;
     if (st === via) continue;
     for (const lato of [1, -1]) {
-      lungo(st, lato, () => (daFare.length ? { ...EDIFICI[daFare[0]], largo: EDIFICI[daFare[0]].largo + (EDIFICI[daFare[0]].recinto ? 2 * EDIFICI[daFare[0]].recinto + 2 : 0) + (EDIFICI[daFare[0]].tettoia ? 2 * EDIFICI[daFare[0]].tettoia + 1 : 0) } : null),
+      yield* lungo(st, lato, () => (daFare.length ? { ...EDIFICI[daFare[0]], largo: EDIFICI[daFare[0]].largo + (EDIFICI[daFare[0]].recinto ? 2 * EDIFICI[daFare[0]].recinto + 2 : 0) + (EDIFICI[daFare[0]].tettoia ? 2 * EDIFICI[daFare[0]].tettoia + 1 : 0) } : null),
         (L) => { const tipo = daFare.shift(); kit.edificio(tipo, { u: L.c[0], v: L.c[1], fu: L.f[0], fv: L.f[1] }); });
     }
   }
@@ -657,7 +673,7 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
   for (const st of strade) {                            // la chiesa, se non è andata sulla piazza
     if (!daFare.length) break;
     for (const lato of [1, -1]) {
-      lungo(st, lato, () => (daFare.length ? { ...EDIFICI[daFare[0]] } : null),
+      yield* lungo(st, lato, () => (daFare.length ? { ...EDIFICI[daFare[0]] } : null),
         (L) => { const tipo = daFare.shift(); kit.edificio(tipo, { u: L.c[0], v: L.c[1], fu: L.f[0], fv: L.f[1] }); });
     }
   }
@@ -668,7 +684,7 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
     if (!st) continue;
     for (const lato of [1, -1]) {
       let tipo = 'schiera';
-      lungo(st, lato, () => {
+      yield* lungo(st, lato, () => {
         if (caseFatte >= K.case) return null;
         const r0 = kit.rnd();
         tipo = st.tipo === 'via' ? (r0 < 0.4 ? 'bottega' : 'schiera') : st.tipo === 'mura' ? (r0 < 0.55 ? 'schiera' : 'bassa') : (r0 < 0.5 ? 'bassa' : 'schiera');
@@ -681,9 +697,12 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
       });
     }
   }
-  const edificiBorgo = kit.chiudi();
+  yield;
+  const edificiBorgo = yield* kit.chiudiAPezzi();
+  yield;
   scatole.push(...edificiBorgo.scatole);
 
+  yield;
   // ─── Oggetti: uno per materiale, merli a istanze ───
   const object = new THREE.Group();
   object.name = 'borgo';
@@ -723,6 +742,7 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
   solidi.push(...edificiBorgo.solidi);
   object.updateMatrixWorld(true);
 
+  yield;
   // ─── Collisioni e suolo ───
   let U0 = Infinity, U1 = -Infinity, V0 = Infinity, V1 = -Infinity;
   for (const [u, v] of BL) { U0 = Math.min(U0, u); U1 = Math.max(U1, u); V0 = Math.min(V0, v); V1 = Math.max(V1, v); }
