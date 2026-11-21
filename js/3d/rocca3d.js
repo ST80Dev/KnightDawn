@@ -943,7 +943,7 @@ export function createRocca(suolo, luogo, ox, oz) {
   };
   // ─── Edifici del cortile (passo 5): cappella e pozzo; sala d'armi e armeria nel castello di casata e nella sede
   // maggiore. Addossati alle mura (facciata verso il cortile), o liberi nel cortile se lungo le mura non c'è posto.
-  const kit = creaKit({ X, Z, ux, uz, terreno, luogo, seme: (Math.floor(luogo.x) * 19349663) ^ (Math.floor(luogo.z) * 83492791), nome: 'rocca-edifici' });
+  const kit = creaKit({ X, Z, ux, uz, terreno, luogo, seme: (Math.floor(luogo.x) * 19349663) ^ (Math.floor(luogo.z) * 83492791), nome: 'rocca-edifici', contesto: 'rocca' });
   {
     const lotti = [mastioL];
     const passaggio = [gm[0] - gn[0] * (PORTA.profondita - SPOR + 4), gm[1] - gn[1] * (PORTA.profondita - SPOR + 4)];

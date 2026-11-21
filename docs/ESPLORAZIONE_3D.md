@@ -1258,8 +1258,17 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
      porte, comignoli. Texture generate una volta: coppi (canali lungo la falda, muschio) e intonaco (macchie,
      colature, pietre a vista). Il tono della pietra segue quello del luogo.
    - *Irregolarità* (richiesta dell'utente: spigoli non tutti lineari, «l'idea delle pietre irregolari»): pareti fuori
-     squadra di qualche cm; **cantonali** di pietra di misure diverse agli spigoli di case, edifici e campanili,
-     alternati sui due lati e sporgenti (anche sulle case intonacate).
+     squadra di qualche cm; **cantonali** di pietra di misure diverse, alternati sui due lati, ma solo su ~1 spigolo
+     su 3 e a tratti, con buchi (utente: spigoli tutti pieni sembravano edifici restaurati di oggi); interi solo sui
+     campanili.
+   - *Medievale e un po' fantasy* (utente: case «troppo curate, quasi del 1900», tetti «in mattoni»): **piani alti a
+     graticcio** che sporgono di 45 cm su metà delle case del borgo (travi scure, controventi nelle campate di testa;
+     taverna e guaritore sempre); **tetti** ripidi e irregolari (colmo che si incurva, gronde storte, pendenze diverse)
+     in paglia, scandole, lastre di pietra o coppi secondo il contesto (borgo, campagna, rocca), con **muschio** verso
+     le gronde; una sola texture per i tetti a lastre irregolari, tinta per casa, e una per la paglia. **Finestre**
+     piccole e poche, non allineate, con imposte di legno aperte; edera e umido al piede di alcune case; comignoli
+     di misure diverse. Attorno: **pagliai**, **cataste** di legna e **botti** (campagna, porte delle case, taverna,
+     fabbro).
    - *Lotti* (`borgo3d.js`): lungo le strade, facciata sulla via; prima gli edifici nominati lungo la via dalla porta
      (la stalla vicino alla porta), poi la piazza del mercato a metà della via (raggio 11 m casata, 15 m maggiore) con
      loggia, chiesa e banchi, poi le case (via: botteghe e schiere; anello: anche col retro contro le mura; vicoli)
@@ -1269,11 +1278,11 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
      le mura (facciata sul cortile) o liberi nel cortile; il pozzo nel punto libero più vicino al centro.
    - *Campagna:* case rurali (a volte col fienile) sui siti di `caseCampagna` della sessione Vegetazione, costruite
      con la Scena (`main.js`, `creaCaseCampagna`).
-   - *Prestazioni:* volumi uniti per materiale (pietra, intonaco, coppi, legno); finestre, porte, comignoli,
-     cantonali e celle campanarie a istanze in zone (al più 2 × 2 per kit) che si spengono oltre 160 m (`THREE.LOD`);
+   - *Prestazioni:* volumi uniti per materiale (pietra, intonaco, tetti, paglia, legno); finestre, imposte, porte,
+     comignoli, travi del graticcio, cantonali e celle campanarie a istanze in zone (al più 2 × 2 per kit) che si spengono oltre 160 m (`THREE.LOD`);
      per la camera una sagoma a scatole invisibile; una scatola di collisione per edificio. Borgo con le mura:
-     casata ~24 oggetti, sede maggiore ~28 (limite 40); triangoli fino a ~73.000 nella sede maggiore da vicino (i
-     cantonali pesano: si possono ridurre). Rocca con i suoi edifici ~15 oggetti; campagna ~11 oggetti per blocco.
+     casata ~29 oggetti, sede maggiore ~37 (limite 40); triangoli ~29.000 (casata) e ~65.000 (sede maggiore) da
+     vicino. Rocca con i suoi edifici ~15 oggetti; campagna ~11 oggetti per blocco.
    - *Edifici nominati con la porta* (`edifici: [{ tipo, nome, porta: { u, v, fu, fv } }]` di rocca e borgo): per il
      passo 6 (Carta del cronista).
 6. **Porte → Carta del cronista.** Soglie, «E: entra», overlay segnaposto, tempo fermo. *Prova:* ogni
