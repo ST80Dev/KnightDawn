@@ -1306,6 +1306,13 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
    centinaio di metri; FPS di notte nel borgo; le persone non si attraversano.
 8. **Da lontano.** Sagoma negli anelli, luci lontane. *Prova:* dal fondovalle a 2–5 km la rocca si
    riconosce di giorno e di notte; nessuna rocca «doppia» tra modello e sagoma; FPS invariati fuori dal sito.
+   **Fatto (sessione M6, da provare dall'utente):** `sagomeLuoghi` in `orizzonte.js`. Per i luoghi che la Scena non
+   costruisce (stessa regola di `costruisciRocche`, quindi niente rocca doppia): entro 6 km cinte di rocca e borgo
+   (altezze di `MISURE_ROCCA` e `CLASSI_BORGO`), torri agli spigoli della rocca, mastio, una massa di tetti nel borgo;
+   tra 6 e 18 km solo il mastio. Di notte 4/7/11 luci per borgo (minore, casata, maggiore) sopra i tetti, punti che
+   ignorano la nebbia, fino a 10 km (`luciLontane(notte)`, chiamata in `main.js` con le luci delle rocche). Una mesh
+   per tutte le sagome (~250 triangoli per luogo) e un `Points` per le luci: 2 chiamate. Provato in una scena di prova
+   (seme 570549, rocca di partenza a 3, 6 e 9 km): di giorno mastio e mura sulla cresta, di notte le luci del borgo.
 9. **Blocco che segue il cavaliere** (se l'utente lo approva in M7, punto 6). *Prova:* dal borgo di partenza
    si sale al crinale in 15–20 minuti reali senza fermarsi al bordo e senza stacchi visibili né cali di FPS al
    cambio di blocco; rocca e borgo restano al loro posto; tornando indietro si ritrova tutto.

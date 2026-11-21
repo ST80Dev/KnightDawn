@@ -1340,6 +1340,7 @@ function frame(now) {
     aggiornaCielo();
     castle?.aggiornaLuci(now / 1000, 1 - _luceGiorno);
     for (const r of rocche) r.aggiornaLuci(now / 1000, 1 - _luceGiorno);
+    orizzonte?.luciLontane?.(1 - _luceGiorno);   // M7, passo 8: luci dei borghi lontani (orizzonte.js)
     tt = segna('cielo e luci', tt);
     aggiornaStato();
     aggiornaIndicatoreAndatura();
