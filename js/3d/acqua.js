@@ -258,3 +258,174 @@ export function creaNastroStrada(t, mat, altezza, quote = null) {
   mesh.name = 'strada';
   return mesh;
 }
+
+// ─── Ponti (strade, passo 4) ───────────────────────────────────────────────
+// Dove una strada passa acqua più profonda del guado (js/mondo/strade.js, attraversamentiBlocco): pietra per le strade
+// maestre e le luci oltre 20 m, legno per il resto (deciso con l'utente). Mesh da codice, una per ponte; ogni ponte è
+// anche suolo (quotaSuolo, l'impalcato) e ostacolo (spingiFuori, i parapetti), come cortile e mura del castello.
+const PONTE = {
+  pietra: { colore: '#9a9182', scuro: '#7d7568', parapetto: 0.85, spessoreParapetto: 0.45, margine: 0.6,
+    arco: 14, pila: 1.8, spalla: 1.2, chiave: 0.8, schiena: 0.035, schienaMax: 1.2 },
+  legno: { colore: '#7a5a3a', scuro: '#5a4128', parapetto: 1.0, margine: 0.35, cavalletto: 6.5, montante: 2 },
+};
+
+/** Unisce geometrie (con o senza indice) in una sola, con un colore per geometria. */
+function unisci(parti) {
+  const pos = [], nor = [], col = [];
+  for (const { geo, colore } of parti) {
+    const g = geo.index ? geo.toNonIndexed() : geo;
+    g.computeVertexNormals();
+    const p = g.attributes.position.array, n = g.attributes.normal.array;
+    for (let i = 0; i < p.length; i += 3) {
+      pos.push(p[i], p[i + 1], p[i + 2]); nor.push(n[i], n[i + 1], n[i + 2]); col.push(colore.r, colore.g, colore.b);
+    }
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  return out;
+}
+
+/**
+ * Ponti del blocco. `attraversamenti` da generaScena (acqua.attraversamenti), `altezza(x, z)` il terreno disegnato.
+ * Restituisce { gruppo, ponti: [{ object, solidi, quotaSuolo, spingiFuori }] }.
+ */
+export function creaPonti(attraversamenti, altezza) {
+  const gruppo = new THREE.Group();
+  gruppo.name = 'ponti';
+  const ponti = [];
+  const matPietra = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
+  const matLegno = new THREE.MeshLambertMaterial({ vertexColors: true });
+  for (const at of attraversamenti || []) {
+    if (!at.ponte) continue;
+    const pietra = at.materiale === 'pietra', P = pietra ? PONTE.pietra : PONTE.legno;
+    const dx = at.x1 - at.x0, dz = at.z1 - at.z0, L = Math.hypot(dx, dz);
+    if (L < 2) continue;
+    const ux = dx / L, uz = dz / L;                       // asse del ponte; v = (-uz, ux)
+    const W = 2 * (at.semi + P.margine);                  // larghezza fuori tutto
+    const schiena = pietra ? Math.min(P.schienaMax, P.schiena * L) : 0;
+    const cima = (u) => at.quota + schiena * 4 * (u / L) * (1 - u / L);
+    // Letto sotto il ponte (il più basso lungo l'asse) per pile e cavalletti.
+    let letto = Infinity;
+    for (let k = 0; k <= 20; k++) letto = Math.min(letto, altezza(at.x0 + ux * L * k / 20, at.z0 + uz * L * k / 20));
+    const base = letto - 1.5;
+    const c1 = new THREE.Color(P.colore), c2 = new THREE.Color(P.scuro);
+    const parti = [];
+    if (pietra) {
+      // Fianco con gli archi (piano u–y), estruso per tutta la larghezza.
+      const forma = new THREE.Shape();
+      const N = 24;
+      forma.moveTo(0, base); forma.lineTo(L, base);
+      for (let k = N; k >= 0; k--) forma.lineTo(L * k / N, cima(L * k / N));
+      forma.lineTo(0, base);
+      const luceArchi = L - 2 * P.spalla;
+      const n = Math.max(1, Math.round(luceArchi / P.arco));
+      const a = (luceArchi - (n - 1) * P.pila) / n;
+      const imposta = Math.max(at.pelo + 0.2, letto + 0.3);
+      for (let k = 0; k < n && a > 1; k++) {
+        const u0 = P.spalla + k * (a + P.pila), u1 = u0 + a, m = (u0 + u1) / 2;
+        const freccia = Math.max(0.5, Math.min(a / 2, cima(m) - P.chiave - imposta));
+        const foro = new THREE.Path();
+        foro.moveTo(u0, base + 0.05); foro.lineTo(u1, base + 0.05); foro.lineTo(u1, imposta);
+        for (let q = 1; q < 12; q++) {
+          const t = q / 12, u = u1 - (u1 - u0) * t, w = (u - m) / (a / 2);
+          foro.lineTo(u, imposta + freccia * Math.sqrt(Math.max(0, 1 - w * w)));
+        }
+        foro.lineTo(u0, imposta); foro.lineTo(u0, base + 0.05);
+        forma.holes.push(foro);
+      }
+      const fianco = new THREE.ExtrudeGeometry(forma, { depth: W, bevelEnabled: false, curveSegments: 1 });
+      fianco.translate(0, 0, -W / 2);
+      parti.push({ geo: fianco, colore: c1 });
+      // Parapetti: seguono la schiena d'asino.
+      for (const lato of [-1, 1]) {
+        const f = new THREE.Shape();
+        f.moveTo(0, cima(0));
+        for (let k = 1; k <= N; k++) f.lineTo(L * k / N, cima(L * k / N));
+        for (let k = N; k >= 0; k--) f.lineTo(L * k / N, cima(L * k / N) + P.parapetto);
+        const g = new THREE.ExtrudeGeometry(f, { depth: P.spessoreParapetto, bevelEnabled: false, curveSegments: 1 });
+        g.translate(0, 0, lato > 0 ? W / 2 - P.spessoreParapetto : -W / 2);
+        parti.push({ geo: g, colore: c2 });
+      }
+    } else {
+      const scatola = (lu, ly, lw, u, y, v, colore) => {
+        const g = new THREE.BoxGeometry(lu, ly, lw); g.translate(u, y, v); parti.push({ geo: g, colore });
+      };
+      scatola(L, 0.22, W, L / 2, at.quota - 0.11, 0, c1);                                   // tavolato
+      for (const s of [-1, 1]) scatola(L, 0.4, 0.3, L / 2, at.quota - 0.42, s * (W / 2 - 0.3), c2);   // travi
+      const nc = Math.max(1, Math.round(L / P.cavalletto));
+      for (let k = 1; k < nc; k++) {                                                         // cavalletti nel letto
+        const u = L * k / nc, alto = at.quota - 0.6 - base;
+        for (const s of [-1, 1]) scatola(0.28, alto, 0.28, u, base + alto / 2, s * (W / 2 - 0.3), c2);
+        scatola(0.25, 0.25, W - 0.3, u, at.quota - 0.75, 0, c2);
+      }
+      const nm = Math.max(2, Math.round(L / P.montante));
+      for (const s of [-1, 1]) {                                                              // parapetti
+        for (let k = 0; k <= nm; k++) scatola(0.14, P.parapetto, 0.14, L * k / nm, at.quota + P.parapetto / 2, s * (W / 2 - 0.1), c2);
+        scatola(L, 0.12, 0.12, L / 2, at.quota + P.parapetto, s * (W / 2 - 0.1), c1);
+        scatola(L, 0.1, 0.1, L / 2, at.quota + P.parapetto * 0.5, s * (W / 2 - 0.1), c1);
+      }
+    }
+    const geo = unisci(parti);
+    // Dal piano (u, y, v) al blocco: u lungo l'asse, v a sinistra.
+    const m = new THREE.Matrix4().set(ux, 0, -uz, at.x0, 0, 1, 0, 0, uz, 0, ux, at.z0, 0, 0, 0, 1);
+    geo.applyMatrix4(m);
+    geo.computeBoundingSphere();
+    const mesh = new THREE.Mesh(geo, pietra ? matPietra : matLegno);
+    mesh.name = 'ponte';
+    gruppo.add(mesh);
+    const locale = (x, z) => [(x - at.x0) * ux + (z - at.z0) * uz, -(x - at.x0) * uz + (z - at.z0) * ux];
+    const dentro = W / 2 - (pietra ? P.spessoreParapetto : 0.2);   // carreggiata utile tra i parapetti
+    ponti.push({
+      object: mesh, solidi: [mesh], materiale: at.materiale, luce: L,
+      quotaSuolo(x, z) {
+        const [u, v] = locale(x, z);
+        return u >= 0 && u <= L && Math.abs(v) <= W / 2 ? cima(u) : null;
+      },
+      spingiFuori(x, z, r) {
+        const [u, v] = locale(x, z);
+        if (u < 0.4 || u > L - 0.4) return null;         // alle testate si entra e si esce
+        const a = Math.abs(v), s = Math.sign(v) || 1;
+        if (a > W / 2 + r || a < dentro - r) return null;
+        const nv = a < (dentro + W / 2) / 2 ? s * (dentro - r) : s * (W / 2 + r);
+        return { x: at.x0 + ux * u - uz * nv, z: at.z0 + uz * u + ux * nv };
+      },
+      aggiornaLuci() {},
+    });
+  }
+  // Guadi: una fila di pietre piatte accanto alla carreggiata, appena sopra il pelo (per chi va a piedi), tutte in una
+  // sola InstancedMesh per blocco. La soglia di ghiaia sotto l'acqua la fa il terreno (spianaStrade).
+  const pietre = [];
+  for (const at of attraversamenti || []) {
+    if (at.ponte) continue;
+    const P = at.punti, n = P.length / 2;
+    for (let k = 0; k < n - 1; k++) {
+      const ax = P[k * 2], az = P[k * 2 + 1], bx = P[k * 2 + 2], bz = P[k * 2 + 3];
+      const l = Math.hypot(bx - ax, bz - az) || 1, tx = (bx - ax) / l, tz = (bz - az) / l;
+      for (let d = 0; d < l; d += GUADO.passo) {
+        const x = ax + tx * d, z = az + tz * d;
+        if (altezza(x, z) > at.pelo - 0.05) continue;     // solo dove c'è acqua
+        const caso = Math.sin(x * 12.9898 + z * 78.233) * 43758.5453, r = caso - Math.floor(caso);
+        const o = at.semi + GUADO.discosto + 0.2 * (r - 0.5);
+        pietre.push({ x: x - tz * o, z: z + tx * o, y: at.pelo + GUADO.sopra, r, a: Math.atan2(tz, tx) + r * 2 });
+      }
+    }
+  }
+  if (pietre.length) {
+    const geo = new THREE.IcosahedronGeometry(1, 0);
+    geo.scale(GUADO.raggio, GUADO.alto, GUADO.raggio * 0.8);
+    const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: GUADO.colore, flatShading: true }), pietre.length);
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), po = new THREE.Vector3();
+    pietre.forEach((p, i) => {
+      const k = 0.8 + 0.4 * p.r;
+      m.compose(po.set(p.x, p.y, p.z), q.setFromEuler(e.set(0, p.a, 0)), sc.set(k, 1, k));
+      mesh.setMatrixAt(i, m);
+    });
+    mesh.name = 'guadi';
+    gruppo.add(mesh);
+  }
+  return { gruppo, ponti };
+}
+
+const GUADO = { passo: 0.95, discosto: 0.7, raggio: 0.38, alto: 0.22, sopra: 0.06, colore: '#8e877a' };
