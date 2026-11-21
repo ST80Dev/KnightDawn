@@ -2390,6 +2390,20 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
     lontano dai luoghi: seme 570549 da 11 % a 2,2 %, 855588 da 6,6 % a 1,5 %, 48213 da 6,2 % a 1,3 %; vicino ai luoghi
     (entro 80 m dai piani) da 20 % a 14 %, 32 % a 28 %, 16,5 % a 14 %: lì restano i tornanti sulle scarpate dei
     terrapieni e i tratti davanti alle porte.
+  - *Strade impossibili verso le rocche* (segnalato dall'utente su R1 del seme 395728: tornanti su pendii improponibili,
+    rocca irraggiungibile). Profilo misurato: dalla porta 25 m di discesa in 55 m (27–32°) e un gradino di 15 m a
+    33–57°; il cavaliere non sale oltre 35°. Cause e correzioni (parti a, b, c approvate dall'utente; la d, porta dal
+    lato dell'arrivo dolce, è di M7 in `luoghi.js`):
+    a. la ricerca guardava solo le pendenze lisciate su ~60 m (su una cima stretta il versante sembrava dolce) e non le
+       scarpate dei terrapieni: ora conta anche la pendenza lisciata su ~40 m (`lisciaVera`) e il terreno con i
+       terrapieni (`terrenoLuoghi`);
+    b. il profilo seguiva ogni gradino: ora ha una pendenza massima (1,5 × pmax della classe) con scavi e riporti fino
+       a 3 m (`profiloMax`, `taglio`), fermo agli estremi (`raccordoEstremi` 30 m: incroci e porte);
+    c. il tratto dritto davanti alla porta passa da 30 a 12 m; in `quotaFinale`, fuori dai piani dei luoghi, la strada
+       scava il suo ripiano anche nella scarpata del terrapieno (prima la scarpata passava sopra la strada).
+    Il ripiano sotto la strada nel blocco accetta salti fino a 5 m. Tratti di strada oltre 35° sul terreno disegnato,
+    nei blocchi di 10 rocche: seme 395728 da 0,09 % a 0,04 % (R1 da 55° a 33°), 570549 da 0,03 % a 0,01 %, 855588 e
+    48213 da 0,02–0,03 % a 0. Restano i tornanti troppo stretti (bracci a ~8 m con 7 m di dislivello).
 - **Vegetazione**: `distanzaStrada(carta, x, z)` è pronta; l'esclusione degli alberi dalla carreggiata è della
   sessione della vegetazione (passo 3 di questo piano).
 
@@ -2712,6 +2726,34 @@ si resta sotto 1,5 ms e ≤ 10 chiamate (cupola 1, stelle 1, precipitazioni 1). 
 
 Periodi variabili 2–3 ore canoniche; foschia calda al tramonto non ora; neve anche in pianura al Nord, ogni tanto; meteo
 tendenziale per bioma e latitudine; foschia di giorno a distanza standard per ogni stato (decisioni 7–10 sopra).
+
+## Minimappa (richiesta dell'utente, novembre 2026) — fatta, da provare
+
+Richiesta: «una minimappa che segue il cavaliere dall'alto, con zoom regolabile, che si possa allargare a circa 1/3
+dello schermo per capire cosa ho nei dintorni o (solo per il test) spostarmi senza tornare alla Carta con M».
+`js/3d/minimappa.js`, agganci in `main.js`, stile in `style.css`.
+- In basso a destra (in alto a destra c'è il pannello di stato); l'indicatore dell'andatura sale sopra di lei. Solo nel
+  mondo generato (a Tavullia non c'è); nascosta con la Carta aperta e durante il percorso di prova (misure confrontabili).
+- Nord in alto (come la Carta), il cavaliere al centro con la freccia della direzione; il cavallo come pallino marrone
+  (sul bordo, nella sua direzione, se è fuori vista). Scala e «N».
+- **Tela 2D, nessun costo per la scena 3D.** Sotto: la Carta (1 pixel per km, colori «naturali» di `cartaVista.js`).
+  Sopra: il rilievo fine di una finestra attorno al cavaliere (1,6 volte la vista; 1,3 allargata) con la stessa quota
+  delle Scene (`quotaFinale`), colore naturale (bosco scuro, radure, roccia, neve), ombreggiatura, laghi, fiumi e mare;
+  un campione ogni 2 pixel (3 allargata). Poi fiumi e strade (tracciato fine dove le Scene l'hanno cercato), luoghi
+  maggiori e siti con i segni della Carta. Si ricalcola solo cambiando zoom o dimensione o avvicinandosi al bordo della
+  finestra, a pezzi: **1,5 ms per fotogramma (3 allargata)**, la parte pronta si vede subito sopra quella vecchia.
+  Misure in headless: finestra piccola ~280 ms di lavoro in tutto (~2–3 s di gioco a 60 FPS), allargata ~450 ms;
+  ridisegno 0,3 ms (piccola, al massimo 25 volte al secondo) e ~3 ms in rendering software (allargata, 12 volte al
+  secondo; sulla scheda vera la tela 2D è accelerata). In F3 la voce «minimappa» dei tempi CPU.
+- Zoom: rotella sopra la minimappa, `+` / `−` (tastiera o pulsanti), da 0,5 a 256 m per pixel (piccola: ~100 m – 54 km
+  di lato). `N` o ⤢ la allarga a min(70 % dell'altezza, 45 % della larghezza), stessa scala: si vede più terreno.
+  Zoom e dimensione ricordati nel browser.
+- **Solo per le prove:** allargata, un clic porta lì il cavaliere (con il cavallo accanto). Dentro il blocco disegnato
+  (riquadro tratteggiato) lo sposta e basta; fuori carica la Scena centrata lì come un clic sulla Carta (pausa di
+  caricamento). Rifiuta mare e acqua profonda. Il puntatore mostra distanza, direzione e quota. Da togliere o
+  sostituire quando ci sarà il viaggio vero.
+- Limiti noti: niente edifici disegnati (solo i segni di luoghi e siti), niente case di campagna; la minimappa non ruota
+  con la camera.
 
 ## Fuori dal prototipo (non farlo ora)
 
