@@ -418,7 +418,10 @@ export function* createBorgoAPezzi(suolo, luogo, ox, oz, rocca) {
   };
   const strade = [];                               // { punti: [[u, v]...], tipo }
   {
-    const G0 = loc(0, SPOR + Math.min(lungaPorta, 6)), G1 = loc(0, SPOR - prof - 3);
+    // Tratto dritto attraverso la porta e per qualche metro dopo: Chaikin smussa gli angoli, e con un solo punto subito
+    // dentro l'arco la via curvava già nel passaggio (chi la seguiva strisciava contro il fianco della torre-porta).
+    const G0 = loc(0, SPOR + Math.min(lungaPorta, 6)), Gm = loc(0, SPOR - prof / 2), G1 = loc(0, SPOR - prof - 3);
+    const G2 = loc(0, SPOR - prof - 8);
     // Arrivo al piede della rampa della rocca da davanti, nel suo verso (di fianco si urterebbe pianerottolo e parapetti).
     // Prima un punto più lontano dal muro della rocca: la via non taglia sopra la rampa che corre lungo il muro.
     const piede = rocca.piede, rd = rocca.rampa?.dir ?? [0, 0], rn = rocca.porta ? [rocca.porta.nu, rocca.porta.nv] : [0, 0];
@@ -431,7 +434,7 @@ export function* createBorgoAPezzi(suolo, luogo, ox, oz, rocca) {
     const salto = Math.abs(terreno(...G1) - terreno(...E));
     let pts;
     if (salto / lungo <= STRADE.pendenzaVia) {
-      pts = [G0, G1, [(G1[0] + E[0]) / 2, (G1[1] + E[1]) / 2], ...avvio, E, piede];
+      pts = [G0, Gm, G1, G2, [(G1[0] + E[0]) / 2, (G1[1] + E[1]) / 2], ...avvio, E, piede];
     } else {
       // Tornanti: n tratti da un lato all'altro, quanto lo consente il contorno, abbastanza lunghi per la pendenza.
       const serve = salto / STRADE.pendenzaVia;
@@ -450,7 +453,7 @@ export function* createBorgoAPezzi(suolo, luogo, ox, oz, rocca) {
         tot += Math.hypot(E[0] - prec[0], E[1] - prec[1]);
         if (tot >= serve) break;
       }
-      pts = [G0, G1, ...zig, ...avvio, E, piede];
+      pts = [G0, Gm, G1, G2, ...zig, ...avvio, E, piede];
     }
     strade.push({ tipo: 'via', punti: serpeggia(ricampiona(chaikin(pts, 3), STRADE.passo), 0.7, 9, fase) });
     // Anello lungo le mura (chiuso), angoli arrotondati: lati suddivisi ogni 4 m prima di arrotondare, così Chaikin

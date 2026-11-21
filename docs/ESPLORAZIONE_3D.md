@@ -1461,7 +1461,16 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
       passaggio sotto la torre-porta (pavimento in pendenza dalla soglia al terreno interno: c'era un gradino) e il
       lotto degli edifici con tettoia o recinto. Prove: siti validi su 30 semi; cammino porta del borgo → corte d'armi →
       porta interna → corte del signore 35/35 (seme 12345) e 34/34 (570549), con percorso cercato su griglia; porte 9/9.
-      [Certo] La sala d'armi (16×9 m) non trova posto in ~5 rocche su 18 di casata e maggiori (corte d'armi stretta). *Prova:* cammino porta del borgo →
+      [Certo] La sala d'armi (16×9 m) non trova posto in ~5 rocche su 18 di casata e maggiori (corte d'armi stretta).
+    - **Porta del borgo sul lato dell'arrivo dolce** (richiesta dell'utente via sessione M6, seme 395728: a R1 la porta
+      dava su un versante a 30° e non si saliva). `luoghi.js` (`LUOGHI.portaArrivo`): per ogni lato candidato il profilo
+      del terreno lungo la normale da 10 a 250 m (tratto più ripido su 40 m e pendenza media); oltre ~13% e 10% il lato
+      costa di più, e lo stesso costo entra nella scelta dell'orientamento del borgo (prima contava solo il lavoro di
+      terra: a R1 vinceva l'orientamento con la porta sul versante ripido). `VERSIONE_GENERATORE` `+porta-1`. A R1 la
+      porta passa sul lato ovest-nord-ovest: tratto più ripido 5% invece del 44%. Anche: la via del borgo resta dritta
+      per ~8 m dopo la porta (prima curvava già nel passaggio) e la porta del muro interno si sposta verso il centro
+      se accanto al capo del muro l'altra corte è troppo stretta. Prove: siti validi 30/30; cammino fino alla corte del
+      signore 35/35, 34/34, 31/31 (semi 12345, 570549, 395728). *Prova:* cammino porta del borgo →
       corte d'armi → corte del signore su tutte le rocche di due semi; porte e udienza raggiungibili; FPS sul percorso
       di prova.
 

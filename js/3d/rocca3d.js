@@ -757,7 +757,12 @@ export function* createRoccaAPezzi(suolo, luogo, ox, oz) {
       const v0 = vs[0] + SP * 0.5, v1 = vs[vs.length - 1] - SP * 0.5, L = v1 - v0;
       // Porta del muro interno in linea con la porta della rocca (il passaggio tra le due corti resta dritto e lascia
       // spazio ai lati per gli edifici); mastio a metà del tratto più lungo dei due che restano.
-      const vg = clamp(gm[1], v0 + CORTI.porta / 2 + 2, v1 - CORTI.porta / 2 - 2);
+      // Dalla linea della porta della rocca verso il centro del muro, finché davanti e dietro la porta interna c'è spazio
+      // (dove la cinta corre di sbieco, accanto al capo del muro l'altra corte può essere già fuori).
+      const libera = (v) => [-5, 5].every((du) => dentroPoligono(P, uC + du, v) && distanzaContorno(P, uC + du, v) >= SP + 2.5);
+      let vg = clamp(gm[1], v0 + CORTI.porta / 2 + 2, v1 - CORTI.porta / 2 - 2);
+      const verso0 = (v0 + v1) / 2 > vg ? 1 : -1;
+      for (let k = 0; k < 40 && !libera(vg); k++) vg += verso0;
       const lungoSotto = vg - v0 > v1 - vg;
       const [ta, tb] = lungoSotto ? [v0, vg - CORTI.porta / 2 - 1] : [vg + CORTI.porta / 2 + 1, v1];
       let vm = null;
