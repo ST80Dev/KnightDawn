@@ -13,8 +13,8 @@ import * as THREE from 'three';
 
 export const GRUPPI = ['terreno', 'veg. sagome lontane', 'veg. sagome', 'veg. erba', 'veg. resto', 'edifici',
   'personaggi', 'resto'];
-/** Budget provvisori in ms di GPU (docs/PRESTAZIONI.md, «Obiettivi e budget»); la vegetazione ha un budget complessivo. */
-export const BUDGET_GPU = { terreno: 4, vegetazione: 4, edifici: 2, personaggi: 2, resto: 1.5, totale: 13.5 };
+/** Budget in ms di GPU (docs/PRESTAZIONI.md, «Obiettivi e budget», approvati dall'utente); vegetazione complessiva. */
+export const BUDGET_GPU = { terreno: 4.5, vegetazione: 6.5, edifici: 1.5, personaggi: 1.5, resto: 1.5, totale: 15.5 };
 /** Budget di un gruppo (i gruppi «veg. …» condividono quello della vegetazione: null = vedi la somma). */
 export const budgetDi = (g) => (g.startsWith('veg.') ? null : BUDGET_GPU[g]);
 
@@ -197,6 +197,67 @@ export function creaPercorso(centro) {
       }).sort((x, y) => y.max - x.max);
       return { fotogrammi: v.length, fps: 1000 / media, msMedio: media, fps1: 1000 / p99, msPeggiore: v[v.length - 1],
         cpuMedia, cpu99, cpuMax: c.length ? c[c.length - 1] : NaN, parti: elenco, lunghi: osservatore ? lunghi : null };
+    },
+  };
+}
+
+// ─── Qualità e risoluzione adattiva (docs/PRESTAZIONI.md, passo 2) ────────────────────────────────────────────────
+// Tre preset (tasto F2, ?qualita=basso|medio|alto, ricordato nel browser). Sulla scheda di riferimento (Intel UHD 730,
+// schermo al 100 %) «medio» è identico a com'era prima: servono ai PC più deboli o agli schermi ad alta densità.
+// La risoluzione adattiva scende a passi del 10 % (fino al 60 %) quando la scheda sfora e risale del 5 % quando c'è
+// margine; usa i tempi GPU se ci sono, altrimenti la durata dei fotogrammi. Ferma durante il percorso di prova.
+
+export const PRESET_QUALITA = {
+  basso: { nome: 'bassa', maxDpr: 1, scala: 0.75, rilievo: false },
+  medio: { nome: 'media', maxDpr: 1.5, scala: 1, rilievo: true },
+  alto: { nome: 'alta', maxDpr: 2, scala: 1, rilievo: true },
+};
+const ORDINE_QUALITA = ['basso', 'medio', 'alto'];
+const ADATTIVA = { min: 0.6, giu: 0.9, su: 1.05, finestra: 1000, msSfora: 15, msMargine: 10.5, fotoSfora: 18,
+  fotoMargine: 14, finestreSu: 3 };
+
+/**
+ * @param {THREE.WebGLRenderer} renderer
+ * @param {ReturnType<typeof creaProfilatore>} profilatore
+ * @param {string} iniziale  chiave di PRESET_QUALITA
+ * @param {(rilievo: boolean) => void} applicaRilievo  accende o spegne il micro-rilievo del suolo
+ */
+export function creaQualita(renderer, profilatore, iniziale, applicaRilievo) {
+  let chiave = PRESET_QUALITA[iniziale] ? iniziale : 'medio';
+  let adatta = 1;                          // fattore della risoluzione adattiva (ADATTIVA.min … 1)
+  let t = 0, somma = 0, n = 0, buone = 0;
+  const base = () => Math.min(window.devicePixelRatio || 1, PRESET_QUALITA[chiave].maxDpr) * PRESET_QUALITA[chiave].scala;
+  const applica = () => renderer.setPixelRatio(base() * adatta);
+  function imposta(k) {
+    chiave = PRESET_QUALITA[k] ? k : 'medio';
+    adatta = 1; t = somma = n = buone = 0;
+    applica();
+    applicaRilievo(PRESET_QUALITA[chiave].rilievo);
+    try { localStorage.setItem('kd-qualita', chiave); } catch { /* niente memoria: va bene lo stesso */ }
+  }
+  return {
+    get chiave() { return chiave; },
+    get nome() { return PRESET_QUALITA[chiave].nome; },
+    get scala() { return base() * adatta; },
+    get adatta() { return adatta; },
+    imposta,
+    successiva() { imposta(ORDINE_QUALITA[(ORDINE_QUALITA.indexOf(chiave) + 1) % ORDINE_QUALITA.length]); },
+    /** Torna alla risoluzione piena del preset (inizio del percorso di prova). */
+    azzeraAdattiva() { adatta = 1; t = somma = n = buone = 0; applica(); },
+    /** Da chiamare a ogni fotogramma con la durata reale (s); `ferma` = niente adattamento (percorso di prova). */
+    aggiorna(dt, ferma) {
+      if (ferma || dt <= 0 || dt > 0.25) return;      // fotogrammi enormi (cambio di scena, scheda nascosta): ignorati
+      t += dt * 1000; somma += dt * 1000; n++;
+      if (t < ADATTIVA.finestra) return;
+      const foto = somma / n, gpu = profilatore.media('totale')?.media;
+      const sfora = gpu != null ? gpu > ADATTIVA.msSfora : foto > ADATTIVA.fotoSfora;
+      const margine = gpu != null ? gpu < ADATTIVA.msMargine : foto < ADATTIVA.fotoMargine;
+      t = somma = n = 0;
+      if (sfora && adatta > ADATTIVA.min) {
+        adatta = Math.max(ADATTIVA.min, adatta * ADATTIVA.giu); buone = 0; applica(); profilatore.azzera();
+      } else if (margine && adatta < 1) {
+        if (++buone >= ADATTIVA.finestreSu) { adatta = Math.min(1, adatta * ADATTIVA.su); buone = 0; applica(); profilatore.azzera(); }
+      } else buone = 0;
     },
   };
 }
