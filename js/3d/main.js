@@ -1055,6 +1055,13 @@ function avviaPercorso() {
 const fmtMs = (m) => (m ? `${fmt(m.media, 1)} ms (picco ${fmt(m.max, 1)})` : 'n/d');
 function fineDelPercorso() {
   const st = percorso.statistiche();
+  if (percorso.interrotto || !st) {
+    const s = percorso.interrotto;
+    percorso = null;
+    messaggio(`Percorso di prova interrotto${s ? `: il browser si è fermato per ${fmt(s, 0)} s` : ''} (finestra nascosta`
+      + ' o ridotta a icona?). Rifallo con F9 lasciando la finestra in primo piano.', 10000);
+    return;
+  }
   const P = profilatore.info, buf = renderer.getDrawingBufferSize(_dimBuffer);
   const righe = [
     `Knight Dawn — percorso di prova (${new Date().toISOString().slice(0, 16).replace('T', ' ')})`,
