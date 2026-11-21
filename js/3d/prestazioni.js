@@ -136,6 +136,17 @@ const ATTESA_INIZIALE = 1.5;               // s di assestamento (compilazione, p
 export function creaPercorso(centro) {
   const tempi = [];                        // durata dei fotogrammi (ms) nel giro normale
   const cpu = [];                          // ms di processore per fotogramma (logica + invio) nel giro normale
+  const parti = {};                        // nome → ms per fotogramma, nel giro normale
+  // Compiti lunghi del browser (> 50 ms), anche fuori dal fotogramma: raccolta di memoria, messaggi, timer…
+  const lunghi = { n: 0, max: 0 };
+  let osservatore = null;
+  try {
+    osservatore = new PerformanceObserver((lista) => {
+      if (t < 0 || t >= DURATA_GIRO) return;
+      for (const e of lista.getEntries()) { lunghi.n++; lunghi.max = Math.max(lunghi.max, e.duration); }
+    });
+    osservatore.observe({ type: 'longtask', buffered: false });
+  } catch { osservatore = null; }
   let t = -ATTESA_INIZIALE;
   let finito = false;
   return {
@@ -151,7 +162,7 @@ export function creaPercorso(centro) {
       t += dt;
       const azzera = (prima < 0 && t >= 0) || (prima < DURATA_GIRO && t >= DURATA_GIRO);
       if (t >= 0 && t < DURATA_GIRO) tempi.push(dt * 1000);
-      if (t >= 2 * DURATA_GIRO) { finito = true; return { mira: null, azzera: false }; }
+      if (t >= 2 * DURATA_GIRO) { finito = true; osservatore?.disconnect(); return { mira: null, azzera: false }; }
       let tt = Math.max(0, t) % DURATA_GIRO, f = FASI[0];
       for (const fase of FASI) { f = fase; if (tt < fase.durata) break; tt -= fase.durata; }
       const ang = centro.direzione + (tt / f.durata) * Math.PI * 2;
@@ -166,6 +177,11 @@ export function creaPercorso(centro) {
     },
     /** ms di processore di questo fotogramma (logica + invio dei comandi). */
     registraCPU(ms) { if (t >= 0 && t < DURATA_GIRO) cpu.push(ms); },
+    /** ms di ciascuna parte del fotogramma (oggetto nome → ms). */
+    registraParti(p) {
+      if (t < 0 || t >= DURATA_GIRO) return;
+      for (const k in p) (parti[k] || (parti[k] = [])).push(p[k]);
+    },
     /** Statistiche dei fotogrammi del giro normale. */
     statistiche() {
       const v = tempi.slice().sort((a, b) => a - b);
@@ -175,8 +191,12 @@ export function creaPercorso(centro) {
       const c = cpu.slice().sort((a, b) => a - b);
       const cpuMedia = c.length ? c.reduce((s, x) => s + x, 0) / c.length : NaN;
       const cpu99 = c.length ? c[Math.min(c.length - 1, Math.floor(c.length * 0.99))] : NaN;
+      const elenco = Object.entries(parti).map(([nome, a]) => {
+        const o = a.slice().sort((x, y) => x - y);
+        return { nome, media: o.reduce((s, x) => s + x, 0) / o.length, p99: o[Math.min(o.length - 1, Math.floor(o.length * 0.99))], max: o[o.length - 1] };
+      }).sort((x, y) => y.max - x.max);
       return { fotogrammi: v.length, fps: 1000 / media, msMedio: media, fps1: 1000 / p99, msPeggiore: v[v.length - 1],
-        cpuMedia, cpu99, cpuMax: c.length ? c[c.length - 1] : NaN };
+        cpuMedia, cpu99, cpuMax: c.length ? c[c.length - 1] : NaN, parti: elenco, lunghi: osservatore ? lunghi : null };
     },
   };
 }
