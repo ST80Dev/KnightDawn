@@ -59,9 +59,10 @@ export const LUOGHI = {
   // cima (raggio tra `raggio` m, fin dove il terreno resta entro `cala` m dalla cima), 5–8 vertici; il borgo
   // (misure piene lungo il verso × di traverso) si aggancia ai due vertici anteriori della rocca.
   classi: {
-    minore: { rocca: [40, 36], raggio: [13, 21], borgo: [60, 80] },
-    casata: { rocca: [52, 46], raggio: [17, 27], borgo: [90, 130] },
-    maggiore: { rocca: [64, 56], raggio: [21, 33], borgo: [130, 200] },
+    // Raggi più grandi col passo 10 di M7 (corte del signore: decisione dell'utente, rocche più grandi e articolate).
+    minore: { rocca: [54, 48], raggio: [18, 27], borgo: [60, 80] },
+    casata: { rocca: [68, 60], raggio: [23, 34], borgo: [90, 130] },
+    maggiore: { rocca: [84, 74], raggio: [28, 41], borgo: [130, 200] },
   },
   forma: { cala: 5, vertici: [5, 8], ondula: 0.16, borgoOndula: 0.2, portaMin: 10 },
   // Spalto davanti alla porta della rocca: il borgo scende dalla rocca, e una rampa in muratura dal cortile al pendio
