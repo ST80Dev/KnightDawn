@@ -2200,6 +2200,13 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
    e segmentato): tronco in un solo tornito modellato (groppa, spalle, garrese, ventre) al posto di cinque masse
    sovrapposte, più stretto; base del collo da 0,29 a 0,215 m; collo prolungato e cranio esteso dietro la nuca, così
    testa e collo si chiudono; più segmenti su tronco, collo, testa e gambe; gambe un poco più sottili.
+   *Seconda correzione* (dopo la prova su Pages: «ancora troppo giocattolo di legno, corpo tozzo, collo e testa con
+   angolazione fissa a 45°»): niente più solidi torniti dritti. Ogni parte è un **tubo a sezioni ovali lungo una curva**
+   (`tubo` in `cavallo3d.js`), con semilarghezza e due semialtezze diverse sopra e sotto: tronco più asciutto (largo
+   ~0,45 m, ventre a ~0,77 m da terra) con garrese e groppa; **collo ad arco** (da ~36° alla base a ~63° alla nuca,
+   cresta più alta della gola); **testa a ~60°** con ganasce, fronte piatta e muso; gambe con avambraccio e gamba
+   muscolosi e tendini dietro lo stinco, pastorale inclinato; coda che esce indietro e poi scende. Ombreggiatura finta
+   nei colori dei vertici (facce rivolte in basso più scure). 5.5 mila triangoli, stessi 12 snodi e 15 chiamate.
 2. **Segue a piedi.** Tracce, distanza, andature animate (passo, trotto, galoppo), sosta e brucare, attesa se bloccato
    (bosco fitto, acqua, pendii), avviso «rimasto indietro», fischio con F, ostacolo per il cavaliere. *Prova:* correre e
    scattare nel bosco, guadare, salire un pendio ripido, fischiare da lontano.
