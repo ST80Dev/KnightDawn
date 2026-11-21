@@ -18,7 +18,7 @@ import { createCavallo } from './cavallo3d.js';
 import { createFollowCamera } from './camera.js';
 import { createCastle } from './castle3d.js';
 import { createRocca } from './rocca3d.js';
-import { creaCaseCampagna } from './edifici3d.js';
+import { creaCaseCampagna, quotaFinestre } from './edifici3d.js';
 import { createBorgo } from './borgo3d.js';
 import { createCartaVista } from './cartaVista.js';
 import { creaOrizzonteAPezzi } from './orizzonte.js';
@@ -370,6 +370,126 @@ function cambiaPausa() {
   tasti.clear();
 }
 
+// ─── Porte degli edifici → Carta del cronista (M7, passo 6) ─────────────
+// Vicino alla porta di un edificio nominato (taverna, stalla, cappella…), a piedi e rivolto verso di essa, compare
+// «E: entra — Taverna»; E apre la Carta del cronista segnaposto (nome, una riga, «Esci»). Mentre è aperta il tempo
+// non scorre e il cavaliere non si muove; per ora entrare non costa tempo (le azioni con la loro durata arrivano con
+// la Veglia, GDD §3). Niente interni 3D. Il tasto è provvisorio: la scelta dei tasti è rinviata dall'utente.
+const PORTA = { distanza: 2.4, rivolto: 0.35, tasto: 'KeyE', nomeTasto: 'E' };
+const RIGHE_CRONISTA = {
+  stalla: 'Odore di fieno e di cavalli; lo stalliere alza appena gli occhi dal lavoro.',
+  taverna: "Fumo, voci e boccali: chi ha sete, chi ha notizie, chi cerca guai.",
+  fabbro: "Il martello batte sull'incudine; la forgia arrossa le pareti annerite.",
+  guaritore: 'Erbe appese ad asciugare, ampolle e un odore amaro di decotti.',
+  loggia: 'Sotto la loggia i mercanti contrattano a voce alta.',
+  loggiaGrande: 'Sotto la loggia grande si tratta, si giudica, si annunciano bandi.',
+  chiesa: 'Penombra, cera e pietra fredda; un canto lontano dal coro.',
+  cappella: 'Una cappella piccola e spoglia: una lampada accesa davanti all\'altare.',
+  salaArmi: "Rastrelliere di lance e scudi; un maestro d'armi osserva chi entra.",
+  armeria: 'Lame, maglie e corazze in fila: tutto ha un prezzo.',
+  pozzo: "L'acqua è fredda e profonda; la corda è consumata dalle mani.",
+};
+let cronista = null;                       // la Carta del cronista aperta (elemento), o null
+
+// Un solo gestore del tasto d'azione (E): la prima voce disponibile, in ordine di priorità, agisce. Le altre
+// sessioni aggiungono qui la loro voce invece di un proprio keydown (persona vicina in testa, cavallo in fondo).
+const AZIONI_TASTO = [
+  { nome: 'porta', pronta: () => portaVicina, esegui: () => apriCronista(portaVicina) },
+];
+let portaVicina = null;                    // { nome, tipo, porta } dell'edificio vicino, o null
+let _invitoPorta = null;
+function cercaPortaVicina() {
+  portaVicina = null;
+  if (!knight || cronista || percorso) return;
+  const st = knight.stato, dx0 = Math.sin(st.direzione), dz0 = Math.cos(st.direzione);
+  let migliore = PORTA.distanza;
+  for (const r of rocche) {
+    for (const e of r.edifici ?? []) {
+      const p = e.porta;
+      if (p.x === undefined) continue;
+      const ex = st.x - p.x, ez = st.z - p.z, d = Math.hypot(ex, ez);
+      if (d > migliore) continue;
+      if (ex * p.nx + ez * p.nz < -0.3) continue;                      // dalla parte giusta della porta
+      if (-(dx0 * p.nx + dz0 * p.nz) < PORTA.rivolto) continue;        // rivolto verso la porta
+      migliore = d;
+      portaVicina = e;
+    }
+  }
+  if (!_invitoPorta) _invitoPorta = avvisoHud('', 'messaggio');
+  _invitoPorta.hidden = !portaVicina;
+  if (portaVicina) _invitoPorta.textContent = `${PORTA.nomeTasto}: entra — ${portaVicina.nome}`;
+}
+function apriCronista(e) {
+  chiudiCronista();
+  tasti.clear();
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:60;width:min(560px,90vw);'
+    + 'background:#efe2c2;color:#3a2412;border:3px double #7a4f22;box-shadow:0 0 0 6px #c9ad78,0 12px 40px rgba(0,0,0,.6);'
+    + 'padding:22px 26px;font:16px Georgia,serif;text-align:center';
+  const titolo = document.createElement('div');
+  titolo.textContent = e.nome;
+  titolo.style.cssText = 'font-size:24px;letter-spacing:1px;color:#6b1d10;margin-bottom:6px';
+  const miniatura = document.createElement('div');
+  miniatura.textContent = '✦ ✦ ✦';
+  miniatura.style.cssText = 'color:#a07a3c;margin:6px 0 12px';
+  const riga = document.createElement('div');
+  riga.textContent = RIGHE_CRONISTA[e.tipo] ?? 'Qui finisce la strada e comincia il racconto.';
+  riga.style.cssText = 'font-style:italic;line-height:1.5;margin-bottom:10px';
+  const nota = document.createElement('div');
+  nota.textContent = 'Carta del cronista (segnaposto): le azioni arriveranno con la Veglia.';
+  nota.style.cssText = 'font-size:12px;color:#7a6040;margin-bottom:14px';
+  const esci = document.createElement('button');
+  esci.textContent = 'Esci';
+  esci.style.cssText = 'font:16px Georgia,serif;padding:4px 22px;background:#7a4f22;color:#efe2c2;border:1px solid #3a2412;cursor:pointer';
+  esci.onclick = chiudiCronista;
+  box.append(titolo, miniatura, riga, nota, esci);
+  document.body.appendChild(box);
+  cronista = box;
+  if (_invitoPorta) _invitoPorta.hidden = true;
+}
+function chiudiCronista() {
+  if (!cronista) return;
+  cronista.remove();
+  cronista = null;
+  tasti.clear();
+}
+
+// ─── Luci vicine (M7, passo 7) ──────────────────────────────────────────
+// Le sorgenti di borghi, rocche e campagna (torce, forge) sono molte; PointLight vere solo per le LUCI_VICINE più
+// vicine al cavaliere, sempre le stesse (un numero fisso di luci: niente ricompilazione degli shader). Le altre
+// restano fiamme e aloni. Con la luce della torre-porta di ogni rocca si resta nelle 4–6 previste.
+const LUCI_VICINE = { quante: 4, raggio: 70 };
+const _luciVicine = [];
+function luciVicine(t, buio) {
+  if (!_luciVicine.length) {
+    for (let i = 0; i < LUCI_VICINE.quante; i++) {
+      const l = new THREE.PointLight('#ff9a40', 0, 14, 1.7);
+      l.name = 'luce-vicina';
+      scene.add(l);
+      _luciVicine.push(l);
+    }
+  }
+  const f = Math.min(1, Math.max(0, (buio - 0.15) / 0.5));
+  const st = knight?.stato;
+  const tutte = [];
+  if (f > 0 && st) {
+    for (const r of [...rocche, campagna]) for (const sg of r?.sorgenti ?? []) {
+      const d = Math.hypot(sg.x - st.x, sg.z - st.z);
+      if (d < LUCI_VICINE.raggio) tutte.push({ sg, d });
+    }
+    tutte.sort((a, b) => a.d - b.d);
+  }
+  _luciVicine.forEach((l, i) => {
+    const v = tutte[i];
+    if (!v) { l.intensity = 0; return; }
+    const tremolio = 0.85 + 0.1 * Math.sin(t * 13.1 + i * 1.7) + 0.05 * Math.sin(t * 23.7 + i);
+    l.position.set(v.sg.x, v.sg.y, v.sg.z);
+    l.color.set(v.sg.colore);
+    l.distance = v.sg.distanza;
+    l.intensity = v.sg.intensita * f * tremolio;
+  });
+}
+
 // Fatica per distanza: ogni fotogramma la strada fatta dal cavaliere consuma Forza (il tempo invece
 // segue il tempo reale, vedi frame()).
 const _prec = { x: 0, y: 0, z: 0 };
@@ -573,6 +693,7 @@ function applicaMondo(p) {
  * @param {{tipo:'tavullia'} | {tipo:'mondo', cx:number, cz:number}} desc
  */
 async function caricaScena(desc) {
+  chiudiCronista();
   preparazione = null;                    // un cambio di blocco in corso non vale più
   togliScenaAttuale(true);
   scostamento = { x: 0, z: 0 };
@@ -777,7 +898,7 @@ async function init() {
         await caricaScena({ tipo: 'mondo', cx: sito.x, cz: sito.z });
         const p = partenzaDelSito(sito);
         posizionaCavaliere(p.x, p.z, p.direzione);
-        messaggio(`Rocca di partenza (${NOMI_CLASSI[sito.classe]}): il borgo murato arriva nei prossimi passi.`);
+        messaggio(`Rocca di partenza (${NOMI_CLASSI[sito.classe]}): fuori dalla porta del borgo. Vicino alle porte degli edifici, ${PORTA.nomeTasto}: entra.`);
       } else {
         await caricaScena({ tipo: 'mondo', ...puntoPartenza(carta) });
         posizionaCavaliere(0, 0, Math.PI);
@@ -922,6 +1043,14 @@ window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;      // si sta scrivendo (es. il seme della Carta)
   if (e.code === 'KeyM' && !e.repeat) { cartaVista.alterna(); return; }
   if (cartaVista.aperta) return;
+  if (cronista) {                                        // Carta del cronista aperta: solo uscire
+    if ((e.code === 'Escape' || e.code === PORTA.tasto) && !e.repeat) chiudiCronista();
+    return;
+  }
+  if (e.code === PORTA.tasto && !e.repeat) {
+    const azione = AZIONI_TASTO.find((a) => a.pronta());
+    if (azione) { azione.esegui(); return; }
+  }
   if (e.code.startsWith('Arrow')) e.preventDefault();
   tasti.add(e.code);
   if (e.code === 'KeyC' && !e.repeat && knight) cambiaModoCamera();
@@ -1394,7 +1523,7 @@ function frame(now) {
   if (knight) {
     if (percorso) {
       // Percorso di prova: tempo di gioco fermo, la camera segue il giro fisso.
-    } else if (!inPausa) {
+    } else if (!inPausa && !cronista) {
       knight.update(dt, leggiInput());
       if (SEGUI_BLOCCO && scenaAttuale?.tipo === 'mondo' && vicinoAlBordo(knight.stato.x, knight.stato.z, terrain.size / 2)) cambiaBlocco();
       avanzaBlocco();
@@ -1404,11 +1533,17 @@ function frame(now) {
     } else {
       cam.prendiGiroMouse();               // in pausa il mouse non gira il cavaliere
     }
-    if (cavallo && !inPausa) cavallo.update(dt);
+    if (cavallo && !inPausa && !cronista) cavallo.update(dt);
+    cercaPortaVicina();
     tt = segna('cavaliere e tempo', tt);
     aggiornaCielo();
     castle?.aggiornaLuci(now / 1000, 1 - _luceGiorno);
-    for (const r of rocche) r.aggiornaLuci(now / 1000, 1 - _luceGiorno);
+    {
+      const quota = quotaFinestre(Calendar.oraDelGiorno());
+      for (const r of rocche) r.aggiornaLuci(now / 1000, 1 - _luceGiorno, quota);
+      campagna?.aggiornaLuci(now / 1000, 1 - _luceGiorno, quota);
+      luciVicine(now / 1000, 1 - _luceGiorno);
+    }
     orizzonte?.luciLontane?.(1 - _luceGiorno);   // M7, passo 8: luci dei borghi lontani (orizzonte.js)
     tt = segna('cielo e luci', tt);
     aggiornaStato();
