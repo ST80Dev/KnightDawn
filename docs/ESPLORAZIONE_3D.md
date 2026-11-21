@@ -1427,7 +1427,8 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
      non a lungo in `main`. Un comando per forzare un cambio di blocco da codice (in `kd`) per il percorso di prova.
 10. **Corte del signore** (richiesta dell'utente, nov. 2026: «uno degli aspetti più belli e importanti dovrebbe essere
     l'interazione con i soggetti delle casate padroni dei castelli»; manca la dimora dei signori, la rocca è piccola).
-    **Piano (da approvare; l'utente ha approvato corte del signore e rocche più grandi).**
+    **Piano approvato dall'utente** («intanto rocche più grandi, ben articolate almeno graficamente, così facciamo spazio
+    all'eventuale interazione vera e propria con i signori»; «in M7 solo i luoghi»; «agli interni ci penseremo dopo»).
     - *Due corti nella rocca*: **corte d'armi** (quella di oggi: mastio, sala d'armi, armeria, guardie, porta della
       rocca) e **corte del signore**, oltre un muro interno basso (~5 m) con una porta ad arco, verso il retro, nel lato
       più alto e riparato. Mastio sul confine tra le due (ultimo rifugio, come nei castelli dell'epoca).
@@ -1441,20 +1442,15 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
       ~48×40 m, casata 46×40 → ~62×52, maggiore 58×50 → ~78×66. Il borgo non cambia. Cambiano le Carte generate:
       `VERSIONE_GENERATORE`; verifica dei siti (`verifica.js`) su 30 semi; le sagome da lontano (sessione M6) leggono
       già `MISURE_ROCCA` e i piani.
-    - *Persone della casata* (abitanti3d.js; modelli della sessione M1, nuovi ruoli): signore, signora, erede, castellano,
-      cappellano, dama o cavaliere vassallo; servitù: cuoco, giardiniere, stalliere del signore. Posti per ora del giorno
-      (mattina: signore nella sala o davanti al palazzo; pomeriggio: signora e dame in giardino; sera: tutti dentro, luce
-      alle finestre del piano nobile). «E: parla» con tutti; col signore **«E: chiedi udienza»** apre una Carta del
-      cronista propria (nome e casata, una riga segnaposto, «Congedati»).
-    - *Cosa non c'è in M7* (decisioni proposte, da confermare): il **contenuto** dell'interazione (cosa dice il signore,
-      incarichi, favori, onore, rapporti tra casate) arriva con la milestone «fazioni e nomi», che userà questi posti e
-      questo aggancio (`udienza` in abitanti3d.js); **niente interni 3D** (entrare apre la Carta del cronista, come
-      per gli altri edifici).
+    - *Fuori da M7* (decisioni dell'utente): **persone della casata e interazione** (signore, signora, castellano…,
+      «chiedi udienza», il contenuto con la milestone «fazioni e nomi»): i luoghi del passo 10 lasciano loro lo spazio
+      (sala grande, giardino, davanti al palazzo); **interni 3D** rinviati. Il palazzo ha la sua porta come gli altri
+      edifici nominati (Carta del cronista segnaposto).
     - *Prestazioni*: palazzo e pertinenze nel kit di edifici (volumi uniti per materiale, nessun materiale nuovo salvo il
       verde del giardino); giardino a istanze (aiuole, siepi, alberi). Budget della rocca invariato: ≤ 20 chiamate di
       disegno con le pertinenze, da misurare sul percorso di prova.
     - *Passi*: (a) piani più grandi e muro interno con la porta, verifica dei siti; (b) palazzo; (c) giardino e
-      pertinenze; (d) persone della casata e «chiedi udienza». Una PR per passo. *Prova:* cammino porta del borgo →
+      pertinenze. Una PR per passo. *Prova:* cammino porta del borgo →
       corte d'armi → corte del signore su tutte le rocche di due semi; porte e udienza raggiungibili; FPS sul percorso
       di prova.
 
