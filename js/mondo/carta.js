@@ -29,7 +29,7 @@ export const CARTA_PREDEFINITA = { cols: 120, rows: 90, cella: 1000 };
 // Comprende i luoghi (M7, js/mondo/luoghi.js), che si aggiungono alla Carta nel Worker e stanno nella stessa cache.
 // regione-2: punti panoramici solo alture (verifiche in cache); m7-terrapieno: terrapieni di rocca e borgo;
 // strade: rete delle strade e dei sentieri (js/mondo/strade.js); strade-2: costo del rilievo dentro la cella.
-export const VERSIONE_GENERATORE = 'regione-2+m7-terrapieno-1+strade-2';
+export const VERSIONE_GENERATORE = 'regione-2+m7-terrapieno-1+strade-2+mare-1';
 
 // Parametri della forma (km dove non indicato). Valori di partenza, da tarare guardando le Carte.
 const FORMA = {
@@ -37,10 +37,14 @@ const FORMA = {
   continente: { lunghezza: 70, ottave: 6, guadagno: 0.55 },   // forma d'insieme e dettaglio delle coste
   scalaGrande: { lunghezza: 160, peso: 0.45 },                 // masse di terra, golfi e mari interni
   // Bordi: nessun anello di mare forzato (regola del 2D, docs/WORLD_GEN.md in 2c869fa). I bordi possono
-  // essere terra o mare secondo il rumore; solo una leggera spinta verso il mare negli ultimi km.
-  bordo: { larghezza: 10, profondita: 0.15 },
+  // essere terra o mare secondo il rumore. Niente più spinta verso il mare negli ultimi km (era 0,15): con il
+  // mondo di 120×90 km non c'è un «di là dal mare» [deciso con l'utente, novembre 2026].
+  bordo: { larghezza: 10, profondita: 0 },
   inclinazione: 0.30,                                          // quanto un lato può avere più mare
-  mare: [0.10, 0.22],                                          // parte della superficie (GDD)
+  // Parte della superficie a mare [rivisto con l'utente, novembre 2026: prima 10–22 %; nel mondo di 120×90 km non c'è
+  // un «di là dal mare», il mare aperto era spazio sprecato]. Il livello per quantile tiene le coste naturali: il mare
+  // si ritira nelle parti più basse (bracci e mari interni compresi).
+  mare: [0.05, 0.11],
   montagna: [0.045, 0.10],                                     // parte della terra con catene alte (GDD)
   // Catene: lungo le linee di zero di un rumore su grande scala (linee lunghe e sinuose), solo dove una
   // maschera le ammette (tratti di lunghezza limitata). Contrafforti laterali da rumore ridged.
