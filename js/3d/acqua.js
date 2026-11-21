@@ -235,14 +235,16 @@ function sollevaSuTerreno(pos, m, k, altezza) {
  * cavaliere per posare i piedi SULLA strada, che sta qualche centimetro sopra il terreno (prima i piedi ci affondavano).
  * Coordinate locali del blocco. Indice a griglia di 4 m.
  */
-export function suoloStrade(gruppo) {
-  const CELLA = 4, celle = new Map(), tri = [];
+const RAMPA_BORDO = 0.4;               // tangente (~22°) della salita dal terreno alla carreggiata, sul bordo
+export function suoloStrade(gruppo, terreno = null) {
+  const CELLA = 4, celle = new Map(), tri = [], bordi = [];
   gruppo?.traverse((o) => {
     if (o.name !== 'strada' || !o.geometry?.index) return;
-    const p = o.geometry.attributes.position.array, idx = o.geometry.index.array;
+    const p = o.geometry.attributes.position.array, idx = o.geometry.index.array, bo = o.geometry.userData.bordo;
     for (let n = 0; n < idx.length; n += 3) {
       const t = [idx[n], idx[n + 1], idx[n + 2]].flatMap((v) => [p[v * 3], p[v * 3 + 1], p[v * 3 + 2]]);
       const id = tri.push(t) - 1;
+      bordi.push(bo ? [bo[idx[n]], bo[idx[n + 1]], bo[idx[n + 2]]] : null);
       const x0 = Math.floor(Math.min(t[0], t[3], t[6]) / CELLA), x1 = Math.floor(Math.max(t[0], t[3], t[6]) / CELLA);
       const z0 = Math.floor(Math.min(t[2], t[5], t[8]) / CELLA), z1 = Math.floor(Math.max(t[2], t[5], t[8]) / CELLA);
       for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) {
@@ -262,7 +264,14 @@ export function suoloStrade(gruppo) {
         const l1 = ((t[5] - t[8]) * (x - t[6]) + (t[6] - t[3]) * (z - t[8])) / det;
         const l2 = ((t[8] - t[2]) * (x - t[6]) + (t[0] - t[6]) * (z - t[8])) / det;
         const l3 = 1 - l1 - l2;
-        if (l1 >= -1e-6 && l2 >= -1e-6 && l3 >= -1e-6) return l1 * t[1] + l2 * t[4] + l3 * t[7];
+        if (l1 >= -1e-6 && l2 >= -1e-6 && l3 >= -1e-6) {
+          const h = l1 * t[1] + l2 * t[4] + l3 * t[7], b = bordi[id];
+          if (!terreno || !b) return h;
+          // Dal prato alla carreggiata niente scalino (segnalato dall'utente: il cavaliere non risaliva in strada):
+          // vicino al bordo la superficie su cui si cammina sale dal terreno alla strada con pendenza RAMPA_BORDO.
+          const tH = terreno(x, z), dB = l1 * b[0] + l2 * b[1] + l3 * b[2];
+          return h > tH ? tH + Math.min(h - tH, dB * RAMPA_BORDO) : h;
+        }
       }
       return null;
     },
@@ -322,6 +331,8 @@ export function creaNastroStrada(t, mat, altezza, quote = null) {
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.setAttribute('aTrasversale', new THREE.BufferAttribute(trasv, 1));
+  // Metri dal bordo della carreggiata per vertice (solo per suoloStrade, non va sulla scheda).
+  geo.userData.bordo = Float32Array.from(trasv, (s, n) => (1 - Math.abs(s)) * t[Math.floor(n / k) * 3 + 2]);
   geo.setIndex(indici);
   geo.computeVertexNormals();
   // Luce uniforme in larghezza: in ogni sezione la normale è la media della sezione (segue solo la salita o la discesa

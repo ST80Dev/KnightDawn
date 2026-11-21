@@ -697,7 +697,7 @@ function applicaMondo(p) {
   acqua = orizzonte.acqua;
   if (acqua) scene.add(acqua);
   // Le strade per ultime: sotto un ponte la carreggiata nell'alveo non deve vincere sull'impalcato.
-  _suolo = componiSuolo(terrain, [...rocche, ...ponti, suoloStrade(acqueScena)]);
+  _suolo = componiSuolo(terrain, [...rocche, ...ponti, suoloStrade(acqueScena, (x, z) => terrain.getHeight(x, z))]);
   // Persone ai loro posti e per le strade (passo 7), sul suolo composto. Al cambio di blocco (scambiaBlocco) si rifanno
   // con rocche e borghi, già nelle coordinate del blocco nuovo: non serve spostarle (abitanti.sposta resta per altri usi).
   if (rocche.length) {
