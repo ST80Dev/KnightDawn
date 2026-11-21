@@ -29,25 +29,9 @@ import { distanzaStrada } from '../mondo/strade.js';
 import { posizionaVegetazione, coperturaMondo, coperturaTavullia } from '../mondo/vegetazione.js';
 import { creaVegetazione } from './vegetazione3d.js';
 import { semeDaTesto } from '../mondo/rumore.js';
+import { creaCielo, posizioneSole, visibilitaDelGiorno } from './cielo.js';
 import { creaProfilatore, creaPercorso, GRUPPI, FAMIGLIE, BUDGET_GPU, budgetDi, creaQualita } from './prestazioni.js';
 
-// Nebbia sulla distanza vera dalla camera, non sulla profondità lungo l'asse di vista (come fa Three.js):
-// con la profondità, un monte al bordo dello schermo riceveva meno nebbia e spariva girandosi verso di lui.
-THREE.ShaderChunk.fog_vertex = '#ifdef USE_FOG\n\tvFogDepth = length( mvPosition.xyz );\n#endif';
-
-const COLORE_CIELO = '#c4d4d6';           // azzurro-pergamena, uguale alla nebbia
-const NEBBIA = [900, 4000];               // m: inizio e fine della nebbia lineare (foschia leggera)
-// Con l'orizzonte (mondo generato) la foschia dipende dal giorno (visibilitaDelGiorno): inizio a 1,5 km, fine
-// (`far`, m) tirata per giorno. Nebbia lineare addolcita (smoothstep di Three.js): con far 65 km a 20 km si perde
-// ~25 % del contrasto, a 35 km ~55 %, a 50 km ~85 % (sagome dei monti alti ancora leggibili). Giornate limpide
-// (dopo la pioggia, col vento) fino a far 150 km: a 80 km ~55 %, a 100 km ~75 %. Quando ci sarà il meteo, il tiro
-// del giorno verrà da lì.
-const NEBBIA_ORIZZONTE_INIZIO = 1500;
-const VISIBILITA = [                       // [probabilità, far minimo, far massimo] (m)
-  [0.15, 40000, 50000],                    // foschia densa, afa
-  [0.60, 55000, 75000],                    // di norma
-  [0.25, 110000, 150000],                  // limpida
-];
 const LONTANO = 130000;                   // m: distanza massima disegnata dalla camera
 const PARAMETRI = new URL(window.location.href).searchParams;
 const TAVULLIA = PARAMETRI.get('terreno') === 'tavullia';
@@ -89,8 +73,9 @@ const profilatore = creaProfilatore(renderer);   // tempi GPU/CPU (docs/PRESTAZI
 renderer.setSize(window.innerWidth, window.innerHeight);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(COLORE_CIELO);
-scene.fog = new THREE.Fog(COLORE_CIELO, NEBBIA[0], NEBBIA[1]);
+// Cielo: luci del giorno e della notte, colore del cielo, nebbia (cielo.js).
+const cieloScena = creaCielo(scene);
+const { sole } = cieloScena;
 
 // Qualità (F2, ?qualita=basso|medio|alto, ricordata nel browser) e risoluzione adattiva: prestazioni.js.
 /** Micro-rilievo di prato e neve nello shader del suolo: spento nella qualità bassa. */
@@ -111,51 +96,6 @@ qualita.imposta(qualita.chiave);
 
 const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.2, LONTANO);
 
-// ─── Luci: sole che segue l'ora del giorno, luna, luce emisferica cielo/terra ───
-// Di giorno sole forte e luce ambiente contenuta: il rilievo collinare si legge dal chiaroscuro.
-// Il colore "da terra" è la luce riflessa dal suolo: schiarisce le pareti verticali in ombra (mura,
-// cavaliere) e quasi non tocca il terreno, le cui facce guardano in alto.
-// Di notte una luna fredda e fissa (alta a sud-est) lascia il paesaggio scuro ma leggibile.
-const cielo = new THREE.HemisphereLight('#dce8ec', '#8a7550', 0.45);
-scene.add(cielo);
-const sole = new THREE.DirectionalLight('#fff0d4', 3.4);
-sole.position.set(-700, 420, 500);
-scene.add(sole);
-const luna = new THREE.DirectionalLight('#9fb4dc', 0);
-luna.position.set(600, 700, 750);
-scene.add(luna);
-
-// Ciclo del giorno (valori provvisori, senza stagioni): alba alle 5, tramonto alle 20, sole al
-// massimo a 55° verso le 12:30. Di notte la "quota" del sole scende sotto l'orizzonte fino a −35°.
-const CICLO = {
-  alba: 5, tramonto: 20, altezzaMax: 55, profonditaNotte: 35,
-  soleMax: 3.4, lunaMax: 0.45,
-  emisferaGiorno: 0.45, emisferaNotte: 0.16,
-  // Di notte si vede bene solo vicino: la nebbia (color notte) si stringe attorno a ciò che si guarda.
-  // Metri oltre la distanza camera–bersaglio: nitido fino a vicinoNotte, buio pieno a lontanoNotte.
-  vicinoNotte: 15, lontanoNotte: 110,
-  colori: {
-    cieloGiorno: new THREE.Color('#c4d4d6'), cieloNotte: new THREE.Color('#0b1019'),
-    cieloCrepuscolo: new THREE.Color('#d9a882'),
-    soleGiorno: new THREE.Color('#fff0d4'), soleBasso: new THREE.Color('#ffb070'),
-    emisferaCieloGiorno: new THREE.Color('#dce8ec'), emisferaCieloNotte: new THREE.Color('#5a6c94'),
-    emisferaTerraGiorno: new THREE.Color('#8a7550'), emisferaTerraNotte: new THREE.Color('#2c2a2a'),
-  },
-};
-const _gradi = Math.PI / 180;
-const smoothstep = (a, b, x) => THREE.MathUtils.smoothstep(x, a, b);
-
-/** Posizione del sole (gradi) per un'ora del giorno 0–24: { altezza, azimut } (azimut da nord, orario). */
-function posizioneSole(ora) {
-  const { alba, tramonto, altezzaMax, profonditaNotte } = CICLO;
-  if (ora >= alba && ora <= tramonto) {
-    const t = (ora - alba) / (tramonto - alba);
-    return { altezza: altezzaMax * Math.sin(Math.PI * t), azimut: 70 + 220 * t };
-  }
-  const t = ((ora - tramonto + 24) % 24) / (24 - (tramonto - alba));
-  return { altezza: -profonditaNotte * Math.sin(Math.PI * t), azimut: 290 + 140 * t };
-}
-
 // Le pareti del castello hanno una piccola luce propria (luce riflessa): di notte va abbassata,
 // altrimenti brillano. Si raccolgono una volta i materiali con emissive e la loro intensità di base.
 let emissivi = [];
@@ -168,34 +108,15 @@ function raccogliEmissivi(radice) {
   });
 }
 
-const _col = new THREE.Color();
-let _oraCielo = -1;
-let _luceGiorno = 1;                       // 0 notte → 1 giorno: la usa anche la nebbia
+/** Cielo e luci dell'ora; poi le luci proprie di mura e castello e le ombre finte di cavaliere e cavallo. */
+// Copia di cieloScena.luceGiorno (0 notte → 1 giorno) con il nome di prima del passo 0: altre sessioni la usano
+// già nei loro branch (luci lontane, luci di rocche e borghi), così le loro unioni restano valide.
+let _luceGiorno = 1;
 function aggiornaCielo() {
-  const ora = Calendar.oraDelGiorno();
-  if (Math.abs(ora - _oraCielo) < 0.002) return;          // ~7 s di gioco: niente da ridisegnare
-  _oraCielo = ora;
-  const { altezza, azimut } = posizioneSole(ora);
-  const C = CICLO.colori;
-  const giorno = smoothstep(-5, 8, altezza);               // 0 notte → 1 pieno giorno
-  _luceGiorno = giorno;
-  const crepuscolo = Math.max(0, 1 - Math.abs(altezza - 1) / 9) * smoothstep(-8, -2, altezza);
-
-  const a = altezza * _gradi, z = azimut * _gradi;
-  sole.position.set(Math.sin(z) * Math.cos(a), Math.max(Math.sin(a), 0.02), -Math.cos(z) * Math.cos(a))
-    .multiplyScalar(1000);
-  sole.intensity = CICLO.soleMax * smoothstep(-2, 10, altezza);
-  sole.color.copy(C.soleGiorno).lerp(C.soleBasso, 1 - smoothstep(4, 20, altezza));
-  luna.intensity = CICLO.lunaMax * (1 - giorno);
-
-  cielo.intensity = THREE.MathUtils.lerp(CICLO.emisferaNotte, CICLO.emisferaGiorno, giorno);
-  cielo.color.copy(C.emisferaCieloNotte).lerp(C.emisferaCieloGiorno, giorno);
-  cielo.groundColor.copy(C.emisferaTerraNotte).lerp(C.emisferaTerraGiorno, giorno);
-
-  _col.copy(C.cieloNotte).lerp(C.cieloGiorno, giorno).lerp(C.cieloCrepuscolo, crepuscolo * 0.75);
-  scene.background.copy(_col);
-  scene.fog.color.copy(_col);
-
+  const cambiato = cieloScena.aggiorna(Calendar.oraDelGiorno());
+  _luceGiorno = cieloScena.luceGiorno;
+  if (!cambiato) return;
+  const giorno = _luceGiorno;
   const luceRiflessa = 0.2 + 0.8 * giorno;
   for (const e of emissivi) e.m.emissive.copy(e.base).multiplyScalar(luceRiflessa);
   const ombra = knight && knight.object.getObjectByName('ombra-cavaliere');
@@ -615,7 +536,7 @@ async function caricaScena(desc) {
   _suolo = componiSuolo(terrain, castle ? [castle] : [...rocche, ...ponti]);
   scenaAttuale = desc;
   statPendenze = misuraPendenze(terrain);
-  _oraCielo = -1;                          // ricalcola le luci (anche quelle proprie del castello)
+  cieloScena.invalida();                   // ricalcola le luci (anche quelle proprie del castello)
 }
 
 /** Mette il cavaliere in (x, z) locali della Scena attuale; lo crea la prima volta. */
@@ -855,39 +776,14 @@ function vincolaCameraLibera() {
   if (camera.position.y < minY) camera.position.y = minY;
 }
 
-// Nebbia: da vicino nasconde il bordo del mondo; allontanandosi si ritira per la vista d'insieme.
-// Di notte la nebbia, del colore del cielo notturno, si stringe: si vede bene solo attorno al punto
-// osservato. Le luci di case, castello e fuochi (future) dovranno ignorarla per restare visibili da lontano.
-/** `far` della foschia (m) per il giorno `g` (intero) del seme: tiro deterministico, stesso giorno = stessa vista. */
-function farDelGiorno(seme, g) {
-  let h = (Math.imul(seme | 0, 0x9e3779b1) ^ Math.imul(g | 0, 0x85ebca6b)) >>> 0;
-  h = Math.imul(h ^ (h >>> 16), 0x7feb352d) >>> 0;
-  h = Math.imul(h ^ (h >>> 15), 0x846ca68b) >>> 0;
-  const r = ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-  let soglia = 0;
-  for (const [p, min, max] of VISIBILITA) {
-    soglia += p;
-    if (r < soglia) return min + (max - min) * ((r - soglia + p) / p);
-  }
-  return VISIBILITA.at(-1)[2];
-}
-
-/** Visibilità del momento: interpola tra il giorno corrente e il successivo, così cambia piano e senza scatti. */
-function visibilitaDelGiorno() {
-  const giorni = (Calendar.passiTotali + Calendar.frazione) / CALENDAR.PASSI_PER_GIORNO;
-  const g = Math.floor(giorni), f = giorni - g;
-  const seme = carta?.seme ?? 0;
-  return THREE.MathUtils.lerp(farDelGiorno(seme, g), farDelGiorno(seme, g + 1), f * f * (3 - 2 * f));
-}
-
+/** Nebbia attorno al punto osservato (cielo.js); con l'orizzonte la foschia dipende dal giorno. */
 function aggiornaNebbia(puntoOsservato) {
-  const dist = camera.position.distanceTo(puntoOsservato);
-  const nebbia = orizzonte ? [NEBBIA_ORIZZONTE_INIZIO, visibilitaDelGiorno()] : NEBBIA;
-  const nearGiorno = Math.max(nebbia[0], dist * 0.9);
-  const farGiorno = Math.max(nebbia[1], nearGiorno + 3000);
-  const g = _luceGiorno * _luceGiorno;     // la vista si allunga solo quando la luce è davvero tornata
-  scene.fog.near = THREE.MathUtils.lerp(dist + CICLO.vicinoNotte, nearGiorno, g);
-  scene.fog.far = THREE.MathUtils.lerp(dist + CICLO.lontanoNotte, farGiorno, g);
+  cieloScena.aggiornaNebbia(camera, puntoOsservato, !!orizzonte, carta?.seme ?? 0, giorniDiGioco());
+}
+
+/** Giorni di gioco trascorsi, con la frazione. */
+function giorniDiGioco() {
+  return (Calendar.passiTotali + Calendar.frazione) / CALENDAR.PASSI_PER_GIORNO;
 }
 
 // ─── Tastiera ───────────────────────────────────────────────────────────
@@ -1242,7 +1138,7 @@ function aggiornaPannello(now) {
       + ` · ${Calendar.eNotte() ? 'notte 1:' + TEMPO_SCENA.RAPPORTO_NOTTE : 'giorno 1:' + TEMPO_SCENA.RAPPORTO_GIORNO}`
       + (inPausa ? ' · in pausa' : '')
       + ` · sole ${fmt(posizioneSole(ora).altezza)}° · Forza ${fmt(Knight.forza.cur, 2)}`
-      + (orizzonte ? ` · foschia fino a ${fmt(visibilitaDelGiorno() / 1000)} km` : '');
+      + (orizzonte ? ` · foschia fino a ${fmt(visibilitaDelGiorno(carta?.seme ?? 0, giorniDiGioco()) / 1000)} km` : '');
     const pelo = livelloAcquaIn(k.x, k.z);
     if (!Number.isNaN(pelo)) testo += `\nacqua: pelo a ${fmt(pelo, 1)} m · profondità ${fmt(Math.max(0, pelo - k.y), 1)} m`;
     testo += `\ncamera: ${modoCamera === 'segui' ? 'alle spalle' : 'libera (C per tornare)'}`;
