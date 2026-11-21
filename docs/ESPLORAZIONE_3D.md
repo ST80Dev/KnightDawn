@@ -1692,7 +1692,14 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      fascia di 4 celle (~30 m) dai fiumi con densità degli alberi fino a 0,42 (pesi 1 / 0,85 / 0,6 / 0,3 per cella),
      specie di riva (pioppi, betulle), più tronchi caduti; nuovo tipo `ramo` (rami secchi a terra, si attraversano;
      anche pochi nei boschi). Blocco arido con ~1,6 km di fiume: alberi da 482 a 809, 36 tronchi, ~600 rami.
-     Limite: il bosco lontano oltre il blocco non ha ancora la fascia lungo i fiumi.
+     Bosco lontano: lungo i tracciati dei fiumi fuori dal blocco (`tracciatiFiumi`) tre file di sagome di riva per lato
+     (a 4, 12, 22 m oltre la sponda, probabilità 0,85 / 0,6 / 0,3; passo che cresce con la distanza, reticolo del
+     mondo): ~1700 sagome in più in un blocco con un fiume (prima 43 sagome lontane in quella zona arida).
+     *Ghiaia sulle rive* (richiesta dell'utente: «un po' di ghiaia sui bordi ogni tanto», non sotto l'acqua): quarta
+     componente di `aSuolo`, a chiazze su ~35 m nelle prime due celle dai fiumi, dipinta nel suolo cotto.
+     *Massi erratici* (`VEGETAZIONE.erratici`): pochi massi di 4–8 m isolati nei prati (non nel bosco, nei campi,
+     vicino a strade, case e terrapieni). *Alberi lungo le strade* (`stradaAlberi`): a tratti, a 2,5–5 m dal bordo,
+     fuori dal bosco; ~200 in un blocco attorno alla rocca di partenza.
      *Case fuori dal borgo* (richiesta dell'utente: case isolate o a gruppetti di 2–3 in mezzo o a lato dei campi):
      `CASE_CAMPAGNA` / `caseCampagna(carta)`, siti deterministici per Carta (4–9 gruppi per rocca secondo la classe,
      tra gli orti e il limite dei campi pieni, in piano, all'asciutto, lontano dai terrapieni e tra loro, orientati

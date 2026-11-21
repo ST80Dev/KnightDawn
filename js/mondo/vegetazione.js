@@ -13,7 +13,7 @@
 
 import { BIOMA, CLIMA, limiteNevi } from './carta.js';
 import { fbm, derivaSeme, smoothstep, hash2, mulberry32 } from './rumore.js';
-import { specchio, distanzaPiano, livelloLago, quotaFinale } from './scena.js';
+import { specchio, distanzaPiano, livelloLago, quotaFinale, tracciatiFiumi } from './scena.js';
 import { distanzaStrada } from './strade.js';
 
 // ─── 1. Copertura del terreno (condivisa con il colore) ───────────────────
@@ -1037,6 +1037,8 @@ export const SAGOME = { latifogliaTonda: 0, latifogliaOvale: 1, conifera: 2, pin
 
 /** Parametri del bosco lontano ([Ipotesi] da tarare guardando e misurando). */
 export const BOSCO_LONTANO = {
+  // Fascia lungo i fiumi: [metri oltre la sponda, probabilità] per fila; passo di base lungo il fiume (m).
+  fiumi: { passo: 12, fasce: [[4, 0.85], [12, 0.6], [22, 0.3]] },
   griglia: 50,          // m: passo della griglia grossolana su cui si valutano copertura e quota
   raggio: 3000,         // m (in quadrato, dal centro del blocco): oltre, il bosco resta un colore
   // Prestazioni (misura della sessione M1: 137 000 sagome con alpha test raddoppiavano il fotogramma): oltre `da` m
@@ -1126,6 +1128,43 @@ export function boscoLontano(carta, cx, cz, half, quota, stagione = 0) {
         const eta = 0.45 + 1.0 * (((h2 >>> 8) & 0xff) / 256) ** 1.4;
         const scala = eta * (0.55 + 0.45 * campo(lim, x, z));
         out.push(x, y, z, scala, tessera);
+      }
+    }
+  }
+  // Fascia alberata lungo i fiumi anche da lontano (richiesta dell'utente: «a grandi linee, una fascia alberata»):
+  // lungo i tracciati dei fiumi fuori dal blocco, sui due lati, file di sagome di riva a `fasce` m oltre la sponda,
+  // con passo che cresce con la distanza come il resto del bosco lontano. Posizioni su un reticolo del mondo (`passo`)
+  // per non cambiare a ogni spostamento del blocco.
+  const RF = B.fiumi;
+  if (RF) {
+    const sF = derivaSeme(carta.seme, 471);
+    for (const pz of tracciatiFiumi(carta, cx, cz, half, false, R)) {
+      for (let k = 0; k + 7 < pz.length; k += 4) {
+        const ax = pz[k], az = pz[k + 1], bx = pz[k + 4], bz = pz[k + 5], w = pz[k + 3];
+        const lun = Math.hypot(bx - ax, bz - az);
+        if (lun < 1e-3) continue;
+        const tx = (bx - ax) / lun, tz = (bz - az) / lun;
+        const d = Math.max(Math.abs(ax), Math.abs(az));
+        const passo = Math.max(RF.passo, B.cella * d / half);
+        const t = Math.min(1, Math.max(0, (d - B.dirada.da) / (B.dirada.a - B.dirada.da)));
+        const dirada = 1 - (1 - B.dirada.fino) * t;
+        for (let u = 0; u < lun; u += passo) {
+          const px = ax + tx * u, pzz = az + tz * u;
+          RF.fasce.forEach(([dist, prob], fi) => {
+            for (const lato of [-1, 1]) {
+              const x = px - tz * lato * (w / 2 + dist), z = pzz + tx * lato * (w / 2 + dist);
+              const ix = Math.round((cx + x) / RF.passo), iz = Math.round((cz + z) / RF.passo);
+              const h = hash2(ix, iz, sF ^ (fi * 0x9e3779b9));
+              if (h / 4294967296 >= prob * dirada) continue;
+              if (Math.max(Math.abs(x), Math.abs(z)) < half || campo(lim, x, z) < 0.3) continue;
+              const y = quota(x, z);
+              if (Number.isNaN(y) || y < 0.5 || !Number.isNaN(livelloLago(carta, cx + x, cz + z))) continue;
+              const eta = 0.6 + 0.9 * (((h >>> 8) & 0xff) / 256) ** 1.4;
+              out.push(x + ((h >>> 16) & 0xff) / 255 * 4 - 2, y, z, eta * (0.55 + 0.45 * campo(lim, x, z)),
+                h & 1 ? SAGOME.riva : SAGOME.latifogliaTonda);
+            }
+          });
+        }
       }
     }
   }
