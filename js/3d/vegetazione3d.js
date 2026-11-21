@@ -459,6 +459,17 @@ function creaModelli() {
   tronco.rotateZ(Math.PI / 2); tronco.translate(2.5, 0.22, 0);
   const moncone = fusto(0.09, 0.05, 0.8, 4, COL.corteccia, { x: -1.2, y: 0.4, inclinaZ: 0.7, sotto: 0 });
   M.tronco = [{ fino: 250, varianti: [unisci([tronco, moncone])] }];
+  // Rami secchi a terra: un ramo coricato (lungo x) con due rametti; due forme. Piccoli: si attraversano.
+  const ramo = (lungo, piega) => {
+    const asse = fusto(0.07, 0.03, lungo, 4, COL.corteccia, { sotto: 0 });
+    asse.rotateZ(Math.PI / 2 - piega); asse.translate(lungo / 2, 0.06, 0);
+    const r1 = fusto(0.03, 0.012, 0.7, 3, COL.corteccia, { sotto: 0 });
+    r1.rotateZ(Math.PI / 2); r1.rotateY(0.7); r1.translate(-lungo * 0.15, 0.05, 0);
+    const r2 = fusto(0.025, 0.01, 0.5, 3, COL.corteccia, { sotto: 0 });
+    r2.rotateZ(Math.PI / 2); r2.rotateY(-0.9); r2.translate(lungo * 0.2, 0.04, 0);
+    return unisci([asse, r1, r2]);
+  };
+  M.ramo = [{ fino: 60, varianti: [ramo(2.2, 0.04), ramo(1.6, -0.03)] }];
 
   // Muretti a secco: tratti di 2,2 m lungo x (si sovrappongono a passo 1,7 m), alti ~0,95 m: due corsi di pietre
   // spaccate e una fila di copertina; da lontano un blocco semplice.
