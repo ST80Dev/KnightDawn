@@ -1008,6 +1008,9 @@ function fineDelPercorso() {
       + ` · fotogramma peggiore ${fmt(st.msPeggiore, 1)} ms · ${st.fotogrammi} fotogrammi` : 'FPS: n/d',
     st && Number.isFinite(st.cpuMedia) ? `CPU per fotogramma (logica + invio): media ${fmt(st.cpuMedia, 1)} ms · 1% peggiori`
       + ` ${fmt(st.cpu99, 1)} ms · massimo ${fmt(st.cpuMax, 1)} ms` : 'CPU: n/d',
+    ...(st?.parti?.length ? ['CPU per parte (media · 1% peggiori · massimo, ms):',
+      ...st.parti.map((p) => `  ${p.nome}: ${fmt(p.media, 2)} · ${fmt(p.p99, 1)} · ${fmt(p.max, 1)}`)] : []),
+    st?.lunghi ? `compiti lunghi fuori dal fotogramma (> 50 ms): ${st.lunghi.n} · il più lungo ${fmt(st.lunghi.max)} ms` : '',
     `GPU totale: ${fmtMs(percorsoNormale?.totale)} · budget ${fmt(BUDGET_GPU.totale, 1)} ms`,
     `chiamate ${percorsoNormale?.calls ?? 'n/d'} · ${fmt((percorsoNormale?.triangles ?? 0) / 1000)} mila triangoli`,
     'GPU per gruppo (ripartizione):',
@@ -1032,7 +1035,7 @@ function fineDelPercorso() {
   righe.push(`oggetti visibili: ${pesi.length} (chiamate ≈ oggetti nel campo visivo) · i più pesanti:`);
   for (const p of pesi.slice(0, 12)) righe.push(`  ${p.nome}: ${fmt(p.tri / 1000)} mila triangoli${p.ist > 1 ? ` · ${p.ist} istanze` : ''}`);
   percorso = null;
-  mostraRisultati(righe.join('\n'));
+  mostraRisultati(righe.filter((r) => r !== '').join('\n'));
 }
 function mostraRisultati(testo) {
   console.log(testo);
@@ -1095,6 +1098,8 @@ function puntoSottoCursore() {
 const fmt = (n, d = 0) => n.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d });
 
 const _dimBuffer = new THREE.Vector2();
+const PANNELLO_INTERVALLO_MS = 200;
+let _pannelloT = -Infinity;
 const infoFrame = { calls: 0, triangles: 0, msInvio: 0, msLogica: 0 };
 function aggiornaPannello(now) {
   fpsFrame++;
@@ -1105,6 +1110,10 @@ function aggiornaPannello(now) {
     fpsT0 = now;
   }
   if (fpsEl.hidden) return;
+  // Il testo si ricostruisce 5 volte al secondo, non a ogni fotogramma: il percorso di prova misurava fino a 23 ms
+  // di picco per il pannello (statistiche, raggio sotto il cursore, DOM), cioè scatti causati dalla misura stessa.
+  if (now - _pannelloT < PANNELLO_INTERVALLO_MS) return;
+  _pannelloT = now;
   let testo = rigaFps;
   const ri = infoFrame, buf = renderer.getDrawingBufferSize(_dimBuffer);
   testo += `\nprestazioni (F4 cambia, F9 percorso di prova): ${percorso ? 'PERCORSO DI PROVA in corso' : PROVE_PRESTAZIONI[provaPrestazioni]}`
@@ -1188,9 +1197,19 @@ function aggiornaPannello(now) {
 // ─── Render loop ────────────────────────────────────────────────────────
 const DT_MAX = 0.1;                        // s: dopo una pausa (scheda in background) niente salti
 let tPrec = performance.now();
+// Tempo di processore per parte del fotogramma (percorso di prova: per trovare gli scatti).
+const partiCPU = {};
+function segna(nome, t) {
+  const n = performance.now();
+  partiCPU[nome] = (partiCPU[nome] || 0) + (n - t);
+  return n;
+}
+
 function frame(now) {
   requestAnimationFrame(frame);
   const t0 = performance.now();
+  for (const k in partiCPU) partiCPU[k] = 0;
+  let tt = t0;
   const dtReale = Math.max(0, (now - tPrec) / 1000);
   const dt = THREE.MathUtils.clamp(dtReale, 0, DT_MAX);
   tPrec = now;
@@ -1207,11 +1226,14 @@ function frame(now) {
     } else {
       cam.prendiGiroMouse();               // in pausa il mouse non gira il cavaliere
     }
+    tt = segna('cavaliere e tempo', tt);
     aggiornaCielo();
     castle?.aggiornaLuci(now / 1000, 1 - _luceGiorno);
     for (const r of rocche) r.aggiornaLuci(now / 1000, 1 - _luceGiorno);
+    tt = segna('cielo e luci', tt);
     aggiornaStato();
     aggiornaIndicatoreAndatura();
+    tt = segna('interfaccia', tt);
     if (percorso) {
       const r = percorso.aggiorna(dtReale, camera, (x, z) => suolo.getHeight(x, z));
       if (r.azzera) {
@@ -1230,21 +1252,29 @@ function frame(now) {
       vincolaCameraLibera();
       aggiornaNebbia(controls.target);
     }
+    tt = segna('camera', tt);
   }
   if (vegetazione && vegetazioneVisibile) {
     vegetazione.aggiorna(camera.position.x, camera.position.z, sole.position, _luceGiorno);
+    tt = segna('vegetazione: aggiorna', tt);
     // Visuale pulita: ciò che sta tra camera e cavaliere si dirada (solo con la camera alle spalle)
     if (knight && modoCamera === 'segui' && !percorso) vegetazione.visuale(knight.stato.x, knight.stato.y, knight.stato.z);
     else vegetazione.visuale(null);
+    tt = segna('vegetazione: visuale', tt);
   }
   aggiornaPannello(now);
+  tt = segna('pannello F3', tt);
   infoFrame.msLogica = performance.now() - t0;
   const modoDisegno = percorso ? percorso.modo : provaPrestazioni === 1 ? 'gruppi' : 'normale';
   const r = profilatore.disegna(scene, camera, modoDisegno, gruppoDi);
   infoFrame.calls = r.calls;
   infoFrame.triangles = r.triangles;
   infoFrame.msInvio = r.msInvio;
-  if (percorso) percorso.registraCPU(infoFrame.msLogica + r.msInvio);
+  partiCPU['invio comandi'] = r.msInvio;
+  if (percorso) {
+    percorso.registraCPU(infoFrame.msLogica + r.msInvio);
+    percorso.registraParti(partiCPU);
+  }
 }
 
 camera.position.set(0, 300, 900);          // vista provvisoria mentre il terreno si carica
