@@ -1561,6 +1561,13 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      piene fino a 600 m dalla camera, poi diradate come (600/d)², la legge del bosco lontano, con cui al bordo si
      raccordano. In headless nello stesso punto: latifoglie vicine da ~333 000 a ~145 000 triangoli, sagome del
      blocco da 59 500 a 36 200, vegetazione da 792 000 a 571 000 triangoli; chiamate da 26 a 29.
+   - *Scatti dopo i campi e Carta rigenerata* (misura dell'utente dopo #135–#140: «vegetazione: aggiorna» fino a
+     13,5 ms alla partenza; bosco fitto 7,2 ms GPU contro 6,5): il pezzo lungo era l'erba vicina, un tipo intero in un
+     fotogramma (in headless fino a 21 ms attorno alla rocca). Ora l'erba si calcola a fasce di righe (`fascia` in
+     `erbaAttorno`; 32 per l'erba) e si scrive in un buffer a parte copiato alla fine; erba e ridistribuzione
+     dividono un tetto unico di ~1,5 ms per fotogramma. Percorso di prova in headless: picco da 21 a ~3,2 ms. Bosco
+     fitto: latifoglie medie fino a 200 m invece di 300 (poi sagome): triangoli della vegetazione da 649 000 a
+     478 000, sagome +2 600; a vista uguale.
    - *Campi coltivati* (dopo la milestone Prestazioni; decisioni dell'utente: niente stagioni, estensione come
      proposta più «qualcosa intorno a case isolate e villaggi»): `CAMPAGNA.raggi` per tipo di luogo (rocca secondo la
      classe 0,5–2 km; `villaggio` 0,3–0,7 km e `casa` 70–200 m già pronti per quando la milestone dei luoghi li
