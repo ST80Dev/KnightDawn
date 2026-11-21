@@ -194,7 +194,8 @@ Scheda Intel UHD 730 (il browser Brave nasconde il nome), 1920×935, seme 570549
 | 21/11/2026 | **nuova base** bosco fitto, stessa versione | 77,6 | 49,8 | 11,3 | 3,8 | **7,2** ⚠ | 0,0 | 0,1 | 0,2 | 128 | 1085 mila |
 | 21/11/2026 | partenza dopo #141 (siepi) | 98,2 ¹ | **50,3** ⚠ | 6,9 | 3,9 | 2,2 | 0,3 | 0,1 | 0,4 | 272 | 660 mila |
 | 21/11/2026 | **base attuale** partenza, main dopo #143 (erba vicina a fasce, latifoglie medie a 200 m) | 100,0 ¹ | **99,0** | 6,7 | 3,8 | 2,0 | 0,3 | 0,1 | 0,3 | 272 | 655 mila |
-| 21/11/2026 | **base attuale** bosco fitto, stessa versione | **82,1** | 49,8 ² | 11,1 | 4,0 | 7,0 ⚠ | 0,0 | 0,1 | 0,2 | 127 | 898 mila |
+| 21/11/2026 | bosco fitto, main dopo #143 | **82,1** | 49,8 ² | 11,1 | 4,0 | 7,0 ⚠ | 0,0 | 0,1 | 0,2 | 127 | 898 mila |
+| 21/11/2026 | **base attuale** bosco fitto, main dopo #144 (sagome diradate da 300 m) | **84,1** | 49,8 ² | 10,7 | 4,0 | 6,5 | 0,0 | 0,1 | 0,2 | 127 | 882 mila |
 
 Nuova base (21/11/2026, qualità alta = media sullo schermo di riferimento al 100 %). Le Carte sono rigenerate (#135):
 la scena della partenza e il bosco non sono gli stessi di prima, quindi il confronto con le righe precedenti è solo
