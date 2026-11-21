@@ -2214,7 +2214,8 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
    lato, anteriore sinistro un poco avanti, collo più basso e testa girata e inclinata verso il cavaliere; orecchie
    diverse (una avanti, una di lato); criniera a ciocche che ricade a destra; coda che piega di lato. 5.536 triangoli.
    Limite che resta [Certo]: ogni snodo è un pezzo rigido, quindi dove la gamba entra nel corpo si vede l'attacco.
-   Una pelle continua chiede una `SkinnedMesh` (ossa che deformano un'unica superficie): da valutare con l'utente.
+   Una pelle continua chiede una `SkinnedMesh` (ossa che deformano un'unica superficie). **Decisione dell'utente
+   (novembre 2026): per ora restano i pezzi rigidi**; la pelle unica si riconsidera più avanti.
 2. **Segue a piedi.** Tracce, distanza, andature animate (passo, trotto, galoppo), sosta e brucare, attesa se bloccato
    (bosco fitto, acqua, pendii), avviso «rimasto indietro», fischio con F, ostacolo per il cavaliere. *Prova:* correre e
    scattare nel bosco, guadare, salire un pendio ripido, fischiare da lontano.
