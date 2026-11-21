@@ -774,10 +774,12 @@ export function posizionaVegetazione(o) {
     suolo[i * 4 + 1] = dist[i] === 0 ? 1 : Math.max(0, 1 - (dist[i] - 1) / (V.acquaCelle - 1));
     suolo[i * 4 + 2] = D.campo[i] * smoothstep(2, 12, oltre)
       * (caseQui.length ? smoothstep(KC.aia[0] - 4, KC.aia[0] + 4, dCasa(cx - half + c * cell, cz - half + r * cell)) : 1);
+    // Quarta componente: 1 − ghiaia (con l'attributo assente WebGL dà w = 1, cioè niente ghiaia, non tutto ghiaia).
     const dF = distFiume[i];
+    suolo[i * 4 + 3] = 1;
     if (dF <= 2) {
       const G = V.fiume.ghiaia;
-      suolo[i * 4 + 3] = G.celle[dF] * smoothstep(G.soglia[0], G.soglia[1],
+      suolo[i * 4 + 3] = 1 - G.celle[dF] * smoothstep(G.soglia[0], G.soglia[1],
         fbm(cx - half + c * cell, cz - half + r * cell, sG, G.lunghezza, 2));
     }
   }

@@ -267,7 +267,7 @@ TEXTURE_PERM_CAMPI.needsUpdate = true;
  * Materiale del terreno del mondo generato a colore per pixel. La geometria deve avere gli attributi `base` (vec3)
  * e `strati` (vec4: roccia, neve, variazione, tono della roccia), oltre a `color` (colore per vertice completo, per
  * chi lo legge). (cx, cz): coordinate del mondo dell'origine della mesh.
- * Vegetazione: se la geometria ha anche `aSuolo` (vec4 per vertice: bosco sopra, vicinanza dell'acqua, campi, ghiaia; lo aggiunge
+ * Vegetazione: se la geometria ha anche `aSuolo` (vec4 per vertice: bosco sopra, vicinanza dell'acqua, campi, 1 − ghiaia; lo aggiunge
  * vegetazione3d.js al blocco) sul prato compaiono lettiera sotto il bosco (marrone chiaro e scuro, quasi nero,
  * muschio) e fango vicino all'acqua; la terra nuda a chiazze nei prati c'è ovunque (anche negli anelli). `mezzo`:
  * metà lato del blocco, negli ultimi 120 m lettiera e fango sfumano (l'orizzonte non li ha).
@@ -461,7 +461,8 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
       float blocco = 1.0 - smoothstep(uMezzo - 120.0, uMezzo, max(loc.x, loc.y));
       // Prestazioni: niente rumori dove non servono. Terra nuda solo sul prato entro 3 km; lettiera e fango solo dove
       // il blocco li porta (aSuolo, 0 negli anelli); la grana di 2 m solo vicino.
-      float suoloV = max(max(vSuolo.x, vSuolo.y), max(vSuolo.z, vSuolo.w)) * blocco;
+      float ghiaiaV = 1.0 - vSuolo.w;                // aSuolo.w = 1 − ghiaia (assente: 1, niente ghiaia)
+      float suoloV = max(max(vSuolo.x, vSuolo.y), max(vSuolo.z, ghiaiaV)) * blocco;
 #ifdef SUOLO_LONTANO
       if (false) {
 #else
@@ -479,11 +480,11 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
           cPrato = mix(cPrato, lett, vSuolo.x * 0.95 * prato * blocco);
           cPrato = mix(cPrato, vec3(0.07, 0.055, 0.035) * (0.8 + 0.4 * r2), smoothstep(0.3, 1.0, vSuolo.y) * 0.6 * blocco);
           // Ghiaia a chiazze sulle rive dei fiumi: grigio-beige a grana fine (sassolini) e qualche ciottolo più chiaro.
-          if (vSuolo.w > 0.01) {
+          if (ghiaiaV > 0.01) {
             float g1 = rumoreSuolo(p + 91.0, 2.0);
             vec3 ghiaia = mix(vec3(0.20, 0.18, 0.15), vec3(0.36, 0.33, 0.28), g1) * (0.75 + 0.5 * r3);
             ghiaia = mix(ghiaia, vec3(0.45, 0.43, 0.38), smoothstep(0.72, 0.85, r3) * 0.6);
-            cPrato = mix(cPrato, ghiaia, smoothstep(0.15, 0.6, vSuolo.w + 0.25 * (r2 - 0.5)) * blocco);
+            cPrato = mix(cPrato, ghiaia, smoothstep(0.15, 0.6, ghiaiaV + 0.25 * (r2 - 0.5)) * blocco);
           }
         }
         if (vSuolo.z > 0.01) {
