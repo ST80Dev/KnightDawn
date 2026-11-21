@@ -165,6 +165,12 @@ Scheda Intel UHD 730 (il browser Brave nasconde il nome), 1920×935, seme 570549
 | 21/11/2026 | bosco fitto (`&centro=99937,43289`), profondità logaritmica, MSAA | 46,3 | 24,9 | 16,4 | 4,9 | 10,3 | 0,0 | 0,1 | 0,9 | 127 | 1234 mila |
 | 21/11/2026 | bosco fitto, **profondità invertita**, MSAA | **71,7** | 33,2 | 13,3 | 4,4 | 8,8 | 0,0 | 0,1 | 0,3 | 127 | 1253 mila |
 | 21/11/2026 | bosco fitto, profondità logaritmica, senza MSAA | 57,3 | 25,0 | 13,7 | 3,3 | 9,5 | 0,0 | 0,1 | 0,6 | 127 | 1234 mila |
+| 21/11/2026 | bosco fitto, main dopo #130–#132 (latifoglie leggere, vegetazione a pezzi, profondità invertita) | **83,1** | **49,8** | **10,9** | 4,4 | 6,5 | 0,0 | 0,1 | 0,3 | 131 | 1000 mila |
+
+Ultima riga (bosco fitto, il caso peggiore): obiettivo raggiunto (83,1 FPS, 1% peggiori 49,8, fotogramma peggiore
+20,2 ms); scatti risolti (CPU massimo 7,2 ms, nessun compito lungo; prima il pannello F3 ricostruito a ogni fotogramma e la
+ridistribuzione della vegetazione tutta in un fotogramma). **Budget ritarati sulle misure (proposta all'utente):**
+terreno 4,5 · vegetazione 6,5 (bosco fitto) · borgo, cavallo e persone insieme 3 · resto 1,5 = ~15,5 ms su 16,6.
 
 Terza riga (stessa partenza della prima): obiettivo di 60 FPS raggiunto con margine (GPU 11,4 ms su 13,5; CPU 3,4 ms di
 media, 21,7 ms di massimo). Vegetazione: sagome lontane 1,2 · sagome nel blocco 0,4 · erba 1,3 · resto 0,5 ms. Resta da
