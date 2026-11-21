@@ -566,9 +566,12 @@ function scriviSagoma(a, j, x, y, z, s) {
 }
 const SAGOMA_BORDO = { fascia: 150, oltre: 120 };
 // Sagome del blocco diradate con la distanza dalla camera (misura nel bosco fitto: 59 000 sagome, 3,3 ms): piene fino
-// a `da` m, poi la densità cala come (da/d)², la stessa legge del bosco lontano (cella 10 m al bordo del blocco, cioè
-// il 36 % della densità del blocco): al bordo le due densità si raccordano. Gli alberi dietro sono comunque coperti.
-const SAGOME_DIRADA = { da: 600 };
+// a `da` m, poi la densità cala fino al 36 % al bordo del blocco, la densità del bosco lontano (cella 10 m contro 6):
+// le due si raccordano. Gli alberi dietro sono comunque coperti.
+const SAGOME_DIRADA = { da: 300, bordo: 0.36 };
+// (dopo la misura nel bosco fitto con le latifoglie medie a 200 m: sagome 2,5 ms con 38 800 istanze, sovrapposte con
+// alpha test) Diradate già da `da` m, con una legge più dolce: densità (da/d)^k, k tale che al bordo del blocco valga
+// `bordo`, la densità del bosco lontano (cella 10 m contro 6): il raccordo resta.
 
 // ─── Collisioni (passo 3; deciso con l'utente: tronchi, massi, affioramenti e sassi grandi bloccano; arbusti, erba e
 // sassi piccoli si attraversano) ───
@@ -1080,6 +1083,7 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
     const tS = sagomeBlocco ? sagomeBlocco.geometry.attributes.aTessera.array : null;
     const bordoMin = halfBlocco - SAGOMA_BORDO.fascia, oltre2 = SAGOMA_BORDO.oltre * SAGOMA_BORDO.oltre;
     const da2 = SAGOME_DIRADA.da * SAGOME_DIRADA.da;
+    const kDir = Math.log(SAGOME_DIRADA.bordo) / Math.log(SAGOME_DIRADA.da / halfBlocco) / 2;   // su d², quindi /2
     for (const T of tipi) {
       const L = T.livelli, nL = L.length, fino2 = L.map((l) => l.fino * l.fino);
       const conta = T.mesh.map((ms) => new Array(ms.length).fill(0));
@@ -1095,7 +1099,7 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
         if (T.sag && l !== T.lSagoma && d2 > oltre2
           && Math.max(Math.abs(T.xz[k * 2]), Math.abs(T.xz[k * 2 + 1])) > bordoMin) l = T.lSagoma;
         if (l === T.lSagoma) {
-          if (T.sag && (d2 <= da2 || T.caso[k] * d2 < da2)) {
+          if (T.sag && (d2 <= da2 || T.caso[k] < (da2 / d2) ** kDir)) {
             const o = k * 5;
             scriviSagoma(aS, nSag, T.sag[o], T.sag[o + 1], T.sag[o + 2], T.sag[o + 3]);
             tS[nSag++] = T.sag[o + 4];
