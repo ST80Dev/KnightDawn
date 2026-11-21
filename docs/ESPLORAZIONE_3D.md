@@ -1994,6 +1994,140 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
    di `coperturaMondo`): prati e campi quasi come una carrareccia; bosco fitto, macchia, ghiaioni, palude e pendii
    senza tornanti più lenti e più faticosi (velocità e Forza). Con il viaggio sulla Carta lungo le strade (passo 5).
 
+## Cavallo (milestone a sé) — piano approvato (novembre 2026)
+
+> Richiesta dell'utente (novembre 2026): un cavallo che accompagna il cavaliere e un comando per salire in sella e
+> scendere. C'è **fin dall'inizio della partita**; l'acquisto al mercato (`docs/EARLY_GAME.md` §5) resta per il gameplay
+> più avanti. Si lavora in parallelo a M7 (deroga alla regola 4 concessa dall'utente). Codice in `js/3d/cavallo3d.js`;
+> in `main.js` solo agganci piccoli.
+
+### Cose da sapere prima (contrasti con i documenti e con il codice)
+
+1. **Il garzone parte senza cavallo** (`docs/EARLY_GAME.md` §1 e §5, `knight.js`: `cavallo = null`). Proposta: la
+   partita nuova dà un **ronzino** (`js/data/items.js`, vigore 20, possa 0), con un commento «provvisorio» in `knight.js`;
+   il ronzino non dà bonus in battaglia, quindi il combattimento non cambia. `EARLY_GAME.md` va aggiornato con una nota.
+2. **`Knight.isMounted()` oggi vuol dire «possiede un cavallo con vigore»**, non «è in sella»: lo usano lo sconto di
+   Forza (×0,7) e la possa in battaglia (`combat.js`). Con il cavallo vero diventa **in sella e con vigore** (nuovo campo
+   `Knight.inSella`, salvato). Senza questa correzione, avendo il cavallo dall'inizio, si avrebbe lo sconto anche a piedi.
+3. **Trotto ~4 m/s è più lento della corsetta a piedi (4,5 m/s)**, alzata dopo che il documento lo fissava. Proposta:
+   trotto **5 m/s**, così montare non è mai più lento che correre [deciso con l'utente].
+4. **Galoppo a 13 m/s** è quasi il doppio dello scatto (8): erba vicina, ridistribuzione della vegetazione e caricamento
+   del blocco al bordo sono stati tarati sulla corsa a piedi. [Probabile] serve una verifica di scatti al passo 3.
+5. **Il cavaliere seduto** richiede una posa in sella in `knight3d.js` (gambe piegate, piedi nelle staffe, niente IK a
+   terra): piccola modifica a un file non mio, da concordare con la sessione «M1 - Grafica».
+
+### Decisioni (approvate dall'utente, novembre 2026: tasti E e F, ricomparsa fuori vista, passo 1,8 / trotto 5 / galoppo 13, ronzino provvisorio)
+
+- **Tasti.** Occupati: W A S D, frecce, Shift, Ctrl, C, M, P, R, T, V, F2, F3, F4, F8, F9. Proposta:
+  - **E** = monta in sella (entro ~3 m dal cavallo; scritta «E: monta in sella») e smonta. È lo stesso tasto previsto
+    per «E: parla» (M7): un solo tasto d'azione che fa la cosa vicina. In sella, finché non c'è nessuno con cui parlare,
+    E smonta; quando arriveranno le persone, la regola di precedenza si decide allora (proposta: la persona vicina vince,
+    per smontare si sta lontani da chi parla).
+  - **F** = fischio: richiama il cavallo.
+- **Quando segue** (a piedi):
+  - tiene ~4–6 m dietro e un po' di lato; adatta l'andatura alla distanza (passo, trotto, galoppo per recuperare);
+  - **ripercorre le tracce** del cavaliere (un punto ogni ~1 m, gli ultimi ~80 m), invece di cercare una strada: costa
+    quasi nulla e funziona nel bosco e lungo le strade. Taglia dritto solo quando la linea è libera;
+  - **se il cavaliere si ferma**: si ferma a ~3–4 m, dopo qualche secondo abbassa la testa a brucare (o si gira a
+    guardarlo); non si mette tra la camera e il cavaliere;
+  - **bosco fitto**: dove il cavaliere passa e il cavallo no (corpo lungo ~2,4 m) resta fermo e aspetta;
+  - **acqua profonda**: come il cavaliere, non ci entra (`terrain.percorribile`); guadi bassi sì;
+  - **pendii**: rifiuta salite oltre ~28° e discese oltre ~30° (più prudente del cavaliere, 35°): se il cavaliere sale
+    dove lui non può, resta sotto;
+  - **rimasto indietro** (bloccato o oltre ~60 m): smette di seguire e aspetta; avviso nell'HUD «Il cavallo è rimasto
+    indietro (F: fischia)».
+  - **Ritrovarlo**: col fischio, se è entro ~250 m e la strada è libera arriva al trotto o al galoppo; altrimenti
+    **ricompare fuori dall'inquadratura**, ~15 m dietro il cavaliere su un punto percorribile, e lo raggiunge (lieve
+    trucco, accettabile perché non si vede). **Al cambio di Scena** (viaggio sulla Carta) viaggia con il cavaliere e
+    ricompare accanto. Il cavaliere non lo attraversa: a piedi il cavallo è un ostacolo come un tronco (due cerchi).
+- **In sella:**
+  - andature **passo 1,8 m/s** (interruttore Ctrl, come la camminata), **trotto 5** (normale), **galoppo 13** (Shift);
+    indietro 1 m/s; curve più larghe al galoppo (velocità di rotazione ridotta), niente giro sul posto al galoppo;
+  - **pendenze**: stessa curva tipo Tobler del cavaliere con parametri propri: sale bene i pendii moderati (fino a ~15°
+    quasi senza perdere velocità), rifiuta oltre ~28° in salita; in discesa **molta cautela**: oltre ~12° il galoppo
+    diventa trotto, oltre ~20° passo e velocità fino a ×0,25, oltre ~30° non scende; su strada come il cavaliere
+    (salita più dolce);
+  - **camera** più alta e più lontana (perno ~2,6 m invece di 1,6; distanza ~6,5 m invece di 4,2), con transizione
+    morbida montando e smontando; rotella come oggi;
+  - **collisioni**: due cerchi (petto e groppa, raggio ~0,45 m) contro mura, tronchi e rocce, come oggi il cavaliere;
+  - **edifici**: si entra a cavallo nei cortili della rocca e nelle vie del borgo; negli interni no (oggi non esistono:
+    la regola vale quando arriveranno, con «smonta per entrare»);
+  - **montare e smontare**: niente animazione elaborata; ~0,6 s di passaggio dalla staffa alla sella. Si smonta solo se
+    accanto al cavallo c'è un punto percorribile (non acqua profonda, non un muro), altrimenti avviso.
+- **Tempo e Forza:**
+  - nelle Scene il tempo resta **×10 fisso** (`docs/GDD.md` §3): in sella non cambia nulla [Certo]. Al galoppo 1 km costa
+    ~77 s reali e ~13 minuti di gioco, come scritto nel GDD;
+  - Forza del cavaliere in sella: **×0,7 della camminata a ogni andatura** (regola di `EARLY_GAME.md`; la fatica
+    dell'andatura la paga il cavallo). Sulla giornata (~28 km) torna come a piedi (~14 km di corsetta) [Probabile];
+  - **vigore del cavallo**: segnaposto. Non cala nelle Scene; resta il campo di `Knight.cavallo`. Il calo per andatura e
+    pendenza (galoppo costoso, recupero da fermo e all'abbeverata) è un passo futuro;
+  - **Carta**: il viaggio in sella usa `VIAGGIO.METRI_PER_PASSO_CAVALLO` (già in `config.js`, mai usato), ~2× a piedi.
+- **Salvataggio**: posizione e direzione del cavallo nella Scena, `Knight.inSella`. Salvataggi vecchi: senza cavallo →
+  ronzino nuovo accanto al cavaliere, a piedi.
+
+### Budget e stile (regole di `docs/PRESTAZIONI.md` passo 6, `docs/GRAFICA_3D.md`)
+
+- **≤ 6.000 triangoli, ≤ 12 oggetti**, uno per snodo animato: corpo (con sella, gualdrappa, finimenti), collo, testa
+  (con briglia e morso), coda, 4 gambe × 2 snodi (spalla/anca e ginocchio/garretto; lo stinco e lo zoccolo uniti al
+  secondo pezzo). Pezzi uniti per snodo al caricamento.
+- Modellazione come il cavaliere: `LatheGeometry` e profili deformati, normali lisce; mantello baio in `Lambert`, metalli
+  (morso, staffe, fibbie) in `Phong` satinato, niente PMREM; ≤ 5 materiali creati al caricamento; ombra a disco finta.
+- Animazione procedurale come il cavaliere: zoccoli con bersaglio sul terreno e IK a due ossa; passo a 4 tempi, trotto
+  a diagonali, galoppo a 3 tempi con sospensione; collo che pompa al galoppo; respiro, coda e brucare da fermo. Fermo
+  e lontano oltre ~120 m: animazione a metà frequenza (regola delle persone).
+- Nel profilatore il cavallo è nel gruppo **«personaggi»** (`gruppoDi` in `main.js`): con il cavaliere ≤ 1,5 ms GPU.
+  Compare accanto alla partenza, quindi il percorso di prova lo inquadra senza modifiche [Probabile, da verificare].
+
+### Passi (ciascuno provato nel browser e dal percorso di prova `?seme=570549&prova`, anche `&centro=99937,43289`)
+
+1. **Modello fermo.** Cavallo con sella accanto al cavaliere, alla partenza; respiro e coda. F3: triangoli e chiamate in
+   più, gruppo «personaggi». *Prova:* guardarlo da vicino di giorno e al tramonto; numeri del percorso di prova.
+   **Stato: fatto, da provare dall'utente** (`js/3d/cavallo3d.js`; in `main.js`: creazione in `posizionaCavaliere`,
+   ostacolo per il cavaliere, `update`, ombra, `gruppoDi`, `kd.cavallo`). Baio con gualdrappa rossa, sella, staffe e
+   finimenti; **5.368 triangoli, 12 snodi in 12 mesh** (+ ombra), **15 chiamate** (corpo e testa hanno un secondo gruppo
+   Phong per staffe e morso); 2 materiali con colore nei vertici + ombra, creati al caricamento. Zoccoli appoggiati con
+   IK a due ossa (garretto all'indietro), corpo inclinato col pendio (provato a 19°); coda, testa e collo si muovono
+   piano, ogni tanto un colpo di coda. Posto alla partenza a sinistra del cavaliere (poi destra, dietro…) dove il
+   terreno è percorribile, sotto 22° e libero da ostacoli. In headless il percorso di prova parte senza errori;
+   «cavaliere e tempo» (che ora comprende il cavallo) 0,10 ms di CPU; tempi GPU solo sulla scheda vera.
+   *Correzione dopo il primo sguardo dell'utente* (collo troppo largo in basso, buco tra fronte e nuca, troppo massiccio
+   e segmentato): tronco in un solo tornito modellato (groppa, spalle, garrese, ventre) al posto di cinque masse
+   sovrapposte, più stretto; base del collo da 0,29 a 0,215 m; collo prolungato e cranio esteso dietro la nuca, così
+   testa e collo si chiudono; più segmenti su tronco, collo, testa e gambe; gambe un poco più sottili.
+2. **Segue a piedi.** Tracce, distanza, andature animate (passo, trotto, galoppo), sosta e brucare, attesa se bloccato
+   (bosco fitto, acqua, pendii), avviso «rimasto indietro», fischio con F, ostacolo per il cavaliere. *Prova:* correre e
+   scattare nel bosco, guadare, salire un pendio ripido, fischiare da lontano.
+3. **In sella.** E per montare e smontare, posa del cavaliere seduto, camera, andature con Ctrl e Shift, pendenze,
+   collisioni, Forza ×0,7, `Knight.inSella` e `isMounted` corretto. *Prova:* galoppo in pianura e nel bosco (scatti?),
+   discesa ripida, cortile della rocca, smontare in un punto stretto; percorso di prova con il cavaliere in sella.
+4. **Partita e viaggio.** Ronzino alla partita nuova, salvataggio (posizione, in sella), cambio di Scena con il cavallo
+   accanto, Carta con `METRI_PER_PASSO_CAVALLO` se si parte in sella; note in `EARLY_GAME.md` e `GDD.md`. *Prova:*
+   ricaricare la pagina in sella e a piedi; viaggio sulla Carta e ritorno in Scena.
+
+### Accordi con le altre sessioni (novembre 2026)
+
+- **M1 - Grafica**: la posa in sella in `knight3d.js` la fa questa sessione, con gli stessi snodi e le stesse misure,
+  nessun materiale nuovo, nessun oggetto o triangolo in più e il mantello piegato o accorciato in posa per non
+  compenetrare la groppa. Il diff va a M1 prima del merge. `&sella` in `prestazioni.js`: il percorso senza `&sella`
+  resta identico; in sella si usano perno e distanza della camera in sella. Nel riquadro va una riga
+  «scena: … · cavallo: a piedi/in sella». Base sulla UHD 730: personaggi 0,1 ms, edifici 0,3 ms alla partenza.
+- **Vegetazione**: `spingiFuori` non cambia. I muretti a secco attorno ai borghi (tre cerchi da 0,4 m per tratto,
+  varchi di 5 m) e le siepi dei campi (cerchi da ~0,75 m ogni 1,7 m, aperture di 2,6–6 m ogni ~45 m) bloccano anche il
+  cavallo: passa dalle aperture o ci gira attorno. Erba al galoppo: si rifà ogni 5 m a fasce
+  (tetto ~1,5 ms per fotogramma); a 13 m/s può restare indietro rispetto al cavaliere (piena entro ~50 m). Leve, da
+  decidere insieme con i numeri del passo 3: `VICINO.rifai` più grande al galoppo, o un raggio diverso.
+- **M6**: `suolo.suStrada` si riusa com'è. Il viaggio sulla Carta lungo le strade è rinviato alla milestone dei
+  villaggi: se il viaggio in sella sulla Carta terrà conto delle strade, ci si coordina allora.
+
+### Rischi
+
+- [Probabile] il galoppo a 13 m/s fa emergere scatti nello streaming della vegetazione: se succede, si coordina con la
+  sessione Vegetazione (o si limita il galoppo nel bosco, che è anche realistico).
+- [Ipotesi] le tracce non bastano nei punti stretti del borgo: il cavallo aspetta e si fischia; una ricerca di percorso
+  vera si fa solo se serve.
+- Il cavaliere è ancora 86 oggetti (`PRESTAZIONI.md` passo 5): con il cavallo le chiamate dei personaggi salgono di ~12,
+  dentro le 120 del budget.
+
 ## Fuori dal prototipo (non farlo ora)
 
 Multiplayer, server/VPS, NPC con IA, mobile/touch, modelli esterni, combattimento in 3D, ombre di

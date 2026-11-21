@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { loadTerrain, componiSuolo, createTerrain, coloreMondo, cuociSuolo } from './terrain.js';
 import { createKnight } from './knight3d.js';
+import { createCavallo } from './cavallo3d.js';
 import { createFollowCamera } from './camera.js';
 import { createCastle } from './castle3d.js';
 import { createRocca } from './rocca3d.js';
@@ -198,6 +199,8 @@ function aggiornaCielo() {
   for (const e of emissivi) e.m.emissive.copy(e.base).multiplyScalar(luceRiflessa);
   const ombra = knight && knight.object.getObjectByName('ombra-cavaliere');
   if (ombra) ombra.material.opacity = 0.35 + 0.65 * giorno;
+  const ombraCavallo = cavallo && cavallo.object.getObjectByName('ombra-cavallo');
+  if (ombraCavallo) ombraCavallo.material.opacity = 0.35 + 0.65 * giorno;
 }
 
 // ─── HUD ────────────────────────────────────────────────────────────────
@@ -354,6 +357,7 @@ const suoloCamera = {
 const ostacoli = [];                      // spingono fuori il cavaliere (mura del castello)
 const occlusori = [];                     // bloccano la vista della camera
 let cam = null;                           // camera alle spalle del cavaliere
+let cavallo = null;                       // il cavallo del cavaliere (js/3d/cavallo3d.js)
 let controls = null;                      // camera libera di debug (tasto C)
 let modoCamera = 'segui';                 // 'segui' | 'libera'
 const ALTEZZA_MIN_LIBERA = 3;             // m sopra il terreno, camera libera
@@ -611,6 +615,13 @@ function posizionaCavaliere(x, z, direzione) {
     knight.update(0, { avanti: 0, gira: 0, giroMouse: 0, corsa: false, camminata: false });
   }
   _prec.x = knight.stato.x; _prec.y = knight.stato.y; _prec.z = knight.stato.z;   // niente fatica per il salto
+  // Cavallo accanto al cavaliere; è anche un ostacolo per lui (la lista si rifà a ogni Scena).
+  if (!cavallo) {
+    cavallo = createCavallo(suolo, ostacoli);
+    scene.add(cavallo.object);
+  }
+  cavallo.posizionaAccanto(knight.stato);
+  if (!ostacoli.includes(cavallo)) ostacoli.push(cavallo);
   if (cam) {
     if (modoCamera === 'libera') cambiaModoCamera();
     cam.riattiva();
@@ -793,7 +804,7 @@ async function init() {
     get terrain() { return terrain; }, get knight() { return knight; }, get castle() { return castle; },
     get carta() { return carta; }, get scena() { return scenaAttuale; }, get orizzonte() { return orizzonte; },
     get rocche() { return rocche; },
-    get vegetazione() { return vegetazione; },
+    get vegetazione() { return vegetazione; }, get cavallo() { return cavallo; },
     caricaScena, posizionaCavaliere,
   };
 
@@ -1031,7 +1042,7 @@ function gruppoDi(o) {
   if ((terrain && top === terrain.mesh) || (orizzonte && top === orizzonte.oggetto)) return 'terreno';
   if (vegetazione && top === vegetazione.oggetto) return 'veg. resto';
   if ((castle && top === castle.object) || rocche.some((r) => r.object === top)) return 'edifici';
-  if (knight && top === knight.object) return 'personaggi';
+  if ((knight && top === knight.object) || (cavallo && top === cavallo.object)) return 'personaggi';
   return null;
 }
 
@@ -1308,6 +1319,7 @@ function frame(now) {
     } else {
       cam.prendiGiroMouse();               // in pausa il mouse non gira il cavaliere
     }
+    if (cavallo && !inPausa) cavallo.update(dt);
     tt = segna('cavaliere e tempo', tt);
     aggiornaCielo();
     castle?.aggiornaLuci(now / 1000, 1 - _luceGiorno);
