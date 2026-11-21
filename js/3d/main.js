@@ -23,6 +23,7 @@ import { createBorgo } from './borgo3d.js';
 import { createCartaVista } from './cartaVista.js';
 import { creaOrizzonte } from './orizzonte.js';
 import { creaAcqueScena, creaPonti } from './acqua.js';
+import { vicinoAlBordo, trasla } from './blocchi.js';
 import { generaCartaAsincrona, verificaSemi } from '../mondo/generatore.js';
 import { generaScena, centroBlocco, quotaFinale } from '../mondo/scena.js';
 import { distanzaStrada } from '../mondo/strade.js';
@@ -820,6 +821,9 @@ async function init() {
     get rocche() { return rocche; }, get campagna() { return campagna; },
     get vegetazione() { return vegetazione; }, get cavallo() { return cavallo; },
     caricaScena, posizionaCavaliere,
+    /** M7, passo 9: ricentra il blocco (su { x, z } del mondo, o sul cavaliere) — per il percorso di prova. */
+    cambiaBlocco: (x, z) => cambiaBlocco(Number.isFinite(x) && Number.isFinite(z) ? { x, z } : null),
+    get cambiBlocco() { return { quanti: cambiBlocco, ms: msCambioBlocco }; },
   };
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no'
@@ -1063,6 +1067,32 @@ function gruppoDi(o) {
 
 // ─── Percorso di prova (F9 con F3 aperto, o ?prova nell'indirizzo) ───────
 let msCottura = null;                    // ms della cottura del colore del blocco (F3)
+let msCambioBlocco = null, cambiBlocco = 0;   // M7, passo 9: durata dell'ultimo cambio di blocco e quanti (F3)
+let cambioInCorso = false;
+// Finché il cambio è una pausa di qualche secondo (tappa 1), solo con ?blocchi nell'indirizzo: senza, il cavaliere si
+// ferma al bordo come prima. Alla tappa 2 (preparazione in sottofondo) diventa la regola.
+const SEGUI_BLOCCO = PARAMETRI.has('blocchi');
+
+/**
+ * M7, passo 9 (js/3d/blocchi.js): il blocco si ricentra sul cavaliere quando si avvicina al bordo. Cavaliere, cavallo e
+ * camera restano nello stesso punto del mondo e continuano a muoversi; rocche, case, vegetazione si rifanno.
+ * `dove` (facoltativo): punto del mondo { x, z } su cui centrare (comando kd.cambiaBlocco per il percorso di prova).
+ */
+async function cambiaBlocco(dove = null) {
+  if (cambioInCorso || !knight || scenaAttuale?.tipo !== 'mondo') return;
+  cambioInCorso = true;
+  const t0 = performance.now();
+  const c0 = terrain.meta.centroMondo, k = knight.stato;
+  await caricaScena({ tipo: 'mondo', cx: dove ? dove.x : c0.x + k.x, cz: dove ? dove.z : c0.z + k.z });
+  const c1 = terrain.meta.centroMondo;
+  scostamento = { x: 0, z: 0 };
+  trasla(c0.x - c1.x, c0.z - c1.z, [k, cavallo?.stato, _prec], [camera.position]);
+  if (cavallo && !ostacoli.includes(cavallo)) ostacoli.push(cavallo);
+  cam?.riattiva();
+  msCambioBlocco = performance.now() - t0;
+  cambiBlocco++;
+  cambioInCorso = false;
+}
 let percorso = null;
 let percorsoNormale = null;               // istantanea alla fine del giro normale
 let provaAutomatica = PROVA_PRESTAZIONI;
@@ -1219,6 +1249,7 @@ function aggiornaPannello(now) {
     + (qualita.adatta < 1 ? ` (adattiva ×${fmt(qualita.adatta, 2)})` : '');
   testo += `\nCPU: logica ${fmt(ri.msLogica, 1)} ms · invio comandi ${fmt(ri.msInvio, 1)} ms`;
   if (msCottura != null) testo += ` · suolo cotto in ${fmt(msCottura)} ms`;
+  if (msCambioBlocco != null) testo += ` · cambi di blocco ${cambiBlocco} (l'ultimo ${fmt(msCambioBlocco)} ms)`;
   if (!P.timerGPU) testo += '\nGPU: timer non disponibili su questa scheda o browser (usare F4)';
   else if ((percorso ? percorso.modo : provaPrestazioni === 1 ? 'gruppi' : 'normale') === 'gruppi') {
     testo += '\nGPU per gruppo: ' + GRUPPI.map((g) => {
@@ -1329,6 +1360,7 @@ function frame(now) {
       // Percorso di prova: tempo di gioco fermo, la camera segue il giro fisso.
     } else if (!inPausa) {
       knight.update(dt, leggiInput());
+      if (SEGUI_BLOCCO && scenaAttuale?.tipo === 'mondo' && vicinoAlBordo(knight.stato.x, knight.stato.z, terrain.size / 2)) cambiaBlocco();
       contaPercorso();
       const passi = Calendar.avanzaTempoReale(dt);
       if (knight.stato.velEffettiva < FERMO) Knight.riposaPassi(passi);

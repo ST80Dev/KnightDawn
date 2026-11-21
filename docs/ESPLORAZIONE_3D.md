@@ -1342,6 +1342,12 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
      pezzi» dove servirà (Vegetazione per il posizionamento).
    - *Prova*: dal borgo di partenza al crinale senza fermarsi; F3 con i ms del cambio; percorso di prova con un tratto
      che attraversa due bordi di blocco.
+   - **Tappa 1 fatta** (approvata dall'utente con il file `js/3d/blocchi.js`): `vicinoAlBordo` e `trasla` in
+     `blocchi.js`, `cambiaBlocco` in `main.js` (ricarica la Scena centrata sul cavaliere, sposta cavaliere, cavallo,
+     camera e il punto della fatica; F3: numero e ms dei cambi; `kd.cambiaBlocco(x, z)` per il percorso di prova).
+     Prova in headless (seme 570549): dopo il cambio il cavaliere è nello stesso punto del mondo e alla stessa quota
+     (1224,29 m), nessun errore; **pausa 2,8 s** (headless). Attiva solo con `?blocchi` nell'indirizzo finché c'è la
+     pausa: senza, il cavaliere si ferma al bordo come prima.
    - *Note della sessione M1 (prestazioni)*, da rispettare alla tappa 2: nel fotogramma del cambio non devono cadere
      la cottura del suolo (`cuociSuolo`, render 2048²), il caricamento sulla scheda di terreno, istanze della vegetazione
      e texture (ombre, piede, cotto) né compilazioni di shader: tutto nella preparazione, uno per fotogramma
