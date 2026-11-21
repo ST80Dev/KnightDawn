@@ -602,7 +602,10 @@ function* preparaMondo(desc) {
   const ter = yield* createTerrainAPezzi(meta, heights, false, coloreMondo(carta, Calendar.stagione));
   yield 'terreno';
   const acque = creaAcqueScena(dati, meta, COLORE_ACQUA, meta.centroMondo);
-  const pp = creaPonti(dati.attraversamenti, dati.altezza);
+  // Suolo delle carreggiate: serve ai ponti (testate alla quota della strada, non del terreno: niente gradino) e poi
+  // al suolo composto della Scena.
+  const strade = suoloStrade(acque);
+  const pp = creaPonti(dati.attraversamenti, dati.altezza, strade.quotaSuolo);
   yield 'acque e ponti';
   const roc = yield* costruisciRocche(cx, cz, ter);
   yield 'rocche';
@@ -640,7 +643,7 @@ function* preparaMondo(desc) {
   // Shader e texture pronti prima dello scambio (note di M1): niente compilazioni né caricamenti nel suo fotogramma.
   yield* preparaScheda([ter.mesh, acque, pp.gruppo, ...roc.map((r) => r.object), veg.oggetto, camp?.object,
     oriz.oggetto, oriz.acqua]);
-  return { desc: { ...desc, cx, cz }, scostamento: { x: desc.cx - cx, z: desc.cz - cz }, meta, dati, ter, acque, pp, roc,
+  return { desc: { ...desc, cx, cz }, scostamento: { x: desc.cx - cx, z: desc.cz - cz }, meta, dati, ter, acque, strade, pp, roc,
     veg, camp, msCot, oriz };
 }
 
@@ -709,7 +712,7 @@ function applicaMondo(p) {
   if (acqua) scene.add(acqua);
   // Le strade per ultime: sotto un ponte la carreggiata nell'alveo non deve vincere sull'impalcato.
   // Le rocce basse (sotto il mezzo metro) fanno suolo: ci si sale sopra come su un gradino (knight3d.js).
-  _suolo = componiSuolo(terrain, [...rocche, ...ponti, suoloStrade(acqueScena)], vegetazione?.quotaOstacoli ? [vegetazione] : []);
+  _suolo = componiSuolo(terrain, [...rocche, ...ponti, p.strade ?? suoloStrade(acqueScena)], vegetazione?.quotaOstacoli ? [vegetazione] : []);
   // Persone ai loro posti e per le strade (passo 7), sul suolo composto. Al cambio di blocco (scambiaBlocco) si rifanno
   // con rocche e borghi, già nelle coordinate del blocco nuovo: non serve spostarle (abitanti.sposta resta per altri usi).
   if (rocche.length) {

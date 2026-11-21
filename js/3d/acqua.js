@@ -369,10 +369,11 @@ function unisci(parti) {
 }
 
 /**
- * Ponti del blocco. `attraversamenti` da generaScena (acqua.attraversamenti), `altezza(x, z)` il terreno disegnato.
+ * Ponti del blocco. `attraversamenti` da generaScena (acqua.attraversamenti), `altezza(x, z)` il terreno disegnato,
+ * `quotaStrada(x, z)` (facoltativa) la carreggiata che arriva al ponte, o null fuori da essa.
  * Restituisce { gruppo, ponti: [{ object, solidi, quotaSuolo, spingiFuori }] }.
  */
-export function creaPonti(attraversamenti, altezza) {
+export function creaPonti(attraversamenti, altezza, quotaStrada = null) {
   const gruppo = new THREE.Group();
   gruppo.name = 'ponti';
   const ponti = [];
@@ -389,7 +390,10 @@ export function creaPonti(attraversamenti, altezza) {
     const piano = (u) => at.quota + schiena * 4 * (u / L) * (1 - u / L);
     // Testate raccordate al terreno disegnato: ogni estremo parte alla quota del terreno lì (niente gradino né per l'occhio
     // né per i piedi) e raggiunge il piano con una rampa dolce (pendenza ≤ PONTE.raccordo) entro metà della luce.
-    const hA = altezza(at.x0, at.z0), hB = altezza(at.x1, at.z1);
+    // Testate alla quota della carreggiata che arriva (rialzata sul terreno: partire dal terreno lasciava un gradino
+    // di 30–50 cm tra strada e ponte, segnalato dall'utente), se più alta; altrimenti al terreno.
+    const testata = (x, z) => Math.max(altezza(x, z), quotaStrada?.(x, z) ?? -Infinity);
+    const hA = testata(at.x0, at.z0), hB = testata(at.x1, at.z1);
     const RA = Math.min(L / 2, Math.max(1, Math.abs(piano(0) - hA) / PONTE.raccordo));
     const RB = Math.min(L / 2, Math.max(1, Math.abs(piano(L) - hB) / PONTE.raccordo));
     const dolce = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
