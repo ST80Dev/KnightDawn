@@ -1936,7 +1936,8 @@ nuovo: serve la conferma (regola 2).
   resta identico; in sella si usano perno e distanza della camera in sella. Nel riquadro va una riga
   «scena: … · cavallo: a piedi/in sella». Base sulla UHD 730: personaggi 0,1 ms, edifici 0,3 ms alla partenza.
 - **Vegetazione**: `spingiFuori` non cambia. I muretti a secco attorno ai borghi (tre cerchi da 0,4 m per tratto,
-  varchi di 5 m) bloccano anche il cavallo: passa dai varchi o ci gira attorno. Erba al galoppo: si rifà ogni 5 m a fasce
+  varchi di 5 m) e le siepi dei campi (cerchi da ~0,75 m ogni 1,7 m, aperture di 2,6–6 m ogni ~45 m) bloccano anche il
+  cavallo: passa dalle aperture o ci gira attorno. Erba al galoppo: si rifà ogni 5 m a fasce
   (tetto ~1,5 ms per fotogramma); a 13 m/s può restare indietro rispetto al cavaliere (piena entro ~50 m). Leve, da
   decidere insieme con i numeri del passo 3: `VICINO.rifai` più grande al galoppo, o un raggio diverso.
 - **M6**: `suolo.suStrada` si riusa com'è. Il viaggio sulla Carta lungo le strade è rinviato alla milestone dei
