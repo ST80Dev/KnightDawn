@@ -58,7 +58,7 @@ function tornio(profilo, { seg = 16, sx = 1, sz = 1, phiStart = 0, phiLength = M
 }
 
 /** Ellissoide di semiassi (rx, ry, rz). */
-function ellissoide(rx, ry, rz, seg = 14) {
+function ellissoide(rx, ry, rz, seg = 16) {
   const geo = new THREE.SphereGeometry(1, seg, Math.max(5, Math.round(seg / 2)));
   geo.scale(rx, ry, rz);
   geo.computeVertexNormals();
@@ -113,42 +113,51 @@ function unisci(p, perno) {
   return { geo, metallo: true };
 }
 
-// Tronco, groppa, spalle, petto, garrese; sella, gualdrappa, sottopancia, staffili e staffe.
+const gauss = (v, c, l) => Math.exp(-(((v - c) / l) ** 2));
+/** Modella una geometria tornita attorno al tronco (asse Z, centro 0): larghezza, garrese, groppa, ventre. */
+function formaTronco(geo) {
+  const a = geo.attributes.position;
+  for (let i = 0; i < a.count; i++) {
+    const x = a.getX(i), y = a.getY(i), z = a.getZ(i);
+    const larg = 0.68 + 0.09 * gauss(z, -0.5, 0.2) + 0.05 * gauss(z, 0.5, 0.16);   // groppa e spalle
+    const centro = Math.max(0, 1 - (z / 0.62) ** 2);
+    let dy;
+    if (y < 0) dy = -0.05 * centro;                                                    // ventre
+    else {
+      const sopra = (y / 0.35) ** 2;
+      dy = (-0.03 * centro + 0.065 * gauss(z, 0.43, 0.13) + 0.025 * gauss(z, -0.52, 0.16)) * sopra;  // sella, garrese, groppa
+    }
+    a.setXYZ(i, x * larg, y + dy, z);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
+// Tronco, sella, gualdrappa, sottopancia, staffili e staffe.
 function pezziCorpo() {
   const p = pezzi();
-  // Tronco: tornito lungo Z (asse Y del tornio → Z), sezione ovale più alta che larga.
-  const tronco = tornio([[0, -0.8], [0.16, -0.78], [0.27, -0.7], [0.33, -0.55], [0.35, -0.35], [0.36, -0.1],
-    [0.36, 0.15], [0.35, 0.35], [0.31, 0.55], [0.22, 0.68], [0.1, 0.75], [0, 0.76]], { seg: 22 });
+  // Tronco: un solo tornito lungo Z (asse Y del tornio → Z), poi modellato (formaTronco): groppa più larga,
+  // spalle, garrese, ventre che scende. Niente masse sovrapposte: superficie continua e liscia.
+  const tronco = tornio([[0, -0.84], [0.12, -0.82], [0.24, -0.76], [0.31, -0.66], [0.345, -0.52], [0.355, -0.35],
+    [0.35, -0.15], [0.345, 0.05], [0.345, 0.25], [0.335, 0.42], [0.31, 0.55], [0.26, 0.65], [0.19, 0.72],
+    [0.1, 0.77], [0, 0.79]], { seg: 30 });
   tronco.rotateX(Math.PI / 2);                   // y del profilo → z
-  tronco.scale(0.8, 1, 1);
-  // Ventre che scende un poco al centro, schiena appena insellata
-  const a = tronco.attributes.position;
-  for (let i = 0; i < a.count; i++) {
-    const z = a.getZ(i), y = a.getY(i), centro = Math.max(0, 1 - (z / 0.6) ** 2);
-    a.setY(i, y + (y < 0 ? -0.05 * centro : -0.03 * centro));
-  }
-  tronco.computeVertexNormals();
+  formaTronco(tronco);
   tronco.translate(0, CENTRO_Y, 0);
   p.add(tronco, COL.mantello);
-  // Groppa (due masse muscolari), spalle oblique, petto, garrese
-  for (const sx of [-1, 1]) {
-    p.add(ellissoide(0.17, 0.26, 0.3).translate(0.12 * sx, 1.14, -0.5), COL.mantello);
-    p.add(ellissoide(0.11, 0.28, 0.17).rotateX(-0.45).translate(0.14 * sx, 1.06, 0.45), COL.mantello);
-  }
-  p.add(ellissoide(0.21, 0.24, 0.17).translate(0, 1.0, 0.6), COL.mantello);
-  p.add(ellissoide(0.09, 0.12, 0.24).translate(0, 1.36, 0.42), COL.mantello);
 
   // Gualdrappa: lembo di stoffa sulla schiena (tornio parziale attorno al tronco), con orlo
-  const rTronco = 0.36;
+  const rTronco = 0.35;
   const panno = tornio([[rTronco + 0.012, -0.26], [rTronco + 0.014, 0.0], [rTronco + 0.012, 0.32]],
     { seg: 14, phiStart: Math.PI - 1.25, phiLength: 2.5 });
   panno.rotateX(Math.PI / 2);
-  panno.scale(0.8, 1, 1);
-  panno.translate(0, CENTRO_Y - 0.02, 0.02);
+  panno.translate(0, 0, 0.02);
+  formaTronco(panno);
+  panno.translate(0, CENTRO_Y, 0);
   p.add(panno, COL.gualdrappa);
   // Sella: seggio, arcione davanti e paletta dietro
   const seggio = new THREE.SphereGeometry(1, 14, 6, 0, Math.PI * 2, 0, 1.0);
-  seggio.scale(0.2, 0.1, 0.3);
+  seggio.scale(0.19, 0.1, 0.3);
   seggio.computeVertexNormals();
   p.add(seggio.translate(0, 1.4, 0.04), COL.cuoio);
   p.add(ellissoide(0.085, 0.05, 0.05, 10).translate(0, 1.455, 0.28), COL.cuoio);
@@ -156,14 +165,14 @@ function pezziCorpo() {
   // Sottopancia
   const cinghia = tornio([[rTronco + 0.016, 0.0], [rTronco + 0.016, 0.06]], { seg: 22 });
   cinghia.rotateX(Math.PI / 2);
-  cinghia.scale(0.8, 1, 1);
-  p.add(cinghia.translate(0, CENTRO_Y - 0.03, 0.27), COL.cuoio);
+  cinghia.translate(0, 0, 0.27);
+  p.add(formaTronco(cinghia).translate(0, CENTRO_Y, 0), COL.cuoio);
   // Staffili e staffe (le staffe in ferro)
   for (const sx of [-1, 1]) {
-    p.add(new THREE.BoxGeometry(0.012, 0.42, 0.035).rotateZ(0.06 * sx).translate(0.3 * sx, 1.2, 0.08), COL.cuoio);
+    p.add(new THREE.BoxGeometry(0.012, 0.42, 0.035).rotateZ(0.06 * sx).translate(0.255 * sx, 1.2, 0.08), COL.cuoio);
     const staffa = new THREE.TorusGeometry(0.055, 0.009, 4, 10);
     staffa.scale(1, 1.1, 1).rotateY(Math.PI / 2);
-    p.add(staffa.translate(0.315 * sx, 0.96, 0.08), COL.ferro, true);
+    p.add(staffa.translate(0.27 * sx, 0.96, 0.08), COL.ferro, true);
   }
   return p;
 }
@@ -172,22 +181,22 @@ function pezziCorpo() {
 function pezziCollo() {
   const p = pezzi();
   const L = LUNGHEZZA_COLLO;
-  const collo = tornio([[0.27, -0.14], [0.29, 0.0], [0.25, 0.18], [0.19, 0.4], [0.15, 0.58], [0.135, L],
-    [0.11, L + 0.07]], { seg: 16, sx: 0.62 });
+  const collo = tornio([[0.2, -0.16], [0.215, 0.0], [0.19, 0.18], [0.155, 0.4], [0.13, 0.58], [0.12, L],
+    [0.105, L + 0.08], [0.06, L + 0.13], [0, L + 0.14]], { seg: 20, sx: 0.56 });
   // Più profondo verso la gola: sezione spostata un poco in avanti-basso (+z locale)
   const a = collo.attributes.position;
-  for (let i = 0; i < a.count; i++) if (a.getZ(i) > 0) a.setZ(i, a.getZ(i) * 1.12);
+  for (let i = 0; i < a.count; i++) if (a.getZ(i) > 0) a.setZ(i, a.getZ(i) * 1.15);
   collo.computeVertexNormals();
   p.add(orienta(collo, DIR_COLLO, PERNO_COLLO), COL.mantello);
   // Criniera: lama di crini lungo la cresta (lato -z locale = sopra-dietro), un po' ricadente
-  const criniera = new THREE.BoxGeometry(0.04, L, 0.07, 1, 6, 1);
+  const criniera = new THREE.BoxGeometry(0.035, L + 0.06, 0.06, 1, 6, 1);
   const c = criniera.attributes.position;
   for (let i = 0; i < c.count; i++) {
-    const t = (c.getY(i) + L / 2) / L;          // 0 alla base, 1 alla nuca
-    c.setZ(i, c.getZ(i) - (0.27 - 0.14 * t) - 0.015);
+    const t = (c.getY(i) + (L + 0.06) / 2) / (L + 0.06);          // 0 alla base, 1 alla nuca
+    c.setZ(i, c.getZ(i) - (0.205 - 0.09 * t) - 0.012);
     c.setX(i, c.getX(i) + 0.025);                                   // ricade sul lato destro dell'osservatore
   }
-  criniera.translate(0, L / 2 - 0.02, 0);
+  criniera.translate(0, (L + 0.06) / 2 - 0.02, 0);
   criniera.computeVertexNormals();
   p.add(orienta(criniera, DIR_COLLO, PERNO_COLLO), COL.nero);
   return p;
@@ -201,8 +210,8 @@ function pezziTesta() {
   const rot = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), asse);
   // Sistema della testa: Y lungo l'asse, -Z verso la fronte; ruotato col quaternione e spostato alla nuca.
   const inTesta = (geo) => { geo.applyQuaternion(rot); return geo.translate(PERNO_TESTA.x, PERNO_TESTA.y, PERNO_TESTA.z); };
-  const cranio = tornio([[0.0, -0.04], [0.1, -0.01], [0.125, 0.1], [0.112, 0.25], [0.09, 0.42], [0.085, 0.52],
-    [0.068, L - 0.01], [0, L]], { seg: 16, sx: 0.66 });
+  const cranio = tornio([[0.0, -0.11], [0.06, -0.1], [0.1, -0.05], [0.12, 0.04], [0.125, 0.12], [0.112, 0.25],
+    [0.092, 0.4], [0.085, 0.5], [0.07, L - 0.02], [0.04, L], [0, L + 0.005]], { seg: 18, sx: 0.66 });
   p.add(inTesta(cranio), COL.mantello);
   // Ganasce (verso la gola, +z) e muso più scuro
   p.add(inTesta(ellissoide(0.085, 0.14, 0.1, 12).translate(0, 0.14, 0.055)), COL.mantello);
@@ -251,9 +260,9 @@ function pezziGambaAlta(G, lato, posteriore) {
   const p = pezzi();
   const L = G.L1;
   const prof = posteriore
-    ? [[0, 0.26], [0.11, 0.22], [0.135, 0.05], [0.11, -0.12], [0.075, -0.3], [0.058, -0.42], [0.062, -L], [0, -L - 0.03]]
-    : [[0, 0.22], [0.09, 0.18], [0.1, 0.02], [0.085, -0.15], [0.062, -0.32], [0.054, -0.4], [0.06, -L], [0, -L - 0.03]];
-  const g = tornio(prof, { seg: 14, sx: 0.78 });
+    ? [[0, 0.26], [0.1, 0.22], [0.12, 0.05], [0.1, -0.12], [0.07, -0.3], [0.058, -0.42], [0.062, -L], [0, -L - 0.03]]
+    : [[0, 0.22], [0.085, 0.18], [0.092, 0.02], [0.078, -0.15], [0.058, -0.32], [0.054, -0.4], [0.06, -L], [0, -L - 0.03]];
+  const g = tornio(prof, { seg: 16, sx: 0.74 });
   p.add(g.translate(G.x * lato, G.y, G.z), COL.mantello);
   return p;
 }
@@ -262,10 +271,10 @@ function pezziGambaBassa(G, lato, posteriore) {
   const p = pezzi();
   const L = G.L2;
   const g = tornio([[0, 0.04], [0.058, 0.02], [0.05, -0.06], [0.04, -0.12], [0.04, -0.28], [0.053, -0.33],
-    [0.046, -0.37], [0.04, -0.42], [0.045, -0.435]], { seg: 12, sx: 0.85 });
+    [0.046, -0.37], [0.04, -0.42], [0.045, -0.435]], { seg: 14, sx: 0.85 });
   const ginocchio = new THREE.Vector3(G.x * lato, G.y - G.L1, G.z);
   p.add(g.translate(ginocchio.x, ginocchio.y, ginocchio.z), COL.nero);
-  const zoccolo = tornio([[0.046, -0.42], [0.056, -0.47], [0.066, -L + 0.005], [0.064, -L], [0, -L]], { seg: 12 });
+  const zoccolo = tornio([[0.046, -0.42], [0.056, -0.47], [0.066, -L + 0.005], [0.064, -L], [0, -L]], { seg: 14 });
   zoccolo.translate(0, 0, 0.008);
   p.add(zoccolo.translate(ginocchio.x, ginocchio.y, ginocchio.z), COL.zoccolo);
   if (posteriore) p.add(ellissoide(0.03, 0.05, 0.035, 8).translate(ginocchio.x, ginocchio.y + 0.01, ginocchio.z - 0.05), COL.nero);

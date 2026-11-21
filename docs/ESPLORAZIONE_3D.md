@@ -1908,12 +1908,16 @@ nuovo: serve la conferma (regola 2).
    più, gruppo «personaggi». *Prova:* guardarlo da vicino di giorno e al tramonto; numeri del percorso di prova.
    **Stato: fatto, da provare dall'utente** (`js/3d/cavallo3d.js`; in `main.js`: creazione in `posizionaCavaliere`,
    ostacolo per il cavaliere, `update`, ombra, `gruppoDi`, `kd.cavallo`). Baio con gualdrappa rossa, sella, staffe e
-   finimenti; **5.452 triangoli, 12 snodi in 12 mesh** (+ ombra), **15 chiamate** (corpo e testa hanno un secondo gruppo
+   finimenti; **5.368 triangoli, 12 snodi in 12 mesh** (+ ombra), **15 chiamate** (corpo e testa hanno un secondo gruppo
    Phong per staffe e morso); 2 materiali con colore nei vertici + ombra, creati al caricamento. Zoccoli appoggiati con
    IK a due ossa (garretto all'indietro), corpo inclinato col pendio (provato a 19°); coda, testa e collo si muovono
    piano, ogni tanto un colpo di coda. Posto alla partenza a sinistra del cavaliere (poi destra, dietro…) dove il
    terreno è percorribile, sotto 22° e libero da ostacoli. In headless il percorso di prova parte senza errori;
    «cavaliere e tempo» (che ora comprende il cavallo) 0,10 ms di CPU; tempi GPU solo sulla scheda vera.
+   *Correzione dopo il primo sguardo dell'utente* (collo troppo largo in basso, buco tra fronte e nuca, troppo massiccio
+   e segmentato): tronco in un solo tornito modellato (groppa, spalle, garrese, ventre) al posto di cinque masse
+   sovrapposte, più stretto; base del collo da 0,29 a 0,215 m; collo prolungato e cranio esteso dietro la nuca, così
+   testa e collo si chiudono; più segmenti su tronco, collo, testa e gambe; gambe un poco più sottili.
 2. **Segue a piedi.** Tracce, distanza, andature animate (passo, trotto, galoppo), sosta e brucare, attesa se bloccato
    (bosco fitto, acqua, pendii), avviso «rimasto indietro», fischio con F, ostacolo per il cavaliere. *Prova:* correre e
    scattare nel bosco, guadare, salire un pendio ripido, fischiare da lontano.
