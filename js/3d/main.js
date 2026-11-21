@@ -1073,7 +1073,8 @@ function avviaPercorso() {
   qualita.azzeraAdattiva();               // misure confrontabili: risoluzione piena del preset, ferma durante il giro
   if (modoCamera === 'libera') cambiaModoCamera();
   const k = knight.stato;
-  percorso = creaPercorso({ x: k.x, y: k.y, z: k.z, direzione: k.direzione });
+  percorso = creaPercorso({ x: k.x, y: k.y, z: k.z, direzione: k.direzione },
+    { maxFotogramma: PARAMETRI.has('lento') ? Infinity : undefined });
   percorsoNormale = null;
   profilatore.azzera();
   fpsEl.hidden = false;

@@ -140,8 +140,10 @@ const ATTESA_INIZIALE = 1.5;               // s di assestamento (compilazione, p
 /**
  * Percorso di prova: due giri uguali, il primo «normale», il secondo «per gruppi».
  * @param {{x:number, y:number, z:number, direzione:number}} centro  punto e direzione del cavaliere alla partenza
+ * @param {{maxFotogramma?: number}} opz  s oltre cui un fotogramma invalida la misura (Infinity: mai, per la prova in
+ *   headless con ?lento, dove ogni fotogramma dura secondi; lì contano solo errori e conteggi, non i tempi)
  */
-export function creaPercorso(centro) {
+export function creaPercorso(centro, { maxFotogramma = MAX_FOTOGRAMMA } = {}) {
   const tempi = [];                        // durata dei fotogrammi (ms) nel giro normale
   const cpu = [];                          // ms di processore per fotogramma (logica + invio) nel giro normale
   const parti = {};                        // nome → ms per fotogramma, nel giro normale
@@ -172,7 +174,7 @@ export function creaPercorso(centro) {
       // Finestra nascosta o ridotta a icona: il browser ferma i fotogrammi e alla ripresa arriva un dt di decine di
       // secondi, che faceva saltare tutto il percorso senza un campione (risultati tutti «n/d»). Misura non valida.
       // Durante l'attesa iniziale il fotogramma lungo si ignora soltanto.
-      if (dt > MAX_FOTOGRAMMA) {
+      if (dt > maxFotogramma) {
         if (t < 0) dt = 0;
         else { interrotto = dt; finito = true; osservatore?.disconnect(); return { mira: null, azzera: false }; }
       }
