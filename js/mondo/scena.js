@@ -768,7 +768,26 @@ export function spianaLuoghi(carta, x, z, h) {
  */
 export function quotaFinale(carta, x, z, seedDettaglio = derivaSeme(carta.seme, 101), esito = _esito, pesi = null) {
   const h = scavaFiumi(carta, x, z, quotaMondo(carta, x, z, seedDettaglio, pesi), esito);
-  return spianaLuoghi(carta, x, z, spianaStrade(carta, x, z, h, esito));
+  // Sui piani dei luoghi vince il terrapieno; fuori, la strada scava il suo ripiano anche nelle scarpate dei terrapieni
+  // (prima la scarpata passava sopra la strada e verso la rocca restavano tratti a 30–45°, segnalato dall'utente). La
+  // quota della strada tiene già conto dei terrapieni (js/mondo/strade.js, terrenoLuoghi).
+  if (dentroPiano(carta, x, z)) return spianaLuoghi(carta, x, z, spianaStrade(carta, x, z, h, esito));
+  return spianaStrade(carta, x, z, spianaLuoghi(carta, x, z, h), esito);
+}
+
+/** true se (x, z) sta su uno dei piani (terrapieni) di un luogo. */
+function dentroPiano(carta, x, z) {
+  const L = carta.luoghi;
+  if (!L) return false;
+  for (let k = 0; k < L.length; k++) {
+    const l = L[k], P = l.piani;
+    if (!P) continue;
+    const ex = x - l.x, ez = z - l.z;
+    if (ex * ex + ez * ez > l.raggioPiani * l.raggioPiani) continue;
+    for (let j = 0; j < P.length; j++) if (distanzaPiano(P[j], x, z) < 0) return true;
+    return false;
+  }
+  return false;
 }
 
 const _lago = { peso: 0, livello: NaN };
@@ -891,7 +910,7 @@ export function generaScena(carta, cx, cz) { return completa(generaScenaAPezzi(c
  * lato di un tornante), i dintorni delle porte di rocche e borghi (le rampe).
  */
 // porta: striscia lasciata alla rampa fuori dalla porta (m lungo la normale della porta, dietro, di lato).
-export const SOTTO_STRADA = { semiMinima: 1, passoLato: 1, salto: 3, porta: { lungo: 32, dietro: 8, lato: 11 } };
+export const SOTTO_STRADA = { semiMinima: 1, passoLato: 1, salto: 5, porta: { lungo: 32, dietro: 8, lato: 11 } };
 function spianaSottoStrade(carta, cx, cz, heights, fiume, lago, n, cell, half, strade, quote) {
   const S = SOTTO_STRADA, meglio = new Float32Array(n * n).fill(Infinity), val = new Float32Array(n * n);
   strade.forEach((t, s) => {

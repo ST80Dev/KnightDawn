@@ -2366,6 +2366,20 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
     lontano dai luoghi: seme 570549 da 11 % a 2,2 %, 855588 da 6,6 % a 1,5 %, 48213 da 6,2 % a 1,3 %; vicino ai luoghi
     (entro 80 m dai piani) da 20 % a 14 %, 32 % a 28 %, 16,5 % a 14 %: lì restano i tornanti sulle scarpate dei
     terrapieni e i tratti davanti alle porte.
+  - *Strade impossibili verso le rocche* (segnalato dall'utente su R1 del seme 395728: tornanti su pendii improponibili,
+    rocca irraggiungibile). Profilo misurato: dalla porta 25 m di discesa in 55 m (27–32°) e un gradino di 15 m a
+    33–57°; il cavaliere non sale oltre 35°. Cause e correzioni (parti a, b, c approvate dall'utente; la d, porta dal
+    lato dell'arrivo dolce, è di M7 in `luoghi.js`):
+    a. la ricerca guardava solo le pendenze lisciate su ~60 m (su una cima stretta il versante sembrava dolce) e non le
+       scarpate dei terrapieni: ora conta anche la pendenza lisciata su ~40 m (`lisciaVera`) e il terreno con i
+       terrapieni (`terrenoLuoghi`);
+    b. il profilo seguiva ogni gradino: ora ha una pendenza massima (1,5 × pmax della classe) con scavi e riporti fino
+       a 3 m (`profiloMax`, `taglio`), fermo agli estremi (`raccordoEstremi` 30 m: incroci e porte);
+    c. il tratto dritto davanti alla porta passa da 30 a 12 m; in `quotaFinale`, fuori dai piani dei luoghi, la strada
+       scava il suo ripiano anche nella scarpata del terrapieno (prima la scarpata passava sopra la strada).
+    Il ripiano sotto la strada nel blocco accetta salti fino a 5 m. Tratti di strada oltre 35° sul terreno disegnato,
+    nei blocchi di 10 rocche: seme 395728 da 0,09 % a 0,04 % (R1 da 55° a 33°), 570549 da 0,03 % a 0,01 %, 855588 e
+    48213 da 0,02–0,03 % a 0. Restano i tornanti troppo stretti (bracci a ~8 m con 7 m di dislivello).
 - **Vegetazione**: `distanzaStrada(carta, x, z)` è pronta; l'esclusione degli alberi dalla carreggiata è della
   sessione della vegetazione (passo 3 di questo piano).
 
