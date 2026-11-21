@@ -18,13 +18,20 @@
 import * as THREE from 'three';
 import { prisma, unisci, dentroPoligono, distanzaContorno, areaPoligono, normaleLato, localeDelLuogo, creaSpinta,
   scatolaLato, geoTorrePorta, geoGhiera, materialeMuro, rifinisci, tonoDelLuogo } from './rocca3d.js';
+import { creaKit, siToccano, EDIFICI } from './edifici3d.js';
 
 /** Misure secondo la classe del luogo. vicoli: quanti vicoli trasversali. */
 export const CLASSI_BORGO = {
-  minore:   { altezza: 6, spessore: 1.4, torre: 4.2, passoTorri: 32, vicoli: 1 },
-  casata:   { altezza: 7, spessore: 1.6, torre: 5, passoTorri: 35, vicoli: 2 },
-  maggiore: { altezza: 8, spessore: 1.8, torre: 5.6, passoTorri: 38, vicoli: 3 },
+  minore:   { altezza: 6, spessore: 1.4, torre: 4.2, passoTorri: 32, vicoli: 1,
+    case: 14, edifici: ['stalla', 'taverna', 'fabbro'], piazza: 0, torriCasa: 0 },
+  casata:   { altezza: 7, spessore: 1.6, torre: 5, passoTorri: 35, vicoli: 2,
+    case: 30, edifici: ['stalla', 'taverna', 'fabbro', 'guaritore'], piazza: 11, loggia: 'loggia', banchi: 4, torriCasa: 0.15 },
+  maggiore: { altezza: 8, spessore: 1.8, torre: 5.6, passoTorri: 38, vicoli: 3,
+    case: 60, edifici: ['stalla', 'taverna', 'fabbro', 'guaritore'], piazza: 15, loggia: 'loggiaGrande', chiesa: true, banchi: 7, torriCasa: 0.25 },
 };
+// Case e edifici (passo 5, edifici3d.js): `case` al più per classe (8–14, 20–30, 40–60: dove c'è posto), edifici
+// nominati lungo la via principale dalla porta, piazza del mercato (raggio m) a metà della via con banchi e loggia,
+// chiesa nella sede maggiore; torriCasa: quota di case-torre nella metà del borgo verso la rocca.
 
 const PORTA = { larghezza: 3.6, imposta: 3.0, torreLarghezza: 8, torreProfondita: 6, sporgenza: 1, sopraMura: 3.5 };
 const RAMPA_PORTA = { pendenza: 0.2, minima: 3, massima: 24, larghezza: 5, sopra: 0.5 };  // fuori dalla porta, fino al terreno
@@ -37,6 +44,7 @@ const STRADE = {
   vicolo: { larghezza: 2.6, sopra: 0.13 },
   pendenzaVia: 0.1,                        // oltre, la via principale sale a tornanti
   passo: 2,                                // m tra le sezioni del nastro
+  tessera: 3.2,                            // m: lato della texture del selciato (512 px)
 };
 
 // Pietra grigio-bruna come la rocca, un poco più calda (pietra più comune, meno squadrata).
@@ -48,28 +56,67 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 // ─── Ciottolato: texture generata una volta (docs/PRESTAZIONI.md: dettaglio in texture, non in geometria) ───
 let _ciottolato = null;
 function texturaCiottolato() {
+  // Sanpietrini grossi e irregolari (richiesta dell'utente: niente «mosaico»): 512 px = STRADE.tessera m, pietre di
+  // ~15–25 cm in file approssimative di traverso alla strada, consumate, coi bordi storti; terra bruna tra le pietre,
+  // qualche pietra mancante (resta la terra), erba nelle fughe, polvere e fango a chiazze larghe.
   if (_ciottolato) return _ciottolato;
-  const N = 256, c = document.createElement('canvas');
+  const N = 512, c = document.createElement('canvas');
   c.width = c.height = N;
   const g = c.getContext('2d');
   let s = 12345;
   const rnd = () => ((s = (s * 1103515245 + 12345) >>> 0) / 4294967296);
-  g.fillStyle = '#857d70';                               // malta e terra tra i ciottoli
+  const lim = (v) => (v < 0 ? 0 : v > 255 ? 255 : v);
+  g.fillStyle = 'rgb(112,96,76)';                          // terra tra le pietre
   g.fillRect(0, 0, N, N);
-  // Ciottoli: ellissi irregolari, toni di grigio caldo; disegnati anche a cavallo dei bordi (texture ripetibile).
-  for (let k = 0; k < 230; k++) {
-    const x = rnd() * N, y = rnd() * N, rx = 7 + rnd() * 9, ry = 5 + rnd() * 7, a = rnd() * Math.PI;
-    const t = 165 + Math.floor(rnd() * 55), cal = Math.floor(rnd() * 12);
+  for (let k = 0; k < 4000; k++) {                          // grana della terra
+    const v = 80 + Math.floor(rnd() * 70);
+    g.fillStyle = `rgba(${v + 20},${v + 8},${v - 10},0.5)`;
+    g.fillRect(rnd() * N, rnd() * N, 1 + rnd() * 2, 1 + rnd() * 2);
+  }
+  const pietra = (x, y, w, h) => {
+    const v = 120 + Math.floor(rnd() * 80), cal = Math.floor(rnd() * 16) - 4;
+    const pts = [];
+    for (let k = 0; k < 7; k++) {                           // contorno storto, angoli smussati
+      const a = k / 7 * Math.PI * 2 + rnd() * 0.5;
+      const rx = w / 2 * (0.78 + rnd() * 0.22), ry = h / 2 * (0.78 + rnd() * 0.22);
+      const cs = Math.cos(a), sn = Math.sin(a), q = Math.pow(Math.abs(cs) ** 3 + Math.abs(sn) ** 3, -1 / 3);   // quasi quadrata
+      pts.push([x + cs * rx * q, y + sn * ry * q]);
+    }
     for (const dx of [-N, 0, N]) for (const dy of [-N, 0, N]) {
-      const cx = x + dx, cy = y + dy;
-      if (cx < -20 || cy < -20 || cx > N + 20 || cy > N + 20) continue;
-      const gr = g.createRadialGradient(cx - rx * 0.3, cy - ry * 0.3, 1, cx, cy, Math.max(rx, ry));
-      gr.addColorStop(0, `rgb(${t + 25 + cal},${t + 22},${t + 16})`);
-      gr.addColorStop(1, `rgb(${t - 25 + cal},${t - 27},${t - 32})`);
+      if (x + dx < -60 || x + dx > N + 60 || y + dy < -60 || y + dy > N + 60) continue;
+      const gr = g.createLinearGradient(x + dx, y + dy - h / 2, x + dx, y + dy + h / 2);
+      gr.addColorStop(0, `rgb(${lim(v + 22 + cal)},${lim(v + 18)},${lim(v + 10)})`);
+      gr.addColorStop(1, `rgb(${lim(v - 30 + cal)},${lim(v - 34)},${lim(v - 40)})`);
       g.fillStyle = gr;
       g.beginPath();
-      g.ellipse(cx, cy, rx, ry, a, 0, Math.PI * 2);
-      g.fill();
+      pts.forEach(([px, py], k) => (k ? g.lineTo(px + dx, py + dy) : g.moveTo(px + dx, py + dy)));
+      g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(40,30,20,0.35)'; g.lineWidth = 1.5; g.stroke();
+    }
+  };
+  for (let y = 0; y < N;) {
+    const h = 26 + Math.floor(rnd() * 14);
+    let x = -Math.floor(rnd() * 30);
+    while (x < N) {
+      const w = 26 + Math.floor(rnd() * 22);
+      if (rnd() > 0.08) pietra(x + w / 2 + (rnd() - 0.5) * 4, y + h / 2 + (rnd() - 0.5) * 5, w - 4, h - 4);   // l'8 % manca
+      x += w;
+    }
+    y += h;
+  }
+  for (let k = 0; k < 120; k++) {                           // erba nelle fughe
+    const x = rnd() * N, y = rnd() * N;
+    g.strokeStyle = `rgba(${70 + rnd() * 30},${95 + rnd() * 30},${40 + rnd() * 20},0.7)`;
+    g.lineWidth = 1;
+    for (let f = 0; f < 4; f++) { g.beginPath(); g.moveTo(x, y); g.lineTo(x + (rnd() - 0.5) * 8, y - 3 - rnd() * 6); g.stroke(); }
+  }
+  for (let k = 0; k < 28; k++) {                            // polvere e fango a chiazze larghe
+    const x = rnd() * N, y = rnd() * N, r = 30 + rnd() * 90, fango = rnd() < 0.3;
+    for (const dx of [-N, 0, N]) for (const dy of [-N, 0, N]) {
+      const gr = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
+      gr.addColorStop(0, fango ? `rgba(70,55,40,${0.25 + rnd() * 0.2})` : `rgba(165,145,115,${0.3 + rnd() * 0.25})`);
+      gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr; g.fillRect(x + dx - r, y + dy - r, 2 * r, 2 * r);
     }
   }
   const tex = new THREE.CanvasTexture(c);
@@ -230,8 +277,10 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
     for (let k = 1; k <= nt; k++) posti.push({ u: a[0] + (b[0] - a[0]) * k / (nt + 1), v: a[1] + (b[1] - a[1]) * k / (nt + 1), au, av });
   }
   let torri = 0;
+  const torriFatte = [];
   for (const t of posti) {
     if (Math.hypot(t.u - gm[0], t.v - gm[1]) < gw / 2 + lt + 2) continue;          // non addosso alla porta
+    torriFatte.push([t.u, t.v]);
     const { u, v, au, av } = t;
     const sq = (h) => [[-h, -h], [h, -h], [h, h], [-h, h]].map(([a, b]) => [u + au * a - av * b, v + av * a + au * b]);
     let qMin = Infinity, qD = -Infinity;
@@ -429,7 +478,7 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
           const bordo = (j === 0 || j === 4) ? 1 + 0.18 * Math.sin(lung * 0.9 + j * 2.1 + fase) * Math.sin(lung * 0.37 + fase) : 1;
           const u = P[i][0] + nu * t * S.larghezza * bordo, v = P[i][1] + nv * t * S.larghezza * bordo;
           pos.push(X(u, v), terreno(u, v) + S.sopra, Z(u, v));
-          uv.push(t * S.larghezza / 1.6, lung / 1.6);
+          uv.push(t * S.larghezza / STRADE.tessera, lung / STRADE.tessera);
         }
       }
       for (let i = 0; i + 1 < P.length; i++) {
@@ -457,6 +506,175 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
     geo.computeBoundingSphere();
     return geo;
   })();
+
+  // ─── Edifici e case (passo 5) ───
+  // Lotti rettangolari lungo le strade (facciata sulla via, colmo parallelo), anche col retro contro le mura nella
+  // fascia lasciata dall'anello. Prima gli edifici nominati lungo la via principale dalla porta, poi la piazza, poi
+  // le case finché c'è posto. Un lotto è libero se sta nel borgo, fuori dalle strade, dalle torri, dalla porta, dalla
+  // rampa della rocca, dalla piazza e dagli altri lotti.
+  const kit = creaKit({ X, Z, ux, uz, terreno, luogo, seme: (Math.floor(luogo.x) * 73856093) ^ (Math.floor(luogo.z) * 19349663), nome: 'borgo-edifici' });
+  const lotti = [];
+  const segmenti = [], CS = 8, gSeg = new Map();
+  for (const st of strade) {
+    const w = STRADE[st.tipo].larghezza / 2 + 0.3;
+    for (let i = 0; i + 1 < st.punti.length; i++) {
+      const a = st.punti[i], b = st.punti[i + 1], k = segmenti.length;
+      segmenti.push([a, b, w]);
+      for (let gu = Math.floor((Math.min(a[0], b[0]) - 3) / CS); gu <= Math.floor((Math.max(a[0], b[0]) + 3) / CS); gu++) {
+        for (let gv = Math.floor((Math.min(a[1], b[1]) - 3) / CS); gv <= Math.floor((Math.max(a[1], b[1]) + 3) / CS); gv++) {
+          const key = gu * 100003 + gv;
+          if (!gSeg.has(key)) gSeg.set(key, []);
+          gSeg.get(key).push(k);
+        }
+      }
+    }
+  }
+  const suStrada = (u, v, margine = 0.4) => {
+    const L = gSeg.get(Math.floor(u / CS) * 100003 + Math.floor(v / CS));
+    if (!L) return false;
+    for (const k of L) {
+      const [a, b, w] = segmenti[k], du = b[0] - a[0], dv = b[1] - a[1], l2 = du * du + dv * dv;
+      const t = l2 > 0 ? clamp(((u - a[0]) * du + (v - a[1]) * dv) / l2, 0, 1) : 0;
+      if (Math.hypot(u - a[0] - du * t, v - a[1] - dv * t) < w + margine) return true;
+    }
+    return false;
+  };
+  const rp = rocca.porta, rr = rocca.rampa;
+  const pianerottolo = rp ? [rp.u + rp.nu * (rp.sporgenza + 4), rp.v + rp.nv * (rp.sporgenza + 4)] : null;
+  let piazza = null;
+  const lontanoDa = (u, v) => {
+    if (Math.hypot(u - gm[0], v - gm[1]) < prof + 5) return false;
+    for (const [tu, tv] of rocca.poligono) if (Math.hypot(u - tu, v - tv) < (rocca.torre ?? 3.6) + 3) return false;
+    for (const [tu, tv] of torriFatte) if (Math.hypot(u - tu, v - tv) < lt + 1.5) return false;
+    if (pianerottolo && Math.hypot(u - pianerottolo[0], v - pianerottolo[1]) < 7) return false;
+    if (rr) {
+      const a = rr.inizio, b = [rocca.piede[0], rocca.piede[1]], du = b[0] - a[0], dv = b[1] - a[1], l2 = du * du + dv * dv;
+      const t = l2 > 0 ? clamp(((u - a[0]) * du + (v - a[1]) * dv) / l2, 0, 1) : 0;
+      if (Math.hypot(u - a[0] - du * t, v - a[1] - dv * t) < 4.5) return false;
+    }
+    if (piazza && Math.hypot(u - piazza.c[0], v - piazza.c[1]) < piazza.r) return false;
+    return true;
+  };
+  const libero = (L, { piazzaOk = false } = {}) => {
+    const pz = piazza;
+    if (piazzaOk) piazza = null;
+    let ok = true;
+    // Campioni ogni ~2 m su tutto il lotto (bordi compresi): una strada in curva non passa tra un campione e l'altro.
+    const ni = Math.max(2, Math.ceil(2 * L.a / 2)), nj = Math.max(2, Math.ceil(2 * L.b / 2));
+    for (let ii = 0; ii <= ni; ii++) {
+      for (let jj = 0; jj <= nj; jj++) {
+        const i = -1 + 2 * ii / ni, j = -1 + 2 * jj / nj;
+        const u = L.c[0] + L.s[0] * L.a * i + L.f[0] * L.b * j, v = L.c[1] + L.s[1] * L.a * i + L.f[1] * L.b * j;
+        if (!dentroPoligono(BL, u, v) || distanzaContorno(BL, u, v) < SP + 0.3 || suStrada(u, v) || !lontanoDa(u, v)) { ok = false; break; }
+      }
+      if (!ok) break;
+    }
+    piazza = pz;
+    return ok && !lotti.some((A) => siToccano(A, L, -0.15));
+  };
+  const lotto = (c, f, largo, fondo) => ({ c, f, s: [-f[1], f[0]], a: largo / 2, b: fondo / 2 });
+  /** Cammina lungo una strada su un lato e prova i lotti; `prossimo()` dà le misure (null: basta). */
+  function lungo(st, lato, prossimo, posa, { da = 0, passoVuoto = 1 } = {}) {
+    const P = st.punti, w = STRADE[st.tipo].larghezza / 2;
+    let i = da;
+    while (i < P.length - 2) {
+      const spec = prossimo();
+      if (!spec) return;
+      const a = P[Math.max(0, i - 2)], b = P[Math.min(P.length - 1, i + 3)], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      const t = [(b[0] - a[0]) / l, (b[1] - a[1]) / l], n = [-t[1] * lato, t[0] * lato];
+      const off = w + 0.9 + spec.fondo / 2, c = [P[i][0] + t[0] * spec.largo / 2 + n[0] * off, P[i][1] + t[1] * spec.largo / 2 + n[1] * off];
+      const L = lotto(c, [-n[0], -n[1]], spec.largo, spec.fondo);
+      if (libero(L)) {
+        lotti.push(L);
+        posa(L, spec);
+        i += Math.max(1, Math.ceil((spec.largo + (kit.rnd() < 0.25 ? 2 + kit.rnd() * 3 : 0)) / STRADE.passo));
+      } else i += passoVuoto;
+    }
+  }
+  const via = strade.find((st) => st.tipo === 'via');
+  // Piazza del mercato a metà della via, dove la via è più larga di posto.
+  if (K.piazza && via) {
+    const P = via.punti;
+    for (const f of [0.5, 0.4, 0.6, 0.3, 0.7]) {
+      const c = P[Math.floor(P.length * f)];
+      if (dentroPoligono(BL, c[0], c[1]) && distanzaContorno(BL, c[0], c[1]) > K.piazza + 4 && lontanoDa(c[0], c[1])) { piazza = { c, r: K.piazza }; break; }
+    }
+  }
+  // Edifici nominati lungo la via principale, dalla porta.
+  const daFare = [...K.edifici];
+  if (via) {
+    for (const lato of [1, -1]) {
+      lungo(via, lato, () => (daFare.length ? { ...EDIFICI[daFare[0]], largo: EDIFICI[daFare[0]].largo + (EDIFICI[daFare[0]].recinto ? 2 * EDIFICI[daFare[0]].recinto + 2 : 0) + (EDIFICI[daFare[0]].tettoia ? 2 * EDIFICI[daFare[0]].tettoia + 1 : 0) } : null),
+        (L) => { const tipo = daFare.shift(); kit.edificio(tipo, { u: L.c[0], v: L.c[1], fu: L.f[0], fv: L.f[1] }); }, { da: 3 });
+    }
+  }
+  for (const st of strade) {                            // quelli rimasti, sulle altre strade
+    if (!daFare.length) break;
+    if (st === via) continue;
+    for (const lato of [1, -1]) {
+      lungo(st, lato, () => (daFare.length ? { ...EDIFICI[daFare[0]], largo: EDIFICI[daFare[0]].largo + (EDIFICI[daFare[0]].recinto ? 2 * EDIFICI[daFare[0]].recinto + 2 : 0) + (EDIFICI[daFare[0]].tettoia ? 2 * EDIFICI[daFare[0]].tettoia + 1 : 0) } : null),
+        (L) => { const tipo = daFare.shift(); kit.edificio(tipo, { u: L.c[0], v: L.c[1], fu: L.f[0], fv: L.f[1] }); });
+    }
+  }
+  // Piazza: loggia e chiesa sul bordo, rivolte al centro; banchi dentro, fuori dalla via.
+  if (piazza) {
+    const sulBordo = (tipo) => {
+      const E = EDIFICI[tipo];
+      for (let k = 0; k < 24; k++) {
+        const ang = k / 24 * Math.PI * 2, d = [Math.cos(ang), Math.sin(ang)];
+        const c = [piazza.c[0] + d[0] * (piazza.r + E.fondo / 2 - 1), piazza.c[1] + d[1] * (piazza.r + E.fondo / 2 - 1)];
+        const L = lotto(c, [-d[0], -d[1]], E.largo, E.fondo);
+        if (libero(L, { piazzaOk: true }) && Math.hypot(c[0] - piazza.c[0], c[1] - piazza.c[1]) >= piazza.r - 1) {
+          lotti.push(L);
+          kit.edificio(tipo, { u: c[0], v: c[1], fu: -d[0], fv: -d[1] });
+          return true;
+        }
+      }
+      return false;
+    };
+    if (K.loggia) sulBordo(K.loggia);
+    if (K.chiesa && !sulBordo('chiesa')) daFare.push('chiesa');   // se sulla piazza non c'è posto, lungo le strade
+    let fatti = 0;
+    for (let k = 0; k < 16 && fatti < K.banchi; k++) {
+      const ang = k / 16 * Math.PI * 2 + 0.2, d = [Math.cos(ang), Math.sin(ang)], rr2 = piazza.r * 0.62;
+      const u = piazza.c[0] + d[0] * rr2, v = piazza.c[1] + d[1] * rr2;
+      if (suStrada(u, v, 1.2) || !dentroPoligono(BL, u, v)) continue;
+      const L = lotto([u, v], [-d[0], -d[1]], 2.6, 1.8);
+      if (lotti.some((A) => siToccano(A, L, 0.5))) continue;
+      lotti.push(L);
+      kit.banco(u, v, -d[0], -d[1]);
+      fatti++;
+    }
+  }
+  for (const st of strade) {                            // la chiesa, se non è andata sulla piazza
+    if (!daFare.length) break;
+    for (const lato of [1, -1]) {
+      lungo(st, lato, () => (daFare.length ? { ...EDIFICI[daFare[0]] } : null),
+        (L) => { const tipo = daFare.shift(); kit.edificio(tipo, { u: L.c[0], v: L.c[1], fu: L.f[0], fv: L.f[1] }); });
+    }
+  }
+  // Case: via (botteghe e schiere), poi anello lungo le mura, poi vicoli.
+  let caseFatte = 0;
+  const vicinoRocca = (c) => Math.hypot(c[0], c[1]) < Math.hypot(gm[0], gm[1]) * 0.5;
+  for (const st of [via, ...strade.filter((x) => x.tipo === 'mura'), ...strade.filter((x) => x.tipo === 'vicolo')]) {
+    if (!st) continue;
+    for (const lato of [1, -1]) {
+      let tipo = 'schiera';
+      lungo(st, lato, () => {
+        if (caseFatte >= K.case) return null;
+        const r0 = kit.rnd();
+        tipo = st.tipo === 'via' ? (r0 < 0.4 ? 'bottega' : 'schiera') : st.tipo === 'mura' ? (r0 < 0.55 ? 'schiera' : 'bassa') : (r0 < 0.5 ? 'bassa' : 'schiera');
+        const T = { bottega: [7.5, 9], schiera: [6.5, 8.5], bassa: [6, 7], torre: [5, 5] }[tipo];
+        return { largo: T[0] + kit.rnd() * 1.5, fondo: T[1] };
+      }, (L, spec) => {
+        const t = K.torriCasa && vicinoRocca(L.c) && kit.rnd() < K.torriCasa ? 'torre' : tipo;
+        kit.casa({ u: L.c[0], v: L.c[1], fu: L.f[0], fv: L.f[1], tipo: t, largo: t === 'torre' ? Math.min(spec.largo, 5.5) : spec.largo, fondo: t === 'torre' ? Math.min(spec.fondo, 5.5) : spec.fondo });
+        caseFatte++;
+      });
+    }
+  }
+  const edificiBorgo = kit.chiudi();
+  scatole.push(...edificiBorgo.scatole);
 
   // ─── Oggetti: uno per materiale, merli a istanze ───
   const object = new THREE.Group();
@@ -490,6 +708,11 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
     im.name = 'borgo-merli';
     object.add(im);
   }
+  const triMura = object.children.reduce((t, m) => t + (m.isInstancedMesh ? m.geometry.index.count / 3 * m.count
+    : (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3), 0);
+  const oggettiMura = object.children.length;
+  object.add(edificiBorgo.object);
+  solidi.push(...edificiBorgo.solidi);
   object.updateMatrixWorld(true);
 
   // ─── Collisioni e suolo ───
@@ -525,10 +748,11 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
     poligono: BL,
     porta: { u: gm[0], v: gm[1], nu: gn[0], nv: gn[1], rampa: rampaVera ? lungaPorta : 0 },
     aggiornaLuci() {},                            // luci del borgo: passo 7
+    edifici: edificiBorgo.edifici,                // nominati: { tipo, nome, porta } (passo 6)
     misure: {
-      strade: strade.length, torri, merli: merli.length, oggetti: object.children.length,
-      triangoli: object.children.reduce((s, m) => s + (m.isInstancedMesh ? m.geometry.index.count / 3 * m.count
-        : (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3), 0),
+      strade: strade.length, torri, merli: merli.length, oggetti: oggettiMura + edificiBorgo.misure.chiamate,
+      triangoli: triMura + edificiBorgo.misure.triangoli, case: edificiBorgo.misure.case,
+      edifici: edificiBorgo.edifici.length, zone: edificiBorgo.misure.zone,
     },
   };
 }
