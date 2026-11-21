@@ -282,7 +282,7 @@ Nel 2D 1 Passo era 1 tile; ora il **Passo è solo un'unità di tempo** (~3 ore, 
   abbassano. Niente stagioni per ora. **Notte (ritoccata dopo la prova dell'utente):** buia, luna
   debole; la nebbia, del colore del cielo notturno, si stringe attorno al punto osservato (nitido
   fino a ~15 m, buio pieno a ~110 m oltre la camera): si vede bene solo vicino, il castello a 225 m
-  sparisce. Parametri in `CICLO` (`main.js`).
+  sparisce. Parametri in `CICLO` (`cielo.js`, prima in `main.js`).
 - **HUD in HTML:** data (o «Veglia · giorno N») con l'ora, Forza, Salute, Volontà, Onore.
 - **Salvataggio locale** (localStorage, come da `CLAUDE.md`): posizione e direzione del cavaliere,
   terreno corrente, stato di `Knight` e `Calendar`, autosalvataggio. Supabase abbandonato (deciso
@@ -2238,8 +2238,8 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
 
 > Avviata dalla sessione «M1 - Grafica» su richiesta dell'utente (novembre 2026), in parallelo a M7. Riferimenti:
 > M5 «Ciclo giorno/notte» (sopra), `docs/GRAFICA_3D.md` «Foschia e visibilità», `docs/PRESTAZIONI.md` (budget
-> «acqua, cielo, effetti» 1,5 ms GPU e ≤ 10 chiamate; oggi 0,3–0,6 ms). **Stato: piano da approvare** (rivisto con le
-> decisioni dell'utente sul ritmo del meteo, riferite da M1).
+> «acqua, cielo, effetti» 1,5 ms GPU e ≤ 10 chiamate; oggi 0,3–0,6 ms). **Stato: piano approvato dall'utente (21/11/2026)** con le
+> decisioni 7–10 qui sotto; passo 0 in corso.
 
 **Decisioni già prese dall'utente.**
 1. File nuovo **`js/3d/cielo.js`** (deroga alla regola 2): ci va tutto ciò che è cielo, oggi in `main.js` (`COLORE_CIELO`,
@@ -2256,6 +2256,13 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
    nevica; la quota dipende da quota, latitudine e stagione. Salendo in montagna nella stessa Scena si passa dalla pioggia
    alla neve.
 6. **La foschia per giorno di M1** (densa / normale / limpida) è sostituita dal meteo, con lo stesso ritmo a periodi.
+7. **Periodi variabili di 2 o 3 ore canoniche** (21/11/2026).
+8. **Foschia standard** (21/11/2026, «la foschia lasciala standard indipendentemente dall'ora»; scelta: «distanza fissa,
+   meteo escluso»): di giorno la foschia finisce sempre alla stessa distanza (~65 km, la «normale» di M1) qualunque sia lo
+   stato; si accorcia solo con la nebbia vera e le precipitazioni forti. La notte resta stretta come in M5. Niente tinta
+   calda verso il sole al tramonto (non ora).
+9. **Neve in pianura al Nord, ogni tanto** (21/11/2026): possibile anche a quota bassa nelle regioni settentrionali.
+10. **Meteo per zona, tendenziale** (21/11/2026): non uguale in tutto il mondo, ma con tendenze secondo bioma e latitudine.
 
 **Cosa c'è oggi** [Certo, dal codice]: `scene.background` è un colore unico uguale alla nebbia (niente sfumatura, sole,
 luna, stelle, nuvole). La nebbia di giorno va da 1,5 km a 40–150 km (tiro del giorno, interpolato con continuità tra un
@@ -2286,29 +2293,31 @@ leggono la luce del sole e dovranno sapere quanto è «diretta»: ombre finte de
 
    | Indice | Stato | Luce del sole | Visibilità (fine foschia) |
    |---|---|---|---|
-   | 0 | sereno | piena | 60–150 km (limpida più probabile dopo la pioggia) |
-   | 1 | poco nuvoloso (cumuli) | piena | 55–75 km |
-   | 2 | velato (sole con alone) | ×0,6 | 40–60 km (afa) |
-   | 3 | coperto | ×0,2, emisfera più forte e grigia | 30–50 km |
-   | 4 | precipitazioni deboli | ×0,1 | 15–30 km |
-   | 5 | precipitazioni forti | ×0,05 | 6–15 km |
+   | 0 | sereno | piena | standard (~65 km) |
+   | 1 | poco nuvoloso (cumuli) | piena | standard |
+   | 2 | velato (sole con alone) | ×0,6 | standard |
+   | 3 | coperto | ×0,2, emisfera più forte e grigia | standard |
+   | 4 | precipitazioni deboli | ×0,1 | standard |
+   | 5 | precipitazioni forti | ×0,05 | 8–15 km (cortina di pioggia o neve) |
 
-   L'indice viene da un **rumore liscio sul tempo** (valore all'inizio del periodo), spostato da umidità della regione
-   (`umidita` della cella) e stagione; la frequenza è scelta perché tra due periodi vicini si salti al più di un gradino
+   L'indice viene da un **rumore liscio sul tempo** (valore all'inizio del periodo), spostato dalle tendenze della zona:
+   `umidita` della cella (umido → più nuvole e precipitazioni), bioma (sabbia e sud arido più sereni, palude più nebbia,
+   montagna più nuvole), latitudine (il nord più coperto) e stagione; la frequenza è scelta perché tra due periodi vicini si salti al più di un gradino
    (sereno → poco nuvoloso → velato → coperto → pioggia, mai sereno → pioggia). Niente catena da ripercorrere: lo stato di
    qualunque periodo si calcola direttamente, quindi è lo stesso caricando un salvataggio o tornando nello stesso luogo.
    **Nebbia vera** (inizio ~100 m, fine 0,6–2,5 km, luce ×0,3): non un gradino della scala ma una variante del sereno o del
    velato nei periodi di notte e del mattino, in autunno e inverno, nelle celle basse e umide [regola da tarare].
-   **Correzione all'idea iniziale** («pioggia e vento → limpida»): mentre piove si vede meno; la giornata limpida è quella
-   dopo la pioggia. Qui: sereno dopo un periodo di precipitazioni → visibilità alta.
    **Regione:** la cella della Carta dove sta il cavaliere (dentro una Scena di 2 km è una sola o poche: si usa quella del
    centro della Scena, così il meteo non cambia attraversando un confine di cella).
 5. **Pioggia o neve:** temperatura del luogo nel momento = `temperaturaMare` + scarto di stagione − 0,0065 · quota (le
-   stesse costanti del generatore, importate da `carta.js`, non copiate). Nevica dove è ≤ 0 °C, piove sopra +1,5 °C, in
+   stesse costanti del generatore, importate da `carta.js`, non copiate), più uno **scarto del periodo** di ±4 °C (rumore
+   liscio sul tempo: ondate di freddo e di caldo). Al nord la media annua al mare è ~−4 °C (`CLIMA.latitudine`): d'inverno
+   lì nevica anche in pianura; in primavera e autunno solo nelle ondate di freddo; al centro solo d'inverno con un'ondata
+   di freddo; al sud mai in pianura. Nevica dove è ≤ 0 °C, piove sopra +1,5 °C, in
    mezzo nevischio (una parte delle strisce diventa fiocchi). Si valuta alla quota della camera, a ogni fotogramma (costo
    nullo): salendo il versante la pioggia diventa neve. [Probabile] La neve che cade scende ~450 m sotto il limite della
    neve a terra (che usa la media della stagione sotto −3 °C): nevicate su prati ancora verdi, come accade davvero.
-   Se all'utente stona, si alza la soglia.
+   Va bene all'utente: «ogni tanto deve essere possibile neve in pianura bassa se si è al Nord».
 6. **Luci col meteo:** con poca luce diretta il sole cala e l'emisfera sale e si ingrigisce (luce diffusa); il cielo
    non è più azzurro. `cielo.js` espone `luceDiretta` (0–1) per chi disegna ombre finte (vegetazione, suolo, mura), che
    le attenua col cielo coperto. Le sessioni proprietarie decidono come usarlo (vedi «Accordi»).
@@ -2328,10 +2337,17 @@ si resta sotto 1,5 ms e ≤ 10 chiamate (cupola 1, stelle 1, precipitazioni 1). 
 0. **Spostamento in `cielo.js`, comportamento identico.** Solo codice spostato; in `main.js` gli agganci (crea, aggiorna
    ogni fotogramma, nebbia sul punto osservato, testo per F3). Verifica: immagini headless a 4 ore (6, 12, 19:30, 0)
    identiche pixel per pixel prima e dopo; poi prova dell'utente.
+   **Stato: fatto, da provare dall'utente.** `js/3d/cielo.js`: `creaCielo(scene)` crea sfondo, nebbia e le tre luci e
+   restituisce `aggiorna(ora)` (false se l'ora è quasi la stessa), `aggiornaNebbia(camera, punto, conOrizzonte, seme,
+   giorni)`, `invalida()`, `luceGiorno`, `sole`, `luna`, `emisfera`; esporta anche `CICLO`, `posizioneSole`,
+   `visibilitaDelGiorno(seme, giorni)` e la modifica di `fog_vertex`. In `main.js` restano gli agganci: luci proprie di
+   mura e castello e ombre finte di cavaliere e cavallo (dopo `aggiorna`), nebbia sul punto osservato, riga di F3.
+   Verificato in headless (seme 570549, ore 6, 12, 19:30, 0): immagini identiche pixel per pixel, stessa nebbia;
+   Tavullia e pannello F3 senza errori.
 1. **Cupola a gradiente, sole e luna, alba e tramonto.** Zenit più scuro e saturo, orizzonte = nebbia; al crepuscolo il
-   cielo è caldo verso il sole e freddo dalla parte opposta (la nebbia resta di un colore solo: domanda 2).
+   cielo è caldo verso il sole e freddo dalla parte opposta (la nebbia resta di un colore solo).
 2. **Stelle di notte.**
-3. **Meteo a periodi senza nuvole disegnate:** scala, periodi, regione, visibilità al posto della foschia per giorno,
+3. **Meteo a periodi senza nuvole disegnate:** scala, periodi, regione, foschia standard al posto di quella per giorno,
    luci, `?meteo=`, F3. Qui si provano con M7 le mura col cielo coperto e con Vegetazione le ombre finte.
 4. **Nuvole ferme** per stato, illuminate dall'ora, ricotte a strisce al cambio di periodo.
 5. **Precipitazioni attorno alla camera** (pioggia, nevischio, neve secondo la temperatura del luogo) **e nebbia vera.**
@@ -2361,14 +2377,10 @@ si resta sotto 1,5 ms e ≤ 10 chiamate (cupola 1, stelle 1, precipitazioni 1). 
 - [Ipotesi] Nuvole proiettate su uno strato piatto possono sembrare «dipinte» vicino all'orizzonte; si sfumano lì.
 - [Certo] Dopo lo spostamento, `main.js` e `cielo.js` si toccano da più sessioni: modifiche minime e `main` unito spesso.
 
-### Da decidere con l'utente
+### Decise con l'utente (21/11/2026)
 
-1. **Lunghezza dei periodi:** variabile 2 o 3 ore canoniche (proposta, meno prevedibile) o fissa a 2?
-2. **Foschia calda verso il sole al tramonto:** la nebbia di Three.js ha un colore solo; colorarla secondo la direzione
-   richiede di cambiare il pezzo di shader della nebbia per tutti i materiali (come già fatto per la distanza in
-   `main.js`). Costo basso, ma tocca tutto: propongo di farlo dopo il passo 1 solo se la riga al tramonto si nota.
-3. **Neve che cade sotto il limite della neve a terra** (punto 5): va bene così o la neve deve cadere solo dove a terra
-   ce n'è già?
+Periodi variabili 2–3 ore canoniche; foschia calda al tramonto non ora; neve anche in pianura al Nord, ogni tanto; meteo
+tendenziale per bioma e latitudine; foschia di giorno a distanza standard per ogni stato (decisioni 7–10 sopra).
 
 ## Fuori dal prototipo (non farlo ora)
 
