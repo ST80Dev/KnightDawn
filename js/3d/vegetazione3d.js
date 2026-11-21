@@ -633,6 +633,7 @@ const TONO = {
   rocce: [0.62, 1.2, 0], bosco: [0.8, 1.05, 0],
 };
 const GIALLO = new THREE.Color('#d9c85a');
+const RIDISTRIBUISCI = { ms: 1.5, pezzo: 3000 };   // tempo per fotogramma e alberi tra un controllo e l'altro
 const RIASSEGNA_DOPO = 12;              // m di spostamento della camera prima di ridistribuire le istanze
 // Raggi lunghi con densità bassa (richiesta dell'utente: il bordo del cerchio a ~30 m si vedeva).
 const VICINO = { erba: { raggio: 70, max: 12000 }, felce: { raggio: 70, max: 3000 }, ciottolo: { raggio: 50, max: 6000 }, rifai: 5 };
@@ -977,15 +978,26 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
     }
     return out;
   }
-  let ultimoVicino = null, msVicino = 0;
+  // Scatti (misura nel bosco fitto, CPU: erba, felci e ciottoli insieme 2–7 ms ogni 5 m): un tipo per fotogramma.
+  // La prima volta tutti subito.
+  let ultimoVicino = null, msVicino = 0, codaVicini = [];
   function aggiornaVicini(cx, cz) {
-    if (!pos.erbaAttorno) return;
-    if (ultimoVicino && Math.hypot(cx - ultimoVicino.x, cz - ultimoVicino.z) < VICINO.rifai) return;
+    if (!pos.erbaAttorno) return false;
+    const primaVolta = !ultimoVicino;
+    if (!codaVicini.length) {
+      if (ultimoVicino && Math.hypot(cx - ultimoVicino.x, cz - ultimoVicino.z) < VICINO.rifai) return false;
+      ultimoVicino = { x: cx, z: cz };
+      codaVicini = Object.keys(vicini);
+    }
     const t1 = performance.now();
-    ultimoVicino = { x: cx, z: cz };
-    const esito = pos.erbaAttorno(cx, cz, { erba: VICINO.erba.raggio, felce: VICINO.felce.raggio, ciottolo: VICINO.ciottolo.raggio });
-    for (const [nome, V] of Object.entries(vicini)) {
-      const T = esito[nome], am = V.mesh.instanceMatrix.array, ac = V.mesh.instanceColor.array;
+    do rifaiVicino(codaVicini.shift(), ultimoVicino.x, ultimoVicino.z); while (primaVolta && codaVicini.length);
+    msVicino = performance.now() - t1;
+    return true;
+  }
+  function rifaiVicino(nome, cx, cz) {
+    {
+      const V = vicini[nome];
+      const T = pos.erbaAttorno(cx, cz, { [nome]: V.raggio })[nome], am = V.mesh.instanceMatrix.array, ac = V.mesh.instanceColor.array;
       let j = 0;
       for (let k = 0; k < T.n && j < V.max; k++) {
         const o = k * STRIDE, x = T.dati[o], z = T.dati[o + 2];
@@ -1012,7 +1024,6 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
       V.mesh.instanceMatrix.needsUpdate = true;
       V.mesh.instanceColor.needsUpdate = true;
     }
-    msVicino = performance.now() - t1;
   }
 
   let ultimo = null, msAggiorna = 0;
@@ -1030,11 +1041,36 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
       uniSuolo.uOmbreForza.value.set(OMBRE.forza * giorno * Math.min(1, Math.max(0, (_v.y - 0.03) / 0.12)), OMBRE.piede * (0.6 + 0.4 * giorno));
       msOmbre = performance.now() - t2;
     }
-    aggiornaVicini(cx, cz);
-    if (ultimo && Math.hypot(cx - ultimo.x, cz - ultimo.z) < RIASSEGNA_DOPO) return;
-    const t1 = performance.now();
-    ultimo = { x: cx, z: cz };
-    let nSag = 0;
+    // Scatti (misura nel bosco fitto, CPU: erba vicina 2–7 ms ogni 5 m, ridistribuzione 3–6 ms ogni 12 m, fino a
+    // ~11 ms in un fotogramma): la ridistribuzione si fa a pezzi, al più ~RIDISTRIBUISCI.ms per fotogramma, e mai
+    // nel fotogramma in cui si è rifatto un tipo di erba. La prima volta tutto subito (la Scena è appena caricata).
+    const vicinoFatto = aggiornaVicini(cx, cz);
+    if (!lavoro && (!ultimo || Math.hypot(cx - ultimo.x, cz - ultimo.z) >= RIASSEGNA_DOPO)) {
+      const prima = !ultimo;
+      ultimo = { x: cx, z: cz };
+      lavoro = ridistribuisci(cx, cz);
+      if (prima) {
+        const t0 = performance.now();
+        while (!lavoro.next().done);
+        lavoro = null;
+        msAggiorna = performance.now() - t0;
+        return;
+      }
+    }
+    if (lavoro && !vicinoFatto) {
+      const t0 = performance.now();
+      let r;
+      do r = lavoro.next(); while (!r.done && performance.now() - t0 < RIDISTRIBUISCI.ms);
+      if (r.done) lavoro = null;
+      msAggiorna = performance.now() - t0;
+    }
+  }
+
+  // Ridistribuzione delle istanze tra livelli e varianti: generatore che si ferma ogni RIDISTRIBUISCI.pezzo alberi.
+  // Mentre lavora, ogni tipo resta come prima finché non è finito (i conteggi cambiano alla fine del tipo).
+  let lavoro = null;
+  function* ridistribuisci(cx, cz) {
+    let nSag = 0, passi = 0;
     const aS = sagomeBlocco ? sagomeBlocco.instanceMatrix.array : null;
     const tS = sagomeBlocco ? sagomeBlocco.geometry.attributes.aTessera.array : null;
     const bordoMin = halfBlocco - SAGOMA_BORDO.fascia, oltre2 = SAGOMA_BORDO.oltre * SAGOMA_BORDO.oltre;
@@ -1045,6 +1081,7 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
       const am = T.mesh.map((ms) => ms.map((m) => m.instanceMatrix.array));
       const ac = T.mesh.map((ms) => ms.map((m) => m.instanceColor.array));
       for (let k = 0; k < T.n; k++) {
+        if (++passi % RIDISTRIBUISCI.pezzo === 0) yield;
         const dx = T.xz[k * 2] - cx, dz = T.xz[k * 2 + 1] - cz, d2 = dx * dx + dz * dz;
         let l = 0;
         while (l < nL && d2 > fino2[l]) l++;
@@ -1083,7 +1120,6 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
       const at = sagomeBlocco.geometry.attributes.aTessera;
       at.clearUpdateRanges(); at.addUpdateRange(0, nSag); at.needsUpdate = true;
     }
-    msAggiorna = performance.now() - t1;
   }
 
   /**

@@ -1536,6 +1536,9 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      piene fino a 600 m dalla camera, poi diradate come (600/d)², la legge del bosco lontano, con cui al bordo si
      raccordano. In headless nello stesso punto: latifoglie vicine da ~333 000 a ~145 000 triangoli, sagome del
      blocco da 59 500 a 36 200, vegetazione da 792 000 a 571 000 triangoli; chiamate da 26 a 29.
+   - *Scatti*: la ridistribuzione delle istanze (ogni 12 m) si fa a pezzi, al più ~1,5 ms per fotogramma, e mai nel
+     fotogramma in cui si rifà l'erba vicina; erba, felci e ciottoli si rifanno uno per fotogramma. In headless nel
+     bosco fitto, camminando 200 m: costo peggiore di un fotogramma da ~11 a ~5–6 ms (resta il calcolo dell'erba).
    - *Collisioni (passo 3)*: tronchi, massi, affioramenti, tronchi caduti (tre cerchi) e sassi di scala ≥ 1,1 come
      cerchi in una griglia di 16 m, ostacolo per il cavaliere come le mura (`spingiFuori`). Prova: correndo contro un
      tronco il cavaliere si ferma a 0,6–0,8 m dal centro e ci scivola attorno.
