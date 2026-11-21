@@ -31,6 +31,7 @@ const COL = {
   legno: '#5b3b20', ferro: '#2e2b28', terra: '#9c8762',
 };
 const LUCE_RIFLESSA = 0.2;                // come castle3d.js: i lati in ombra non escono neri
+const MURATURA = new Set(['mattone', 'scuro', 'pietra', 'merlo']);   // materiali con texture e gradazione
 
 const TORCIA = {
   altezza: 2.7, scostamento: 1.15,
@@ -62,7 +63,79 @@ export function prisma(basso, alto, yb, yt) {
   return geo;
 }
 
-/** Unisce geometrie (posizione e normale) in una sola, non indicizzata. */
+// ─── Gradazione delle mura (richiesta dell'utente: «sembra tutto piatto, non si capiscono spigoli e lati») ───
+// Con la sola luce emisferica tutte le facce verticali in ombra escono dello stesso colore. Due rimedi senza costi
+// di disegno (docs/PRESTAZIONI.md, passo 6: dettaglio in una texture generata una volta):
+//   - colore per vertice: più chiaro o più scuro secondo dove guarda la faccia (una «luce del cielo» fissa di
+//     traverso), più una leggera variazione di tono a chiazze di qualche metro;
+//   - texture a corsi di mattoni e conci (scala di grigi, moltiplica il colore del materiale), coordinate dalla
+//     posizione: lungo la faccia e in altezza sulle pareti, in pianta sulle facce orizzontali.
+const GRADAZIONE = { cielo: [-0.6, -0.8], lati: 0.3, chiazze: 0.08, tessera: 2.4 };
+let _muro = null;
+/** Texture dei corsi di muratura (256 px = GRADAZIONE.tessera m): mattoni sfalsati, malta chiara, toni vari. */
+export function texturaMuro() {
+  if (_muro) return _muro;
+  const N = 256, c = document.createElement('canvas');
+  c.width = c.height = N;
+  const g = c.getContext('2d');
+  let seme = 777;
+  const rnd = () => ((seme = (seme * 1103515245 + 12345) >>> 0) / 4294967296);
+  g.fillStyle = 'rgb(236,232,226)';                      // malta
+  g.fillRect(0, 0, N, N);
+  const righe = 10, alto = N / righe, lungo = 64;
+  for (let r = 0; r < righe; r++) {
+    const sfasa = r % 2 ? lungo / 2 : 0;
+    for (let x = -lungo; x < N + lungo; x += lungo) {
+      const v = 175 + Math.floor(rnd() * 60), cal = Math.floor(rnd() * 10);
+      g.fillStyle = `rgb(${v + cal},${v},${v - cal})`;
+      g.fillRect(x + sfasa + 2, r * alto + 2, lungo - 4, alto - 4);
+      // Qualche segno più scuro dentro il mattone.
+      g.fillStyle = `rgba(60,40,30,${0.08 + rnd() * 0.1})`;
+      g.fillRect(x + sfasa + 2 + rnd() * (lungo - 14), r * alto + 3 + rnd() * (alto - 10), 6 + rnd() * 10, 2 + rnd() * 3);
+    }
+  }
+  _muro = new THREE.CanvasTexture(c);
+  _muro.colorSpace = THREE.SRGBColorSpace;
+  _muro.wrapS = _muro.wrapT = THREE.RepeatWrapping;
+  _muro.anisotropy = 4;
+  return _muro;
+}
+const _h3 = (a, b, c) => { const s = Math.sin(a * 127.1 + b * 311.7 + c * 74.7) * 43758.5453; return s - Math.floor(s); };
+/**
+ * Aggiunge `uv` (dalla posizione) e `color` (lato e chiazze) a una geometria. `orientata` = false per le geometrie
+ * a istanze (le normali locali non dicono dove guarda la faccia nel mondo): solo le chiazze.
+ */
+export function rifinisci(geo, orientata = true) {
+  const p = geo.attributes.position, n = geo.attributes.normal, G = GRADAZIONE;
+  const lc = Math.hypot(G.cielo[0], G.cielo[1]), cx = G.cielo[0] / lc, cz = G.cielo[1] / lc;
+  const uv = new Float32Array(p.count * 2), col = new Float32Array(p.count * 3);
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const nx = n ? n.getX(i) : 0, ny = n ? n.getY(i) : 1, nz = n ? n.getZ(i) : 0;
+    if (Math.abs(ny) > 0.7) { uv[2 * i] = x / G.tessera; uv[2 * i + 1] = z / G.tessera; } else {
+      const l = Math.hypot(nx, nz) || 1, tx = -nz / l, tz = nx / l;
+      uv[2 * i] = (x * tx + z * tz) / G.tessera; uv[2 * i + 1] = y / G.tessera;
+    }
+    let k = 1;
+    if (orientata && Math.abs(ny) < 0.7) {
+      const l = Math.hypot(nx, nz) || 1;
+      k = 1 - G.lati + G.lati * (0.5 + 0.5 * (nx * cx + nz * cz) / l) * 1.15;
+    } else if (orientata && ny < -0.7) k = 0.7;           // sotto (sporti, parapetti)
+    k *= 1 - G.chiazze + 2 * G.chiazze * _h3(Math.floor(x / 4), Math.floor(y / 3), Math.floor(z / 4));
+    col[3 * i] = col[3 * i + 1] = col[3 * i + 2] = Math.min(1, k);
+  }
+  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  return geo;
+}
+/** Materiale di muratura: colore × texture dei corsi × colore per vertice (vedi GRADAZIONE). */
+export function materialeMuro(colore, riflessa) {
+  const m = new THREE.MeshLambertMaterial({ color: colore, flatShading: true, map: texturaMuro(), vertexColors: true });
+  m.emissive.set(colore).multiplyScalar(riflessa);
+  return m;
+}
+
+/** Unisce geometrie (posizione e normale) in una sola, non indicizzata, con uv e colori di rifinisci(). */
 export function unisci(parti) {
   if (!parti.length) return null;
   const n = parti.reduce((s, g) => s + (g.index ? g.index.count : g.attributes.position.count), 0);
@@ -80,6 +153,7 @@ export function unisci(parti) {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  rifinisci(geo);
   geo.computeBoundingSphere();
   geo.computeBoundingBox();
   return geo;
@@ -304,8 +378,8 @@ export function createRocca(suolo, luogo, ox, oz) {
 
   const mat = {};
   for (const [k, c] of Object.entries(COL)) {
-    mat[k] = new THREE.MeshLambertMaterial({ color: c, flatShading: true });
-    mat[k].emissive.set(c).multiplyScalar(LUCE_RIFLESSA);
+    mat[k] = MURATURA.has(k) ? materialeMuro(c, LUCE_RIFLESSA) : new THREE.MeshLambertMaterial({ color: c, flatShading: true });
+    if (!MURATURA.has(k)) mat[k].emissive.set(c).multiplyScalar(LUCE_RIFLESSA);
   }
   mat.terra.flatShading = false;
   mat.terra.polygonOffset = true;
@@ -686,8 +760,8 @@ export function createRocca(suolo, luogo, ox, oz) {
     im.name = nome;
     object.add(im);
   };
-  istanze(geoMerlo(), mat.merlo, merli, 'rocca-merli');
-  istanze(new THREE.BoxGeometry(0.35, 0.6, 0.5), mat.pietra, beccatelli, 'rocca-beccatelli');
+  istanze(rifinisci(geoMerlo(), false), mat.merlo, merli, 'rocca-merli');
+  istanze(rifinisci(new THREE.BoxGeometry(0.35, 0.6, 0.5), false), mat.pietra, beccatelli, 'rocca-beccatelli');
   for (const t of torce) object.add(t.g);
   object.add(luceTorce);
   object.updateMatrixWorld(true);

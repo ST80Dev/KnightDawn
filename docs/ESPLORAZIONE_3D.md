@@ -1206,6 +1206,13 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
        del GDD: o si accetta, o se ne fanno ~20 a 15 km. Seme 12345 (34 rocche): dalla porta del borgo al cortile
        della rocca **34 su 34**; rampe della rocca 30 lungo il muro e 4 dritte; terrazzi: 20 senza, 12 con uno, 2 con
        due; al più ~22.000 triangoli tra rocca e borgo (sede maggiore).
+     - *Terza prova dell'utente* (porta del borgo, colore delle mura). La strada arriva dritta alla porta del borgo
+       lungo la sua normale (ultimi 30 m, `strade.js`, `STRADE.scena.portaDritta`; prima arrivava di sbieco e finiva
+       contro il muro); la rampa fuori dalla porta c'è solo se il terreno scende sotto la soglia di oltre 35 cm (prima
+       i suoi fianchi uscivano comunque, come due panche di pietra). Mura meno piatte: texture dei corsi di mattoni
+       generata una volta e colore per vertice secondo dove guarda la faccia (una luce del cielo fissa di traverso,
+       ±15 %) più chiazze di tono di qualche metro (±8 %), su mura, torri, merli e pietra di rocca e borgo; nessun
+       oggetto né materiale in più. `VERSIONE_GENERATORE` `…strade-3…`.
      - *Misure* (Chromium headless): seguendo la via, dal fuori della porta del borgo al cortile della rocca in
        **24 rocche su 24** (8 semi, tre classi); 32 assalti al borgo e 32 alla rocca per 3 semi: si entra solo dalla
        porta, **nessuna compenetrazione**. Rocca 10

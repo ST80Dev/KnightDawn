@@ -62,6 +62,7 @@ export const STRADE = {
     guado: 4,
     passo: 5,                   // m tra i punti del tracciato finale
     liscia: [3, 2],             // media mobile ±3 punti, 2 passate (toglie i gradini senza tagliare i tornanti)
+    portaDritta: 30,            // m: tratto dritto lungo la normale della porta di un borgo, fino alla porta
     lisciaTerreno: 2,           // passate di media 3×3 sulle quote della griglia prima di cercare il percorso
     profilo: [5, 3],            // quota della strada: media mobile ±5 punti (25 m), 3 passate
     scarpata: 0.6,              // pendenza massima delle scarpate di taglio e di riporto (~31°)
@@ -520,6 +521,15 @@ function stradeScena(carta) {
   return s;
 }
 
+/** La porta di un luogo (con la normale) se (x, z) ci cade sopra, altrimenti null. */
+function portaIn(carta, x, z) {
+  for (const l of carta.luoghi ?? []) {
+    const P = l.porta;
+    if (P && P.nx !== undefined && Math.abs(P.x - x) < 1 && Math.abs(P.z - z) < 1) return P;
+  }
+  return null;
+}
+
 /** Quota del terreno senza strade (rilievo e fiumi); in esito.livello il pelo dell'acqua se il punto è nell'alveo. */
 function terreno(carta, x, z, esito) {
   return scavaFiumi(carta, x, z, quotaMondo(carta, x, z), esito);
@@ -654,7 +664,22 @@ function tracciaTratto(carta, tr, W = STRADE.scena.corridoio) {
     }
     return a;
   };
-  const fx = liscia(rx, ...S.liscia), fz = liscia(rz, ...S.liscia);
+  let fx = liscia(rx, ...S.liscia), fz = liscia(rz, ...S.liscia);
+  // Alla porta di un borgo la strada arriva dritta, lungo la normale della porta (prima arrivava di sbieco e finiva
+  // contro il muro accanto all'arco): gli ultimi S.portaDritta m sono un segmento sulla normale.
+  for (const inizio of [true, false]) {
+    const ex = inizio ? fx[0] : fx[fx.length - 1], ez = inizio ? fz[0] : fz[fz.length - 1];
+    const P = portaIn(carta, ex, ez);
+    if (!P) continue;
+    const R = S.portaDritta, X = [], Z = [];
+    for (let t = 0; t < R - 1e-6; t += S.passo) { X.push(P.x + P.nx * t); Z.push(P.z + P.nz * t); }
+    const resto = [], restoZ = [];
+    for (let i = 0; i < fx.length; i++) {
+      if (Math.hypot(fx[i] - ex, fz[i] - ez) > R) { resto.push(fx[i]); restoZ.push(fz[i]); }
+    }
+    if (!resto.length) continue;
+    if (inizio) { fx = [...X, ...resto]; fz = [...Z, ...restoZ]; } else { fx = [...resto, ...X.reverse()]; fz = [...restoZ, ...Z.reverse()]; }
+  }
   // Quota della strada: il terreno lungo il percorso, saltando l'acqua (lì passerà un ponte o un guado), lisciata.
   const m = fx.length, h = new Array(m), bagnato = new Uint8Array(m);
   for (let i = 0; i < m; i++) { h[i] = terreno(carta, fx[i], fz[i], esito); bagnato[i] = Number.isNaN(esito.livello) ? 0 : 1; }
