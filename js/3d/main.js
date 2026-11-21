@@ -22,7 +22,7 @@ import { creaCaseCampagna, quotaFinestre } from './edifici3d.js';
 import { createBorgoAPezzi } from './borgo3d.js';
 import { createCartaVista } from './cartaVista.js';
 import { creaOrizzonteAPezzi } from './orizzonte.js';
-import { creaAcqueScena, creaPonti } from './acqua.js';
+import { creaAcqueScena, creaPonti, suoloStrade } from './acqua.js';
 import { vicinoAlBordo, trasla } from './blocchi.js';
 import { generaCartaAsincrona, verificaSemi } from '../mondo/generatore.js';
 import { generaScenaAPezzi, centroBlocco, quotaFinale } from '../mondo/scena.js';
@@ -695,7 +695,8 @@ function applicaMondo(p) {
   if (pareti) pareti.visible = false;
   acqua = orizzonte.acqua;
   if (acqua) scene.add(acqua);
-  _suolo = componiSuolo(terrain, [...rocche, ...ponti]);
+  // Le strade per ultime: sotto un ponte la carreggiata nell'alveo non deve vincere sull'impalcato.
+  _suolo = componiSuolo(terrain, [...rocche, ...ponti, suoloStrade(acqueScena)]);
   // Persone ai loro posti e per le strade (passo 7), sul suolo composto. Al cambio di blocco (scambiaBlocco) si rifanno
   // con rocche e borghi, già nelle coordinate del blocco nuovo: non serve spostarle (abitanti.sposta resta per altri usi).
   if (rocche.length) {
