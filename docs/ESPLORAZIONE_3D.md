@@ -1830,6 +1830,62 @@ nuovo: serve la conferma (regola 2).
 4. **Ponti e guadi.**
 5. **Viaggio sulla Carta** lungo le strade.
 
+### Passo 4 — Ponti e guadi (piano, da approvare)
+
+Affidato alla sessione M6 su indicazione dell'utente (novembre 2026). Oggi nell'alveo la strada si interrompe: il
+fiume la taglia e il nastro resta a ±0,3 m dal terreno. Comandi e tasti restano per dopo (decisione dell'utente).
+
+**Cosa c'è da collegare** [Certo, misurato sui tracciati delle Scene di tutta la regione]:
+
+| Seme | Attraversamenti | Ponti (acqua > 0,9 m) | Luce dei ponti | Guadi (luce) |
+|---|---|---|---|---|
+| 570549 | 51 | 8 | 15–56 m | 5–20 m |
+| 48213 | 61 | 14 | 15–88 m | 5–15 m |
+| 855588 | 42 | 11 | 14–59 m | 5–15 m |
+
+Quello che decide è la Scena (profondità vera nell'alveo), non la Carta: la soglia è la stessa del guado a piedi
+(`PROFONDITA_GUADO` 0,9 m). Un blocco di 2×2 km ha di solito 0–2 ponti e 0–5 guadi.
+
+**1. Dove e a che quota** (`js/mondo/strade.js`, senza grafica). Nel tracciato fine di ogni tratto si trovano le
+corse di punti nell'alveo: profondità massima > 0,9 m → **ponte**, altrimenti **guado**. Per il ponte la carreggiata
+passa alla quota dell'impalcato: pelo dell'acqua + luce libera (1,5 m + 3 % della luce) o la quota delle rive se più
+alta, con **rampe in terra** alle testate entro la pendenza massima della classe (le fa `spianaStrade`, come la
+banchina). Per il guado la strada scende nel letto con la pendenza della classe e il letto si alza a una **soglia di
+ghiaia** dove l'acqua resta ≤ 0,4 m, larga quanto carreggiata e banchina (il nastro d'acqua del fiume resta sopra:
+acqua bassa e chiara sopra il guado). Tutto funzione del punto del mondo: blocchi e orizzonte combaciano.
+
+**2. Ponti** (stile di `docs/GRAFICA_3D.md`, mesh da codice, niente modelli):
+- *Pietra* per le strade maestre e per luci oltre ~20 m: archi a sesto ribassato (uno ogni 10–18 m: 1 arco a 15 m,
+  5 a 88 m), pile con rostri a monte, leggera schiena d'asino, parapetti bassi; `ExtrudeGeometry` sul profilo degli archi
+  più blocchi, `MeshStandardMaterial` opaco (pietra) con colori per vertice dalla palette, filari di conci nello
+  shader solo come luce (convenzione del terreno). ~1 500–3 000 triangoli.
+- *Legno* per carrarecce, mulattiere e sentieri su luci fino a ~20 m: travi, tavolato, parapetti a croce di
+  Sant'Andrea, cavalletti nel letto ogni 6–8 m. Lambert. ~600–1 200 triangoli.
+- Una mesh per ponte (geometrie unite), una o due chiamate; nessuna `InstancedMesh` necessaria (ponti diversi tra loro).
+- **Camminarci**: ogni ponte è un oggetto con `quotaSuolo` (impalcato) e `spingiFuori` (parapetti), come il castello;
+  entra in `componiSuolo` e negli ostacoli (una riga in `main.js`, dove si raccolgono le rocche). Sotto l'impalcato si
+  passa solo dove l'acqua si guada.
+
+**3. Guadi**: soglia di ghiaia chiara (colore nel nastro della strada sotto l'acqua) e 10–30 **pietre** di guado
+grosse e piatte in una sola `InstancedMesh` per blocco (una chiamata per tutti i guadi), vegetazione esclusa come sulla
+strada (già lo fa `distanzaStrada`).
+
+**4. Carta**: un segno per i ponti (arco) e per i guadi (puntini) sui rami; nella Carta zoomata quelli veri delle Scene.
+
+**Prestazioni** (`docs/PRESTAZIONI.md`, gruppo «resto», 1,5 ms): per blocco ≤ 2 ponti (≤ 6 000 triangoli, ≤ 4 chiamate)
+e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche con
+`?seme=570549&prova&centro=39277,18877` (ponte di una strada maestra, luce ~25 m). Materiali creati al caricamento.
+
+**Passi** (ciascuno provato nel browser):
+1. Attraversamenti, quote, rampe e soglia del guado (`strade.js`); verifiche in Node su 30 semi: nessuna rampa oltre la
+   pendenza della classe, giuntura tra blocchi 0, guadi ≤ 0,4 m.
+2. Ponti di pietra e di legno, camminabili; percorso di prova sul ponte.
+3. Guadi: pietre e ghiaia.
+4. Segni sulla Carta.
+
+**Da decidere**: (a) pietra per maestre e luci > 20 m, legno altrimenti? (b) presidio e pedaggio ai ponti (GDD: luoghi
+da sorvegliare) arrivano con i luoghi, non ora: d'accordo?
+
 ### Fatto (passi 1–2)
 
 - **Rete** (`aggiungiStrade`, nel Worker con i luoghi; `VERSIONE_GENERATORE` `…+strade-1`): nodi = porte dei borghi,
