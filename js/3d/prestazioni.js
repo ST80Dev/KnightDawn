@@ -12,13 +12,18 @@
 import * as THREE from 'three';
 
 export const GRUPPI = ['ter. blocco', 'ter. orizzonte', 'veg. sagome lontane', 'veg. sagome', 'veg. erba', 'veg. resto',
-  'edifici', 'personaggi', 'resto'];
-/** Famiglie di gruppi con un budget comune: prefisso → chiave di BUDGET_GPU (la somma si confronta col budget). */
-export const FAMIGLIE = { 'ter.': 'terreno', 'veg.': 'vegetazione' };
+  'edifici', 'personaggi', 'cielo', 'resto'];
+/** Famiglie di gruppi con un budget comune: chiave di BUDGET_GPU → gruppi (la somma si confronta col budget). Il cielo
+ *  (cupola, stelle, precipitazioni: oggetti col nome che comincia per «cielo») sta nel budget di acqua, cielo ed effetti. */
+export const FAMIGLIE = {
+  terreno: GRUPPI.filter((g) => g.startsWith('ter.')),
+  vegetazione: GRUPPI.filter((g) => g.startsWith('veg.')),
+  resto: ['cielo', 'resto'],
+};
 /** Budget in ms di GPU (docs/PRESTAZIONI.md, «Obiettivi e budget», approvati dall'utente); vegetazione complessiva. */
 export const BUDGET_GPU = { terreno: 4.5, vegetazione: 6.5, edifici: 1.5, personaggi: 1.5, resto: 1.5, totale: 15.5 };
 /** Budget di un gruppo (i gruppi «ter. …» e «veg. …» condividono quello della famiglia: null = vedi la somma). */
-export const budgetDi = (g) => (Object.keys(FAMIGLIE).some((f) => g.startsWith(f)) ? null : BUDGET_GPU[g]);
+export const budgetDi = (g) => (Object.values(FAMIGLIE).some((f) => f.includes(g)) ? null : BUDGET_GPU[g]);
 
 const CAMPIONI = 90;                       // media mobile sugli ultimi ~1,5 s a 60 FPS
 
@@ -135,8 +140,10 @@ const ATTESA_INIZIALE = 1.5;               // s di assestamento (compilazione, p
 /**
  * Percorso di prova: due giri uguali, il primo «normale», il secondo «per gruppi».
  * @param {{x:number, y:number, z:number, direzione:number}} centro  punto e direzione del cavaliere alla partenza
+ * @param {{maxFotogramma?: number}} opz  s oltre cui un fotogramma invalida la misura (Infinity: mai, per la prova in
+ *   headless con ?lento, dove ogni fotogramma dura secondi; lì contano solo errori e conteggi, non i tempi)
  */
-export function creaPercorso(centro) {
+export function creaPercorso(centro, { maxFotogramma = MAX_FOTOGRAMMA } = {}) {
   const tempi = [];                        // durata dei fotogrammi (ms) nel giro normale
   const cpu = [];                          // ms di processore per fotogramma (logica + invio) nel giro normale
   const parti = {};                        // nome → ms per fotogramma, nel giro normale
@@ -167,7 +174,7 @@ export function creaPercorso(centro) {
       // Finestra nascosta o ridotta a icona: il browser ferma i fotogrammi e alla ripresa arriva un dt di decine di
       // secondi, che faceva saltare tutto il percorso senza un campione (risultati tutti «n/d»). Misura non valida.
       // Durante l'attesa iniziale il fotogramma lungo si ignora soltanto.
-      if (dt > MAX_FOTOGRAMMA) {
+      if (dt > maxFotogramma) {
         if (t < 0) dt = 0;
         else { interrotto = dt; finito = true; osservatore?.disconnect(); return { mira: null, azzera: false }; }
       }

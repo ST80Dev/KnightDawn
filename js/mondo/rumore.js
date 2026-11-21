@@ -141,3 +141,13 @@ export function gradienteD(x, y, seed, out) {
   out[2] = ay + dv * (n01 - n00) + u * (by - ay) + v * (cy - ay) + dv * u * k + u * v * (ay - by - cy + dy);
   return out;
 }
+
+/**
+ * Esegue fino in fondo un generatore «a pezzi» (funzioni function* che fanno yield ogni pochi ms: blocco che segue il
+ * cavaliere, js/3d/blocchi.js) e ne restituisce il risultato: la versione tutta in una volta delle stesse funzioni.
+ */
+export function completa(gen) {
+  let r = gen.next();
+  while (!r.done) r = gen.next();
+  return r.value;
+}

@@ -10,10 +10,10 @@
 // La cella (c, r) della Carta copre [c·cella, (c+1)·cella] × [r·cella, (r+1)·cella].
 // Il blocco usa coordinate locali centrate sul suo centro (vedi docs/ESPLORAZIONE_3D.md, Coordinate).
 
-import { gradienteD, derivaSeme, smoothstep, ridged } from './rumore.js';
+import { gradienteD, derivaSeme, smoothstep, ridged, completa } from './rumore.js';
 import { ACQUA, profiloMassicci } from './carta.js';
 import { tracciaPercorso, lettoMonotono, PERCORSO } from './fiumi.js';
-import { spianaStrade, raffinaStrade, stradeBlocco, attraversamentiBlocco } from './strade.js';   // import circolare: usate solo dentro le funzioni
+import { spianaStrade, raffinaStrade, raffinaStradeAPezzi, stradeBlocco, attraversamentiBlocco } from './strade.js';   // import circolare: usate solo dentro le funzioni
 
 export const SCENA = { lato: 2000, celle: 256 };   // 2×2 km, 257×257 vertici (come Tavullia)
 
@@ -548,14 +548,19 @@ function raffina(carta, pronto, id) {
  * Cerca il percorso sul terreno dei tratti di fiume entro `raggio` m (in quadrato) da (cx, cz). Fuori da
  * questa zona i fiumi seguono il tracciato della Carta (solo nell'orizzonte lontano). Restituisce i ms.
  */
-export function raffinaZona(carta, cx, cz, raggio = FIUMI_SCENA.tratti.zona) {
+export function raffinaZona(carta, cx, cz, raggio) { return completa(raffinaZonaAPezzi(carta, cx, cz, raggio)); }
+
+/** raffinaZona a pezzi (blocco che segue il cavaliere): yield dopo ogni tratto cercato (un tratto resta intero). */
+export function* raffinaZonaAPezzi(carta, cx, cz, raggio = FIUMI_SCENA.tratti.zona) {
   const t0 = performance.now();
   const pronto = fiumiScena(carta);
-  pronto.tratti.forEach((tr, id) => {
-    const [x0, z0, x1, z1] = tr.riquadro;
-    if (x1 < cx - raggio || x0 > cx + raggio || z1 < cz - raggio || z0 > cz + raggio) return;
+  for (let id = 0; id < pronto.tratti.length; id++) {
+    const [x0, z0, x1, z1] = pronto.tratti[id].riquadro;
+    if (x1 < cx - raggio || x0 > cx + raggio || z1 < cz - raggio || z0 > cz + raggio) continue;
+    if (pronto.raffinati.has(id)) continue;
     raffina(carta, pronto, id);
-  });
+    yield;
+  }
   return performance.now() - t0;
 }
 
@@ -866,11 +871,14 @@ export function centroBlocco(v) {
  * @param {number} cz  centro del blocco, z del mondo (m)
  * @returns {{ meta: object, heights: Float32Array }}
  */
-export function generaScena(carta, cx, cz) {
+export function generaScena(carta, cx, cz) { return completa(generaScenaAPezzi(carta, cx, cz)); }
+
+/** generaScena a pezzi (blocco che segue il cavaliere, js/3d/blocchi.js): yield tra i tratti e ogni 4 righe. */
+export function* generaScenaAPezzi(carta, cx, cz) {
   const t0 = performance.now();
   cx = centroBlocco(cx); cz = centroBlocco(cz);
-  const msFiumi = raffinaZona(carta, cx, cz);
-  const msStrade = raffinaStrade(carta, cx, cz);
+  const msFiumi = yield* raffinaZonaAPezzi(carta, cx, cz);
+  const msStrade = yield* raffinaStradeAPezzi(carta, cx, cz);
   const n = SCENA.celle + 1, cell = SCENA.lato / SCENA.celle, half = SCENA.lato / 2;
   const heights = new Float32Array(n * n);
   const fiume = new Float32Array(n * n).fill(NaN);      // pelo dell'acqua dei fiumi (NaN = asciutto)
@@ -878,6 +886,7 @@ export function generaScena(carta, cx, cz) {
   const seed = derivaSeme(carta.seme, 101);
   const esito = { quota: 0, livello: NaN };
   for (let r = 0; r < n; r++) {
+    if (r % 4 === 0) yield;
     const z = cz - half + r * cell;
     for (let c = 0; c < n; c++) {
       const x = cx - half + c * cell, i = r * n + c;

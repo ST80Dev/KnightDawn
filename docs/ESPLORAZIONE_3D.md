@@ -282,7 +282,7 @@ Nel 2D 1 Passo era 1 tile; ora il **Passo è solo un'unità di tempo** (~3 ore, 
   abbassano. Niente stagioni per ora. **Notte (ritoccata dopo la prova dell'utente):** buia, luna
   debole; la nebbia, del colore del cielo notturno, si stringe attorno al punto osservato (nitido
   fino a ~15 m, buio pieno a ~110 m oltre la camera): si vede bene solo vicino, il castello a 225 m
-  sparisce. Parametri in `CICLO` (`main.js`).
+  sparisce. Parametri in `CICLO` (`cielo.js`, prima in `main.js`).
 - **HUD in HTML:** data (o «Veglia · giorno N») con l'ora, Forza, Salute, Volontà, Onore.
 - **Salvataggio locale** (localStorage, come da `CLAUDE.md`): posizione e direzione del cavaliere,
   terreno corrente, stato di `Knight` e `Calendar`, autosalvataggio. Supabase abbandonato (deciso
@@ -1328,9 +1328,68 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
    percorsi e un segnaposto con la stessa interfaccia.
 8. **Da lontano.** Sagoma negli anelli, luci lontane. *Prova:* dal fondovalle a 2–5 km la rocca si
    riconosce di giorno e di notte; nessuna rocca «doppia» tra modello e sagoma; FPS invariati fuori dal sito.
+   **Fatto (sessione M6, da provare dall'utente):** `sagomeLuoghi` in `orizzonte.js`. Per i luoghi che la Scena non
+   costruisce (stessa regola di `costruisciRocche`, quindi niente rocca doppia): entro 6 km cinte di rocca e borgo
+   (altezze di `MISURE_ROCCA` e `CLASSI_BORGO`), torri agli spigoli della rocca, mastio, una massa di tetti nel borgo;
+   tra 6 e 18 km solo il mastio. Di notte 4/7/11 luci per borgo (minore, casata, maggiore) sopra i tetti, punti che
+   ignorano la nebbia, fino a 10 km (`luciLontane(notte)`, chiamata in `main.js` con le luci delle rocche). Una mesh
+   per tutte le sagome (~250 triangoli per luogo) e un `Points` per le luci: 2 chiamate. Provato in una scena di prova
+   (seme 570549, rocca di partenza a 3, 6 e 9 km): di giorno mastio e mura sulla cresta, di notte le luci del borgo.
 9. **Blocco che segue il cavaliere** (se l'utente lo approva in M7, punto 6). *Prova:* dal borgo di partenza
    si sale al crinale in 15–20 minuti reali senza fermarsi al bordo e senza stacchi visibili né cali di FPS al
    cambio di blocco; rocca e borgo restano al loro posto; tornando indietro si ritrova tutto.
+   **Piano (sessione M6, da approvare):**
+   - *Cosa costa oggi* (caricaScena, headless, seme 570549): blocco con fiumi e strade ~0,35 s, orizzonte ~0,5–0,6 s,
+     vegetazione ~0,4 s (posizionamento + costruzione), rocche, case e suolo cotto il resto: **1,3–1,6 s in un colpo
+     solo**. Fatto a ogni cambio di blocco (ogni ~1 km di cammino) sarebbe uno scatto di un secondo e più.
+   - *Quando*: il cavaliere a meno di ~350 m dal bordo del blocco (cioè ~650 m dal centro) → si prepara il blocco
+     centrato su di lui (griglia di `centroBlocco`), lo si sostituisce quando è pronto. Il bordo vero non si raggiunge
+     mai (oggi a 2 m il cavaliere si ferma).
+   - *Il cambio*: tutto si sposta di (vecchio centro − nuovo centro): cavaliere, cavallo, camera, persone. Le rocche
+     e le case già costruite che restano vicine si **spostano** (sono già oggetti del mondo), quelle che escono si
+     liberano, quelle che entrano si costruiscono. Terreno, acque, ponti, orizzonte, vegetazione si rifanno. Salvataggi
+     già in coordinate del mondo: invariati.
+   - *Tappe*:
+     1. **Cambio con pausa breve**: tutto come oggi, ma senza schermata di caricamento e con lo spostamento dello stato;
+        si misura la pausa sulla scheda dell'utente. Serve a verificare che niente si perda o si sposti male.
+     2. **Preparazione a pezzi in sottofondo**: il nuovo blocco si calcola a fette tra un fotogramma e l'altro (righe
+        della griglia, un tratto di fiume o di strada, un anello dell'orizzonte, una parte della vegetazione per volta,
+        entro ~4 ms per fotogramma: regola di `docs/PRESTAZIONI.md`); il cambio diventa un solo fotogramma (solo
+        l'invio delle geometrie alla scheda, preparato in anticipo). Obiettivo: nessuno scatto oltre ~50 ms.
+     3. *Se non basta*: posizionamento della vegetazione e quote del blocco nel Worker (moduli già senza grafica).
+   - *Chi tocca cosa*: l'orchestrazione è nuova e sta quasi tutta in `main.js` (caricaScena). Proposta: un modulo nuovo
+     `js/3d/blocchi.js` per la preparazione a pezzi e il cambio, così `main.js` resta leggibile e i conflitti con le
+     altre sessioni restano pochi (file nuovo: serve la conferma, regola 2). Le funzioni delle altre sessioni si
+     usano così come sono (`creaVegetazione`, `costruisciRocche`, `creaCaseCampagna`), chiedendo solo la versione «a
+     pezzi» dove servirà (Vegetazione per il posizionamento).
+   - *Prova*: dal borgo di partenza al crinale senza fermarsi; F3 con i ms del cambio; percorso di prova con un tratto
+     che attraversa due bordi di blocco.
+   - **Tappa 1 fatta** (approvata dall'utente con il file `js/3d/blocchi.js`): `vicinoAlBordo` e `trasla` in
+     `blocchi.js`, `cambiaBlocco` in `main.js` (ricarica la Scena centrata sul cavaliere, sposta cavaliere, cavallo,
+     camera e il punto della fatica; F3: numero e ms dei cambi; `kd.cambiaBlocco(x, z)` per il percorso di prova).
+     Prova in headless (seme 570549): dopo il cambio il cavaliere è nello stesso punto del mondo e alla stessa quota
+     (1224,29 m), nessun errore; **pausa 2,8 s** (headless). Attiva solo con `?blocchi` nell'indirizzo finché c'è la
+     pausa: senza, il cavaliere si ferma al bordo come prima.
+   - **Tappa 2, prima parte fatta**: `caricaScena` del mondo è diviso in `preparaMondo` (generatore: `generaScenaAPezzi`,
+     `createTerrainAPezzi`, `creaOrizzonteAPezzi` con le acque lontane a pezzi, e un `yield` tra un lavoro e l'altro) e
+     `applicaMondo`; il caricamento normale li usa di seguito e fa quello che faceva. Con `?blocchi`, vicino al bordo la
+     preparazione avanza ~4 ms per fotogramma (`avanzaBlocco` in `main.js`, perché tocca le sue variabili); pronta, lo
+     scambio dura ~10 ms (headless) e il blocco vecchio si libera un oggetto per fotogramma. Il cavaliere resta nello stesso
+     punto del mondo. `kd.cambiBlocco.ultimo.lunghi` elenca i pezzi oltre 8 ms. In headless (CPU più lenta di un PC
+     medio) restano lunghi, tutti atomici: posizionamento della vegetazione ~850 ms, `creaVegetazione` ~250, bosco
+     lontano ~120, rocche e borghi ~90; le parti della scena, del terreno e dell'orizzonte stanno sotto ~26 ms. Mancano
+     le versioni a pezzi di Vegetazione e M7 (chieste) e il caricamento sulla scheda e la compilazione degli shader
+     prima dello scambio (note di M1); intanto resta con `?blocchi`. Poi aggiunti: shader compilati in parallelo
+     (`compileAsync`, la preparazione aspetta senza fermare i fotogrammi) e texture caricate sulla scheda prima dello
+     scambio; F3 mostra anche il disegno del fotogramma dopo lo scambio (le geometrie salgono lì).
+   - *Note della sessione M1 (prestazioni)*, da rispettare alla tappa 2: nel fotogramma del cambio non devono cadere
+     la cottura del suolo (`cuociSuolo`, render 2048²), il caricamento sulla scheda di terreno, istanze della vegetazione
+     e texture (ombre, piede, cotto) né compilazioni di shader: tutto nella preparazione, uno per fotogramma
+     (`renderer.initTexture`, `renderer.compileAsync` o un render del gruppo nuovo in un bersaglio 1×1). Il blocco vecchio
+     si libera a pezzi nei fotogrammi dopo (`dispose`), non nel cambio. Al più due blocchi e due orizzonti in memoria,
+     mai un terzo in anticipo. Orizzonte: spostando il centro di ~1 km le fasce degli anelli cambiano posto; se i
+     rilievi vicini «saltano» si rifà solo l'anello 1 e si spostano gli altri. La tappa 1 (pausa ~1,5 s) solo come prova,
+     non a lungo in `main`. Un comando per forzare un cambio di blocco da codice (in `kd`) per il percorso di prova.
 
 ### Accettazione
 
@@ -2255,6 +2314,167 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
   vera si fa solo se serve.
 - Il cavaliere è ancora 86 oggetti (`PRESTAZIONI.md` passo 5): con il cavallo le chiamate dei personaggi salgono di ~12,
   dentro le 120 del budget.
+
+## Cielo e meteo (in parallelo a M7) — piano da approvare
+
+> Avviata dalla sessione «M1 - Grafica» su richiesta dell'utente (novembre 2026), in parallelo a M7. Riferimenti:
+> M5 «Ciclo giorno/notte» (sopra), `docs/GRAFICA_3D.md` «Foschia e visibilità», `docs/PRESTAZIONI.md` (budget
+> «acqua, cielo, effetti» 1,5 ms GPU e ≤ 10 chiamate; oggi 0,3–0,6 ms). **Stato: piano approvato dall'utente (21/11/2026)** con le
+> decisioni 7–10 qui sotto; passo 0 in corso.
+
+**Decisioni già prese dall'utente.**
+1. File nuovo **`js/3d/cielo.js`** (deroga alla regola 2): ci va tutto ciò che è cielo, oggi in `main.js` (`COLORE_CIELO`,
+   `CICLO`, `posizioneSole`, luci sole/luna/emisfera e loro colori, `NEBBIA`, `aggiornaNebbia`, `VISIBILITA`,
+   `farDelGiorno`, `visibilitaDelGiorno`). In `main.js` restano gli agganci.
+2. **Meteo solo grafico:** nessun effetto su Forza, velocità, incontri. Gli effetti sul gioco verranno con la logica.
+3. **Meteo a periodi** (parole dell'utente: «un meteo fisso per ogni diversa ora progressivamente… al massimo ogni 2/3
+   ore canoniche… per adesso senza sfumature»): il meteo resta fisso per **2–3 ore canoniche** (36–54 minuti reali a ×10),
+   deterministico da seme e tempo di gioco; al cambio di periodo può cambiare **di colpo**, anche dentro la Scena.
+   Nuvole ferme, nessuna transizione per ora. Il sole continua a muoversi (un giorno ~2 h 24 min reali).
+4. **Continuità:** un periodo è vicino al precedente («non si può andare da tempo caldo a neve»): passi piccoli su una
+   scala di stati, legata a stagione e clima della regione.
+5. **Pioggia o neve secondo il luogo:** con lo stesso stato di precipitazione, sotto la quota della neve piove, sopra
+   nevica; la quota dipende da quota, latitudine e stagione. Salendo in montagna nella stessa Scena si passa dalla pioggia
+   alla neve.
+6. **La foschia per giorno di M1** (densa / normale / limpida) è sostituita dal meteo, con lo stesso ritmo a periodi.
+7. **Periodi variabili di 2 o 3 ore canoniche** (21/11/2026).
+8. **Foschia standard** (21/11/2026, «la foschia lasciala standard indipendentemente dall'ora»; scelta: «distanza fissa,
+   meteo escluso»): di giorno la foschia finisce sempre alla stessa distanza (~65 km, la «normale» di M1) qualunque sia lo
+   stato; si accorcia solo con la nebbia vera e le precipitazioni forti. La notte resta stretta come in M5. Niente tinta
+   calda verso il sole al tramonto (non ora).
+9. **Neve in pianura al Nord, ogni tanto** (21/11/2026): possibile anche a quota bassa nelle regioni settentrionali.
+10. **Meteo per zona, tendenziale** (21/11/2026): non uguale in tutto il mondo, ma con tendenze secondo bioma e latitudine.
+11. **Salti da 1 a 3 gradini con frequenza calante** (21/11/2026; esempi dell'utente: sereno → nuvoloso, nuvoloso → neve,
+   velato → pioggia forte).
+
+**Cosa c'è oggi** [Certo, dal codice]: `scene.background` è un colore unico uguale alla nebbia (niente sfumatura, sole,
+luna, stelle, nuvole). La nebbia di giorno va da 1,5 km a 40–150 km (tiro del giorno, interpolato con continuità tra un
+giorno e il successivo); di notte si stringe a ~110 m. La luna è una luce fissa alta a sud-est. Il clima del generatore è
+già pronto per la neve: `temperaturaMare` e `umidita` per cella e `limiteNevi(t0, stagione)` in `js/mondo/carta.js`
+(gradiente 0,0065 °C/m, scarti di stagione −9 / +8 °C), usati anche dalla vegetazione per la neve a terra. Tre cose
+leggono la luce del sole e dovranno sapere quanto è «diretta»: ombre finte della vegetazione
+(`vegetazione.aggiorna(…, sole.position, luceGiorno)`), ombre del suolo (`terrain.js`), ombre delle mura
+(`materialeMuro` in `rocca3d.js`, che prende la direzione della luce direzionale più forte).
+
+### Decisioni tecniche (proposte)
+
+1. **Cupola del cielo:** una sfera attorno alla camera (raggio ~100 km, dentro il `far` di 130 km), disegnata per prima,
+   senza nebbia né scrittura di profondità; uno shader solo: gradiente zenit → orizzonte, disco e alone del sole, disco
+   della luna, nuvole. **Il colore all'orizzonte è il colore della nebbia** (stesso valore, calcolato in un punto): il
+   terreno lontano sfuma nel cielo senza stacco, anche dalle alture dove l'orizzonte scende sotto la linea dell'occhio.
+   1 chiamata.
+2. **Nuvole ferme:** una texture di copertura (1024², rumore frattale da codice) **cotta sulla GPU** all'ingresso nella
+   Scena e a ogni cambio di periodo, in render target creati una volta (nessuna texture nuova durante il gioco). Al cambio
+   di periodo la cottura si fa a strisce in più fotogrammi in un secondo target, poi si scambia: nessun fotogramma oltre
+   ~1,5 ms (regola di `docs/PRESTAZIONI.md`). Proiettata come uno strato a quota fissa (si stringe verso l'orizzonte e si
+   perde nella foschia); lo shader la legge una volta per pixel e la illumina col sole del momento (bianche a mezzogiorno,
+   rosate al tramonto, grigio scuro di notte). Forma per stato: cumuli sparsi, velo, coperto con chiazze più scure.
+3. **Stelle:** ~2000 punti in una chiamata, solo di notte, spenti dove ci sono nuvole (leggono la stessa texture).
+   Luna come disco nella cupola, nella direzione della luce lunare; fasi della luna dal giorno [facoltativo].
+4. **Scala del meteo e periodi.** Il tempo di gioco si divide in periodi di 2 o 3 Passi (lunghezza tirata dal seme, confini
+   sulle ore canoniche). Lo stato di un periodo è un indice su una scala:
+
+   | Indice | Stato | Luce del sole | Visibilità (fine foschia) |
+   |---|---|---|---|
+   | 0 | sereno | piena | standard (~65 km) |
+   | 1 | poco nuvoloso (cumuli) | piena | standard |
+   | 2 | velato (sole con alone) | ×0,6 | standard |
+   | 3 | coperto | ×0,2, emisfera più forte e grigia | standard |
+   | 4 | precipitazioni deboli | ×0,1 | standard |
+   | 5 | precipitazioni forti | ×0,05 | 8–15 km (cortina di pioggia o neve) |
+
+   L'indice viene da un **rumore liscio sul tempo** (valore all'inizio del periodo), spostato dalle tendenze della zona:
+   `umidita` della cella (umido → più nuvole e precipitazioni), bioma (sabbia e sud arido più sereni, palude più nebbia,
+   montagna più nuvole), latitudine (il nord più coperto) e stagione. Tra un periodo e il successivo lo stato cambia di
+   **1–3 gradini con frequenza calante** (decisione 11) [valori da tarare guardando]: di norma resta o cambia di 1; di 2
+   circa una volta su 6; di 3 circa una volta su 20 (temporale d'estate velato → pioggia forte, fronte freddo al nord poco
+   nuvoloso → neve). Si ottiene con il rumore liscio (passi di 0–1) più rari «salti» tirati dal seme per il periodo;
+   le tendenze della zona restano, quindi niente neve dal caldo (la neve dipende comunque dalla temperatura del luogo). Niente catena da ripercorrere: lo stato di
+   qualunque periodo si calcola direttamente, quindi è lo stesso caricando un salvataggio o tornando nello stesso luogo.
+   **Nebbia vera** (inizio ~100 m, fine 0,6–2,5 km, luce ×0,3): non un gradino della scala ma una variante del sereno o del
+   velato nei periodi di notte e del mattino, in autunno e inverno, nelle celle basse e umide [regola da tarare].
+   **Regione:** la cella della Carta dove sta il cavaliere (dentro una Scena di 2 km è una sola o poche: si usa quella del
+   centro della Scena, così il meteo non cambia attraversando un confine di cella).
+5. **Pioggia o neve:** temperatura del luogo nel momento = `temperaturaMare` + scarto di stagione − 0,0065 · quota (le
+   stesse costanti del generatore, importate da `carta.js`, non copiate), più uno **scarto del periodo** di ±4 °C (rumore
+   liscio sul tempo: ondate di freddo e di caldo). Al nord la media annua al mare è ~−4 °C (`CLIMA.latitudine`): d'inverno
+   lì nevica anche in pianura; in primavera e autunno solo nelle ondate di freddo; al centro solo d'inverno con un'ondata
+   di freddo; al sud mai in pianura. Nevica dove è ≤ 0 °C, piove sopra +1,5 °C, in
+   mezzo nevischio (una parte delle strisce diventa fiocchi). Si valuta alla quota della camera, a ogni fotogramma (costo
+   nullo): salendo il versante la pioggia diventa neve. [Probabile] La neve che cade scende ~450 m sotto il limite della
+   neve a terra (che usa la media della stagione sotto −3 °C): nevicate su prati ancora verdi, come accade davvero.
+   Va bene all'utente: «ogni tanto deve essere possibile neve in pianura bassa se si è al Nord».
+6. **Luci col meteo:** con poca luce diretta il sole cala e l'emisfera sale e si ingrigisce (luce diffusa); il cielo
+   non è più azzurro. `cielo.js` espone `luceDiretta` (0–1) per chi disegna ombre finte (vegetazione, suolo, mura), che
+   le attenua col cielo coperto. Le sessioni proprietarie decidono come usarlo (vedi «Accordi»).
+7. **Precipitazioni attorno alla camera:** strisce sottili (pioggia) e fiocchi (neve) in una scatola di ~40 m che segue
+   la camera; la caduta è animata nello shader dei vertici (nessun lavoro della CPU). 1 chiamata, poche migliaia di
+   elementi (niente interni per ora, quindi nessun riparo da gestire).
+8. **Per le prove:** `?meteo=0…5` o `?meteo=nebbia` forza lo stato; il pannello `F3` mostra stato, periodo (inizio e fine),
+   visibilità, temperatura del luogo, `luceDiretta`. Il percorso di prova usa il sereno se non indicato (numeri
+   confrontabili con la tabella di `docs/PRESTAZIONI.md`); il caso peggiore si misura con `&meteo=5`.
+
+**Budget** [Ipotesi, da misurare sulla UHD 730]: cupola con nuvole 0,2–0,4 ms (un pixel di cielo costa una lettura di
+texture), stelle < 0,05, precipitazioni 0,1–0,3; cottura delle nuvole ~2–5 ms in tutto, a strisce. Con l'acqua (0,3–0,6)
+si resta sotto 1,5 ms e ≤ 10 chiamate (cupola 1, stelle 1, precipitazioni 1). Memoria: due texture di nuvole, ~8 MB.
+
+### Passi (ciascuno provato nel browser e dal percorso di prova `?seme=570549&prova`, anche `&centro=99937,43289`)
+
+0. **Spostamento in `cielo.js`, comportamento identico.** Solo codice spostato; in `main.js` gli agganci (crea, aggiorna
+   ogni fotogramma, nebbia sul punto osservato, testo per F3). Verifica: immagini headless a 4 ore (6, 12, 19:30, 0)
+   identiche pixel per pixel prima e dopo; poi prova dell'utente.
+   **Stato: fatto, da provare dall'utente.** `js/3d/cielo.js`: `creaCielo(scene)` crea sfondo, nebbia e le tre luci e
+   restituisce `aggiorna(ora)` (false se l'ora è quasi la stessa), `aggiornaNebbia(camera, punto, conOrizzonte, seme,
+   giorni)`, `invalida()`, `luceGiorno`, `sole`, `luna`, `emisfera`; esporta anche `CICLO`, `posizioneSole`,
+   `visibilitaDelGiorno(seme, giorni)` e la modifica di `fog_vertex`. In `main.js` restano gli agganci: luci proprie di
+   mura e castello e ombre finte di cavaliere e cavallo (dopo `aggiorna`), nebbia sul punto osservato, riga di F3.
+   Verificato in headless (seme 570549, ore 6, 12, 19:30, 0): immagini identiche pixel per pixel, stessa nebbia;
+   Tavullia e pannello F3 senza errori.
+1. **Cupola a gradiente, sole e luna, alba e tramonto.** Zenit più scuro e saturo, orizzonte = nebbia; al crepuscolo il
+   cielo è caldo verso il sole e freddo dalla parte opposta (la nebbia resta di un colore solo).
+   **Stato: fatto, da provare dall'utente** (insieme al passo 0). `creaCupola` in `cielo.js`: sfera `cielo-cupola` di 5 km
+   attorno alla camera (segue qualunque camera la disegni), disegnata per prima, senza profondità né nebbia; 48×24
+   segmenti, uno shader leggero (nessuna texture). Colori in `CICLO.colori` (`zenitGiorno`, `zenitNotte`,
+   `zenitCrepuscolo`, `alonCrepuscolo`, `discoLuna`): all'orizzonte e sotto è il colore della nebbia (in headless nessuna
+   riga tra terreno lontano e cielo, anche dalle alture); fascia calda bassa dalla parte del sole tra ~14° e −8° di
+   altezza; disco del sole di 0,75° (più grande del vero, per vederlo dalla vista di gioco) con due aloni; luna di 0,6°
+   nella direzione della luce lunare (fissa, alta a sud-est), solo di notte. Nel percorso di prova la cupola finisce in
+   «resto» finché non entra in `main` il gruppo «cielo» di M1.
+2. **Stelle di notte.**
+3. **Meteo a periodi senza nuvole disegnate:** scala, periodi, regione, foschia standard al posto di quella per giorno,
+   luci, `?meteo=`, F3. Qui si provano con M7 le mura col cielo coperto e con Vegetazione le ombre finte.
+4. **Nuvole ferme** per stato, illuminate dall'ora, ricotte a strisce al cambio di periodo.
+5. **Precipitazioni attorno alla camera** (pioggia, nevischio, neve secondo la temperatura del luogo) **e nebbia vera.**
+6. **Chiusura:** percorso di prova sereno e con `&meteo=5`, righe nella tabella di `docs/PRESTAZIONI.md`, documenti
+   aggiornati (`docs/GRAFICA_3D.md` «Foschia e visibilità» rimanda qui).
+
+### Accordi con le altre sessioni (da prendere)
+
+- **M1 - Grafica** (risposta ricevuta): spostamento della foschia in `cielo.js` e sostituzione col meteo confermati. Gruppo
+  «cielo» nel profilatore pronto sul branch di M1 `claude/keen-gauss-74qlkn` (da unire con l'ok dell'utente): ci rientra
+  ogni oggetto figlio diretto della scena con nome che comincia per «cielo» (`cielo-cupola`, `cielo-stelle`,
+  `cielo-precipitazioni`); «acqua, cielo ed effetti» somma cielo e resto contro 1,5 ms. Per questo la cupola è una mesh e
+  non `scene.background` (lo sfondo nel percorso per gruppi finirebbe in «ter. blocco»).
+- **M7:** `materialeMuro` scurisce fino a ×0,38 le facce girate dalla luce più forte; col cielo coperto la luce più forte
+  resta il sole indebolito e le mura avrebbero ombre nette sotto un cielo senza sole. Proposta: attenuare con `luceDiretta`.
+- **Vegetazione:** ombre finte attenuate con `luceDiretta`; conferma che la neve a terra resta solo da `limiteNevi`
+  (la neve che cade non imbianca il suolo: niente accumulo per ora).
+- **M6:** l'orizzonte usa la nebbia di scena: nessun cambio atteso; `cielo.js` importa da `carta.js` `CLIMA` e legge
+  `temperaturaMare` e `umidita` della Carta (solo lettura).
+
+### Rischi
+
+- [Probabile] Il punto delicato è l'orizzonte: se il colore della cupola in basso e quello della nebbia non coincidono
+  esattamente si vede una riga. Si calcolano nello stesso punto.
+- [Probabile] I cambi di colpo (decisi dall'utente) si notano di più col cielo coperto ↔ sereno: luce, ombre e nuvole
+  cambiano nello stesso fotogramma. È il comportamento voluto per ora; le transizioni sono il seguito naturale.
+- [Ipotesi] Nuvole proiettate su uno strato piatto possono sembrare «dipinte» vicino all'orizzonte; si sfumano lì.
+- [Certo] Dopo lo spostamento, `main.js` e `cielo.js` si toccano da più sessioni: modifiche minime e `main` unito spesso.
+
+### Decise con l'utente (21/11/2026)
+
+Periodi variabili 2–3 ore canoniche; foschia calda al tramonto non ora; neve anche in pianura al Nord, ogni tanto; meteo
+tendenziale per bioma e latitudine; foschia di giorno a distanza standard per ogni stato (decisioni 7–10 sopra).
 
 ## Fuori dal prototipo (non farlo ora)
 
