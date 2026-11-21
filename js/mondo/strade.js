@@ -66,6 +66,7 @@ export const STRADE = {
     liscia: [3, 2],             // media mobile ±3 punti, 2 passate (toglie i gradini senza tagliare i tornanti)
     portaDritta: 30,            // m: tratto dritto lungo la normale della porta di un borgo, fino alla porta
     lisciaTerreno: 2,           // passate di media 3×3 sulle quote della griglia prima di cercare il percorso
+    lisciaVera: 1,              // passate dopo cui si prende anche la pendenza «vera» (la più ripida delle due conta)
     profilo: [5, 3],            // quota della strada: media mobile ±5 punti (25 m), 3 passate
     scarpata: 0.6,              // pendenza massima delle scarpate di taglio e di riporto (~31°)
     raccordo: 18,               // m oltre il bordo entro cui il terreno segue la strada
@@ -639,8 +640,12 @@ function* tracciaTrattoAPezzi(carta, tr, W = STRADE.scena.corridoio) {
   const sA = cellaDi(A.x, A.z), sB = cellaDi(B.x, B.z);
   for (const s of [sA, sB]) if (Number.isNaN(hq[s])) { hq[s] = terreno(carta, x0 + (s % nx) * g, z0 + ((s / nx) | 0) * g, esito); acqua[s] = 0; }
   // Pendenze sul terreno lisciato (media su ~60 m, `lisciaTerreno` passate): la strada segue la forma del versante
-  // e fa tornanti ampi, invece di zigzagare tra le gobbe del rilievo fine.
+  // e fa tornanti ampi, invece di zigzagare tra le gobbe del rilievo fine. Conta però anche la pendenza vera (media
+  // su ~40 m, `lisciaVera` passate): su una cima stretta la lisciatura la nascondeva e la strada saliva dritta a 30°
+  // verso la rocca (segnalato dall'utente).
+  let hv = null;
   for (let it = 0; it < S.lisciaTerreno; it++) {
+    if (it === S.lisciaVera) hv = hq.slice();
     const t = hq.slice();
     for (let k = 0; k < N; k++) {
       if (Number.isNaN(hq[k])) continue;
@@ -676,7 +681,7 @@ function* tracciaTrattoAPezzi(carta, tr, W = STRADE.scena.corridoio) {
       if (Number.isNaN(hq[kk])) continue;
       let km = -1;
       if (v >= 8) { km = (r + Math.round(DY[v] / 2)) * nx + c + Math.round(DX[v] / 2); if (Number.isNaN(hq[km])) continue; }
-      const L = LUNGO[v] * g, p = Math.abs(hq[kk] - hq[k]) / L, pp = p / K.p0;
+      const L = LUNGO[v] * g, p = Math.max(Math.abs(hq[kk] - hq[k]), hv ? Math.abs(hv[kk] - hv[k]) : 0) / L, pp = p / K.p0;
       let costo = L * (1 + pp * pp);
       if (p > K.pmax) costo *= 1 + S.oltre * (p - K.pmax) / K.pmax;
       const w = Math.max(acqua[kk], km >= 0 ? acqua[km] : 0);
