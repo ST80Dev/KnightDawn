@@ -497,6 +497,16 @@ Durante la Veglia:
   vigore del cavallo dipende da bioma, pendenza e presenza di strade. La tabella per bioma del
   2D (`TRAVEL_COST`) resta come base.
 - Mezzi: a piedi, a cavallo, per mare (dai porti; anche traghetti e guadi).
+- **Porti e rotte per mare** [deciso con l'utente, novembre 2026; si fanno con i luoghi]:
+  - il mare che tocca il bordo della Carta **continua oltre la mappa** (come nella Scena, dove oltre il bordo il
+    paesaggio prosegue a specchio): tutti i tratti di mare che toccano il bordo sono collegati da **rotte esterne**
+    appena fuori dalla mappa, lungo il perimetro; il tempo si conta sulla loro lunghezza vera (da un angolo
+    all'opposto ~200 km: 2–3 giorni di nave contro 9–12 a piedi). Per ora le navi toccano solo porti della mappa
+    (destinazioni fuori mappa, anche solo di nome, da decidere);
+  - i **mari interni** (che non toccano il bordo) collegano solo i porti sulle loro rive;
+  - un **porto** nasce solo dove serve: almeno un altro porto raggiungibile per mare e una rotta che fa risparmiare
+    tempo rispetto al viaggio a piedi. Uno specchio d'acqua piccolo e isolato non ha porti (al più un villaggio di
+    pescatori).
 - Durante il viaggio possono scattare eventi (incontri, meteo, scoperte). Il giocatore può fermarsi
   quando vuole: fermarsi vuol dire entrare nella scena 3D di quel punto. Un evento (imboscata,
   incontro) può fermare il viaggio e portare in 3D lì.
