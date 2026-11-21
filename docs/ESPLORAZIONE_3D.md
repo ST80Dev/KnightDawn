@@ -1556,31 +1556,27 @@ Deserto e steppa: arbusti secchi radi, sassi; niente piante esotiche (stile medi
   attraversano (domanda 5).
 - Camera: non urta la vegetazione (nel bosco salterebbe di continuo) [Probabile]; se una chioma si mette tra camera e
   cavaliere si accetta, o si rimpicciolisce l'albero più vicino alla camera (si decide guardando, passo 3).
-  **Deciso con l'utente (visuale pulita):** nel bosco tronchi e chiome coprivano quasi sempre il cavaliere; ora si
-  dirada «a retino» solo ciò che lo copre davvero (`conVisuale` in `vegetazione3d.js`). Prima versione: spariva tutto
-  ciò che era più vicino alla camera del cavaliere; l'utente ha chiesto di lasciare ciò che non copre (siepi, alberi e
-  muretti di lato a 3–4 m sparivano senza motivo). Ora ogni oggetto è approssimato da volumi nel suo sistema (tronco +
-  4 fasce di chioma: cilindri verticali, scatole per le fasce allungate come i muretti) e lo shader controlla se i
-  segmenti camera → piedi, busto e testa del cavaliere li attraversano, con tre margini (0,1–0,6 m) per un passaggio
-  graduale; i segmenti si fermano 0,4 m prima del cavaliere (il tronco contro cui cammina resta). Calcolo solo per gli
-  oggetti vicini alla linea di vista. Erba e felci solo a ridosso della camera (1,6 m). Trama 4×4 fissa sullo schermo
-  con `discard`, niente trasparenze ordinate; gli oggetti del tutto diradati non si disegnano. Spento con la camera
-  libera (C). Le ombre finte a terra restano. Valori provabili da console: `kd.vegetazione.cfgVisuale`. [Probabile] il
-  `discard` toglie al GPU il test di profondità anticipato sulla vegetazione: costo da verificare con F3 nel bosco
-  fitto.
-  **Passaggi graduali tra i livelli (richiesta dell'utente, nov. 2026):** camminando alberi, massi e altri oggetti
-  «apparivano dal nulla»: oltre l'ultima distanza del tipo sparivano di colpo, tra un livello e l'altro il modello
-  cambiava di colpo, le sagome diradate oltre 300 m spuntavano, e tutto a gruppi ogni 12 m di cammino. Ora attorno a
-  ogni soglia c'è una fascia (12 % della distanza, 6–30 m) in cui l'oggetto si dissolve a retino secondo la distanza
-  dalla camera, nello shader (`PASSAGGI`, `kdLivello`): il livello che esce e quello che entra hanno trame
-  complementari (livelli pari diritta, dispari rovesciata), nessun pixel doppio; oltre l'ultimo livello svanisce; le
-  sagome diradate compaiono a puntini (soglia per albero, attributo `aPassaggio`). La regola del bordo del blocco
-  (sagome già da 120 m) è applicata uguale in JS e nello shader. Ogni livello si assegna con 6,5 m di margine, la
-  ridistribuzione ogni 5 m (era 12). Misure in headless nello stesso punto (seme 570549, blocco 97,00/80,64 km, bosco):
-  istanze 25 300 contro 26 900, triangoli elaborati ~350 mila contro ~296 mila (+18 %, quasi tutti vertici del
-  margine, del tutto dissolti, che non arrivano ai pixel); ridistribuzione completa 2,6–7,4 ms a pezzi in entrambe le
-  versioni. [Probabile] costo GPU piccolo (il costo della vegetazione segue i pixel, PRESTAZIONI.md): da confermare con
-  il percorso di prova nel bosco fitto.
+  **Deciso con l'utente (visuale pulita):** nel bosco tronchi e chiome coprivano quasi sempre il cavaliere; ora sparisce
+  solo ciò che lo copre davvero (`conVisuale` in `vegetazione3d.js`). Ogni oggetto è approssimato da volumi nel suo
+  sistema (tronco + 4 fasce di chioma: cilindri verticali, scatole per le fasce allungate come i muretti) e lo shader
+  controlla se i segmenti camera → piedi, busto e testa del cavaliere li attraversano (margine 0,35 m); i segmenti si
+  fermano 0,4 m prima del cavaliere (il tronco contro cui cammina resta). Calcolo solo per gli oggetti vicini alla
+  linea di vista. Storia delle richieste: prima spariva tutto ciò che era più vicino alla camera del cavaliere (anche
+  siepi e muretti di lato: tolto); poi la dissolvenza «a retino» sembrava sfocata, non coerente con la grafica: ora
+  l'oggetto **sparisce netto** (vertici fuori dallo schermo), senza trasparenze né `discard`. Erba e felci a ridosso
+  della camera (1,6 m) si rimpiccioliscono. Spento con la camera libera (C). Le ombre finte a terra restano. Valori
+  provabili da console: `kd.vegetazione.cfgVisuale` (margine, arretramento, raggio di erba e felci).
+  **Comparsa con la distanza (richieste dell'utente, nov. 2026):** camminando alberi, massi e altri oggetti «apparivano
+  dal nulla». Una prima versione li dissolveva a retino alle soglie di distanza (anche tra i modelli dello stesso
+  oggetto, disegnati due volte nella fascia: +41 % di triangoli nel bosco fitto) e l'utente l'ha trovata sfocata e
+  incoerente. Ora gli oggetti con una distanza massima (cespugli, sassi, siepi, muretti, tronchi caduti…) **crescono**
+  dal suolo negli ultimi metri prima di quella distanza (12 % della distanza, 6–30 m; `CRESCITA`, `kdCresci`), solidi;
+  le sagome diradate oltre 300 m crescono quando la densità supera la loro soglia (attributo `aSoglia`). Il passaggio tra
+  i modelli dello stesso oggetto (vicino → medio → sagoma) è istantaneo come in origine. Il livello più lontano si
+  assegna fino a 13 m oltre la sua distanza (lì misura zero); ridistribuzione ogni 12 m come prima. Misura in headless
+  (seme 570549, blocco 97,00/80,64 km): ~355 mila triangoli elaborati contro ~419 mila della versione a retino, nessun
+  errore. [Probabile] nessun costo GPU in più rispetto a prima delle due richieste (niente doppio disegno, niente
+  `discard`): da confermare con il percorso di prova nel bosco fitto.
 
 **8. Bordo del blocco e orizzonte.** Nell'orizzonte il bosco resta un colore (vincolo). [Probabile] con la nebbia
 solo dai 10 km, dal blocco il bosco «finisce» al bordo e oltre resta il colore piatto: si vedrà, soprattutto
