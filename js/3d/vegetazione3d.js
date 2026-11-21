@@ -401,6 +401,14 @@ function creaModelli() {
 
   // Cespugli: ciuffi su una cupola bassa (due forme da vicino).
   const C = COL.cespuglio, MG = COL.mugo;
+  // Siepi (richiesta dell'utente: «senza collegamento con il terreno, si vedono sospese»): ciuffi su un ellissoide
+  // che scende sotto il terreno, fitti in basso; i tratti a passo 1,7 m si toccano.
+  const siepe = (det, ciuffi) => unisci(chioma({ y: 0.85, a: 1.05, b: 1.2, c: 0.85, ciuffi, raggio: [0.5, 0.75],
+    dettaglio: det, scuro: C[0], chiaro: C[1], rnd, sotto: 0.9, pieno: 0.4, morbido: 0.8 }));
+  M.siepe = [
+    { fino: 40, varianti: [siepe(1, 7), siepe(1, 7)] },
+    { fino: 180, varianti: [siepe(0, 5)] },
+  ];
   M.cespuglio = [
     { fino: 35, varianti: [
       unisci(chioma({ y: 0.55, a: 1.0, b: 0.65, ciuffi: 7, raggio: [0.4, 0.6], scuro: C[0], chiaro: C[1], rnd, sotto: 0, pieno: 0.3 })),
@@ -451,6 +459,26 @@ function creaModelli() {
   tronco.rotateZ(Math.PI / 2); tronco.translate(2.5, 0.22, 0);
   const moncone = fusto(0.09, 0.05, 0.8, 4, COL.corteccia, { x: -1.2, y: 0.4, inclinaZ: 0.7, sotto: 0 });
   M.tronco = [{ fino: 250, varianti: [unisci([tronco, moncone])] }];
+
+  // Muretti a secco: tratti di 2,2 m lungo x (si sovrappongono a passo 1,7 m), alti ~0,95 m: due corsi di pietre
+  // spaccate e una fila di copertina; da lontano un blocco semplice.
+  const tratto = () => {
+    const pietre = [];
+    for (const [y, n, r, sy] of [[0.2, 4, 0.3, 0.62], [0.52, 4, 0.27, 0.6], [0.8, 3, 0.26, 0.5]]) {
+      for (let k = 0; k < n; k++) {
+        const x = -1.1 + (k + 0.5) * (2.2 / n) + (rnd() - 0.5) * 0.15;
+        pietre.push(R1(r * (0.9 + 0.25 * rnd()), { dettaglio: 0, tagli: 5, x, y, z: (rnd() - 0.5) * 0.08,
+          sx: 1.25 + 0.3 * rnd(), sy, sz: y < 0.4 ? 1.0 : 0.85 }));
+      }
+    }
+    return unisci(pietre);
+  };
+  const blocco = new THREE.BoxGeometry(2.2, 0.9, 0.5).toNonIndexed();
+  blocco.translate(0, 0.42, 0);
+  M.muretto = [
+    { fino: 50, piatto: true, varianti: [tratto(), tratto()] },
+    { fino: 220, piatto: true, varianti: [colora(blocco, (c) => c.set(COL.roccia[0]).lerp(new THREE.Color(COL.roccia[1]), 0.35))] },
+  ];
 
   // Sorgenti dell'atlante delle sagome (nell'ordine di SAGOME): i modelli vicini.
   M.sorgentiSagome = [M.latifoglia[0].varianti[0], M.latifoglia[0].varianti[1], M.conifera[0].varianti[0],
@@ -566,9 +594,12 @@ function scriviSagoma(a, j, x, y, z, s) {
 }
 const SAGOMA_BORDO = { fascia: 150, oltre: 120 };
 // Sagome del blocco diradate con la distanza dalla camera (misura nel bosco fitto: 59 000 sagome, 3,3 ms): piene fino
-// a `da` m, poi la densità cala come (da/d)², la stessa legge del bosco lontano (cella 10 m al bordo del blocco, cioè
-// il 36 % della densità del blocco): al bordo le due densità si raccordano. Gli alberi dietro sono comunque coperti.
-const SAGOME_DIRADA = { da: 600 };
+// a `da` m, poi la densità cala fino al 36 % al bordo del blocco, la densità del bosco lontano (cella 10 m contro 6):
+// le due si raccordano. Gli alberi dietro sono comunque coperti.
+const SAGOME_DIRADA = { da: 300, bordo: 0.36 };
+// (dopo la misura nel bosco fitto con le latifoglie medie a 200 m: sagome 2,5 ms con 38 800 istanze, sovrapposte con
+// alpha test) Diradate già da `da` m, con una legge più dolce: densità (da/d)^k, k tale che al bordo del blocco valga
+// `bordo`, la densità del bosco lontano (cella 10 m contro 6): il raccordo resta.
 
 // ─── Collisioni (passo 3; deciso con l'utente: tronchi, massi, affioramenti e sassi grandi bloccano; arbusti, erba e
 // sassi piccoli si attraversano) ───
@@ -576,7 +607,7 @@ const SAGOME_DIRADA = { da: 600 };
 // modello di scala 1 (m), moltiplicato per la scala dell'istanza; il tronco caduto è una fila di tre cerchi.
 const COLLISIONI = { cella: 16, sassoMinimo: 1.1,
   raggio: { latifoglia: 0.42, conifera: 0.34, pino: 0.38, riva: 0.4, secco: 0.32, masso: 1.05, affioramento: 2.3,
-    sasso: 0.3, tronco: 0.32 } };
+    sasso: 0.3, tronco: 0.32, muretto: 0.4, siepe: 0.75 } };
 
 function creaCollisioni(pos) {
   const C = COLLISIONI, celle = new Map();
@@ -600,6 +631,8 @@ function creaCollisioni(pos) {
       if (t.gruppo === 'rocce') {
         const largo = 0.7 + 0.8 * ((v * 3.71) % 1), lungo = 0.7 + 0.7 * ((v * 7.13) % 1);   // come le istanze
         aggiungi(x, z, r0 * s * (largo + lungo) / 2);
+      } else if (nome === 'muretto') {
+        for (const d of [-0.75, 0, 0.75]) aggiungi(x + Math.cos(rot) * d * s, z - Math.sin(rot) * d * s, r0 * s);
       } else if (nome === 'tronco') {
         for (const d of [0.6, 2.5, 4.4]) aggiungi(x + Math.cos(rot) * d * s, z - Math.sin(rot) * d * s, r0 * s);
       } else aggiungi(x, z, r0 * Math.max(0.6, s));
@@ -632,7 +665,7 @@ function creaCollisioni(pos) {
 /** Variazione per istanza: tono (chiaro/scuro e più giallo o più verde) e proporzioni. */
 const TONO = {
   alberi: [0.8, 1.15, 0.14], arbusti: [0.8, 1.12, 0.12], acqua: [0.85, 1.1, 0.1],
-  rocce: [0.62, 1.2, 0], bosco: [0.8, 1.05, 0],
+  rocce: [0.62, 1.2, 0], bosco: [0.8, 1.05, 0], muri: [1.1, 1.4, 0],
 };
 const GIALLO = new THREE.Color('#d9c85a');
 const RIDISTRIBUISCI = { ms: 1.5, pezzo: 2000 };   // tempo per fotogramma e alberi tra un controllo e l'altro
@@ -748,7 +781,8 @@ const FORMA_OMBRA = {
   'arbusto alto': { h: 0.35, r: 1.3, v: 0.4, a: 0.6, p: 1.4 }, sterpo: { h: 0.5, r: 0.6, v: 0.5, a: 0.3, p: 0.6 },
   canne: { h: 1.0, r: 0.45, v: 1.0, a: 0.4, p: 0.6 }, sasso: { h: 0.1, r: 0.35, v: 0.15, a: 0.6, p: 0.45 },
   masso: { h: 0.4, r: 1.3, v: 0.8, a: 0.7, p: 1.6 }, affioramento: { h: 0.2, r: 3.0, v: 0.6, a: 0.6, p: 3.2 },
-  tronco: { h: 0.25, r: 1.6, v: 0.3, a: 0.5, p: 1.8 },
+  tronco: { h: 0.25, r: 1.6, v: 0.3, a: 0.5, p: 1.8 }, muretto: { h: 0.45, r: 1.2, v: 0.5, a: 0.55, p: 1.3 },
+  siepe: { h: 1.0, r: 1.1, v: 1.2, a: 0.65, p: 1.3 },
 };
 const OMBRE = { lato: 1024, latoPiede: 2048, rifaiGradi: 5, perFotogramma: 8000, forza: 0.5, piede: 0.42 };
 
@@ -877,11 +911,11 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
     const matrici = new Float32Array(t.n * 16), colori = new Float32Array(t.n * 3), xz = new Float32Array(t.n * 2);
     const varia = new Float32Array(t.n);
     const [lo, hi, giallo] = TONO[t.gruppo] || [0.9, 1.1, 0];
-    const roccia = t.gruppo === 'rocce', albero = t.gruppo === 'alberi';
+    const roccia = t.gruppo === 'rocce', albero = t.gruppo === 'alberi', muro = t.gruppo === 'muri';
     for (let k = 0; k < t.n; k++) {
       const d = t.dati, o = k * STRIDE;
       const s = d[o + 3], rot = d[o + 4], v = d[o + 5];
-      p.set(d[o], d[o + 1] + (roccia ? -0.15 * s : 0), d[o + 2]);
+      p.set(d[o], d[o + 1] + (roccia ? -0.15 * s : nome === 'siepe' ? -0.12 * s : 0), d[o + 2]);
       // Rocce inclinate; alberi e arbusti tra slanciati e tozzi, larghi e stretti, con un'inclinazione minima.
       const v2 = (v * 7.13) % 1, v3 = (v * 3.71) % 1;
       e.set(roccia ? (v - 0.5) * 0.5 : (v2 - 0.5) * 0.06, rot, roccia ? (v3 - 0.5) * 0.4 : (v3 - 0.5) * 0.06);
@@ -890,6 +924,11 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
       const v4 = (v * 17.31) % 1;              // altezza indipendente dalla larghezza (richiesta dell'utente)
       const alto = roccia ? 0.55 + 0.7 * v : (albero ? 0.72 + 0.56 * v4 : 0.85 + 0.3 * v4);
       sc.set(s * largo, s * alto, s * (roccia ? 0.7 + 0.7 * v2 : largo * (0.9 + 0.2 * v2)));
+      if (muro) {                              // muretti: diritti, lungo il confine, solo un po' più alti o bassi
+        e.set(0, rot, 0); q.setFromEuler(e);
+        p.y = d[o + 1] - 0.08;
+        sc.set(s, s * (0.88 + 0.24 * v4), s);
+      }
       m4.compose(p, q, sc).toArray(matrici, k * 16);
       xz[k * 2] = d[o]; xz[k * 2 + 1] = d[o + 2];
       varia[k] = (v * 11.37) % 1;
@@ -1080,6 +1119,7 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
     const tS = sagomeBlocco ? sagomeBlocco.geometry.attributes.aTessera.array : null;
     const bordoMin = halfBlocco - SAGOMA_BORDO.fascia, oltre2 = SAGOMA_BORDO.oltre * SAGOMA_BORDO.oltre;
     const da2 = SAGOME_DIRADA.da * SAGOME_DIRADA.da;
+    const kDir = Math.log(SAGOME_DIRADA.bordo) / Math.log(SAGOME_DIRADA.da / halfBlocco) / 2;   // su d², quindi /2
     for (const T of tipi) {
       const L = T.livelli, nL = L.length, fino2 = L.map((l) => l.fino * l.fino);
       const conta = T.mesh.map((ms) => new Array(ms.length).fill(0));
@@ -1095,7 +1135,7 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
         if (T.sag && l !== T.lSagoma && d2 > oltre2
           && Math.max(Math.abs(T.xz[k * 2]), Math.abs(T.xz[k * 2 + 1])) > bordoMin) l = T.lSagoma;
         if (l === T.lSagoma) {
-          if (T.sag && (d2 <= da2 || T.caso[k] * d2 < da2)) {
+          if (T.sag && (d2 <= da2 || T.caso[k] < (da2 / d2) ** kDir)) {
             const o = k * 5;
             scriviSagoma(aS, nSag, T.sag[o], T.sag[o + 1], T.sag[o + 2], T.sag[o + 3]);
             tS[nSag++] = T.sag[o + 4];

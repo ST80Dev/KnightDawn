@@ -379,6 +379,13 @@ uniform sampler2D uPermCampi;
 // Permutazione dei campi (PERM_CAMPI): interi esatti, uguali a quelli di vegetazione.js.
 float permC(float x) { return floor(texture2D(uPermCampi, vec2((mod(x, 256.0) + 0.5) / 256.0, 0.5)).r * 255.0 + 0.5); }
 float hashC(float a, float b) { return permC(permC(b) + a); }
+// Aperture naturali delle siepi (come aperturaSiepe in vegetazione.js).
+float aperturaC(float i, float j, float lato, float lungo) {
+  float c = floor(lungo / ${PARCELLE.siepi.aperture.cella.toFixed(1)}), b = hashC(i, j + 141.0 + 7.0 * lato);
+  if (hashC(c, b) >= ${(PARCELLE.siepi.aperture.quota * 256).toFixed(1)}) return 0.0;
+  float centro = (c + 0.2 + 0.6 * hashC(c, b + 1.0) / 255.0) * ${PARCELLE.siepi.aperture.cella.toFixed(1)};
+  return abs(lungo - centro) < ${PARCELLE.siepi.aperture.larghezza[0].toFixed(2)} + ${(PARCELLE.siepi.aperture.larghezza[1] - PARCELLE.siepi.aperture.larghezza[0]).toFixed(2)} * hashC(c, b + 2.0) / 255.0 ? 1.0 : 0.0;
+}
 float hashSuolo(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);
@@ -506,11 +513,25 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
           cC *= 0.86 + 0.28 * r2;
           cC = mix(cC, cPrato * 0.85, 1.0 - smoothstep(0.8, 1.8, bordoC));                             // capezzagna
           if (orto < 0.5) {
-            // Siepi (non i filari d'alberi: quelli hanno le loro ombre finte), come in posizionaVegetazione.
-            float sL = hashC(i, j + 59.0) < ${(PARCELLE.siepi.lungo * 256).toFixed(1)} && hashC(i, j + 97.0) >= ${(PARCELLE.siepi.filari * 256).toFixed(1)} ? fv : 1e4;
-            float sC = hashC(i, j + 83.0) < ${(PARCELLE.siepi.traverso * 256).toFixed(1)} && hashC(i, j + 98.0) >= ${(PARCELLE.siepi.filari * 256).toFixed(1)} && fv > 2.0 ? fu : 1e4;
+            // Siepi (non i filari d'alberi: quelli hanno le loro ombre finte) e, vicino al luogo, muretti a secco con
+            // un varco per lato: come in posizionaVegetazione.
+            float zonaMuri = vCampi.z < ${PARCELLE.muretti.oltreOrti.toFixed(1)} ? 1.0 : 0.0;
+            float noFilL = hashC(i, j + 97.0) >= ${(PARCELLE.siepi.filari * 256).toFixed(1)} ? 1.0 : 0.0;
+            float noFilC = hashC(i, j + 98.0) >= ${(PARCELLE.siepi.filari * 256).toFixed(1)} ? 1.0 : 0.0;
+            float hasL = hashC(i, j + 59.0) < ${(PARCELLE.siepi.lungo * 256).toFixed(1)} ? noFilL : 0.0;
+            float hasC = hashC(i, j + 83.0) < ${(PARCELLE.siepi.traverso * 256).toFixed(1)} && fv > 2.0 ? noFilC : 0.0;
+            float muroL = hasL * zonaMuri * (hashC(i, j + 113.0) < ${(PARCELLE.muretti.quota * 256).toFixed(1)} ? 1.0 : 0.0);
+            float muroC = hasC * zonaMuri * (hashC(i, j + 114.0) < ${(PARCELLE.muretti.quota * 256).toFixed(1)} ? 1.0 : 0.0);
+            float vL = L * (0.15 + 0.7 * hashC(i, j + 127.0) / 255.0), vC = W * (0.15 + 0.7 * hashC(i, j + 131.0) / 255.0);
+            muroL *= step(${PARCELLE.muretti.varco.toFixed(1)}, abs(fu - vL));
+            muroC *= step(${PARCELLE.muretti.varco.toFixed(1)}, abs(fv - vC));
+            float sL = hasL > 0.5 && muroL < 0.5 && aperturaC(i, j, 0.0, fu) < 0.5 && !(zonaMuri > 0.5 && hashC(i, j + 113.0) < ${(PARCELLE.muretti.quota * 256).toFixed(1)}) ? fv : 1e4;
+            float sC = hasC > 0.5 && muroC < 0.5 && aperturaC(i, j, 1.0, fv) < 0.5 && !(zonaMuri > 0.5 && hashC(i, j + 114.0) < ${(PARCELLE.muretti.quota * 256).toFixed(1)}) ? fu : 1e4;
             float siepe = 1.0 - smoothstep(${PARCELLE.siepi.striscia[0].toFixed(1)}, ${PARCELLE.siepi.striscia[1].toFixed(1)}, min(sL, sC));
             cC = mix(cC, vec3(0.035, 0.055, 0.02) * (0.7 + 0.6 * r2), siepe);
+            float dM = min(muroL > 0.5 ? abs(fv - ${PARCELLE.muretti.dentro.toFixed(1)}) : 1e4, muroC > 0.5 ? abs(fu - ${PARCELLE.muretti.dentro.toFixed(1)}) : 1e4);
+            float pietra = 1.0 - smoothstep(${PARCELLE.muretti.striscia[0].toFixed(1)}, ${PARCELLE.muretti.striscia[1].toFixed(1)}, dM);
+            cC = mix(cC, vec3(0.13, 0.125, 0.115) * (0.75 + 0.5 * r3), pietra);
           }
           float dentro = smoothstep(0.0, 0.06, vSuolo.z - (0.12 + 0.6 * h2)) * step(0.3, margineS);
           cPrato = mix(cPrato, cC, dentro * blocco);

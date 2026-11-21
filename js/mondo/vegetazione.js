@@ -13,7 +13,7 @@
 
 import { BIOMA, CLIMA, limiteNevi } from './carta.js';
 import { fbm, derivaSeme, smoothstep, hash2, mulberry32 } from './rumore.js';
-import { specchio, distanzaPiano, livelloLago } from './scena.js';
+import { specchio, distanzaPiano, livelloLago, quotaFinale } from './scena.js';
 import { distanzaStrada } from './strade.js';
 
 // ─── 1. Copertura del terreno (condivisa con il colore) ───────────────────
@@ -168,6 +168,8 @@ export const TIPI = [
   { nome: 'masso', gruppo: 'rocce', passo: 16, scala: [0.4, 3.4], curva: 2.5 },
   { nome: 'affioramento', gruppo: 'rocce', passo: 40, scala: [0.7, 1.5] },
   { nome: 'tronco', gruppo: 'bosco', passo: 15, scala: [0.7, 1.2] },
+  { nome: 'muretto', gruppo: 'muri', scala: [0.95, 1.1] },
+  { nome: 'siepe', gruppo: 'arbusti', scala: [1.0, 1.25] },          // cespugli fitti delle siepi (PARCELLE)          // sui confini dei campi vicino al borgo (PARCELLE)
 ];
 export const STRIDE = 6;                 // per oggetto: x, quota, z (locali al blocco), scala, rotazione, variante
 
@@ -267,7 +269,13 @@ export const PARCELLE = {
   // Strade (richiesta dell'utente: i campi non tagliati a metà dalle strade, al più fino al margine): ogni lato di una
   // strada ha appezzamenti suoi (righe spostate di `lato` m) e i campi finiscono a `margine` m dal bordo, con erba.
   strada: { lato: 1000, margine: [0.6, 2.2], lontano: 25, fascia: 20 },
-  siepi: { lungo: 0.4, traverso: 0.2, filari: 0.25, passo: 1.7, passoFilare: 9, dentro: 0.9, striscia: [1.6, 2.4] },
+  siepi: { lungo: 0.4, traverso: 0.2, filari: 0.25, passo: 1.7, passoFilare: 9, dentro: 0.9, striscia: [1.6, 2.4],
+    // Aperture naturali (richiesta dell'utente: «più di un punto per lato, una cosa naturale»): ogni tratto di `cella` m
+    // ha un'apertura con probabilità `quota`, in un punto a caso, larga 2·(larghezza) m.
+    aperture: { cella: 28, quota: 0.6, larghezza: [1.3, 3.0] } },
+  // Muretti a secco: vicino al luogo (fino a `oltreOrti` m oltre il limite degli orti) una parte (`quota`) dei confini
+  // con la siepe è un muretto; su ogni lato un varco largo 2·`varco` m per passare.
+  muretti: { oltreOrti: 150, quota: 0.6, varco: 2.5, dentro: 0.6, striscia: [0.5, 1.0] },
 };
 export const PERM_CAMPI = (() => {
   const r = mulberry32(0x6a09e667), p = Array.from({ length: 256 }, (_, i) => i);
@@ -289,6 +297,84 @@ export function parcella(qx, qy, orto, o) {
 const siepeLunga = (i, j) => hashCampi(i, j + 59) < PARCELLE.siepi.lungo * 256;
 const siepeCorta = (i, j) => hashCampi(i, j + 83) < PARCELLE.siepi.traverso * 256;
 const filare = (i, j, lato) => hashCampi(i, j + 97 + lato) < PARCELLE.siepi.filari * 256;
+const muro = (i, j, lato) => hashCampi(i, j + 113 + lato) < PARCELLE.muretti.quota * 256;
+/** La siepe ha un'apertura in questo punto del lato (`lungo`: m dall'inizio del lato)? Come `apertura` nello shader. */
+function aperturaSiepe(i, j, lato, lungo) {
+  const A = PARCELLE.siepi.aperture, c = Math.floor(lungo / A.cella), b = hashCampi(i, j + 141 + 7 * lato);
+  if (hashCampi(c, b) >= A.quota * 256) return false;
+  const centro = (c + 0.2 + 0.6 * hashCampi(c, b + 1) / 255) * A.cella;
+  return Math.abs(lungo - centro) < A.larghezza[0] + (A.larghezza[1] - A.larghezza[0]) * hashCampi(c, b + 2) / 255;
+}
+/** Centro del varco del muretto lungo il lato (m dall'inizio del lato lungo `lunghezza`). */
+const varco = (i, j, lato, lunghezza) => lunghezza * (0.15 + 0.7 * hashCampi(i, j + 127 + 4 * lato) / 255);
+
+/**
+ * Case fuori dal borgo (richiesta dell'utente: «ogni tanto, in mezzo o a lato dei campi, una casa isolata o un
+ * gruppetto di 2–3»). Siti deterministici per Carta: per ogni luogo `gruppi` gruppi nella campagna, tra il limite degli
+ * orti (+ `daOrti` m) e `fino` del raggio pieno, in piano, all'asciutto, lontano dai terrapieni e tra loro. Qui solo
+ * dove stanno (e la loro aia libera, con un orto attorno): le case le disegna chi fa gli edifici (M7, passo 5).
+ * Lontano dalle strade fini: un sito con la carreggiata entro `strada` m si scarta nel blocco (`casaSullaStrada`).
+ */
+export const CASE_CAMPAGNA = {
+  gruppi: { minore: 4, casata: 6, maggiore: 9 }, villaggio: 3,
+  daOrti: 60, fino: 0.95, candidati: 70, distanza: 150, pendenza: 8, piani: 50,
+  quante: [0.4, 0.75],              // soglie: 1 casa sotto la prima, 2 sotto la seconda, altrimenti 3
+  passo: [14, 22],                  // m tra le case di un gruppo
+  aia: [12, 20],                    // m: niente oggetti entro il primo, pieni oltre il secondo
+  orto: 26,                         // m: orto attorno alla casa
+  strada: 9,
+};
+const _caseCache = new WeakMap();
+/** Siti delle case della Carta: [{ x, z, verso (rad), gruppo, luogo }]. */
+export function caseCampagna(carta) {
+  if (_caseCache.has(carta)) return _caseCache.get(carta);
+  const K = CASE_CAMPAGNA, out = [], es = { quota: 0, livello: NaN };
+  const asciutto = (x, z) => {
+    const h = quotaFinale(carta, x, z, undefined, es);
+    return Number.isNaN(es.livello) && h > 0.5 && Number.isNaN(livelloLago(carta, x, z)) ? h : NaN;
+  };
+  const pianiTutti = (carta.luoghi || []).flatMap((l) => l.piani || []);
+  const lontanoDaiPiani = (x, z) => pianiTutti.every((p) => distanzaPiano(p, x, z) - p.s > K.piani);
+  const buono = (x, z) => {
+    const h = asciutto(x, z);
+    if (Number.isNaN(h) || !lontanoDaiPiani(x, z)) return false;
+    for (const [dx, dz] of [[12, 0], [-12, 0], [0, 12], [0, -12]]) {
+      const h2 = asciutto(x + dx, z + dz);
+      if (Number.isNaN(h2) || Math.abs(h2 - h) > 12 * Math.tan(K.pendenza * Math.PI / 180)) return false;
+    }
+    return true;
+  };
+  (carta.luoghi || []).forEach((l, li) => {
+    const R = raggiCampagna(l);
+    if (!R) return;
+    const n = l.tipo === 'rocca' ? (K.gruppi[l.classe] || K.gruppi.casata) : l.tipo === 'villaggio' ? K.villaggio : 0;
+    if (!n) return;
+    const sm = derivaSeme(carta.seme, 470 + li), r = mulberry32(sm);
+    const pr = l.piani?.[0], ang0 = Math.atan2(pr?.uz ?? 0, pr?.ux ?? 1);
+    const r0 = R[0] * 0.2 + K.daOrti, r1 = R[0] * K.fino;
+    let presi = 0;
+    for (let c = 0; c < K.candidati && presi < n; c++) {
+      const a = r() * Math.PI * 2, d = Math.sqrt(r0 * r0 + r() * (r1 * r1 - r0 * r0));
+      const x = l.x + Math.cos(a) * d, z = l.z + Math.sin(a) * d;
+      const q = r(), verso = ang0 + (r() < 0.5 ? 0 : Math.PI / 2) + (r() - 0.5) * 0.15;
+      if (out.some((o) => Math.hypot(o.x - x, o.z - z) < K.distanza) || !buono(x, z)) continue;
+      const nCase = q < K.quante[0] ? 1 : q < K.quante[1] ? 2 : 3, gruppo = `${li}-${presi}`;
+      out.push({ x, z, verso, gruppo, luogo: li });
+      for (let k = 1; k < nCase; k++) {
+        for (let t = 0; t < 6; t++) {
+          const b = r() * Math.PI * 2, e = K.passo[0] + r() * (K.passo[1] - K.passo[0]);
+          const xx = x + Math.cos(b) * e, zz = z + Math.sin(b) * e;
+          if (out.some((o) => o.gruppo === gruppo && Math.hypot(o.x - xx, o.z - zz) < K.passo[0]) || !buono(xx, zz)) continue;
+          out.push({ x: xx, z: zz, verso: verso + (r() < 0.3 ? Math.PI / 2 : 0), gruppo, luogo: li });
+          break;
+        }
+      }
+      presi++;
+    }
+  });
+  _caseCache.set(carta, out);
+  return out;
+}
 
 const CAMPI = ['campo', 'alberi', 'limite', 'conifera', 'pino', 'secco', 'riva', 'cespuglio', 'alto', 'sterpo', 'canne',
   'sasso', 'masso', 'affioramento', 'tronco', 'foresta', 'erba', 'felce', 'frana', 'ciottolo'];
@@ -490,6 +576,22 @@ export function posizionaVegetazione(o) {
     return hash2(ix, iz, sm ^ 0x5be0cd19) / 4294967296 < (m - V.strada.libero) / (V.strada.radi - V.strada.libero);
   };
 
+  // Case fuori dal borgo (CASE_CAMPAGNA) in questo blocco, tolte quelle che la strada fine tocca. Attorno: aia libera
+  // (densità di tutti gli oggetti a zero), poi orto (vedi aCampi); niente siepi né muretti.
+  const KC = CASE_CAMPAGNA;
+  const caseQui = o.carta ? caseCampagna(o.carta).filter((k) => Math.abs(k.x - cx) < half + 60 && Math.abs(k.z - cz) < half + 60
+    && oltreStrada(k.x, k.z) >= KC.strada) : [];
+  const dCasa = (X, Z) => { let m = Infinity; for (const k of caseQui) { const d = Math.hypot(X - k.x, Z - k.z); if (d < m) m = d; } return m; };
+  if (caseQui.length) {
+    for (let i = 0; i < n; i++) {
+      const r = (i / cols) | 0, c = i - r * cols, d = dCasa(cx - half + c * cell, cz - half + r * cell);
+      if (d >= KC.aia[1]) continue;
+      const f = smoothstep(KC.aia[0], KC.aia[1], d);
+      for (const k of CAMPI) if (k !== 'campo' && k !== 'foresta' && k !== 'limite' && k !== 'conifera' && k !== 'pino'
+        && k !== 'secco' && k !== 'riva' && k !== 'frana') D[k][i] *= f;
+    }
+  }
+
   const buffer = {};
   for (const t of TIPI) buffer[t.nome] = [];
   const emetti = (t, ix, iz, sm, lx, lz, y, fattoreScala) => {
@@ -592,7 +694,8 @@ export function posizionaVegetazione(o) {
     const sotto = smoothstep(0.12, 0.7, somma / peso);
     suolo[i * 3] = D.foresta[i] * sotto * smoothstep(V.spianata, V.spianata + 30, oltre);
     suolo[i * 3 + 1] = dist[i] === 0 ? 1 : Math.max(0, 1 - (dist[i] - 1) / (V.acquaCelle - 1));
-    suolo[i * 3 + 2] = D.campo[i] * smoothstep(2, 12, oltre);
+    suolo[i * 3 + 2] = D.campo[i] * smoothstep(2, 12, oltre)
+      * (caseQui.length ? smoothstep(KC.aia[0] - 4, KC.aia[0] + 4, dCasa(cx - half + c * cell, cz - half + r * cell)) : 1);
   }
 
   // Coordinate dei campi per vertice (PARCELLE): q lungo e di traverso al verso del borgo, piegate; terza
@@ -616,7 +719,9 @@ export function posizionaVegetazione(o) {
       const dx = x - campi.x, dz = z - campi.z;
       aCampi[i * 4] = dx * campi.ux + dz * campi.uz + PC.piega.ampiezza * fbm(x, z, sP1, PC.piega.lunghezza, 1);
       aCampi[i * 4 + 1] = dx * vx + dz * vz + PC.piega.ampiezza * fbm(x, z, sP2, PC.piega.lunghezza, 1);
-      aCampi[i * 4 + 2] = Math.hypot(dx, dz) + PC.orti.bordo * fbm(x, z, sP3, PC.orti.lunghezza, 1) - campi.orti;
+      const rumoreOrti = fbm(x, z, sP3, PC.orti.lunghezza, 1);
+      aCampi[i * 4 + 2] = Math.min(Math.hypot(dx, dz) + PC.orti.bordo * rumoreOrti - campi.orti,
+        dCasa(x, z) + 8 * rumoreOrti - KC.orto);                                   // orti anche attorno alle case
       // Quarta componente: lato della strada e margine. Dal lato positivo w = metri oltre il margine; dal lato
       // negativo w < 0 fino a `fascia` m (campi propri lungo la strada), poi torna positivo: |w| piccolo = capezzagna
       // (lungo il margine della strada e in fondo alla fascia). Dipende solo dal punto: blocchi vicini uguali.
@@ -677,9 +782,30 @@ export function posizionaVegetazione(o) {
       if (ver.i !== i || ver.j !== j || (lato ? ver.fu : ver.fv) > S.striscia[0]) return;
       if (triangolo(suolo, 3, 2) < 0.12 + 0.6 * hashCampi(i, j + 41) / 255 + 0.04) return;   // campo non dipinto
       if (oltreScarpata(P.x, P.z) < 3 || oltreStrada(P.x, P.z) < V.strada.libero) return;
+      if (dCasa(P.x, P.z) < KC.aia[1] + 2) return;
       const h = hash2(ix, iz, sS);
-      if (albero) emetti(h & 1 ? T.riva : T.latifoglia, ix, iz, sS, lx, lz, quota(), 0.9);
-      else emetti(T.cespuglio, ix, iz, sS, lx, lz, quota(), 1.15 + 0.3 * ((h >>> 8) & 0xff) / 255);
+      if (albero) { emetti(h & 1 ? T.riva : T.latifoglia, ix, iz, sS, lx, lz, quota(), 0.9); return; }
+      // Muretto: vicino al luogo e sui lati scelti, fuori dal varco; orientato lungo il confine (direzione misurata
+      // invertendo la piega mezzo metro prima e dopo).
+      // Siepi e muretti non si attraversano (richiesta dell'utente): su ogni lato un varco dove cessano e si passa.
+      const M = PC.muretti, y = quota();
+      const lungo = lato ? ver.W : ver.L, lungoQui = lato ? ver.fv : ver.fu;
+      const eMuro = triangolo(aCampi, 4, 2) < M.oltreOrti && muro(i, j, lato);
+      if (eMuro ? Math.abs(lungoQui - varco(i, j, lato, lungo)) < M.varco : aperturaSiepe(i, j, lato, lungoQui)) return;
+      if (eMuro) {
+        // Diritto: sulla linea a M.dentro dal confine, senza lo spostamento di traverso delle siepi.
+        const qxS = lato ? ver.u0 + M.dentro : qx, qyS = (lato ? qy : j * ver.W + M.dentro) - ls * PC.strada.lato;
+        alMondo(qxS, qyS, P);
+        const ax = P.x, az = P.z;
+        alMondo(lato ? qxS : qxS + 0.5, lato ? qyS + 0.5 : qyS, P);
+        const bx = P.x, bz = P.z;
+        alMondo(lato ? qxS : qxS - 0.5, lato ? qyS - 0.5 : qyS, P);
+        const rot = Math.atan2(-(bz - P.z), bx - P.x);
+        const hm = hash2(ix, iz, sS ^ 0x6c62272e);
+        buffer.muretto.push(ax - cx, y, az - cz, 0.95 + 0.15 * (hm & 0xff) / 255, rot, (hm >>> 26) / 64);
+        return;
+      }
+      emetti(T.siepe, ix, iz, sS, lx, lz, y, 1);
     };
     const passoL = S.passo;
     for (let ls = 0; ls < 2; ls++)
@@ -694,7 +820,7 @@ export function posizionaVegetazione(o) {
             const alb = filare(i, j, 0), ps = alb ? S.passoFilare : passoL;
             for (let k = Math.ceil((u0 + 1) / ps); k * ps < u0 + L - 1; k++) {
               const jit = hash2(k, j, sS ^ 0x51ed270b);
-              pianta(k * ps + ((jit & 0xff) / 255 - 0.5) * 0.6 * ps, j * W + S.dentro + (((jit >>> 8) & 0xff) / 255 - 0.5) * 0.5,
+              pianta(k * ps + ((jit & 0xff) / 255 - 0.5) * 0.35 * ps, j * W + S.dentro + (((jit >>> 8) & 0xff) / 255 - 0.5) * 0.5,
                 i, j, 0, alb, k, j * 2, ls);
             }
           }
@@ -703,7 +829,7 @@ export function posizionaVegetazione(o) {
             const alb = filare(i, j, 1), ps = alb ? S.passoFilare : passoL;
             for (let k = Math.ceil((j * W + 2.5) / ps); k * ps < (j + 1) * W - 0.5; k++) {
               const jit = hash2(i, k, sS ^ 0x2f8b1c3d);
-              pianta(u0 + S.dentro + ((jit & 0xff) / 255 - 0.5) * 0.5, k * ps + (((jit >>> 8) & 0xff) / 255 - 0.5) * 0.6 * ps,
+              pianta(u0 + S.dentro + ((jit & 0xff) / 255 - 0.5) * 0.5, k * ps + (((jit >>> 8) & 0xff) / 255 - 0.5) * 0.35 * ps,
                 i, j, 1, alb, i, k * 2 + 1, ls);
             }
           }
@@ -757,7 +883,7 @@ export function posizionaVegetazione(o) {
     return esito;
   }
 
-  return { tipi, ms: performance.now() - t0, msCampi, suolo, campi, aCampi, erbaAttorno };
+  return { tipi, ms: performance.now() - t0, msCampi, suolo, campi, aCampi, case: caseQui, erbaAttorno };
 }
 
 // ─── Bosco lontano (sagome negli anelli dell'orizzonte) ──────────────────
