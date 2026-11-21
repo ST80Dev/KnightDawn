@@ -332,12 +332,16 @@ export function localeDelLuogo(luogo, P) {
 /**
  * Collisioni in coordinate locali: scatole orientate { cu, cv, au, av (asse unitario), hl, hw } e cerchi { u, v, r }.
  * Spinge un cerchio fuori da tutte, lungo la normale: il cavaliere scivola lungo i muri.
+ * Altezza (gradini e scavalcamento): una forma con `cima` (quota assoluta della sommità) non conta se
+ * cima ≤ yPiedi + superabile; senza `cima` è un muro alto, che conta sempre.
  */
 export function creaSpinta(scatole, cerchi) {
-  return function spingi(u, v, raggio) {
+  return function spingi(u, v, raggio, yPiedi = -Infinity, superabile = 0) {
+    const sopra = yPiedi + superabile;
     for (let iter = 0; iter < 5; iter++) {
       let mosso = false;
       for (const s of scatole) {
+        if (s.cima !== undefined && s.cima <= sopra) continue;
         const du = u - s.cu, dv = v - s.cv;
         const a = du * s.au + dv * s.av, b = -du * s.av + dv * s.au;
         if (a > s.hl + raggio || a < -s.hl - raggio || b > s.hw + raggio || b < -s.hw - raggio) continue;
@@ -360,6 +364,7 @@ export function creaSpinta(scatole, cerchi) {
         mosso = true;
       }
       for (const c of cerchi) {
+        if (c.cima !== undefined && c.cima <= sopra) continue;
         const eu = u - c.u, ev = v - c.v, d = Math.hypot(eu, ev), min = c.r + raggio;
         if (d >= min) continue;
         if (d > 1e-6) { u = c.u + eu / d * min; v = c.v + ev / d * min; } else u = c.u + min;
@@ -949,7 +954,8 @@ export function* createRoccaAPezzi(suolo, luogo, ox, oz) {
         const qb = [rampa.start[0] + rampa.dir[0] * t1 + rpu * sp, rampa.start[1] + rampa.dir[1] * t1 + rpv * sp];
         const hw = RAMPA.muretto / 2, pp = [[qa[0] - rpu * hw, qa[1] - rpv * hw], [qb[0] - rpu * hw, qb[1] - rpv * hw], [qb[0] + rpu * hw, qb[1] + rpv * hw], [qa[0] + rpu * hw, qa[1] + rpv * hw]];
         parti.scuro.push(prisma(quad(pp), quad(pp), yb, [y0, y1, y1, y0].map((y) => y + RAMPA.parapetto)));   // in pendenza
-        scatole.push({ cu: (qa[0] + qb[0]) / 2, cv: (qa[1] + qb[1]) / 2, au: rampa.dir[0], av: rampa.dir[1], hl: (t1 - t0) / 2 + 0.05, hw });
+        scatole.push({ cu: (qa[0] + qb[0]) / 2, cv: (qa[1] + qb[1]) / 2, au: rampa.dir[0], av: rampa.dir[1], hl: (t1 - t0) / 2 + 0.05, hw,
+          cima: Math.max(y0, y1) + RAMPA.parapetto });   // muretto basso: si scavalca (non verso un salto alto)
       }
     }
     const geo = new THREE.BufferGeometry();
@@ -967,7 +973,7 @@ export function* createRoccaAPezzi(suolo, luogo, ox, oz) {
       const au = (b[0] - a[0]) / l, av = (b[1] - a[1]) / l, hw = RAMPA.muretto / 2;
       const pp = [[a[0] - av * hw, a[1] + au * hw], [b[0] - av * hw, b[1] + au * hw], [b[0] + av * hw, b[1] - au * hw], [a[0] + av * hw, a[1] - au * hw]];
       parti.scuro.push(prisma(quad(pp), quad(pp), piano - 1, piano + RAMPA.parapetto));
-      scatole.push({ cu: (a[0] + b[0]) / 2, cv: (a[1] + b[1]) / 2, au, av, hl: l / 2, hw });
+      scatole.push({ cu: (a[0] + b[0]) / 2, cv: (a[1] + b[1]) / 2, au, av, hl: l / 2, hw, cima: piano + RAMPA.parapetto });
     });
   }
 
@@ -1120,10 +1126,10 @@ export function* createRoccaAPezzi(suolo, luogo, ox, oz) {
   }
   const INGOMBRO = raggio + RT + 8 + rampa.l + W;
   const spingi = creaSpinta(scatole, cerchi);
-  function spingiFuori(x, z, r) {
+  function spingiFuori(x, z, r, yPiedi, superabile) {
     const [u, v] = inLocale(x, z);
     if (Math.abs(u) > INGOMBRO + r || Math.abs(v) > INGOMBRO + r) return null;
-    const [u2, v2] = spingi(u, v, r);
+    const [u2, v2] = spingi(u, v, r, yPiedi, superabile);
     return { x: X(u2, v2), z: Z(u2, v2) };
   }
   /** Quota del suolo costruito: cortile, passaggio, pianerottolo, rampa. null altrove. */

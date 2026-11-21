@@ -755,10 +755,10 @@ export function* createBorgoAPezzi(suolo, luogo, ox, oz, rocca) {
   for (const [u, v] of BL) { U0 = Math.min(U0, u); U1 = Math.max(U1, u); V0 = Math.min(V0, v); V1 = Math.max(V1, v); }
   const M = 8 + lungaPorta;
   const spingi = creaSpinta(scatole, []);
-  function spingiFuori(x, z, raggio) {
+  function spingiFuori(x, z, raggio, yPiedi, superabile) {
     const [u, v] = inLocale(x, z);
     if (u < U0 - M - raggio || u > U1 + M + raggio || v < V0 - M - raggio || v > V1 + M + raggio) return null;
-    const [u2, v2] = spingi(u, v, raggio);
+    const [u2, v2] = spingi(u, v, raggio, yPiedi, superabile);
     return { x: X(u2, v2), z: Z(u2, v2) };
   }
 

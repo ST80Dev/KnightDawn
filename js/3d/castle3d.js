@@ -520,8 +520,9 @@ export function createCastle(terrain, opzioni = {}) {
         const yBase = Math.min(quota(x1, za), quota(x1, zb), quota(x0, za), quota(x0, zb)) - 0.5;
         aggiungi(prisma(rett4(Math.min(x0, x1), Math.max(x0, x1), zb, za),
           rett4(Math.min(x0, x1), Math.max(x0, x1), zb, za), yBase, yTop), mat.mattoneScuro, false);
+        // Muretto basso, a pezzi con la sua sommità: si scavalca (knight3d.js)
+        rettangoli.push({ x0: Math.min(x0, x1), x1: Math.max(x0, x1), z0: zb, z1: za, cima: yTop });
       }
-      rettangoli.push({ x0: Math.min(x0, x1), x1: Math.max(x0, x1), z0: gz0 - lunghezzaRampa, z1: gz0 });
     }
   }
 
@@ -579,12 +580,13 @@ export function createCastle(terrain, opzioni = {}) {
    * Restituisce il punto corretto (mondo) oppure null se il punto è lontano dal castello.
    * Spingendo lungo la normale dell'ostacolo il cavaliere "scivola" lungo i muri.
    */
-  function spingiFuori(x, z, raggio) {
+  function spingiFuori(x, z, raggio, yPiedi = -Infinity, superabile = 0) {
     let [lx, lz] = inLocale(x, z);
     if (Math.abs(lx) > INGOMBRO || Math.abs(lz) > INGOMBRO) return null;
     for (let iter = 0; iter < 4; iter++) {
       let mosso = false;
       for (const r of rettangoli) {
+        if (r.cima !== undefined && r.cima <= yPiedi + superabile) continue;   // basso: gradino o scavalcamento
         const qx = clamp(lx, r.x0, r.x1), qz = clamp(lz, r.z0, r.z1);
         const ex = lx - qx, ez = lz - qz;
         const d2 = ex * ex + ez * ez;
