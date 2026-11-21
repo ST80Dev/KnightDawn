@@ -10,6 +10,7 @@
 // Da qui vengono anche le geometrie e le collisioni che il borgo (borgo3d.js) usa per la sua cinta.
 
 import * as THREE from 'three';
+import { creaKit, siToccano, EDIFICI } from './edifici3d.js';
 
 /** Misure secondo la classe del luogo. torre: raggio (tonde) o mezzo lato (quadrate). */
 export const MISURE_ROCCA = {
@@ -171,7 +172,7 @@ const _h3 = (a, b, c) => { const s = Math.sin(a * 127.1 + b * 311.7 + c * 74.7) 
  * Aggiunge `uv` (dalla posizione) e `color` (lato e chiazze) a una geometria. `orientata` = false per le geometrie
  * a istanze (le normali locali non dicono dove guarda la faccia nel mondo): solo le chiazze.
  */
-export function rifinisci(geo, orientata = true, ombra = null) {
+export function rifinisci(geo, orientata = true, ombra = null, asse = null) {
   const p = geo.attributes.position, n = geo.attributes.normal, G = GRADAZIONE;
   const lc = Math.hypot(G.cielo[0], G.cielo[1]), cx = G.cielo[0] / lc, cz = G.cielo[1] / lc;
   const uv = new Float32Array(p.count * 2), col = new Float32Array(p.count * 3);
@@ -197,7 +198,11 @@ export function rifinisci(geo, orientata = true, ombra = null) {
       }
       nx = fnx; ny = fny; nz = fnz;
     }
-    if (Math.abs(ny) > 0.7) { uv[2 * i] = x / G.tessera + ou; uv[2 * i + 1] = z / G.tessera + ov; } else {
+    if (Math.abs(ny) > 0.7 && asse && (asse[2 * i] || asse[2 * i + 1])) {
+      // Facce in piano o poco inclinate con un asse proprio (falde dei tetti: i coppi corrono lungo la pendenza).
+      const ax = asse[2 * i], az = asse[2 * i + 1];
+      uv[2 * i] = (x * ax + z * az) / G.tessera + ou; uv[2 * i + 1] = (-x * az + z * ax) / G.tessera + ov;
+    } else if (Math.abs(ny) > 0.7) { uv[2 * i] = x / G.tessera + ou; uv[2 * i + 1] = z / G.tessera + ov; } else {
       const l = Math.hypot(nx, nz) || 1, tx = -nz / l, tz = nx / l;
       uv[2 * i] = (x * tx + z * tz) / G.tessera + ou; uv[2 * i + 1] = y / G.tessera + ov;
     }
@@ -217,8 +222,8 @@ export function rifinisci(geo, orientata = true, ombra = null) {
   return geo;
 }
 /** Materiale di muratura: colore × texture dei corsi × colore per vertice (vedi GRADAZIONE). */
-export function materialeMuro(colore, riflessa) {
-  const m = new THREE.MeshLambertMaterial({ color: colore, flatShading: true, map: texturaMuro(), vertexColors: true });
+export function materialeMuro(colore, riflessa, mappa = texturaMuro()) {
+  const m = new THREE.MeshLambertMaterial({ color: colore, flatShading: true, map: mappa, vertexColors: true });
   m.emissive.set(colore).multiplyScalar(riflessa * OMBRA_SOLE.riflessa);
   // Facce in ombra davvero scure (richiesta dell'utente: una facciata girata dal sole sembrava illuminata come le
   // altre). Senza ombre portate, la luce del cielo e quella riflessa arrivano uguali su ogni parete verticale: qui
@@ -247,7 +252,7 @@ export function materialeMuro(colore, riflessa) {
 export function unisci(parti) {
   if (!parti.length) return null;
   const n = parti.reduce((s, g) => s + (g.index ? g.index.count : g.attributes.position.count), 0);
-  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), ombra = new Float32Array(n);
+  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), ombra = new Float32Array(n), asse = new Float32Array(n * 2);
   const G = GRADAZIONE;
   let o = 0;
   for (const g0 of parti) {
@@ -260,7 +265,8 @@ export function unisci(parti) {
     // propria del pezzo (attributo `ombra`: la galleria delle porte).
     let y0 = Infinity, y1 = -Infinity;
     for (let i = 0; i < c; i++) { const y = p.getY(i); if (y < y0) y0 = y; if (y > y1) y1 = y; }
-    const alto = Math.min(G.alto, (y1 - y0) * 0.5), propria = g.attributes.ombra;
+    const alto = Math.min(G.alto, (y1 - y0) * 0.5), propria = g.attributes.ombra, A = g0.userData.asse;
+    if (A) for (let i = 0; i < c; i++) { asse[2 * (o + i)] = A[0]; asse[2 * (o + i) + 1] = A[1]; }
     for (let i = 0; i < c; i++) {
       let k = 1;
       if (y1 - y0 >= 2) { const t = Math.min(1, (p.getY(i) - y0) / alto); k = G.piede + (1 - G.piede) * t * t * (3 - 2 * t); }
@@ -273,7 +279,7 @@ export function unisci(parti) {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-  rifinisci(geo, true, ombra);
+  rifinisci(geo, true, ombra, asse);
   geo.computeBoundingSphere();
   geo.computeBoundingBox();
   return geo;
@@ -384,7 +390,7 @@ export function geoTorrePorta({ m, e, n, gw, pw, sporgenza, profondita, base, ci
   foro.lineTo(-pw / 2, soglia);
   s.holes.push(foro);
   // 4 tratti in profondità: la galleria ha vertici anche in mezzo, dove è più buia.
-  const geo = new THREE.ExtrudeGeometry(s, { depth: profondita, steps: 4, bevelEnabled: false, curveSegments: 10 }).toNonIndexed();
+  const geo = new THREE.ExtrudeGeometry(s, { depth: profondita, steps: 4, bevelEnabled: false, curveSegments: 10 });
   // Forma: x lungo ±e (il segno tiene il sistema destrorso), y quota, profondità da fuori (sporgenza) verso dentro.
   const sg = e[0] * n[1] - e[1] * n[0] > 0 ? -1 : 1;
   const p = geo.attributes.position;
@@ -423,7 +429,7 @@ export function geoGhiera({ m, e, n, pw, sporgenza, profondita, imposta }, X, Z)
   s.moveTo(r1, 0); s.absarc(0, 0, r1, 0, Math.PI, false); s.lineTo(-r0, 0); s.absarc(0, 0, r0, Math.PI, 0, true); s.closePath();
   const sg = e[0] * n[1] - e[1] * n[0] > 0 ? -1 : 1, parti = [];
   for (const faccia of [-0.12, profondita - sp + 0.12]) {      // poco fuori dalla faccia esterna e da quella interna
-    const g = new THREE.ExtrudeGeometry(s, { depth: sp, bevelEnabled: false, curveSegments: 10 }).toNonIndexed();
+    const g = new THREE.ExtrudeGeometry(s, { depth: sp, bevelEnabled: false, curveSegments: 10 });
     const p = g.attributes.position;
     for (let i = 0; i < p.count; i++) {
       const sx = p.getX(i) * sg, y = p.getY(i) + imposta, d = sporgenza - (p.getZ(i) + faccia);
@@ -722,6 +728,7 @@ export function createRocca(suolo, luogo, ox, oz) {
   }
 
   // ─── Mastio: verso il retro (lontano dal borgo), dentro la cinta ───
+  let mastioL = null;
   {
     const k = K.mastio.lato, h = k / 2;
     let iRetro = 0;
@@ -733,6 +740,7 @@ export function createRocca(suolo, luogo, ox, oz) {
       if (dentroPoligono(P, c[0], c[1]) && distanzaContorno(P, c[0], c[1]) >= serve) { cm = c; break; }
     }
     const q4 = (e) => [[-h - e, -h - e], [h + e, -h - e], [h + e, h + e], [-h - e, h + e]].map(([a, b]) => [cm[0] + a, cm[1] + b]);
+    mastioL = { c: cm, s: [1, 0], f: [0, 1], a: h + 1.5, b: h + 1.5 };
     const base = piano - 1, yS = piano + 1.5, top = piano + K.mastio.altezza, par = 1.4, off = (yS - base) * SCARPA;
     parti.scuro.push(prisma(quad(q4(off)), quad(q4(0)), base, yS));
     parti.mattone.push(prisma(quad(q4(0)), quad(q4(0)), yS, top - par));
@@ -933,10 +941,68 @@ export function createRocca(suolo, luogo, ox, oz) {
     im.name = nome;
     object.add(im);
   };
+  // ─── Edifici del cortile (passo 5): cappella e pozzo; sala d'armi e armeria nel castello di casata e nella sede
+  // maggiore. Addossati alle mura (facciata verso il cortile), o liberi nel cortile se lungo le mura non c'è posto.
+  const kit = creaKit({ X, Z, ux, uz, terreno, luogo, seme: (Math.floor(luogo.x) * 19349663) ^ (Math.floor(luogo.z) * 83492791), nome: 'rocca-edifici' });
+  {
+    const lotti = [mastioL];
+    const passaggio = [gm[0] - gn[0] * (PORTA.profondita - SPOR + 4), gm[1] - gn[1] * (PORTA.profondita - SPOR + 4)];
+    const libero = (L) => {
+      for (const i of [-1, 0, 1]) for (const j of [-1, 0, 1]) {
+        const u = L.c[0] + L.s[0] * L.a * i + L.f[0] * L.b * j, v = L.c[1] + L.s[1] * L.a * i + L.f[1] * L.b * j;
+        if (!dentroPoligono(P, u, v) || distanzaContorno(P, u, v) < SP + 0.3) return false;
+        for (const [tu, tv] of P) if (Math.hypot(u - tu, v - tv) < RT + 1.2) return false;
+        if (Math.hypot(u - passaggio[0], v - passaggio[1]) < 6) return false;
+      }
+      return !lotti.some((A) => siToccano(A, L, 0.8));
+    };
+    const tipi = luogo.classe === 'minore' ? ['cappella'] : ['salaArmi', 'cappella', 'armeria'];
+    for (const tipo of tipi) {
+      const E = EDIFICI[tipo];
+      let fatto = false;
+      for (let i = 0; i < N && !fatto; i++) {                 // lungo le mura, dal lato più lungo
+        const a = P[i], b = P[(i + 1) % N], l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        if (i === latoPorta || l < E.largo + 2) continue;
+        const n = normaleLato(a, b, verso), t = [(b[0] - a[0]) / l, (b[1] - a[1]) / l];
+        for (let x = E.largo / 2 + 1; x <= l - E.largo / 2 - 1 && !fatto; x += 1.5) {
+          const c = [a[0] + t[0] * x - n[0] * (SP + E.fondo / 2 + 0.3), a[1] + t[1] * x - n[1] * (SP + E.fondo / 2 + 0.3)];
+          const L = { c, f: [-n[0], -n[1]], s: [n[1], -n[0]], a: E.largo / 2, b: E.fondo / 2 };
+          if (!libero(L)) continue;
+          lotti.push(L); kit.edificio(tipo, { u: c[0], v: c[1], fu: -n[0], fv: -n[1], quota: piano - 0.15 }); fatto = true;
+        }
+      }
+      for (let r0 = 2; r0 < 30 && !fatto; r0 += 1.5) {      // libero nel cortile, rivolto verso la porta
+        for (let k = 0; k < 16 && !fatto; k++) {
+          const ang = k / 16 * Math.PI * 2, c = [Math.cos(ang) * r0, Math.sin(ang) * r0];
+          const dg = Math.hypot(gm[0] - c[0], gm[1] - c[1]) || 1, f = [(gm[0] - c[0]) / dg, (gm[1] - c[1]) / dg];
+          const L = { c, f, s: [-f[1], f[0]], a: E.largo / 2, b: E.fondo / 2 };
+          if (!libero(L)) continue;
+          lotti.push(L); kit.edificio(tipo, { u: c[0], v: c[1], fu: f[0], fv: f[1], quota: piano - 0.15 }); fatto = true;
+        }
+      }
+    }
+    // Pozzo: il punto libero più vicino al centro del cortile.
+    let migliore = null;
+    for (let u = -30; u <= 30; u += 1.5) for (let v = -30; v <= 30; v += 1.5) {
+      const L = { c: [u, v], s: [1, 0], f: [0, 1], a: 1.4, b: 1.4 };
+      if (!libero(L)) continue;
+      const d = Math.hypot(u, v);
+      if (!migliore || d < migliore.d) migliore = { d, u, v };
+    }
+    if (migliore) kit.pozzo(migliore.u, migliore.v, piano - 0.15);
+  }
+  const edificiRocca = kit.chiudi();
+  scatole.push(...edificiRocca.scatole);
+
   istanze(rifinisci(geoMerlo(), false), mat.merlo, merli, 'rocca-merli');
   istanze(rifinisci(new THREE.BoxGeometry(0.35, 0.6, 0.5), false), mat.pietra, beccatelli, 'rocca-beccatelli');
   for (const t of torce) object.add(t.g);
   object.add(luceTorce);
+  const triMura = object.children.reduce((s2, m) => s2 + (m.isMesh ? (m.isInstancedMesh ? m.count : 1)
+    * (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3 : 0), 0);
+  const oggettiMura = object.children.filter((m) => m.isMesh).length;
+  object.add(edificiRocca.object);
+  solidi.push(...edificiRocca.solidi);
   object.updateMatrixWorld(true);
 
   // ─── Collisioni, suolo, luci ───
@@ -990,10 +1056,10 @@ export function createRocca(suolo, luogo, ox, oz) {
     piano, poligono: P, piede, torre: RT, tonde, terrazzi,
     rampa: { lato: rampa.lato, lunghezza: rampa.l, pendenza: rampa.g, inizio: rampa.start, fine: rFine, dir: rampa.dir },
     porta: { u: gm[0], v: gm[1], nu: gn[0], nv: gn[1], sporgenza: SPOR, profondita: PORTA.profondita },
+    edifici: edificiRocca.edifici,                // nominati: { tipo, nome, porta } (passo 6)
     misure: {
-      oggetti: object.children.length, merli: merli.length,
-      triangoli: object.children.reduce((s, m) => s + (m.isMesh ? (m.isInstancedMesh ? m.count : 1)
-        * (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3 : 0), 0),
+      oggetti: oggettiMura + edificiRocca.misure.chiamate, merli: merli.length, edifici: edificiRocca.edifici.length,
+      triangoli: triMura + edificiRocca.misure.triangoli,
     },
   };
 }

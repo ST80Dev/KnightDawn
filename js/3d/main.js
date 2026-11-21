@@ -18,6 +18,7 @@ import { createCavallo } from './cavallo3d.js';
 import { createFollowCamera } from './camera.js';
 import { createCastle } from './castle3d.js';
 import { createRocca } from './rocca3d.js';
+import { creaCaseCampagna } from './edifici3d.js';
 import { createBorgo } from './borgo3d.js';
 import { createCartaVista } from './cartaVista.js';
 import { creaOrizzonte } from './orizzonte.js';
@@ -301,6 +302,7 @@ let carta = null;                         // Carta del mondo generato (null a Ta
 let scenaAttuale = null;                  // { tipo: 'tavullia' } | { tipo: 'mondo', cx, cz } (centro, m del mondo)
 let statPendenze = '';                    // percentili della pendenza della Scena (F3)
 let vegetazione = null;                   // alberi, arbusti, rocce della Scena (vegetazione3d.js)
+let campagna = null;                      // M7, passo 5: case di campagna del blocco (edifici3d.js)
 let vegetazioneVisibile = true;           // tasto V
 // Il blocco del mondo si centra sulla griglia fissa del mondo (centroBlocco): le coordinate locali chieste per la
 // Scena (rispetto al centro richiesto) si spostano di tanto in posizionaCavaliere.
@@ -509,10 +511,11 @@ function costruisciRocche(cx, cz, ter) {
  */
 async function caricaScena(desc) {
   for (const o of [terrain?.mesh, acqua, castle?.object, orizzonte?.oggetto, acqueScena, vegetazione?.oggetto,
-    ...rocche.map((r) => r.object), gruppoPonti]) {
+    ...rocche.map((r) => r.object), gruppoPonti, campagna?.object]) {
     if (o) { scene.remove(o); libera(o); }
   }
   rocche = [];
+  campagna = null;
   ponti = []; gruppoPonti = null;
   vegetazione = null;
   scostamento = { x: 0, z: 0 };
@@ -555,11 +558,22 @@ async function caricaScena(desc) {
       ostacoli.push(r);
       occlusori.push(...r.solidi);
     }
-    vegetazione = creaVegetazione(posizionaVegetazione({
+    const posVeg = posizionaVegetazione({
       heights, cols: meta.cols, cell: meta.cellSize, cx: desc.cx, cz: desc.cz, acqua: dati,
       copertura: coperturaMondo(carta, Calendar.stagione), seme: carta.seme, carta,
       piani: (carta.luoghi || []).flatMap((l) => l.piani || []), mare: true,
-    }), terrain, renderer);
+    });
+    vegetazione = creaVegetazione(posVeg, terrain, renderer);
+    // Case di campagna (passo 5) sui siti della vegetazione (aia e orto già liberi attorno).
+    if (posVeg.case?.length) {
+      const half = terrain.size / 2, cx0 = desc.cx, cz0 = desc.cz;
+      const suoloC = { getHeight: (x, z) => (Math.abs(x) <= half && Math.abs(z) <= half ? terrain.getHeight(x, z) : quotaFinale(carta, x + cx0, z + cz0)) };
+      campagna = creaCaseCampagna(suoloC, posVeg.case, desc.cx, desc.cz, carta.seme);
+      scene.add(campagna.object);
+      raccogliEmissivi(campagna.object);
+      ostacoli.push(campagna);
+      occlusori.push(...campagna.solidi);
+    }
     // Colore del blocco in una texture (docs/PRESTAZIONI.md, passo 3): dopo la vegetazione, che aggiunge al terreno
     // l'attributo aSuolo (lettiera sotto il bosco, fango vicino all'acqua) letto dalla cottura.
     msCottura = cuociSuolo(renderer, terrain);
@@ -803,7 +817,7 @@ async function init() {
     scene, camera, cam, controls, suolo, Knight, Calendar, Save, renderer, qualita,
     get terrain() { return terrain; }, get knight() { return knight; }, get castle() { return castle; },
     get carta() { return carta; }, get scena() { return scenaAttuale; }, get orizzonte() { return orizzonte; },
-    get rocche() { return rocche; },
+    get rocche() { return rocche; }, get campagna() { return campagna; },
     get vegetazione() { return vegetazione; }, get cavallo() { return cavallo; },
     caricaScena, posizionaCavaliere,
   };
@@ -1041,7 +1055,7 @@ function gruppoDi(o) {
   while (top.parent && top.parent !== scene) top = top.parent;
   if ((terrain && top === terrain.mesh) || (orizzonte && top === orizzonte.oggetto)) return 'terreno';
   if (vegetazione && top === vegetazione.oggetto) return 'veg. resto';
-  if ((castle && top === castle.object) || rocche.some((r) => r.object === top)) return 'edifici';
+  if ((castle && top === castle.object) || rocche.some((r) => r.object === top) || (campagna && top === campagna.object)) return 'edifici';
   if ((knight && top === knight.object) || (cavallo && top === cavallo.object)) return 'personaggi';
   return null;
 }
@@ -1247,12 +1261,13 @@ function aggiornaPannello(now) {
       }
       for (const r of rocche) {
         if (r.tipo === 'borgo') testo += `\nborgo ${r.luogo.id + 1}: ${r.poligono.length} vertici, ${r.misure.strade} strade,`
-          + ` ${r.misure.torri} torri, porta con rampa di ${fmt(r.porta.rampa, 1)} m, ${r.misure.oggetti} oggetti,`
-          + ` ${fmt(r.misure.triangoli)} triangoli`;
+          + ` ${r.misure.torri} torri, ${r.misure.case} case e ${r.misure.edifici} edifici, porta con rampa di ${fmt(r.porta.rampa, 1)} m,`
+          + ` ${r.misure.oggetti} oggetti, ${fmt(r.misure.triangoli)} triangoli`;
         else testo += `\nrocca ${r.luogo.id + 1}: ${r.poligono.length} torri ${r.tonde ? 'tonde' : 'quadrate'}, ${r.terrazzi} terrazzi, rampa`
           + ` ${r.rampa.lato ? 'lungo il muro' : 'dritta'} di ${fmt(r.rampa.lunghezza, 1)} m al ${fmt(100 * r.rampa.pendenza)} %,`
-          + ` ${r.misure.oggetti} oggetti, ${fmt(r.misure.triangoli)} triangoli`;
+          + ` ${r.misure.edifici} edifici, ${r.misure.oggetti} oggetti, ${fmt(r.misure.triangoli)} triangoli`;
       }
+      if (campagna) testo += `\ncase di campagna: ${campagna.misure.case}, ${campagna.misure.chiamate} oggetti, ${fmt(campagna.misure.triangoli)} triangoli`;
     }
     if (castle) {
       testo += castle.dentro(k.x, k.z) ? '\ncastello: nel cortile'

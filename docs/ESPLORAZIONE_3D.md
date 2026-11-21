@@ -1248,6 +1248,34 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
    collisioni a griglia, texture da codice. *Prova:* le classi si distinguono a colpo d'occhio; FPS su PC
    medio nel borgo e nella rocca, anche nel borgo più grande; chiamate e triangoli in F3 entro il budget;
    giudizio dell'utente sullo stile.
+   **Stato: fatto, da provare dall'utente.** Decisioni dell'utente: file nuovo `js/3d/edifici3d.js` (kit unico per
+   borgo, rocca, campagna e poi villaggi); case in pietra con parti intonacate chiare e coppi rossi; sede maggiore
+   subito; tutte le tappe insieme.
+   - *Kit:* tipi di casa (a schiera, bassa, casa-torre, con bottega, rurale con fienile), edifici nominati (stalla con
+     recinto, taverna con insegna, fabbro con tettoia, guaritore, loggia del mercato e banchi, chiesa con campanile e
+     loggia grande nella sede maggiore; nella rocca cappella con campaniletto, pozzo, sala d'armi e armeria). Zoccolo
+     di pietra fino al terreno più basso (niente terrazze), pareti, tetto a due falde (colmo lungo la via), finestre,
+     porte, comignoli. Texture generate una volta: coppi (canali lungo la falda, muschio) e intonaco (macchie,
+     colature, pietre a vista). Il tono della pietra segue quello del luogo.
+   - *Irregolarità* (richiesta dell'utente: spigoli non tutti lineari, «l'idea delle pietre irregolari»): pareti fuori
+     squadra di qualche cm; **cantonali** di pietra di misure diverse agli spigoli di case, edifici e campanili,
+     alternati sui due lati e sporgenti (anche sulle case intonacate).
+   - *Lotti* (`borgo3d.js`): lungo le strade, facciata sulla via; prima gli edifici nominati lungo la via dalla porta
+     (la stalla vicino alla porta), poi la piazza del mercato a metà della via (raggio 11 m casata, 15 m maggiore) con
+     loggia, chiesa e banchi, poi le case (via: botteghe e schiere; anello: anche col retro contro le mura; vicoli)
+     fino a 14 / 30 / 60 per classe. Un lotto è libero se, campionato ogni ~2 m, sta nel borgo, fuori dalle strade,
+     dalle torri, dalla porta, dalla rampa della rocca e dagli altri lotti (prima i campioni erano solo angoli e
+     mezzerie: il recinto della stalla, lungo 32 m, finiva sulla via in curva). Nella rocca gli edifici stanno contro
+     le mura (facciata sul cortile) o liberi nel cortile; il pozzo nel punto libero più vicino al centro.
+   - *Campagna:* case rurali (a volte col fienile) sui siti di `caseCampagna` della sessione Vegetazione, costruite
+     con la Scena (`main.js`, `creaCaseCampagna`).
+   - *Prestazioni:* volumi uniti per materiale (pietra, intonaco, coppi, legno); finestre, porte, comignoli,
+     cantonali e celle campanarie a istanze in zone (al più 2 × 2 per kit) che si spengono oltre 160 m (`THREE.LOD`);
+     per la camera una sagoma a scatole invisibile; una scatola di collisione per edificio. Borgo con le mura:
+     casata ~24 oggetti, sede maggiore ~28 (limite 40); triangoli fino a ~73.000 nella sede maggiore da vicino (i
+     cantonali pesano: si possono ridurre). Rocca con i suoi edifici ~15 oggetti; campagna ~11 oggetti per blocco.
+   - *Edifici nominati con la porta* (`edifici: [{ tipo, nome, porta: { u, v, fu, fv } }]` di rocca e borgo): per il
+     passo 6 (Carta del cronista).
 6. **Porte → Carta del cronista.** Soglie, «E: entra», overlay segnaposto, tempo fermo. *Prova:* ogni
    edificio nominato si apre e si chiude; il tempo non scorre.
 7. **Luci notturne e persone.** Torce, finestre, forgia, gruppo di luci vicine; figure ai loro posti e
