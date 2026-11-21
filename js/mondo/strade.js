@@ -42,6 +42,7 @@ export const STRADE = {
     guado: 300,                 // m equivalenti per attraversare un corso d'acqua che si guada
     ponte: 600,                 // m equivalenti per un ponte nuovo: 2–4 ponti per mondo (aggirare un fiume costa poco)
     ponteEsistente: 150,
+    ponteVillaggio: 6000,       // m equivalenti in più per un ponte nuovo sul tratto che collega un villaggio (M8)
     riuso: 0.55,                // passo già su strada: costo × questo
     abitati: { distanza: 12, massimo: 20 },   // km tra i nodi; abitati provvisori al più
     anelli: { rapporto: 1.6, entro: 25000 }, // collegamento in più se il giro sulla rete supera 1,6× il diretto
@@ -201,16 +202,21 @@ function ruvidezza(carta) {
   return out;
 }
 
-/** Dijkstra sulle celle della Carta da più sorgenti; si ferma al bersaglio se c'è. */
-function cammini(carta, sorgenti, costo, bersaglio = -1) {
+/**
+ * Dijkstra sulle celle della Carta da più sorgenti; si ferma al bersaglio se c'è, o alla prima cella per cui
+ * `fermaSe(k)` è vero (M8: dal villaggio alla strada più vicina), che restituisce in `arrivo`.
+ */
+function cammini(carta, sorgenti, costo, bersaglio = -1, fermaSe = null) {
   const { cols, rows } = carta, n = cols * rows;
   const dist = new Float64Array(n).fill(Infinity), da = new Int32Array(n).fill(-1);
   const coda = nuovaCoda(4096);
   for (const s of sorgenti) { dist[s] = 0; coda.spingi(s, 0); }
+  let arrivo = -1;
   while (!coda.vuota) {
     const d = coda.testa, k = coda.togli();
     if (d > dist[k]) continue;
     if (k === bersaglio) break;
+    if (fermaSe && fermaSe(k)) { arrivo = k; break; }
     const x = k % cols, y = (k / cols) | 0;
     for (let v = 0; v < MX.length; v++) {
       const xx = x + MX[v], yy = y + MY[v];
@@ -221,7 +227,7 @@ function cammini(carta, sorgenti, costo, bersaglio = -1) {
       if (nd < dist[kk]) { dist[kk] = nd; da[kk] = k; coda.spingi(kk, nd); }
     }
   }
-  return { dist, da };
+  return { dist, da, arrivo };
 }
 
 function percorsoDa(da, bersaglio) {
@@ -254,16 +260,20 @@ function nodiRete(carta) {
     const valli = v.valli.map((w) => aggiungi(w.x, w.y, 'valle', { valico: v.id }));
     valichi.push({ nodo: a, valli: valli.filter((k) => k >= 0) });
   }
-  // Abitati provvisori: i siti candidati non scelti per le rocche, lontani dagli altri nodi. Tengono il posto dei
-  // villaggi (milestone dei luoghi): la rete collega già colline e pianure, e si infittirà con i luoghi veri.
+  // Villaggi (M8, js/mondo/siti.js): i grandi e poi gli altri, lontani dagli altri nodi, diventano nodi della rete
+  // (al più A.massimo: il costo cresce col quadrato dei nodi); gli altri si collegano dopo con un tratto corto
+  // (collegaVillaggi). Carte senza villaggi: come prima, abitati provvisori dai siti candidati delle rocche.
   const A = STRADE.carta.abitati;
-  const candidati = [...(carta.candidatiLuoghi ?? [])].sort((a, b) => b.punteggio - a.punteggio);
+  const villaggi = (carta.siti ?? []).filter((s) => s.tipo === 'villaggio')
+    .sort((a, b) => (a.dimensione === b.dimensione ? a.id - b.id : a.dimensione === 'villaggio' ? -1 : 1));
+  const candidati = villaggi.length ? villaggi : [...(carta.candidatiLuoghi ?? [])].sort((a, b) => b.punteggio - a.punteggio);
   let abitati = 0;
   for (const c of candidati) {
     if (abitati >= A.massimo) break;
     const x = c.x / cella, y = c.z / cella;
     if (nodi.some((n) => Math.hypot(n.x - x, n.y - y) < A.distanza)) continue;
-    if (aggiungi(x, y, 'abitato', { provvisorio: true }) >= 0) abitati++;
+    const extra = villaggi.length ? { sito: c.id } : { provvisorio: true };
+    if (aggiungi(x, y, villaggi.length ? 'villaggio' : 'abitato', extra) >= 0) abitati++;
   }
   return { nodi, valichi };
 }
@@ -380,6 +390,36 @@ export function aggiungiStrade(carta) {
     }
     registra(celle, classe, e.a, e.b, A, B);
   }
+  // Villaggi non ancora sulla rete: un tratto dal villaggio alla prima cella di strada (Dijkstra fermato lì), in ordine
+  // di id; i tratti già fatti valgono come strada per i successivi.
+  const sulla = new Set(nodi.filter((k) => k.tipo === 'villaggio').map((k) => k.sito));
+  let collegati = 0;
+  for (const v of (carta.siti ?? [])) {
+    if (v.tipo !== 'villaggio' || sulla.has(v.id)) continue;
+    const x = v.x / carta.cella, y = v.z / carta.cella, sv = cellaDi(x, y);
+    if (stato.strada[sv]) { nodi.push({ id: nodi.length, x, y, tipo: 'villaggio', sito: v.id }); continue; }
+    permesse.add(sv);
+    const corsa = (classe) => {
+      // un ponte nuovo per un villaggio costa molto di più: si va alla strada dalla propria parte del fiume
+      const base = costiCarta(carta, classe, stato, permesse, ruvido);
+      const costo = (i, j, w) => {
+        const c = base(i, j, w);
+        if (c === Infinity) return c;
+        const f = attraversamento(carta, i, j, w);
+        return f >= 0 && carta.bacino[f] >= carta.sogliaFiume && !stato.ponti.has(f) ? c + C.ponteVillaggio : c;
+      };
+      const { da, arrivo } = cammini(carta, [sv], costo, -1, (k) => stato.strada[k] === 1);
+      return arrivo < 0 ? null : percorsoDa(da, arrivo).reverse();      // dalla strada al villaggio
+    };
+    let classe = 'carrareccia', celle = corsa(classe);
+    if (!celle) continue;
+    const qMax = Math.max(...celle.map((k) => quota[k]));
+    if (qMax > C.quotaMulattiera) { classe = qMax > C.quotaSentiero ? 'sentiero' : 'mulattiera'; celle = corsa(classe) ?? celle; }
+    const id = nodi.length;
+    nodi.push({ id, x, y, tipo: 'villaggio', sito: v.id });
+    registra(celle, classe, -1, id, null, { x, y });
+    collegati++;
+  }
   // Sentieri dalla rete alle cime panoramiche e alle forcelle dei gruppi montuosi.
   const mete = cime(carta).map((c) => ({ ...c, tipo: 'cima' }));
   for (const g of carta.massicci ?? []) for (const f of g.forcelle) mete.push({ x: f.x, y: f.y, tipo: 'forcella' });
@@ -402,7 +442,7 @@ export function aggiungiStrade(carta) {
     for (let s = 1; s < a.x.length; s++) l += Math.hypot(a.x[s] - a.x[s - 1], a.y[s] - a.y[s - 1]);
     km[a.classe] = (km[a.classe] ?? 0) + l * carta.cella / 1000;
   }
-  carta.strade = { nodi, archi, rami, ponti, info: { rami: rami.length, nodi: N, archi: archi.length, ponti: ponti.length, guadi, km, ms: performance.now() - t0 } };
+  carta.strade = { nodi, archi, rami, ponti, info: { rami: rami.length, nodi: N, villaggiCollegati: collegati, archi: archi.length, ponti: ponti.length, guadi, km, ms: performance.now() - t0 } };
   return carta;
 }
 

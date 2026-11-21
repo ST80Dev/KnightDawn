@@ -15,6 +15,7 @@ import { generaCarta, VERSIONE_GENERATORE } from './carta.js';
 import { verificaFiumi, verificaPanorami, verificaVarieta, verificaLuoghi } from './verifica.js';
 import { aggiungiLuoghi } from './luoghi.js';
 import { aggiungiStrade } from './strade.js';
+import { aggiungiSiti, completaSiti, verificaSiti } from './siti.js';
 
 const CACHE_MASSIMO = 3;
 
@@ -77,13 +78,15 @@ function verificaSemi(id, semi) {
   semi.forEach((seme, k) => {
     self.postMessage({ id, tipo: 'avanzamento', testo: `seme ${seme} (${k + 1} di ${semi.length})`, frazione: k / semi.length });
     const t0 = performance.now();
-    const carta = aggiungiStrade(aggiungiLuoghi(generaCarta(seme)));
+    const carta = completaSiti(aggiungiStrade(aggiungiSiti(aggiungiLuoghi(generaCarta(seme)))));
     const f = verificaFiumi(carta), p = verificaPanorami(carta), v = verificaVarieta(carta), l = verificaLuoghi(carta);
+    const s = verificaSiti(carta);
     esiti.push({ seme, ms: performance.now() - t0, regole: [
       { nome: 'fiumi', ok: f.ok, testo: f.ok ? 'fiumi in discesa, con foce' : f.errori[0] },
       { nome: 'panorami', ok: p.ok, testo: `punti panoramici: ${(p.copertura * 100).toFixed(1)} %` },
       ...v.regole,
       { nome: 'rocche', ok: l.ok, testo: l.testo },
+      { nome: 'siti', ok: s.ok, testo: s.testo },
     ] });
   });
   self.postMessage({ id, tipo: 'semi', esiti });
@@ -105,11 +108,14 @@ self.onmessage = async (e) => {
       carta = generaCarta(seme, { avanzamento });
       avanzamento('Rocche e borghi', 0.95);
       aggiungiLuoghi(carta);
+      avanzamento('Villaggi e luoghi', 0.96);
+      aggiungiSiti(carta);
       avanzamento('Strade e sentieri', 0.97);
       aggiungiStrade(carta);
+      completaSiti(carta);
       const t0 = performance.now();
       carta.verifiche = { fiumi: verificaFiumi(carta), panorami: verificaPanorami(carta), varieta: verificaVarieta(carta),
-        luoghi: verificaLuoghi(carta) };
+        luoghi: verificaLuoghi(carta), siti: verificaSiti(carta) };
       carta.statistiche.msVerifiche = performance.now() - t0;
       carta.daCache = false;
       await scriviCache(chiave, carta);                // prima di trasferire i buffer (la put li copia)
