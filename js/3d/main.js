@@ -28,7 +28,7 @@ import { distanzaStrada } from '../mondo/strade.js';
 import { posizionaVegetazione, coperturaMondo, coperturaTavullia } from '../mondo/vegetazione.js';
 import { creaVegetazione } from './vegetazione3d.js';
 import { semeDaTesto } from '../mondo/rumore.js';
-import { creaProfilatore, creaPercorso, GRUPPI, BUDGET_GPU, budgetDi, creaQualita } from './prestazioni.js';
+import { creaProfilatore, creaPercorso, GRUPPI, FAMIGLIE, BUDGET_GPU, budgetDi, creaQualita } from './prestazioni.js';
 
 // Nebbia sulla distanza vera dalla camera, non sulla profondità lungo l'asse di vista (come fa Three.js):
 // con la profondità, un monte al bordo dello schermo riceveva meno nebbia e spariva girandosi verso di lui.
@@ -1039,7 +1039,8 @@ function gruppoDi(o) {
   }
   let top = o;
   while (top.parent && top.parent !== scene) top = top.parent;
-  if ((terrain && top === terrain.mesh) || (orizzonte && top === orizzonte.oggetto)) return 'terreno';
+  if (terrain && top === terrain.mesh) return 'ter. blocco';
+  if (orizzonte && top === orizzonte.oggetto) return 'ter. orizzonte';
   if (vegetazione && top === vegetazione.oggetto) return 'veg. resto';
   if ((castle && top === castle.object) || rocche.some((r) => r.object === top)) return 'edifici';
   if ((knight && top === knight.object) || (cavallo && top === cavallo.object)) return 'personaggi';
@@ -1097,11 +1098,11 @@ function fineDelPercorso() {
       const m = profilatore.media(g), b = budgetDi(g);
       return `  ${g}: ${fmtMs(m)}${b != null ? ` · budget ${fmt(b, 1)}${m && m.media > b ? '  ⚠ oltre il budget' : ''}` : ''}`;
     }),
-    (() => {
-      const v = GRUPPI.filter((g) => g.startsWith('veg.')).reduce((s, g) => s + (profilatore.media(g)?.media || 0), 0);
-      return `  vegetazione in tutto: ${fmt(v, 1)} ms · budget ${fmt(BUDGET_GPU.vegetazione, 1)}`
-        + (v > BUDGET_GPU.vegetazione ? '  ⚠ oltre il budget' : '');
-    })(),
+    ...Object.entries(FAMIGLIE).map(([pre, chiave]) => {
+      const v = GRUPPI.filter((g) => g.startsWith(pre)).reduce((s, g) => s + (profilatore.media(g)?.media || 0), 0);
+      return `  ${chiave} in tutto: ${fmt(v, 1)} ms · budget ${fmt(BUDGET_GPU[chiave], 1)}`
+        + (v > BUDGET_GPU[chiave] + 0.05 ? '  ⚠ oltre il budget' : '');
+    }),
   ];
   // Gli oggetti più pesanti (triangoli disegnati, istanze comprese): per capire se qualcosa si duplica.
   const pesi = [];
