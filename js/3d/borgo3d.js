@@ -17,7 +17,7 @@
 
 import * as THREE from 'three';
 import { prisma, unisci, dentroPoligono, distanzaContorno, areaPoligono, normaleLato, localeDelLuogo, creaSpinta,
-  scatolaLato, geoTorrePorta, materialeMuro, rifinisci } from './rocca3d.js';
+  scatolaLato, geoTorrePorta, materialeMuro, rifinisci, tonoDelLuogo } from './rocca3d.js';
 
 /** Misure secondo la classe del luogo. vicoli: quanti vicoli trasversali. */
 export const CLASSI_BORGO = {
@@ -147,7 +147,7 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
 
   const mat = {};
   for (const [k, c] of Object.entries(COL)) {
-    mat[k] = k === 'legno' ? new THREE.MeshLambertMaterial({ color: c, flatShading: true }) : materialeMuro(c, LUCE_RIFLESSA);
+    mat[k] = k === 'legno' ? new THREE.MeshLambertMaterial({ color: c, flatShading: true }) : materialeMuro(tonoDelLuogo(luogo, c), LUCE_RIFLESSA);
     if (k === 'legno') mat[k].emissive.set(c).multiplyScalar(LUCE_RIFLESSA);
   }
   mat.strada = new THREE.MeshLambertMaterial({ map: texturaCiottolato(), color: '#ffffff' });

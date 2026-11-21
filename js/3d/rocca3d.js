@@ -72,7 +72,10 @@ export function prisma(basso, alto, yb, yt) {
 //     traverso), più una leggera variazione di tono a chiazze di qualche metro;
 //   - texture a corsi di mattoni e conci (scala di grigi, moltiplica il colore del materiale), coordinate dalla
 //     posizione: lungo la faccia e in altezza sulle pareti, in pianta sulle facce orizzontali.
-const GRADAZIONE = { cielo: [-0.6, -0.8], lati: 0.36, chiazze: 0.12, fini: 0.06, tessera: 3.2 };
+const GRADAZIONE = { cielo: [-0.6, -0.8], lati: 0.36, chiazze: 0.16, fini: 0.08, tessera: 3.2 };
+// Tono di fondo diverso per ogni luogo (richiesta dell'utente), a caso entro questi limiti: chiarezza (×) e calore
+// (+ più bruno, − più grigio). Rocca e borgo dello stesso luogo hanno lo stesso tono.
+const TONO_LUOGO = { chiaro: [0.82, 1.1], caldo: [-0.07, 0.09] };
 let _muro = null;
 /**
  * Texture della muratura di pietra (256 px = GRADAZIONE.tessera m), ripetibile: corsi di altezza diversa, conci di
@@ -96,7 +99,9 @@ export function texturaMuro() {
     corsi.push([y, h]); y += h;
   }
   const concio = (x, y, w, h) => {
-    const v = 150 + Math.floor(rnd() * 95), t = Math.floor(rnd() * 22) - 8;   // t: > 0 più bruno, < 0 più grigio
+    // Toni più distanti, soprattutto verso lo scuro (richiesta dell'utente): qualche concio molto scuro.
+    const q = rnd(), v = q < 0.15 ? 85 + Math.floor(rnd() * 40) : 125 + Math.floor(rnd() * 120);
+    const t = Math.floor(rnd() * 22) - 8;                // > 0 più bruno, < 0 più grigio
     const col = (d) => `rgb(${clamp(v + t + d, 0, 255)},${clamp(v + d, 0, 255)},${clamp(v - t * 0.8 + d - 4, 0, 255)})`;
     const gx = x + 1.5, gy = y + 1.5, gw = w - 3, gh = h - 3;
     g.fillStyle = col(0);
@@ -366,6 +371,15 @@ function costruisciTorcia(mat, matFiamma, matAlone) {
 }
 
 /** Pseudo-caso stabile del luogo in [0, 1). */
+/** Colore di muratura col tono di fondo del luogo (TONO_LUOGO): chiarezza e calore a caso, stabili per luogo. */
+export function tonoDelLuogo(luogo, colore) {
+  const T = TONO_LUOGO, c = new THREE.Color(colore);
+  const chiaro = T.chiaro[0] + (T.chiaro[1] - T.chiaro[0]) * casoLuogo(luogo, 31);
+  const caldo = T.caldo[0] + (T.caldo[1] - T.caldo[0]) * casoLuogo(luogo, 37);
+  c.r = Math.min(1, c.r * chiaro * (1 + caldo)); c.g = Math.min(1, c.g * chiaro); c.b = Math.min(1, c.b * chiaro * (1 - caldo * 1.3));
+  return c;
+}
+
 function casoLuogo(luogo, k) {
   const s = Math.sin((luogo.x * 0.0123 + luogo.z * 0.0371 + k * 12.9898) * 43758.5453);
   return s - Math.floor(s);
@@ -420,7 +434,7 @@ export function createRocca(suolo, luogo, ox, oz) {
 
   const mat = {};
   for (const [k, c] of Object.entries(COL)) {
-    mat[k] = MURATURA.has(k) ? materialeMuro(c, LUCE_RIFLESSA) : new THREE.MeshLambertMaterial({ color: c, flatShading: true });
+    mat[k] = MURATURA.has(k) ? materialeMuro(tonoDelLuogo(luogo, c), LUCE_RIFLESSA) : new THREE.MeshLambertMaterial({ color: c, flatShading: true });
     if (!MURATURA.has(k)) mat[k].emissive.set(c).multiplyScalar(LUCE_RIFLESSA);
   }
   mat.terra.flatShading = false;
