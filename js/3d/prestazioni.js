@@ -11,12 +11,14 @@
 
 import * as THREE from 'three';
 
-export const GRUPPI = ['terreno', 'veg. sagome lontane', 'veg. sagome', 'veg. erba', 'veg. resto', 'edifici',
-  'personaggi', 'resto'];
+export const GRUPPI = ['ter. blocco', 'ter. orizzonte', 'veg. sagome lontane', 'veg. sagome', 'veg. erba', 'veg. resto',
+  'edifici', 'personaggi', 'resto'];
+/** Famiglie di gruppi con un budget comune: prefisso → chiave di BUDGET_GPU (la somma si confronta col budget). */
+export const FAMIGLIE = { 'ter.': 'terreno', 'veg.': 'vegetazione' };
 /** Budget in ms di GPU (docs/PRESTAZIONI.md, «Obiettivi e budget», approvati dall'utente); vegetazione complessiva. */
 export const BUDGET_GPU = { terreno: 4.5, vegetazione: 6.5, edifici: 1.5, personaggi: 1.5, resto: 1.5, totale: 15.5 };
-/** Budget di un gruppo (i gruppi «veg. …» condividono quello della vegetazione: null = vedi la somma). */
-export const budgetDi = (g) => (g.startsWith('veg.') ? null : BUDGET_GPU[g]);
+/** Budget di un gruppo (i gruppi «ter. …» e «veg. …» condividono quello della famiglia: null = vedi la somma). */
+export const budgetDi = (g) => (Object.keys(FAMIGLIE).some((f) => g.startsWith(f)) ? null : BUDGET_GPU[g]);
 
 const CAMPIONI = 90;                       // media mobile sugli ultimi ~1,5 s a 60 FPS
 
