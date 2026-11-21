@@ -18,8 +18,11 @@ export const KNIGHT_CFG = {
   // Prova (richiesta dell'utente): andature più veloci, 1 km di corsetta in ~3,7 minuti reali (era 3,2 e 6,0 m/s).
   velCorsetta: 4.5,     // m/s, andatura normale
   velScatto: 8.0,       // m/s, scatto (Shift)
-  velIndietro: 0.9,     // m/s, passo all'indietro (senza corsa)
-  velRotazione: 2.0,    // rad/s con A/D (circa 115°/s); in corsa un po' meno
+  // All'indietro secondo l'andatura (richiesta dell'utente: 0,9 m/s fissi erano troppo lenti rispetto alle altre)
+  velIndietroCammino: 1.0,   // m/s, camminata
+  velIndietro: 2.4,          // m/s, corsetta (andatura normale)
+  velIndietroScatto: 3.2,    // m/s, con Shift
+  velRotazione: 2.0,    // rad/s con A/D (circa 115°/s), massima tenendo premuto; in corsa un po' meno
   pendenzaMax: 35,      // gradi: oltre questa pendenza, nella direzione di marcia, il cavaliere non sale
   pendenzaParete: 48,   // gradi: su un terreno così ripido non si sta, in nessuna direzione (pareti invalicabili)
   // Velocità secondo la pendenza nella direzione di marcia (curva tipo Tobler, ammorbidita per il gioco):
@@ -38,7 +41,11 @@ export const KNIGHT_CFG = {
   margineBordo: 2,      // m dal bordo dell'area
   raggio: 0.4,          // m: ingombro sul piano contro mura e torri (spalle + scudo)
   accelerazione: 8,     // 1/s: rapidità con cui la velocità raggiunge quella voluta
-  avvioRotazione: 10,   // 1/s: rapidità con cui la rotazione da tastiera parte e si ferma
+  // Rotazione da tastiera (richiesta dell'utente: un tocco girava di ~17°, a scatti): parte con un'accelerazione
+  // costante, così un tocco breve dà pochi gradi e tenendo premuto si arriva alla velocità piena in ~0,45 s;
+  // lasciando il tasto si ferma quasi subito (niente scivolata oltre l'angolo voluto).
+  accelRotazione: 4.5,  // rad/s²
+  arrestoRotazione: 18, // 1/s: rapidità con cui la rotazione si spegne lasciando il tasto
 };
 
 // Girando da fermo il cavaliere fa piccoli passi sul posto: metri di "passo" per radiante di rotazione
@@ -619,8 +626,15 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     // Rotazione: i tasti partono e si fermano in modo morbido, il mouse è diretto.
     // Girare a destra (visto dall'alto, senso orario) riduce l'angolo.
     const velRot = cfg.velRotazione * (input.corsa && input.avanti > 0 ? 0.8 : 1);
-    stato.velAngolare += (input.gira * velRot - stato.velAngolare) * avvicina(cfg.avvioRotazione, dt);
-    if (Math.abs(stato.velAngolare) < 1e-3 && input.gira === 0) stato.velAngolare = 0;
+    if (input.gira !== 0) {
+      // verso la velocità voluta con accelerazione costante; invertendo il verso, frena tre volte più in fretta
+      const obiettivo = input.gira * velRot, manca = obiettivo - stato.velAngolare;
+      const inverte = stato.velAngolare !== 0 && Math.sign(stato.velAngolare) !== Math.sign(obiettivo);
+      stato.velAngolare += Math.sign(manca) * Math.min(Math.abs(manca), cfg.accelRotazione * (inverte ? 3 : 1) * dt);
+    } else {
+      stato.velAngolare *= Math.exp(-cfg.arrestoRotazione * dt);
+      if (Math.abs(stato.velAngolare) < 1e-3) stato.velAngolare = 0;
+    }
     stato.direzione -= stato.velAngolare * dt + input.giroMouse;
     stato.direzione = Math.atan2(Math.sin(stato.direzione), Math.cos(stato.direzione));   // in (-π, π]
 
@@ -630,8 +644,9 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     stato.fattorePendenza = fattorePendenza(stato.pendenzaMarcia);
     stato.andatura = input.corsa ? 'scatto' : input.camminata ? 'camminata' : 'corsetta';
     const velAvanti = { scatto: cfg.velScatto, camminata: cfg.velCammino, corsetta: cfg.velCorsetta }[stato.andatura];
+    const velIndietro = { scatto: cfg.velIndietroScatto, camminata: cfg.velIndietroCammino, corsetta: cfg.velIndietro }[stato.andatura];
     const velVoluta = stato.fattorePendenza * (input.avanti > 0 ? velAvanti
-      : input.avanti < 0 ? -cfg.velIndietro : 0);
+      : input.avanti < 0 ? -velIndietro : 0);
     stato.velocita += (velVoluta - stato.velocita) * avvicina(cfg.accelerazione, dt);
     if (Math.abs(stato.velocita) < 0.01 && input.avanti === 0) stato.velocita = 0;
 
@@ -681,6 +696,9 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     const v = Math.max(stato.velEffettiva, stato.velPassoGiro);
     const passoF = clamp(v / VEL_ANIM_CAMMINO, 0, 1);                                          // 0 fermo → 1 cammino
     const corsaF = clamp((v - VEL_ANIM_CAMMINO) / (VEL_ANIM_CORSA - VEL_ANIM_CAMMINO), 0, 1);   // 0 cammino → 1 corsa
+    // All'indietro il ritmo delle gambe segue la velocità, ma il busto non si sbilancia in avanti e il mantello
+    // non si alza come in corsa.
+    const slancio = stato.velocita < 0 ? 0 : corsaF;
     const riposo = 1 - passoF;
 
     // La fase avanza con la distanza percorsa: i piedi non scivolano e, se bloccato, si fermano.
@@ -732,10 +750,10 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     const respiro = Math.sin(stato.tempo * 1.7);
 
     // Busto: inclinato in avanti in corsa, leggera torsione opposta alle anche
-    mod.busto.rotation.x = 0.03 + corsaF * 0.2;
+    mod.busto.rotation.x = 0.03 + slancio * 0.2;
     mod.busto.rotation.y = ampBraccia * 0.18 * s;
     mod.busto.position.y = 0.98 + respiro * 0.007 * riposo;
-    mod.testa.rotation.x = -corsaF * 0.15 + respiro * 0.02 * riposo;
+    mod.testa.rotation.x = -slancio * 0.15 + respiro * 0.02 * riposo;
 
     // Braccia: il destro oscilla opposto alla gamba destra, il sinistro (scudo) molto meno
     mod.braccioD.spalla.rotation.x = -ampBraccia * s;
@@ -746,7 +764,7 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     mod.braccioS.gomito.rotation.x = -(0.75 + corsaF * 0.25);
 
     // Mantello: si solleva all'indietro con la velocità e sventola col passo
-    mod.mantello.rotation.x = 0.05 + passoF * 0.12 + corsaF * 0.45
+    mod.mantello.rotation.x = 0.05 + passoF * 0.12 + slancio * 0.45
       + Math.sin(stato.fase * 2) * 0.05 * passoF + respiro * 0.01 * riposo;
   }
 

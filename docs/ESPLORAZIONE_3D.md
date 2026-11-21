@@ -127,6 +127,10 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
   si alza per scavalcarlo. Girando da fermo il cavaliere fa piccoli passi sul posto. Il tasto `C` passa
   ancora alla camera libera di debug (OrbitControls). Parametri provabili da console: `kd.cam.cfg`.
   Misurato in headless: camera mai a meno di 45 cm dal suolo, linea di vista mai sotto il terreno.
+  Ritocchi chiesti dall'utente (nov. 2026): all'indietro la velocità segue l'andatura (camminata 1,0, corsetta 2,4,
+  scatto 3,2 m/s; prima 0,9 fissi), senza busto inclinato né mantello alzato; la rotazione con A/D parte con
+  accelerazione costante (4,5 rad/s², piena a 115°/s in ~0,45 s) e si spegne subito lasciando il tasto: un tocco di
+  0,1–0,15 s gira di 3–5° invece di ~17° (misurato in headless).
 
 ### M4 — Castello
 - `js/3d/castle3d.js`: castello procedurale (mura, 4 torri, mastio, porta), posizionato su un punto
