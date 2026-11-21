@@ -742,7 +742,9 @@ function tracciaTratto(carta, tr, W = STRADE.scena.corridoio) {
     if (!bagnato[i]) { i++; continue; }
     let j = i, prof = 0, peloMax = -Infinity;
     while (j < m && bagnato[j]) { prof = Math.max(prof, pelo[j] - suolo[j]); peloMax = Math.max(peloMax, pelo[j]); j++; }
-    const a = Math.max(0, i - 1), b = Math.min(m - 1, j), luce = lungo(a, b);
+    // Il ponte si appoggia per due punti (~10 m) su ciascuna riva: il terreno disegnato (un vertice ogni 7,8 m, quelli
+    // nell'alveo restano bassi) sale davvero fino all'impalcato prima della testata [segnalato dall'utente: gradino].
+    const a = Math.max(0, i - 2), b = Math.min(m - 1, j + 1), luce = lungo(a, b);
     const ponte = prof > AT.guado;
     let quota;
     if (ponte) {

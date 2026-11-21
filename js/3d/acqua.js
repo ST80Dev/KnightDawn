@@ -264,6 +264,7 @@ export function creaNastroStrada(t, mat, altezza, quote = null) {
 // maestre e le luci oltre 20 m, legno per il resto (deciso con l'utente). Mesh da codice, una per ponte; ogni ponte è
 // anche suolo (quotaSuolo, l'impalcato) e ostacolo (spingiFuori, i parapetti), come cortile e mura del castello.
 const PONTE = {
+  raccordo: 0.12,             // pendenza massima delle rampe di raccordo alle testate
   pietra: { colore: '#9a9182', scuro: '#7d7568', parapetto: 0.85, spessoreParapetto: 0.45, margine: 0.6,
     arco: 14, pila: 1.8, spalla: 1.2, chiave: 0.8, schiena: 0.035, schienaMax: 1.2 },
   legno: { colore: '#7a5a3a', scuro: '#5a4128', parapetto: 1.0, margine: 0.35, cavalletto: 6.5, montante: 2 },
@@ -305,7 +306,14 @@ export function creaPonti(attraversamenti, altezza) {
     const ux = dx / L, uz = dz / L;                       // asse del ponte; v = (-uz, ux)
     const W = 2 * (at.semi + P.margine);                  // larghezza fuori tutto
     const schiena = pietra ? Math.min(P.schienaMax, P.schiena * L) : 0;
-    const cima = (u) => at.quota + schiena * 4 * (u / L) * (1 - u / L);
+    const piano = (u) => at.quota + schiena * 4 * (u / L) * (1 - u / L);
+    // Testate raccordate al terreno disegnato: ogni estremo parte alla quota del terreno lì (niente gradino né per l'occhio
+    // né per i piedi) e raggiunge il piano con una rampa dolce (pendenza ≤ PONTE.raccordo) entro metà della luce.
+    const hA = altezza(at.x0, at.z0), hB = altezza(at.x1, at.z1);
+    const RA = Math.min(L / 2, Math.max(1, Math.abs(piano(0) - hA) / PONTE.raccordo));
+    const RB = Math.min(L / 2, Math.max(1, Math.abs(piano(L) - hB) / PONTE.raccordo));
+    const dolce = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+    const cima = (u) => piano(u) + (hA - piano(0)) * (1 - dolce(u / RA)) + (hB - piano(L)) * (1 - dolce((L - u) / RB));
     // Letto sotto il ponte (il più basso lungo l'asse) per pile e cavalletti.
     let letto = Infinity;
     for (let k = 0; k <= 20; k++) letto = Math.min(letto, altezza(at.x0 + ux * L * k / 20, at.z0 + uz * L * k / 20));
@@ -352,19 +360,29 @@ export function creaPonti(attraversamenti, altezza) {
       const scatola = (lu, ly, lw, u, y, v, colore) => {
         const g = new THREE.BoxGeometry(lu, ly, lw); g.translate(u, y, v); parti.push({ geo: g, colore });
       };
-      scatola(L, 0.22, W, L / 2, at.quota - 0.11, 0, c1);                                   // tavolato
-      for (const s of [-1, 1]) scatola(L, 0.4, 0.3, L / 2, at.quota - 0.42, s * (W / 2 - 0.3), c2);   // travi
+      const N = 24;
+      const lastra = (spessore, sotto, larghezza, v, colore) => {     // lastra che segue la cima (tavolato, travi, correnti)
+        const f = new THREE.Shape();
+        f.moveTo(0, cima(0) - sotto);
+        for (let k = 1; k <= N; k++) f.lineTo(L * k / N, cima(L * k / N) - sotto);
+        for (let k = N; k >= 0; k--) f.lineTo(L * k / N, cima(L * k / N) - sotto - spessore);
+        const g = new THREE.ExtrudeGeometry(f, { depth: larghezza, bevelEnabled: false, curveSegments: 1 });
+        g.translate(0, 0, v - larghezza / 2);
+        parti.push({ geo: g, colore });
+      };
+      lastra(0.22, 0, W, 0, c1);                                                             // tavolato
+      for (const s of [-1, 1]) lastra(0.4, 0.22, 0.3, s * (W / 2 - 0.3), c2);                // travi
       const nc = Math.max(1, Math.round(L / P.cavalletto));
       for (let k = 1; k < nc; k++) {                                                         // cavalletti nel letto
-        const u = L * k / nc, alto = at.quota - 0.6 - base;
+        const u = L * k / nc, alto = cima(u) - 0.6 - base;
         for (const s of [-1, 1]) scatola(0.28, alto, 0.28, u, base + alto / 2, s * (W / 2 - 0.3), c2);
-        scatola(0.25, 0.25, W - 0.3, u, at.quota - 0.75, 0, c2);
+        scatola(0.25, 0.25, W - 0.3, u, cima(u) - 0.75, 0, c2);
       }
       const nm = Math.max(2, Math.round(L / P.montante));
       for (const s of [-1, 1]) {                                                              // parapetti
-        for (let k = 0; k <= nm; k++) scatola(0.14, P.parapetto, 0.14, L * k / nm, at.quota + P.parapetto / 2, s * (W / 2 - 0.1), c2);
-        scatola(L, 0.12, 0.12, L / 2, at.quota + P.parapetto, s * (W / 2 - 0.1), c1);
-        scatola(L, 0.1, 0.1, L / 2, at.quota + P.parapetto * 0.5, s * (W / 2 - 0.1), c1);
+        for (let k = 0; k <= nm; k++) scatola(0.14, P.parapetto, 0.14, L * k / nm, cima(L * k / nm) + P.parapetto / 2, s * (W / 2 - 0.1), c2);
+        lastra(0.12, -P.parapetto, 0.12, s * (W / 2 - 0.1), c1);                               // corrimano
+        lastra(0.1, -P.parapetto * 0.5, 0.1, s * (W / 2 - 0.1), c1);
       }
     }
     const geo = unisci(parti);
