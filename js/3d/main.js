@@ -15,7 +15,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { loadTerrain, componiSuolo, createTerrain, coloreMondo, cuociSuolo } from './terrain.js';
 import { createKnight } from './knight3d.js';
 import { createFollowCamera } from './camera.js';
-import { createCastle, CLASSI_ROCCA } from './castle3d.js';
+import { createCastle } from './castle3d.js';
+import { createRocca } from './rocca3d.js';
 import { createBorgo } from './borgo3d.js';
 import { createCartaVista } from './cartaVista.js';
 import { creaOrizzonte } from './orizzonte.js';
@@ -485,23 +486,14 @@ function costruisciRocche(cx, cz, ter) {
   };
   for (const l of carta?.luoghi ?? []) {
     if (!l.piani) continue;
-    const x = l.x - cx, z = l.z - cz, m = Math.max(l.piani[0].a, l.piani[0].b) + 150;
+    const x = l.x - cx, z = l.z - cz, m = (l.raggioPiani ?? 300) + 50;
     if (Math.abs(x) > half + m || Math.abs(z) > half + m) continue;
-    const K = CLASSI_ROCCA[l.classe] ?? CLASSI_ROCCA.casata;
-    const rocca = createCastle(suoloMondo, {
-      ...K, x, z, piano: l.piani[0].q,
-      rotazione: Math.atan2(-l.verso.x, -l.verso.z),        // la porta (lato −Z locale) verso il borgo
-      // Con il borgo (passo 4) la rampa scende alla prima terrazza e finisce dentro di essa (anche più ripida):
-      // oltre c'è il muro di contenimento con la rampa della via.
-      rampa: { pendenzaMax: 0.25, lunghezzaMin: 3, parapetto: 0.5,
-        lunghezzaMax: l.piani.length > 1 ? Math.max(4, Math.min(40, 2 * l.piani[1].a - (K.latoZ / 2 + 3.5 - l.piani[0].a) - 4)) : 40 },
-      quotaPiede: l.piani.length > 1 ? l.piani[1].q : undefined,
-    });
-    rocca.luogo = l;
-    rocca.tipo = 'rocca';
+    // Carte di prima delle forme irregolari (senza poligoni): niente rocca (la cache si rigenera con la versione).
+    if (!l.piani[0].poligono) continue;
+    const rocca = createRocca(suoloMondo, l, x, z);         // cinta poligonale, porta verso il borgo (M7)
     out.push(rocca);
-    // M7, passo 4: il borgo murato sulle terrazze, addossato alla rocca.
-    if (l.piani.length > 1) out.push(createBorgo(suoloMondo, l, x, z, { HZ: K.latoZ / 2, HX: K.latoX / 2, R: K.raggioTorre }));
+    // M7, passo 4: il borgo murato in pendio, addossato alla rocca.
+    if (l.piani.length > 1) out.push(createBorgo(suoloMondo, l, x, z, rocca));
   }
   return out;
 }
@@ -625,8 +617,10 @@ const FUORI_DALLA_PORTA = 35;    // m fuori dalla porta del borgo (M7, passo 2: 
 
 /** Punto di partenza (locale alla Scena centrata sul sito) e direzione: fuori dalla porta del borgo, verso la rocca. */
 function partenzaDelSito(sito) {
-  const v = sito.verso, d = FUORI_DALLA_PORTA;
-  const p = sito.porta ? { x: sito.porta.x - sito.x + v.x * d, z: sito.porta.z - sito.z + v.z * d }
+  const d = FUORI_DALLA_PORTA, P = sito.porta;
+  // La porta guarda fuori lungo la sua normale (forme irregolari: non più per forza lungo il verso).
+  const v = P && P.nx !== undefined ? { x: P.nx, z: P.nz } : sito.verso;
+  const p = P ? { x: P.x - sito.x + v.x * d, z: P.z - sito.z + v.z * d }
     : { x: v.x * PARTENZA_DAL_SITO, z: v.z * PARTENZA_DAL_SITO };
   return { ...p, direzione: Math.atan2(-v.x, -v.z) };
 }
@@ -1226,7 +1220,7 @@ function aggiornaPannello(now) {
         if (d > 1500 || !l.terrapieno) continue;
         const t = l.terrapieno;
         testo += `\nrocca ${l.id + 1} (${NOMI_CLASSI[l.classe]}, ${l.carattere}) a ${fmt(d)} m: ${l.piani.length} piani`
-          + ` (rocca ${fmt(l.piani[0].q, 1)} m, terrazze ${l.piani.slice(1).map((p) => fmt(p.q, 1)).join(' / ')} m),`
+          + ` (rocca ${fmt(l.piani[0].q, 1)} m, borgo in pendio, media ${fmt(l.piani[1]?.q ?? NaN, 1)} m),`
           + ` salto massimo ${fmt(t.salto, 1)} m, scarpate ≤ ${fmt(t.pendenza)}°, lavoro medio ${fmt(t.lavoro, 1)} m`
           + (t.pelo !== null ? `, acqua vicina a ${fmt(t.pelo, 1)} m` : '');
       }
@@ -1234,8 +1228,14 @@ function aggiornaPannello(now) {
         if (!r.dentro(k.x, k.z)) continue;
         testo += r.tipo === 'borgo' ? `\nnel borgo ${r.luogo.id + 1}` : `\nnel cortile della rocca ${r.luogo.id + 1}`;
       }
-      for (const r of rocche) if (r.misure) testo += `\nborgo ${r.luogo.id + 1}: ${r.misure.terrazze} terrazze, ${r.misure.rampe} rampe,`
-        + ` ${r.misure.torri} torri, ${r.misure.oggetti} oggetti, ${fmt(r.misure.triangoli)} triangoli`;
+      for (const r of rocche) {
+        if (r.tipo === 'borgo') testo += `\nborgo ${r.luogo.id + 1}: ${r.poligono.length} vertici, ${r.misure.strade} strade,`
+          + ` ${r.misure.torri} torri, porta con rampa di ${fmt(r.porta.rampa, 1)} m, ${r.misure.oggetti} oggetti,`
+          + ` ${fmt(r.misure.triangoli)} triangoli`;
+        else testo += `\nrocca ${r.luogo.id + 1}: ${r.poligono.length} torri ${r.tonde ? 'tonde' : 'quadrate'}, ${r.terrazzi} terrazzi, rampa`
+          + ` ${r.rampa.lato ? 'lungo il muro' : 'dritta'} di ${fmt(r.rampa.lunghezza, 1)} m al ${fmt(100 * r.rampa.pendenza)} %,`
+          + ` ${r.misure.oggetti} oggetti, ${fmt(r.misure.triangoli)} triangoli`;
+      }
     }
     if (castle) {
       testo += castle.dentro(k.x, k.z) ? '\ncastello: nel cortile'

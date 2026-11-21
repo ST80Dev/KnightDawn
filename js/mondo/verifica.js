@@ -356,7 +356,7 @@ export function verificaLuoghi(carta, limiti = { asprezza: 0.2, bordo: 7, fiume:
     // Passo 2 (terrapieno): piani presenti, scarpate percorribili, piano più basso sopra l'acqua vicina.
     if (!l.piani || !l.piani.length) errori.push(`${nome} senza terrapieno`);
     else {
-      const basso = Math.min(...l.piani.map((p) => p.q));
+      const basso = Math.min(...l.piani.map((p) => (p.griglia ? Math.min(...p.griglia.h) : p.q)));
       if (l.terrapieno.pelo !== null && basso < l.terrapieno.pelo + 6 - 0.01) errori.push(`${nome}: borgo a ${(basso - l.terrapieno.pelo).toFixed(1)} m sull'acqua`);
       if (l.terrapieno.pendenza > 26) errori.push(`${nome}: scarpate a ${l.terrapieno.pendenza.toFixed(0)}°`);
     }

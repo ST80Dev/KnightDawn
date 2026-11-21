@@ -1,76 +1,111 @@
-// Knight Dawn — borgo murato (M7, passo 4). Senza edifici: terrazze con il loro pavimento, muri di contenimento
-// tra una terrazza e l'altra con la rampa della via, cinta con torri quadrate e torre-porta dove arriva la strada.
+// Knight Dawn — borgo murato (M7, passo 4). Senza edifici: cinta irregolare con torri quadrate e torre-porta sul lato
+// col minor dislivello, rete di strade interne di ciottolato.
 //
-// Il borgo poggia sui piani del terrapieno (js/mondo/luoghi.js, `luogo.piani`: il primo è la rocca, gli altri le
-// terrazze, lungo il verso del borgo). Coordinate locali: u lungo il verso (dalla rocca verso la porta del borgo),
-// v di traverso (come `distanzaPiano` in js/mondo/scena.js). Le geometrie si costruiscono direttamente in coordinate
-// del blocco e si uniscono per materiale (docs/PRESTAZIONI.md, passo 6: mura unite per materiale, ≤ 8 materiali,
-// ripetuti in InstancedMesh): pochi oggetti da disegnare qualunque sia la grandezza del borgo.
-// Interfaccia come la rocca (castle3d.js): object, solidi, spingiFuori, quotaSuolo, dentro, aggiornaLuci.
+// Il borgo sta in **pendio** (decisione dell'utente: niente terrazze piatte con muri di sostegno né scalinata
+// centrale, «troppo moderno», «sembra l'interno di un palazzo»): il terreno dentro le mura è quello naturale
+// lisciato (`luogo.piani[1].griglia`, js/mondo/luoghi.js; il primo piano è la rocca, in piano). Le mura seguono il
+// pendio a gradoni brevi; le strade (via principale dalla porta alla rampa della rocca, a tornanti se il pendio è
+// ripido; via lungo le mura; vicoli lungo le curve di livello) girano per tutto il borgo e ne fanno gli isolati
+// dove andranno le case (passo 5).
+//
+// Contorno (js/mondo/luoghi.js, `piani[1].poligono`): dai due vertici anteriori della rocca gira dall'altra parte con
+// una catena irregolare (i primi `nCatena` punti); il resto del contorno sono i lati anteriori della rocca, le cui mura
+// chiudono anche il borgo. Coordinate locali: u lungo il verso (dalla rocca verso il borgo), v di traverso. Le geometrie si costruiscono in coordinate del blocco e si uniscono per materiale
+// (docs/PRESTAZIONI.md, passo 6: ≤ 8 materiali, ripetuti in InstancedMesh, dettaglio in una texture generata una
+// volta): pochi oggetti da disegnare qualunque sia la grandezza del borgo.
+// Interfaccia come la rocca (rocca3d.js): object, solidi, spingiFuori, quotaSuolo, dentro, aggiornaLuci.
 
 import * as THREE from 'three';
+import { prisma, unisci, dentroPoligono, distanzaContorno, areaPoligono, normaleLato, localeDelLuogo, creaSpinta,
+  scatolaLato, geoTorrePorta } from './rocca3d.js';
 
-/** Misure secondo la classe del luogo. */
+/** Misure secondo la classe del luogo. vicoli: quanti vicoli trasversali. */
 export const CLASSI_BORGO = {
-  minore:   { altezza: 6, spessore: 1.4, torre: 4.2, passoTorri: 32 },
-  casata:   { altezza: 7, spessore: 1.6, torre: 5, passoTorri: 35 },
-  maggiore: { altezza: 8, spessore: 1.8, torre: 5.6, passoTorri: 38 },
+  minore:   { altezza: 6, spessore: 1.4, torre: 4.2, passoTorri: 32, vicoli: 1 },
+  casata:   { altezza: 7, spessore: 1.6, torre: 5, passoTorri: 35, vicoli: 2 },
+  maggiore: { altezza: 8, spessore: 1.8, torre: 5.6, passoTorri: 38, vicoli: 3 },
 };
 
-const PORTA = { larghezza: 3.6, imposta: 3.0, torreLarghezza: 8, torreProfondita: 6, sopraMura: 3.5 };
-const VIA = { larghezza: 4, pendenza: 0.25, minima: 4, parapetto: 0.6 };   // rampe tra le terrazze
+const PORTA = { larghezza: 3.6, imposta: 3.0, torreLarghezza: 8, torreProfondita: 6, sporgenza: 1, sopraMura: 3.5 };
 const RAMPA_PORTA = { pendenza: 0.2, minima: 3, massima: 24, larghezza: 5 };  // fuori dalla porta, fino al terreno
-const CONTENIMENTO = { spessore: 1.0, parapetto: 1.0 };
+const TRATTO = 6;                          // m: lunghezza dei gradoni delle mura sul pendio
 const SCARPA = 0.15;                       // inclinazione della scarpa alla base delle mura (tangente)
+// Strade interne: larghezza (m), quota sopra il terreno (m; diverse, così agli incroci non sfarfallano).
+const STRADE = {
+  via: { larghezza: 4.2, sopra: 0.14 },
+  mura: { larghezza: 3.0, sopra: 0.12, rientro: 10 },   // via lungo le mura, a `rientro` m dalla cinta
+  vicolo: { larghezza: 2.6, sopra: 0.13 },
+  pendenzaVia: 0.1,                        // oltre, la via principale sale a tornanti
+  passo: 2,                                // m tra le sezioni del nastro
+};
 
-const COL = { mattone: '#a8684d', scuro: '#8a523d', pietra: '#c4b597', terra: '#a08a64', legno: '#5b3b20' };
+const COL = { mattone: '#a8684d', scuro: '#8a523d', pietra: '#c4b597', legno: '#5b3b20' };
 const LUCE_RIFLESSA = 0.2;                 // come la rocca: i lati in ombra non escono neri
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
-// ─── Geometrie ──────────────────────────────────────────────────────────
-
-/** Prisma a facce piane tra due quadrilateri orizzontali (punti [x, z], stesso ordine), facce verso l'esterno. */
-function prisma(basso, alto, yb, yt) {
-  const V = [...basso.map(([x, z]) => [x, yb, z]), ...alto.map(([x, z]) => [x, yt, z])];
-  const C = [0, 1, 2].map((k) => V.reduce((s, v) => s + v[k], 0) / 8);
-  const facce = [[0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]];
-  const pos = [];
-  for (const f of facce) {
-    const [a, b, c, d] = f.map((i) => V[i]);
-    const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], w = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
-    const n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
-    const fc = [0, 1, 2].map((k) => (a[k] + b[k] + c[k] + d[k]) / 4 - C[k]);
-    const tri = n[0] * fc[0] + n[1] * fc[1] + n[2] * fc[2] >= 0 ? [a, b, c, a, c, d] : [a, c, b, a, d, c];
-    for (const p of tri) pos.push(...p);
+// ─── Ciottolato: texture generata una volta (docs/PRESTAZIONI.md: dettaglio in texture, non in geometria) ───
+let _ciottolato = null;
+function texturaCiottolato() {
+  if (_ciottolato) return _ciottolato;
+  const N = 256, c = document.createElement('canvas');
+  c.width = c.height = N;
+  const g = c.getContext('2d');
+  let s = 12345;
+  const rnd = () => ((s = (s * 1103515245 + 12345) >>> 0) / 4294967296);
+  g.fillStyle = '#857d70';                               // malta e terra tra i ciottoli
+  g.fillRect(0, 0, N, N);
+  // Ciottoli: ellissi irregolari, toni di grigio caldo; disegnati anche a cavallo dei bordi (texture ripetibile).
+  for (let k = 0; k < 230; k++) {
+    const x = rnd() * N, y = rnd() * N, rx = 7 + rnd() * 9, ry = 5 + rnd() * 7, a = rnd() * Math.PI;
+    const t = 165 + Math.floor(rnd() * 55), cal = Math.floor(rnd() * 12);
+    for (const dx of [-N, 0, N]) for (const dy of [-N, 0, N]) {
+      const cx = x + dx, cy = y + dy;
+      if (cx < -20 || cy < -20 || cx > N + 20 || cy > N + 20) continue;
+      const gr = g.createRadialGradient(cx - rx * 0.3, cy - ry * 0.3, 1, cx, cy, Math.max(rx, ry));
+      gr.addColorStop(0, `rgb(${t + 25 + cal},${t + 22},${t + 16})`);
+      gr.addColorStop(1, `rgb(${t - 25 + cal},${t - 27},${t - 32})`);
+      g.fillStyle = gr;
+      g.beginPath();
+      g.ellipse(cx, cy, rx, ry, a, 0, Math.PI * 2);
+      g.fill();
+    }
   }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  geo.computeVertexNormals();
-  return geo;
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.anisotropy = 4;
+  _ciottolato = tex;
+  return tex;
 }
 
-/** Unisce geometrie non indicizzate (posizione e normale) in una sola. */
-function unisci(parti) {
-  if (!parti.length) return null;
-  const n = parti.reduce((s, g) => s + g.attributes.position.count, 0);
-  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3);
-  let o = 0;
-  for (const g0 of parti) {
-    const g = g0.index ? g0.toNonIndexed() : g0;
-    if (!g.attributes.normal) g.computeVertexNormals();
-    pos.set(g.attributes.position.array, o);
-    nor.set(g.attributes.normal.array, o);
-    o += g.attributes.position.count * 3;
-    g.dispose();
-    if (g !== g0) g0.dispose();
+/** Polilinea più morbida (Chaikin), estremi fermi. */
+function chaikin(p, volte) {
+  for (let k = 0; k < volte; k++) {
+    const q = [p[0]];
+    for (let i = 0; i + 1 < p.length; i++) {
+      const [a, b] = [p[i], p[i + 1]];
+      q.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25], [a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]);
+    }
+    q.push(p[p.length - 1]);
+    p = q;
   }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-  geo.computeBoundingSphere();
-  geo.computeBoundingBox();
-  return geo;
+  return p;
+}
+
+/** Punti ogni `passo` m lungo una polilinea (u, v). */
+function ricampiona(p, passo) {
+  const out = [p[0]];
+  let resto = 0;
+  for (let i = 0; i + 1 < p.length; i++) {
+    const [a, b] = [p[i], p[i + 1]], l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    let t = passo - resto;
+    while (t <= l) { out.push([a[0] + (b[0] - a[0]) * t / l, a[1] + (b[1] - a[1]) * t / l]); t += passo; }
+    resto = l - (t - passo);
+  }
+  const ult = p[p.length - 1];
+  if (Math.hypot(ult[0] - out[out.length - 1][0], ult[1] - out[out.length - 1][1]) > passo * 0.3) out.push(ult);
+  return out;
 }
 
 // ─── Borgo ──────────────────────────────────────────────────────────────
@@ -78,247 +113,330 @@ function unisci(parti) {
 /**
  * Costruisce il borgo murato di un luogo.
  * @param {{getHeight:(x:number, z:number) => number}} suolo  quota del terreno in coordinate del blocco
- * @param {object} luogo  da carta.luoghi (piani, verso, classe)
+ * @param {object} luogo  da carta.luoghi (piani con `poligono`, porta, verso, classe)
  * @param {number} ox  centro del sito (rocca) in coordinate del blocco
  * @param {number} oz
- * @param {{ HZ:number, HX:number, R:number }} rocca  mezze misure della cinta della rocca e raggio delle torri
+ * @param {{ piede:number[], poligono:number[][] }} rocca  la rocca (rocca3d.js): piede della sua rampa, contorno (locali)
  */
 export function createBorgo(suolo, luogo, ox, oz, rocca) {
   const K = CLASSI_BORGO[luogo.classe] ?? CLASSI_BORGO.casata;
   const ux = luogo.verso.x, uz = luogo.verso.z;
-  const P = luogo.piani, R0 = P[0], T = P.slice(1);
+  const B = luogo.piani[1];
   const SP = K.spessore, H = K.altezza;
-  const ra = R0.a;                                         // fine del piano della rocca lungo u
-  const lb = T[0].b;                                       // mezza larghezza del borgo
-  const uFine = ra + T.reduce((s, t) => s + 2 * t.a, 0);   // fine dell'ultima terrazza (porta del borgo)
+  const fase = (luogo.id + 1) * 1.7 + luogo.x * 1e-3;      // varia le curve da un borgo all'altro
   // Locale (u, v) → blocco (x, z) e quota del terreno.
   const X = (u, v) => ox + ux * u - uz * v, Z = (u, v) => oz + uz * u + ux * v;
   const xz = (u, v) => [X(u, v), Z(u, v)];
   const terreno = (u, v) => suolo.getHeight(X(u, v), Z(u, v));
   const inLocale = (x, z) => { const dx = x - ox, dz = z - oz; return [dx * ux + dz * uz, -dx * uz + dz * ux]; };
-  /** Quota minima del terreno lungo un segmento locale (campioni ogni ~1,5 m), anche un po' fuori. */
-  function minimoLungo(u0, v0, u1, v1, fuoriU = 0, fuoriV = 0) {
-    const n = Math.max(2, Math.ceil(Math.hypot(u1 - u0, v1 - v0) / 1.5));
+  const BL = localeDelLuogo(luogo, B.poligono);
+  const nC = B.nCatena ?? BL.length;
+  const verso = areaPoligono(BL);
+  const q4 = (pp) => pp.map(([u, v]) => xz(u, v));
+  /** Quota minima del terreno lungo un segmento locale (campioni ogni ~1,5 m), anche spostato di (fu, fv). */
+  function minimoLungo(a, b, fu = 0, fv = 0) {
+    const n = Math.max(2, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 1.5));
     let mn = Infinity;
     for (let i = 0; i <= n; i++) {
-      const u = u0 + (u1 - u0) * i / n, v = v0 + (v1 - v0) * i / n;
-      mn = Math.min(mn, terreno(u, v), terreno(u + fuoriU, v + fuoriV));
+      const u = a[0] + (b[0] - a[0]) * i / n, v = a[1] + (b[1] - a[1]) * i / n;
+      mn = Math.min(mn, terreno(u, v), terreno(u + fu, v + fv));
     }
     return mn;
   }
-  // Terrazze: estensione lungo u e quota.
-  const terrazze = [];
-  { let u = ra; for (const t of T) { terrazze.push({ u0: u, u1: u + 2 * t.a, q: t.q }); u += 2 * t.a; } }
-  const terrazzaDi = (u) => terrazze.find((t) => u >= t.u0 && u <= t.u1) ?? null;
 
   const mat = {};
   for (const [k, c] of Object.entries(COL)) {
     mat[k] = new THREE.MeshLambertMaterial({ color: c, flatShading: true });
     mat[k].emissive.set(c).multiplyScalar(LUCE_RIFLESSA);
   }
-  mat.terra.flatShading = false;
-  mat.terra.polygonOffset = true;                 // il pavimento coincide con il terreno dei piani più bassi
-  mat.terra.polygonOffsetFactor = -1;
-  mat.terra.polygonOffsetUnits = -1;
-  const parti = { mattone: [], scuro: [], pietra: [], terra: [], legno: [] };
-  const rettangoli = [];                          // collisioni in locale: { u0, u1, v0, v1 }
+  mat.strada = new THREE.MeshLambertMaterial({ map: texturaCiottolato(), color: '#ffffff' });
+  mat.strada.polygonOffset = true;
+  mat.strada.polygonOffsetFactor = -2;
+  mat.strada.polygonOffsetUnits = -2;
+  const parti = { mattone: [], scuro: [], pietra: [], legno: [] };
+  const scatole = [];                              // collisioni in locale (rocca3d.js, creaSpinta)
 
-  /** Quadrilatero locale (u, v) → punti [x, z] del blocco. */
-  const quad = (u0, u1, v0, v1) => [xz(u0, v0), xz(u1, v0), xz(u1, v1), xz(u0, v1)];
-  /** Pavimento piano (due triangoli verso l'alto). */
-  function pavimento(u0, u1, v0, v1, y, m = 'terra') {
-    const [a, b, c, d] = quad(u0, u1, v0, v1).map(([x, z]) => [x, y, z]);
-    const geo = new THREE.BufferGeometry();
-    // Ordine dei vertici con la normale verso l'alto (dipende dal verso degli assi locali).
-    const su = (b[0] - a[0]) * (d[2] - a[2]) - (b[2] - a[2]) * (d[0] - a[0]) < 0;
-    const tri = su ? [a, b, c, a, c, d] : [a, c, b, a, d, c];
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(tri.flat(), 3));
-    geo.computeVertexNormals();
-    parti[m].push(geo);
+  // ─── Porta: sul lato della catena più vicino al punto scelto dal generatore ───
+  const [pu, pv] = luogo.porta ? localeDelLuogo(luogo, [[luogo.porta.x, luogo.porta.z]])[0] : BL[1];
+  let latoPorta = 1, dP = Infinity;
+  for (let i = 0; i + 1 < nC; i++) {
+    const a = BL[i], b = BL[i + 1], l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const t = clamp(((pu - a[0]) * (b[0] - a[0]) + (pv - a[1]) * (b[1] - a[1])) / (l * l), 0, 1);
+    const d = Math.hypot(a[0] + (b[0] - a[0]) * t - pu, a[1] + (b[1] - a[1]) * t - pv);
+    if (d < dP) { dP = d; latoPorta = i; }
   }
+  const gA = BL[latoPorta], gB = BL[latoPorta + 1], gL = Math.hypot(gB[0] - gA[0], gB[1] - gA[1]);
+  const ge = [(gB[0] - gA[0]) / gL, (gB[1] - gA[1]) / gL], gn = normaleLato(gA, gB, verso);
+  const gw = PORTA.torreLarghezza, pw = PORTA.larghezza, SPOR = PORTA.sporgenza, prof = PORTA.torreProfondita;
+  // Centro della porta: il punto del generatore, tenuto lontano dagli estremi del lato.
+  const tP = clamp(((pu - gA[0]) * ge[0] + (pv - gA[1]) * ge[1]), Math.min(gL / 2, gw / 2 + 3), Math.max(gL / 2, gL - gw / 2 - 3));
+  const gm = [gA[0] + ge[0] * tP, gA[1] + ge[1] * tP];
+  const loc = (e, d) => [gm[0] + ge[0] * e + gn[0] * d, gm[1] + ge[1] * e + gn[1] * d];
 
-  // ─── Pavimenti delle terrazze ───
-  for (const t of terrazze) pavimento(t.u0, t.u1, -lb + SP / 2, lb - SP / 2, t.q);
-
-  // ─── Muri di contenimento e rampe della via ───
-  const rampe = [];                               // { u0, u1, y0, y1 } in locale, |v| ≤ VIA.larghezza / 2
-  for (let i = 0; i + 1 < terrazze.length; i++) {
-    const su = terrazze[i], giu = terrazze[i + 1], ub = su.u1, salto = su.q - giu.q;
-    if (salto < 0.3) continue;                    // quasi alla stessa quota: niente muro
-    const w = VIA.larghezza / 2, sp = CONTENIMENTO.spessore;
-    for (const [v0, v1] of [[-lb + SP / 2, -w - 0.4], [w + 0.4, lb - SP / 2]]) {
-      parti.mattone.push(prisma(quad(ub, ub + sp, v0, v1), quad(ub, ub + sp, v0, v1), giu.q - 0.6, su.q + CONTENIMENTO.parapetto));
-      rettangoli.push({ u0: ub - 0.3, u1: ub + sp, v0: Math.min(v0, v1), v1: Math.max(v0, v1) });
-    }
-    // Rampa nella terrazza più bassa, dal bordo del muro fino al suo pavimento.
-    const lunga = clamp(salto / VIA.pendenza, VIA.minima, Math.max(VIA.minima, giu.u1 - giu.u0 - 6));
-    const r = { u0: ub, u1: ub + lunga, y0: su.q, y1: giu.q };
-    rampe.push(r);
-    const [a, b, c, d] = [[ub, -w, r.y0], [ub + lunga, -w, r.y1], [ub + lunga, w, r.y1], [ub, w, r.y0]]
-      .map(([u, v, y]) => [X(u, v), y + 0.03, Z(u, v)]);
-    const geo = new THREE.BufferGeometry();
-    const sopra = (b[0] - a[0]) * (d[2] - a[2]) - (b[2] - a[2]) * (d[0] - a[0]) < 0;
-    geo.setAttribute('position', new THREE.Float32BufferAttribute((sopra ? [a, b, c, a, c, d] : [a, c, b, a, d, c]).flat(), 3));
-    geo.computeVertexNormals();
-    parti.pietra.push(geo);
-    // Muretti ai lati della rampa (si vede il salto; non ci si cade di lato).
-    for (const s of [-1, 1]) {
-      const v0 = s * w, v1 = s * (w + 0.4);
-      const n = Math.max(2, Math.ceil(lunga / 2));
-      for (let k = 0; k < n; k++) {
-        const ua = ub + lunga * k / n, ub2 = ub + lunga * (k + 1) / n;
-        const yTop = r.y0 + (r.y1 - r.y0) * (k / n) + VIA.parapetto;
-        parti.pietra.push(prisma(quad(ua, ub2, Math.min(v0, v1), Math.max(v0, v1)), quad(ua, ub2, Math.min(v0, v1), Math.max(v0, v1)), giu.q - 0.3, yTop));
-      }
-      rettangoli.push({ u0: ub, u1: ub + lunga, v0: Math.min(v0, v1), v1: Math.max(v0, v1) });
-    }
-  }
-
-  // ─── Cinta ───
-  // Tratti: lati (v = ±lb) per terrazza, fondo con la porta (u = uFine), retro (u = ra) dai lati fino alle torri
-  // della rocca. Ognuno: base sotto il terreno esterno, cima H sopra il pavimento interno; scarpa all'esterno.
+  // ─── Cinta, a gradoni sul pendio ───
+  // Ogni lato della catena in tratti di ~TRATTO m: base sotto il terreno esterno, cima H sopra il terreno interno più
+  // alto del tratto; scarpa all'esterno. n = normale esterna; il muro sta tra il bordo e SP verso l'interno.
   const merli = [];                               // { u, v, y, nu, nv }
-  const torri = [];                               // { u, v, base, cima }
-  function tratto(u0, v0, u1, v1, nu, nv, qDentro) {
-    const du = u1 - u0, dv = v1 - v0, len = Math.hypot(du, dv);
-    if (len < 0.5) return;
-    const tu = du / len, tv = dv / len;
-    // Linea mediana del muro: spostata di SP/2 verso l'interno rispetto al bordo.
-    const pu = -nu * SP / 2, pv = -nv * SP / 2;
-    const a0 = [u0 + pu - nu * SP / 2, v0 + pv - nv * SP / 2], a1 = [u1 + pu - nu * SP / 2, v1 + pv - nv * SP / 2];
-    const b0 = [u0 + pu + nu * SP / 2, v0 + pv + nv * SP / 2], b1 = [u1 + pu + nu * SP / 2, v1 + pv + nv * SP / 2];
-    const base = minimoLungo(u0, v0, u1, v1, nu * 2, nv * 2) - 1;
-    const cima = qDentro + H;
-    const q4 = (p, q, r, s) => [xz(...p), xz(...q), xz(...r), xz(...s)];
-    parti.mattone.push(prisma(q4(a0, a1, b1, b0), q4(a0, a1, b1, b0), base, cima));
-    // Scarpa esterna fino a 2 m sopra il pavimento.
-    const yS = Math.max(base + 0.5, qDentro + 2), off = (yS - base) * SCARPA;
-    const c0 = [b0[0] + nu * off, b0[1] + nv * off], c1 = [b1[0] + nu * off, b1[1] + nv * off];
-    parti.scuro.push(prisma(q4(a0, a1, c1, c0), q4(a0, a1, b1, b0), base, yS));
-    // Collisione (con la scarpa).
-    const us = [a0[0], a1[0], c0[0], c1[0]], vs = [a0[1], a1[1], c0[1], c1[1]];
-    rettangoli.push({ u0: Math.min(...us), u1: Math.max(...us), v0: Math.min(...vs), v1: Math.max(...vs) });
-    // Merli sul filo esterno.
-    const n = Math.floor(len / 1.9);
-    for (let k = 0; k < n; k++) {
-      const t = (k + 0.5) / n;
-      merli.push({ u: u0 + du * t + pu + nu * (SP / 2 - 0.3), v: v0 + dv * t + pv + nv * (SP / 2 - 0.3), y: cima, nu, nv });
-    }
-    return { base, cima, tu, tv };
-  }
-  // Lati, terrazza per terrazza (la cima segue il pavimento: mura a gradoni).
-  for (const s of [-1, 1]) {
-    for (const t of terrazze) tratto(t.u0, s * lb, t.u1, s * lb, 0, s, t.q);
-  }
-  // Fondo, con la porta al centro.
-  const ultima = terrazze[terrazze.length - 1];
-  const gw = PORTA.torreLarghezza;
-  for (const s of [-1, 1]) tratto(uFine, s * gw / 2, uFine, s * lb, 1, 0, ultima.q);
-  // Retro: dal lato fino a dentro le torri della rocca (che coprono la giunzione).
-  const vRocca = Math.max(0, rocca.HX - 1);
-  for (const s of [-1, 1]) tratto(ra, s * lb, ra, s * vRocca, -1, 0, terrazze[0].q);
-
-  // Torri quadrate: agli angoli del fondo e del retro, e lungo i lati ogni ~passoTorri.
-  const lt = K.torre / 2;
-  const posti = [[uFine, -lb], [uFine, lb], [ra, -lb], [ra, lb]];
-  for (const s of [-1, 1]) {
-    const n = Math.floor((uFine - ra) / K.passoTorri);
-    for (let k = 1; k <= n - 0; k++) {
-      const u = ra + (uFine - ra) * k / (n + 1);
-      posti.push([u, s * lb]);
-    }
-  }
-  for (const [u, v] of posti) {
-    const t = terrazzaDi(clamp(u, ra + 0.01, uFine - 0.01));
-    const qD = t ? t.q : terrazze[0].q;
-    const base = Math.min(terreno(u - lt - 1, v), terreno(u + lt + 1, v), terreno(u, v - lt - 1), terreno(u, v + lt + 1), terreno(u, v)) - 1;
-    const cima = qD + H + 2.5;
-    parti.mattone.push(prisma(quad(u - lt, u + lt, v - lt, v + lt), quad(u - lt, u + lt, v - lt, v + lt), base, cima));
-    const e = 0.35;                                       // parapetto sporgente in cima
-    parti.mattone.push(prisma(quad(u - lt - e, u + lt + e, v - lt - e, v + lt + e), quad(u - lt - e, u + lt + e, v - lt - e, v + lt + e), cima - 1.2, cima));
-    rettangoli.push({ u0: u - lt - e, u1: u + lt + e, v0: v - lt - e, v1: v + lt + e });
-    for (const [nu, nv] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      for (const o of [-lt + 0.7, 0, lt - 0.7]) {
-        merli.push({ u: u + nu * (lt + e - 0.3) + (nv !== 0 ? o : 0), v: v + nv * (lt + e - 0.3) + (nu !== 0 ? o : 0), y: cima, nu, nv });
+  function lato(A0, B0, n) {
+    const [nu, nv] = n;
+    const len = Math.hypot(B0[0] - A0[0], B0[1] - A0[1]);
+    const k = Math.max(1, Math.round(len / TRATTO));
+    for (let j = 0; j < k; j++) {
+      const a = [A0[0] + (B0[0] - A0[0]) * j / k, A0[1] + (B0[1] - A0[1]) * j / k];
+      const b = [A0[0] + (B0[0] - A0[0]) * (j + 1) / k, A0[1] + (B0[1] - A0[1]) * (j + 1) / k];
+      const dentroA = [a[0] - nu * (SP + 1), a[1] - nv * (SP + 1)], dentroB = [b[0] - nu * (SP + 1), b[1] - nv * (SP + 1)];
+      const qDentro = Math.max(terreno(...dentroA), terreno(...dentroB), terreno((dentroA[0] + dentroB[0]) / 2, (dentroA[1] + dentroB[1]) / 2));
+      const i0 = [a[0] - nu * SP, a[1] - nv * SP], i1 = [b[0] - nu * SP, b[1] - nv * SP];   // filo interno
+      const base = minimoLungo(a, b, nu * 2, nv * 2) - 1;
+      const cima = qDentro + H;
+      // Il tratto si allunga di 0,05 m per lato: i gradoni non lasciano fessure.
+      const l = Math.max(1e-6, Math.hypot(b[0] - a[0], b[1] - a[1]));
+      const eu = (b[0] - a[0]) / l * 0.05, ev = (b[1] - a[1]) / l * 0.05;
+      const P = [[i0[0] - eu, i0[1] - ev], [i1[0] + eu, i1[1] + ev], [b[0] + eu, b[1] + ev], [a[0] - eu, a[1] - ev]];
+      parti.mattone.push(prisma(q4(P), q4(P), base, cima));
+      const yS = Math.max(base + 0.5, qDentro + 1.5), off = (yS - base) * SCARPA;
+      const Ps = [P[0], P[1], [P[2][0] + nu * off, P[2][1] + nv * off], [P[3][0] + nu * off, P[3][1] + nv * off]];
+      parti.scuro.push(prisma(q4(Ps), q4(P), base, yS));
+      const terra = Math.min(terreno(a[0] + nu, a[1] + nv), terreno(b[0] + nu, b[1] + nv));
+      scatole.push(scatolaLato(a, b, n, -SP, Math.max(0.2, (yS - terra) * SCARPA)));
+      const m = Math.max(1, Math.floor(l / 1.9));
+      for (let i = 0; i < m; i++) {
+        const t = (i + 0.5) / m;
+        merli.push({ u: a[0] + (b[0] - a[0]) * t - nu * 0.3, v: a[1] + (b[1] - a[1]) * t - nv * 0.3, y: cima, nu, nv });
       }
     }
-    torri.push({ u, v, base, cima });
+  }
+  for (let i = 0; i + 1 < nC; i++) {
+    const a = BL[i], b = BL[i + 1], n = normaleLato(a, b, verso);
+    if (i === latoPorta) {
+      lato(a, loc(-gw / 2, 0), n);
+      lato(loc(gw / 2, 0), b, n);
+    } else lato(a, b, n);
   }
 
-  // ─── Torre-porta del borgo (sul fondo, al centro) ───
+  // ─── Torri quadrate: sui vertici della catena (non quelli della rocca) e lungo i lati ogni ~passoTorri ───
+  const lt = K.torre / 2;
+  const posti = [];                                // { u, v, au, av }: centro e asse
+  for (let i = 0; i + 1 < nC; i++) {
+    const a = BL[i], b = BL[i + 1], l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const au = (b[0] - a[0]) / l, av = (b[1] - a[1]) / l;
+    if (i > 0) {
+      const n1 = normaleLato(BL[i - 1], a, verso), n2 = normaleLato(a, b, verso);
+      const bu = n1[0] + n2[0], bv = n1[1] + n2[1], bl = Math.hypot(bu, bv) || 1;
+      posti.push({ u: a[0], v: a[1], au: bv / bl, av: -bu / bl });
+    }
+    const nt = Math.floor(l / K.passoTorri);
+    for (let k = 1; k <= nt; k++) posti.push({ u: a[0] + (b[0] - a[0]) * k / (nt + 1), v: a[1] + (b[1] - a[1]) * k / (nt + 1), au, av });
+  }
+  let torri = 0;
+  for (const t of posti) {
+    if (Math.hypot(t.u - gm[0], t.v - gm[1]) < gw / 2 + lt + 2) continue;          // non addosso alla porta
+    const { u, v, au, av } = t;
+    const sq = (h) => [[-h, -h], [h, -h], [h, h], [-h, h]].map(([a, b]) => [u + au * a - av * b, v + av * a + au * b]);
+    let qMin = Infinity, qD = -Infinity;
+    for (const [a, b] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const h = terreno(u + a * (lt + 1), v + b * (lt + 1));
+      qMin = Math.min(qMin, h); qD = Math.max(qD, h);
+    }
+    const base = qMin - 1, cima = qD + H + 2.5, e = 0.35;
+    parti.mattone.push(prisma(q4(sq(lt)), q4(sq(lt)), base, cima));
+    parti.mattone.push(prisma(q4(sq(lt + e)), q4(sq(lt + e)), cima - 1.2, cima));    // parapetto sporgente
+    scatole.push({ cu: u, cv: v, au, av, hl: lt + e, hw: lt + e });
+    for (const [n0, n1] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nu = au * n0 - av * n1, nv = av * n0 + au * n1, tu = -nv, tv = nu;
+      for (const o of [-lt + 0.7, 0, lt - 0.7]) {
+        merli.push({ u: u + nu * (lt + e - 0.3) + tu * o, v: v + nv * (lt + e - 0.3) + tv * o, y: cima, nu, nv });
+      }
+    }
+    torri++;
+  }
+
+  // ─── Torre-porta del borgo: il passaggio segue il terreno ───
+  let gMin = Infinity, gMax = -Infinity;
+  for (let d = SPOR - prof + 1; d <= SPOR + 1e-6; d += 0.5) {
+    const h = terreno(...loc(0, d));
+    gMin = Math.min(gMin, h); gMax = Math.max(gMax, h);
+  }
   {
-    const pw = PORTA.larghezza, prof = PORTA.torreProfondita, q = ultima.q;
-    const u0 = uFine - prof + 1, u1 = uFine + 1;          // sporge di 1 m fuori dalla cinta
-    const base = Math.min(minimoLungo(u1, -gw / 2, u1, gw / 2, 2, 0), q) - 1.5;
-    const cima = q + H + PORTA.sopraMura, imposta = q + PORTA.imposta;
-    const s = new THREE.Shape();
-    s.moveTo(-gw / 2, base); s.lineTo(gw / 2, base); s.lineTo(gw / 2, cima); s.lineTo(-gw / 2, cima); s.closePath();
-    const foro = new THREE.Path();
-    foro.moveTo(-pw / 2, q - 0.4); foro.lineTo(pw / 2, q - 0.4); foro.lineTo(pw / 2, imposta);
-    foro.absarc(0, imposta, pw / 2, 0, Math.PI, false);
-    foro.lineTo(-pw / 2, q - 0.4);
-    s.holes.push(foro);
-    const geo = new THREE.ExtrudeGeometry(s, { depth: prof, bevelEnabled: false, curveSegments: 10 }).toNonIndexed();
-    // Forma: x → −v (così il sistema resta destrorso), y → quota, profondità → u.
-    const p = geo.attributes.position;
-    for (let i = 0; i < p.count; i++) {
-      const v = -p.getX(i), y = p.getY(i), u = u0 + p.getZ(i);
-      p.setXYZ(i, X(u, v), y, Z(u, v));
+    const base = Math.min(minimoLungo(loc(-gw / 2, SPOR), loc(gw / 2, SPOR), gn[0] * 2, gn[1] * 2), gMin) - 1.5;
+    const imposta = gMax + PORTA.imposta;
+    parti.mattone.push(geoTorrePorta({ m: gm, e: ge, n: gn, gw, pw, sporgenza: SPOR, profondita: prof, base,
+      cima: gMax + H + PORTA.sopraMura, soglia: gMin - 0.6, imposta }, X, Z));
+    const dIn = SPOR - prof;                              // faccia interna
+    for (const s of [-1, 1]) {                            // battenti aperti, contro la faccia interna
+      const a = loc(s * pw / 2, dIn), b = loc(s * pw, dIn);
+      const fb = [a, b, [b[0] - gn[0] * 0.14, b[1] - gn[1] * 0.14], [a[0] - gn[0] * 0.14, a[1] - gn[1] * 0.14]];
+      parti.legno.push(prisma(q4(fb), q4(fb), gMin - 0.3, imposta + 0.6));
+      const c0 = s * (pw / 2 + gw / 2) / 2, cd = (SPOR + dIn) / 2;
+      scatole.push({ cu: gm[0] + ge[0] * c0 + gn[0] * cd, cv: gm[1] + ge[1] * c0 + gn[1] * cd, au: ge[0], av: ge[1],
+        hl: (gw / 2 - pw / 2) / 2, hw: prof / 2 + 0.15 });
     }
-    geo.deleteAttribute('normal');
-    geo.deleteAttribute('uv');
-    geo.computeVertexNormals();
-    parti.mattone.push(geo);
-    parti.pietra.push(prisma(quad(u0, u1, -pw / 2, pw / 2), quad(u0, u1, -pw / 2, pw / 2), q - 0.5, q + 0.02));   // soglia
-    // Battenti aperti, contro la faccia interna.
-    for (const lato of [-1, 1]) {
-      const v0 = lato * pw / 2, v1 = lato * pw;
-      parti.legno.push(prisma(quad(u0 - 0.14, u0, Math.min(v0, v1), Math.max(v0, v1)), quad(u0 - 0.14, u0, Math.min(v0, v1), Math.max(v0, v1)), q, imposta + 0.6));
-    }
-    for (const lato of [-1, 1]) {
-      const v0 = lato * pw / 2, v1 = lato * gw / 2;
-      rettangoli.push({ u0, u1, v0: Math.min(v0, v1), v1: Math.max(v0, v1) });
-    }
+    const cima = gMax + H + PORTA.sopraMura;
     for (let k = 0; k < 4; k++) {
-      const vv = -gw / 2 + 0.6 + (gw - 1.2) * k / 3;
-      merli.push({ u: u1 - 0.3, v: vv, y: cima, nu: 1, nv: 0 });
-      merli.push({ u: u0 + 0.3, v: vv, y: cima, nu: -1, nv: 0 });
+      const o = -gw / 2 + 0.6 + (gw - 1.2) * k / 3, [a1, b1] = loc(o, SPOR - 0.3), [a2, b2] = loc(o, dIn + 0.3);
+      merli.push({ u: a1, v: b1, y: cima, nu: gn[0], nv: gn[1] });
+      merli.push({ u: a2, v: b2, y: cima, nu: -gn[0], nv: -gn[1] });
     }
   }
 
-  // ─── Rampa fuori dalla porta: dal passaggio al terreno (il terrapieno a 25° sta sotto il pavimento) ───
-  const uPorta = uFine + 1;
+  // ─── Rampa fuori dalla porta: dal passaggio al terreno (il terrapieno a 25° scende sotto) ───
+  const qSoglia = terreno(...loc(0, SPOR));
   let lungaPorta = RAMPA_PORTA.minima;
   {
     let migliore = Infinity;
     for (let l = RAMPA_PORTA.minima; l <= RAMPA_PORTA.massima; l += 0.5) {
-      const g = Math.abs(ultima.q - terreno(uPorta + l, 0)) / l;
+      const g = Math.abs(qSoglia - terreno(...loc(0, SPOR + l))) / l;
       if (g < migliore) { migliore = g; lungaPorta = l; }
       if (g <= RAMPA_PORTA.pendenza) break;
     }
   }
-  const piedePorta = (v) => terreno(uPorta + lungaPorta, v);
-  const quotaRampaPorta = (u, v) => ultima.q + (piedePorta(v) - ultima.q) * clamp((u - uPorta) / lungaPorta, 0, 1);
+  const quotaRampaPorta = (d, e) => qSoglia + (terreno(...loc(e, SPOR + lungaPorta)) - qSoglia) * clamp((d - SPOR) / lungaPorta, 0, 1);
   {
     const w = RAMPA_PORTA.larghezza / 2, n = Math.max(2, Math.ceil(lungaPorta / 1.5));
     for (let i = 0; i < n; i++) {
-      const ua = uPorta + lungaPorta * i / n, ub2 = uPorta + lungaPorta * (i + 1) / n;
-      const pts = [[ua, -w], [ub2, -w], [ub2, w], [ua, w]].map(([u, v]) => [X(u, v), quotaRampaPorta(u, v) + 0.04, Z(u, v)]);
-      const [a, b, c, d] = pts;
-      const geo = new THREE.BufferGeometry();
-      const sopra = (b[0] - a[0]) * (d[2] - a[2]) - (b[2] - a[2]) * (d[0] - a[0]) < 0;
-      geo.setAttribute('position', new THREE.Float32BufferAttribute((sopra ? [a, b, c, a, c, d] : [a, c, b, a, d, c]).flat(), 3));
-      geo.computeVertexNormals();
-      parti.pietra.push(geo);
-      // Fianchi della rampa fino sotto il terreno (si vede un rilevato in muratura, non un nastro sospeso).
-      for (const sv of [-1, 1]) {
-        const v0 = sv * w, v1 = sv * (w + 0.5);
-        const yTop = Math.max(quotaRampaPorta(ua, v0), quotaRampaPorta(ub2, v0)) + 0.3;
-        const yBase = Math.min(terreno(ua, v1), terreno(ub2, v1), terreno(ua, v0), terreno(ub2, v0)) - 0.5;
-        if (yTop - yBase > 0.6) parti.pietra.push(prisma(quad(ua, ub2, Math.min(v0, v1), Math.max(v0, v1)), quad(ua, ub2, Math.min(v0, v1), Math.max(v0, v1)), yBase, yTop));
+      const da = SPOR + lungaPorta * i / n, db = SPOR + lungaPorta * (i + 1) / n;
+      for (const se of [-1, 1]) {                         // fianchi in muratura fino sotto il terreno
+        const e0 = se * w, e1 = se * (w + 0.5);
+        const yTop = Math.max(quotaRampaPorta(da, e0), quotaRampaPorta(db, e0)) + 0.3;
+        const yBase = Math.min(terreno(...loc(e0, da)), terreno(...loc(e0, db)), terreno(...loc(e1, da)), terreno(...loc(e1, db))) - 0.5;
+        const pp = [loc(e0, da), loc(e1, da), loc(e1, db), loc(e0, db)];
+        if (yTop - yBase > 0.6) parti.pietra.push(prisma(q4(pp), q4(pp), yBase, yTop));
       }
     }
   }
+
+  // ─── Strade interne ───
+  // Polilinee in (u, v). Via principale: dalla porta (fuori, sulla rampa) al piede della rampa della rocca; se il
+  // pendio supera STRADE.pendenzaVia sale a tornanti. Via lungo le mura: anello a `rientro` m dalla cinta (lascia posto
+  // alle case addossate alle mura). Vicoli: di traverso alla via, da un lato all'altro dell'anello. Curve morbide e un
+  // leggero serpeggiare: niente righe a squadra.
+  const rientro = STRADE.mura.rientro;
+  const NB = BL.length;
+  // Contorno rientrato: ogni vertice spostato verso l'interno lungo la bisettrice (spigolo vivo, al più 2,5 × rientro).
+  const BI = BL.map((p, i) => {
+    const n1 = normaleLato(BL[(i + NB - 1) % NB], p, verso), n2 = normaleLato(p, BL[(i + 1) % NB], verso);
+    const su = n1[0] + n2[0], sv = n1[1] + n2[1], c = Math.hypot(su, sv) / 2;
+    const k = Math.min(rientro / Math.max(c, 0.4), 2.5 * rientro) / (2 * Math.max(c, 1e-3));
+    return [p[0] - su * k, p[1] - sv * k];
+  });
+  const serpeggia = (p, ampiezza, onda, sfasa) => {
+    let s = 0;
+    return p.map((q, i) => {
+      if (i > 0) s += Math.hypot(q[0] - p[i - 1][0], q[1] - p[i - 1][1]);
+      if (i === 0 || i === p.length - 1) return q;
+      const a = p[Math.max(0, i - 1)], b = p[Math.min(p.length - 1, i + 1)];
+      const tl = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nu = -(b[1] - a[1]) / tl, nv = (b[0] - a[0]) / tl;
+      const o = ampiezza * (Math.sin(s / onda + sfasa) * 0.7 + Math.sin(s / (onda * 0.43) + sfasa * 2.3) * 0.3);
+      return [q[0] + nu * o, q[1] + nv * o];
+    });
+  };
+  /** Quanto si può andare da `c` lungo ±p restando dentro il contorno rientrato. */
+  const estensione = (c, p, s) => {
+    let d = 0;
+    while (d < 400 && dentroPoligono(BI, c[0] + p[0] * s * (d + 1), c[1] + p[1] * s * (d + 1))) d += 1;
+    return d;
+  };
+  const strade = [];                               // { punti: [[u, v]...], tipo }
+  {
+    const G0 = loc(0, SPOR + Math.min(lungaPorta, 6)), G1 = loc(0, SPOR - prof - 3);
+    // Arrivo al piede della rampa della rocca da davanti, nel suo verso (di fianco si urterebbe pianerottolo e parapetti).
+    // Prima un punto più lontano dal muro della rocca: la via non taglia sopra la rampa che corre lungo il muro.
+    const piede = rocca.piede, rd = rocca.rampa?.dir ?? [0, 0], rn = rocca.porta ? [rocca.porta.nu, rocca.porta.nv] : [0, 0];
+    let E = [piede[0] + rd[0] * 6, piede[1] + rd[1] * 6];
+    if (!dentroPoligono(BL, E[0], E[1])) E = piede;
+    const Efuori = [E[0] + rn[0] * 10, E[1] + rn[1] * 10];
+    const avvio = dentroPoligono(BI, Efuori[0], Efuori[1]) ? [Efuori] : [];
+    const lungo = Math.hypot(E[0] - G1[0], E[1] - G1[1]) || 1;
+    const d = [(E[0] - G1[0]) / lungo, (E[1] - G1[1]) / lungo], p = [-d[1], d[0]];
+    const salto = Math.abs(terreno(...G1) - terreno(...E));
+    let pts;
+    if (salto / lungo <= STRADE.pendenzaVia) {
+      pts = [G0, G1, [(G1[0] + E[0]) / 2, (G1[1] + E[1]) / 2], ...avvio, E, piede];
+    } else {
+      // Tornanti: n tratti da un lato all'altro, quanto lo consente il contorno, abbastanza lunghi per la pendenza.
+      const serve = salto / STRADE.pendenzaVia;
+      let n = 2, zig = [];
+      for (; n <= 8; n++) {
+        zig = [];
+        let tot = 0, prec = G1;
+        for (let k = 0; k < n; k++) {
+          const c = [G1[0] + d[0] * lungo * (k + 0.5) / n, G1[1] + d[1] * lungo * (k + 0.5) / n];
+          const s = k % 2 ? -1 : 1, A = estensione(c, p, s) * 0.8;
+          const q = [c[0] + p[0] * s * A, c[1] + p[1] * s * A];
+          zig.push(q);
+          tot += Math.hypot(q[0] - prec[0], q[1] - prec[1]);
+          prec = q;
+        }
+        tot += Math.hypot(E[0] - prec[0], E[1] - prec[1]);
+        if (tot >= serve) break;
+      }
+      pts = [G0, G1, ...zig, ...avvio, E, piede];
+    }
+    strade.push({ tipo: 'via', punti: serpeggia(ricampiona(chaikin(pts, 3), STRADE.passo), 0.7, 9, fase) });
+    // Anello lungo le mura (chiuso), angoli arrotondati: lati suddivisi ogni 4 m prima di arrotondare, così Chaikin
+    // smussa solo gli angoli. Si parte e si chiude a metà di un lato (l'estremo fermo di Chaikin non fa spigolo).
+    const k0 = Math.max(0, Math.floor(nC / 2) - 1);
+    const mezzo = [(BI[k0][0] + BI[k0 + 1][0]) / 2, (BI[k0][1] + BI[k0 + 1][1]) / 2];
+    const giro = [mezzo];
+    for (let k = 1; k <= NB; k++) giro.push(BI[(k0 + k) % NB]);
+    giro.push(mezzo);
+    strade.push({ tipo: 'mura', punti: serpeggia(ricampiona(chaikin(ricampiona(giro, 4), 2), STRADE.passo), 0.8, 11, fase + 1) });
+    // Vicoli di traverso alla via, da un lato all'altro dell'anello.
+    for (let k = 1; k <= K.vicoli; k++) {
+      const c = [E[0] + (G1[0] - E[0]) * k / (K.vicoli + 1), E[1] + (G1[1] - E[1]) * k / (K.vicoli + 1)];
+      if (!dentroPoligono(BI, c[0], c[1])) continue;
+      const s0 = estensione(c, p, -1), s1 = estensione(c, p, 1);
+      if (s0 + s1 < 16) continue;
+      const w = Math.sin(fase + k) * 4;
+      const pv = [[c[0] - p[0] * s0, c[1] - p[1] * s0], [c[0] - p[0] * s0 * 0.35 + d[0] * w, c[1] - p[1] * s0 * 0.35 + d[1] * w],
+        [c[0] + p[0] * s1 * 0.4 - d[0] * w, c[1] + p[1] * s1 * 0.4 - d[1] * w], [c[0] + p[0] * s1, c[1] + p[1] * s1]];
+      strade.push({ tipo: 'vicolo', punti: serpeggia(ricampiona(chaikin(pv, 3), STRADE.passo), 0.6, 7, fase + k * 2) });
+    }
+  }
+  // Nastri di ciottolato: 5 vertici per sezione (bordi un po' irregolari), sul terreno + qualche cm.
+  let triStrade = 0;
+  const geoStrade = (() => {
+    const pos = [], uv = [], idx = [];
+    for (const s of strade) {
+      const S = STRADE[s.tipo], P = s.punti, base = pos.length / 3;
+      let lung = 0;
+      for (let i = 0; i < P.length; i++) {
+        if (i > 0) lung += Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]);
+        const a = P[Math.max(0, i - 1)], b = P[Math.min(P.length - 1, i + 1)];
+        const tl = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nu = -(b[1] - a[1]) / tl, nv = (b[0] - a[0]) / tl;
+        for (let j = 0; j < 5; j++) {
+          const t = j / 4 - 0.5;
+          const bordo = (j === 0 || j === 4) ? 1 + 0.18 * Math.sin(lung * 0.9 + j * 2.1 + fase) * Math.sin(lung * 0.37 + fase) : 1;
+          const u = P[i][0] + nu * t * S.larghezza * bordo, v = P[i][1] + nv * t * S.larghezza * bordo;
+          pos.push(X(u, v), terreno(u, v) + S.sopra, Z(u, v));
+          uv.push(t * S.larghezza / 1.6, lung / 1.6);
+        }
+      }
+      for (let i = 0; i + 1 < P.length; i++) {
+        for (let j = 0; j < 4; j++) {
+          const a = base + i * 5 + j, b = a + 1, c = a + 5, d = c + 1;
+          idx.push(a, c, b, b, c, d);
+          triStrade += 2;
+        }
+      }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setIndex(idx);
+    geo.computeVertexNormals();
+    // Le normali devono guardare in su (l'ordine dei vertici dipende dal verso degli assi locali).
+    const nrm = geo.attributes.normal;
+    let giu = 0;
+    for (let i = 0; i < nrm.count; i++) if (nrm.getY(i) < 0) giu++;
+    if (giu > nrm.count / 2) {
+      for (let i = 0; i < idx.length; i += 3) { const t = idx[i + 1]; idx[i + 1] = idx[i + 2]; idx[i + 2] = t; }
+      geo.setIndex(idx);
+      geo.computeVertexNormals();
+    }
+    geo.computeBoundingSphere();
+    return geo;
+  })();
 
   // ─── Oggetti: uno per materiale, merli a istanze ───
   const object = new THREE.Group();
@@ -333,13 +451,17 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
     if (k === 'mattone' || k === 'scuro') solidi.push(m);   // la camera non passa attraverso le mura
   }
   {
+    const m = new THREE.Mesh(geoStrade, mat.strada);
+    m.name = 'borgo-strade';
+    object.add(m);
+  }
+  {
     const geo = new THREE.BoxGeometry(0.85, 1.1, 0.5);
     geo.translate(0, 0.55, 0);
     const im = new THREE.InstancedMesh(geo, mat.mattone, merli.length);
     const m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), y = new THREE.Vector3(0, 1, 0), s1 = new THREE.Vector3(1, 1, 1);
     merli.forEach((m, i) => {
-      // Normale esterna in coordinate del blocco.
-      const nx = ux * m.nu - uz * m.nv, nz = uz * m.nu + ux * m.nv;
+      const nx = ux * m.nu - uz * m.nv, nz = uz * m.nu + ux * m.nv;   // normale esterna nel blocco
       q4.setFromAxisAngle(y, Math.atan2(nx, nz));
       im.setMatrixAt(i, m4.compose(new THREE.Vector3(X(m.u, m.v), m.y, Z(m.u, m.v)), q4, s1));
     });
@@ -351,56 +473,41 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
   object.updateMatrixWorld(true);
 
   // ─── Collisioni e suolo ───
-  const INGOMBRO_U0 = ra - 4, INGOMBRO_U1 = uFine + 6 + lungaPorta, INGOMBRO_V = lb + 6;
+  let U0 = Infinity, U1 = -Infinity, V0 = Infinity, V1 = -Infinity;
+  for (const [u, v] of BL) { U0 = Math.min(U0, u); U1 = Math.max(U1, u); V0 = Math.min(V0, v); V1 = Math.max(V1, v); }
+  const M = 8 + lungaPorta;
+  const spingi = creaSpinta(scatole, []);
   function spingiFuori(x, z, raggio) {
-    let [u, v] = inLocale(x, z);
-    if (u < INGOMBRO_U0 - raggio || u > INGOMBRO_U1 + raggio || Math.abs(v) > INGOMBRO_V + raggio) return null;
-    for (let iter = 0; iter < 4; iter++) {
-      let mosso = false;
-      for (const r of rettangoli) {
-        const qu = clamp(u, r.u0, r.u1), qv = clamp(v, r.v0, r.v1);
-        const eu = u - qu, ev = v - qv, d2 = eu * eu + ev * ev;
-        if (d2 >= raggio * raggio) continue;
-        if (d2 > 1e-10) {
-          const d = Math.sqrt(d2);
-          u = qu + (eu / d) * raggio; v = qv + (ev / d) * raggio;
-        } else {
-          const vie = [u - r.u0, r.u1 - u, v - r.v0, r.v1 - v];
-          const m = vie.indexOf(Math.min(...vie));
-          if (m === 0) u = r.u0 - raggio; else if (m === 1) u = r.u1 + raggio;
-          else if (m === 2) v = r.v0 - raggio; else v = r.v1 + raggio;
-        }
-        mosso = true;
-      }
-      if (!mosso) break;
-    }
-    return { x: X(u, v), z: Z(u, v) };
+    const [u, v] = inLocale(x, z);
+    if (u < U0 - M - raggio || u > U1 + M + raggio || v < V0 - M - raggio || v > V1 + M + raggio) return null;
+    const [u2, v2] = spingi(u, v, raggio);
+    return { x: X(u2, v2), z: Z(u2, v2) };
   }
 
-  /** Quota del suolo costruito: pavimenti delle terrazze, rampe della via, passaggio della porta. null altrove. */
+  /** Quota del suolo costruito: solo la rampa fuori dalla porta (dentro il borgo si cammina sul pendio). */
   function quotaSuolo(x, z) {
     const [u, v] = inLocale(x, z);
-    if (u > uPorta && u <= uPorta + lungaPorta && Math.abs(v) <= RAMPA_PORTA.larghezza / 2) return quotaRampaPorta(u, v);
-    if (u < ra || u > uPorta || Math.abs(v) > lb - SP / 2) return null;
-    if (u > uFine - PORTA.torreProfondita + 1) return Math.abs(v) <= PORTA.larghezza / 2 ? ultima.q : null;
-    if (Math.abs(v) <= VIA.larghezza / 2) {
-      for (const r of rampe) if (u >= r.u0 && u <= r.u1) return r.y0 + (r.y1 - r.y0) * (u - r.u0) / (r.u1 - r.u0);
-    }
-    const t = terrazzaDi(u);
-    return t ? t.q : null;
+    const du = u - gm[0], dv = v - gm[1], e = du * ge[0] + dv * ge[1], d = du * gn[0] + dv * gn[1];
+    if (d > SPOR && d <= SPOR + lungaPorta && Math.abs(e) <= RAMPA_PORTA.larghezza / 2) return quotaRampaPorta(d, e);
+    return null;
   }
 
   /** true se il punto è dentro la cinta del borgo. */
   function dentro(x, z) {
     const [u, v] = inLocale(x, z);
-    return u > ra && u < uFine && Math.abs(v) < lb - SP;
+    return dentroPoligono(BL, u, v) && distanzaContorno(BL, u, v) > SP;
   }
 
   return {
-    tipo: 'borgo', luogo, object, solidi, rettangoli, spingiFuori, quotaSuolo, dentro,
+    tipo: 'borgo', luogo, object, solidi, scatole, spingiFuori, quotaSuolo, dentro, inLocale,
+    strade,                                       // polilinee locali (u, v): per gli edifici del passo 5
+    poligono: BL,
+    porta: { u: gm[0], v: gm[1], nu: gn[0], nv: gn[1], rampa: lungaPorta },
     aggiornaLuci() {},                            // luci del borgo: passo 7
-    misure: { terrazze: terrazze.length, rampe: rampe.length, torri: torri.length, merli: merli.length,
-      oggetti: object.children.length, triangoli: object.children.reduce((s, m) => s + (m.isInstancedMesh
-        ? m.geometry.index.count / 3 * m.count : m.geometry.attributes.position.count / 3), 0) },
+    misure: {
+      strade: strade.length, torri, merli: merli.length, oggetti: object.children.length,
+      triangoli: object.children.reduce((s, m) => s + (m.isInstancedMesh ? m.geometry.index.count / 3 * m.count
+        : (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3), 0),
+    },
   };
 }

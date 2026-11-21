@@ -18,7 +18,7 @@
 // forma del mondo (dal passo 2 il terrapieno), e deve essere identico in ogni browser.
 
 import { ACQUA, BIOMA } from './carta.js';
-import { quotaMondo, scavaFiumi, raffinaZona } from './scena.js';
+import { quotaMondo, scavaFiumi, raffinaZona, quotaPiano } from './scena.js';
 import { derivaSeme } from './rumore.js';
 
 export const LUOGHI = {
@@ -31,7 +31,8 @@ export const LUOGHI = {
   fiume: { minimo: 0.9, minimoValle: 0.35, buono: [0.9, 4], fino: 6 },   // km dall'asse del tracciato della Carta
   valico: { buono: 8, fino: 15 },// km dal valico più vicino (il sito sta più in basso)
   riservati: 20,                  // per zona: celle affinate scelte tra quelle vicine a un valico
-  candidati: 260,                 // celle affinate (le migliori secondo la stima sulla Carta)
+  candidati: 900,                 // celle affinate (le migliori secondo la stima sulla Carta)
+  tessera: { km: 12, quanti: 8 }, // al più `quanti` celle affinate per tessera di km × km: candidati su tutta la Carta
   // Misure del sito (castello di casata, docs/ESPLORAZIONE_3D.md, M7): la classe ne cambierà la grandezza
   // dal passo 3; qui servono a giudicare il terreno.
   rocca: { semilato: 26, passo: 8.6667 },             // m: quadrato di 52 m attorno al punto più alto
@@ -42,22 +43,41 @@ export const LUOGHI = {
   pesi: { fiume: 70, valico: 60, rocca: 4, borgo: 1.5, pendenza: 3 },
   // Scelta: zona attorno al centro (km), poi distanza minima tra i siti (km), a scalini se non bastano.
   zona: [25, 35, 50, 80],
-  distanza: [15, 12, 8],
-  numero: 3,
+  // Numero (GDD §2, densità: luoghi maggiori a ~18 km, 30–40 per mondo): per ora tutti rocche con borgo; con la
+  // milestone dei luoghi una parte diventerà città e monasteri. Distanza minima a scalini finché non bastano.
+  distanza: [15, 13, 11, 10],
+  numero: 36,
+  // Classi degli altri siti (la partenza è un castello di casata), per punteggio: le quote di sedi maggiori e di
+  // castelli di casata, il resto rocche minori.
+  quoteClassi: { maggiore: 0.15, casata: 0.35 },
   // Castello di valle (deciso con l'utente): a ≤ entro km da un crinale almeno sopra m più alto, così di persona
   // in 15–20 minuti si sale dal castello al crinale per guardare oltre. La partenza è di valle, se c'è.
   crinale: { entro: 5, sopra: 800 },
   // Passo 2: terrapieni. Misure piene (m) del piano della rocca e del borgo secondo la classe (lungo il verso del
-  // borgo × di traverso) e numero di terrazze del borgo; il borgo comincia dove finisce il piano della rocca.
+  // borgo × di traverso); il borgo comincia dove finisce il piano della rocca.
+  // Forme irregolari (decisione dell'utente: rocche e borghi tutti rettangolari sembravano uguali): la rocca segue la
+  // cima (raggio tra `raggio` m, fin dove il terreno resta entro `cala` m dalla cima), 5–8 vertici; il borgo
+  // (misure piene lungo il verso × di traverso) si aggancia ai due vertici anteriori della rocca.
   classi: {
-    minore: { rocca: [40, 36], borgo: [60, 80], terrazze: [1, 2] },
-    casata: { rocca: [52, 46], borgo: [90, 130], terrazze: [2, 3] },
-    maggiore: { rocca: [64, 56], borgo: [130, 200], terrazze: [3, 4] },
+    minore: { rocca: [40, 36], raggio: [13, 21], borgo: [60, 80] },
+    casata: { rocca: [52, 46], raggio: [17, 27], borgo: [90, 130] },
+    maggiore: { rocca: [64, 56], raggio: [21, 33], borgo: [130, 200] },
   },
+  forma: { cala: 5, vertici: [5, 8], ondula: 0.16, borgoOndula: 0.2, portaMin: 10 },
+  // Spalto davanti alla porta della rocca: il borgo scende dalla rocca, e una rampa in muratura dal cortile al pendio
+  // verrebbe lunga 30–40 m. Il terreno del borgo si rialza in un dosso di terra fino a `sotto` m sotto il cortile, piatto
+  // per `piano` m attorno al punto davanti alla porta e poi in discesa a `pendenza`: la rampa resta di pochi metri.
+  spalto: { sotto: 0.5, piano: 8, pendenza: 0.16, davanti: 7 },
+  // Terrazzi sotto la rocca (decisione dell'utente: castelli diversi l'uno dall'altro): 0–3 fasce su 1–2 lati del
+  // retro (non verso il borgo), larghe `largo` m (variano da vertice a vertice), `sotto` m sotto il cortile (secondo
+  // il terreno); niente terrazzo dove il versante è troppo ripido (`ripido`: terreno oltre quei m sotto la fascia).
+  terrazzi: { quanti: [0, 1, 2, 2, 3], largo: [8, 15], sotto: [2.5, 7], ripido: 9, margine: 40 },
   piani: {
     passo: 6,                     // m tra i campioni del terreno sotto un piano
-    salto: 6,                     // m di dislivello per terrazza (ne decide il numero, entro i limiti della classe)
-    sopraRocca: 3,                // m: la rocca sta almeno così sopra la prima terrazza
+    // Borgo in pendio (decisione dell'utente: niente terrazze piatte con muri di sostegno né scalinata centrale): il
+    // terreno del borgo è quello naturale lisciato, su una griglia di `griglia` m, `liscia` passate di media 3×3.
+    griglia: 10, liscia: 3,
+    sopraRocca: 3,                // m: la rocca sta almeno così sopra il borgo, lungo il bordo comune
     // Larghezza della scarpata (m): quanto serve per riprendere il salto a 25° (salto / tan 25° ≈ 2,15 m per metro),
     // più un margine; oltre si torna al terreno naturale (TERRAPIENO.ritorno in scena.js).
     scarpa: { perMetro: 2.15, margine: 10, min: 15, max: 120 },
@@ -428,88 +448,368 @@ function saltoBordo(q, p, passo) {
     let t = (k / n) * perimetro, lu, lv;
     if (t < 2 * a) { lu = -a + t; lv = -b; } else if ((t -= 2 * a) < 2 * b) { lu = a; lv = -b + t; }
     else if ((t -= 2 * b) < 2 * a) { lu = a - t; lv = b; } else { t -= 2 * a; lu = -a; lv = b - t; }
-    const d = q(p.cx + p.ux * lu - p.uz * lv, p.cz + p.uz * lu + p.ux * lv) - p.q;
+    const x = p.cx + p.ux * lu - p.uz * lv, z = p.cz + p.uz * lu + p.ux * lv;
+    const d = q(x, z) - quotaPiano(p, x, z);
     const e = d < 0 ? -d : d;
     if (e > mx) mx = e;
   }
   return mx;
 }
 
+// ─── Poligoni (coordinate locali u, v; solo operazioni esatte) ───
+/** true se (u, v) sta dentro il poligono [[u, v]...] (pari/dispari). */
+export function dentroPoligono(P, u, v) {
+  let d = false;
+  for (let i = 0, j = P.length - 1; i < P.length; j = i++) {
+    const [ui, vi] = P[i], [uj, vj] = P[j];
+    if ((vi > v) !== (vj > v) && u < (uj - ui) * (v - vi) / (vj - vi) + ui) d = !d;
+  }
+  return d;
+}
+/** Pseudo-angolo in [0, 4) di una direzione (cresce in senso antiorario da +u), senza trigonometria. */
+const pseudo = (du, dv) => {
+  const s = (du < 0 ? -du : du) + (dv < 0 ? -dv : dv) || 1;
+  return dv >= 0 ? 1 - du / s : 3 + du / s;
+};
+/** Normale esterna (unitaria) del lato a→b di un poligono attorno al punto interno c. */
+function normaleEsterna(a, b, c) {
+  const du = b[0] - a[0], dv = b[1] - a[1], l = Math.sqrt(du * du + dv * dv) || 1;
+  let nu = dv / l, nv = -du / l;
+  const mu = (a[0] + b[0]) / 2 - c[0], mv = (a[1] + b[1]) / 2 - c[1];
+  if (nu * mu + nv * mv < 0) { nu = -nu; nv = -nv; }
+  return [nu, nv];
+}
+
+/** Salto massimo (m) tra il piano e il terreno appena fuori dal contorno poligonale (4 m fuori). */
+function saltoBordoPoligono(q, p, P, W, centro, passo) {
+  let mx = 0;
+  for (let i = 0; i < P.length; i++) {
+    const a = P[i], b = P[(i + 1) % P.length], [nu, nv] = normaleEsterna(a, b, centro);
+    const l = Math.sqrt((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1]));
+    const n = Math.max(1, Math.ceil(l / passo));
+    for (let k = 0; k <= n; k++) {
+      const u = a[0] + (b[0] - a[0]) * k / n + nu * 4, v = a[1] + (b[1] - a[1]) * k / n + nv * 4;
+      const [x, z] = W(u, v), d = q(x, z) - quotaPiano(p, x, z);
+      if ((d < 0 ? -d : d) > mx) mx = d < 0 ? -d : d;
+    }
+  }
+  return mx;
+}
+
 /**
- * Piani (rocca + terrazze del borgo) per un sito, nella direzione `dir` del borgo. null se impossibile: il
+ * Piani (rocca in piano + borgo in pendio) per un sito, nella direzione `dir` del borgo. null se impossibile: il
  * terrapieno toccherebbe la fascia di un fiume o di un torrente, o servirebbe alzare troppo per stare sopra
  * l'acqua. Le quote vengono dal terreno senza luoghi (rilievo + fiumi).
+ *
+ * Forme (decisione dell'utente: niente rettangoli tutti uguali, porte sul lato col minor dislivello):
+ *   - rocca: poligono di 5–8 vertici attorno alla cima, raggio in ogni direzione fin dove il terreno resta entro
+ *     `forma.cala` m dalla cima (tra i raggi della classe), con un po' di variazione per castello;
+ *   - borgo: dai due vertici anteriori della rocca (A a sinistra, B a destra del verso) gira dall'altra parte con un
+ *     contorno arrotondato e irregolare; si chiude sui lati anteriori della rocca (le mura della rocca sono anche
+ *     quelle del borgo lì);
+ *   - porta del borgo: sul lato della sua cinta dove il terreno fuori sta più vicino a quello dentro;
+ *   - porta della rocca: sul lato anteriore (verso il borgo) col salto minore verso il borgo.
+ * Ogni piano ha `poligono` (coordinate del mondo) oltre all'ingombro rettangolare (cx, cz, ux, uz, a, b) che lo
+ * contiene, usato per i controlli veloci e per la griglia del pendio.
  */
 function pianiInDirezione(carta, sito, classe, dir, seed, L) {
-  const Pc = L.piani, K = L.classi[classe];
+  const Pc = L.piani, K = L.classi[classe], F = L.forma;
   const q = (x, z) => scavaFiumi(carta, x, z, quotaMondo(carta, x, z, seed), _es);
   const [ux, uz] = dir;
-  const ra = K.rocca[0] / 2, rb = K.rocca[1] / 2;
-  const rocca = { tipo: 'rocca', cx: sito.x, cz: sito.z, ux, uz, a: ra, b: rb, r: Pc.raggioCorner.rocca, q: 0, s: 0 };
-  const sr = sottoRettangolo(q, rocca.cx, rocca.cz, ux, uz, ra, rb, Pc.passo);
-  rocca.q = (sr.max + sr.media) / 2;                       // un po' di sterro in cima, il resto riporto
-  // Borgo: tutto il rettangolo, poi le terrazze lungo il verso.
-  const la = K.borgo[0] / 2, lb = K.borgo[1] / 2;
-  const bcx = sito.x + ux * (ra + la), bcz = sito.z + uz * (ra + la);
-  const sb = sottoRettangolo(q, bcx, bcz, ux, uz, la, lb, Pc.passo);
-  if (sb.media > rocca.q) return null;                     // il borgo deve stare sotto la rocca
-  let n = Math.ceil((sb.max - sb.min) / Pc.salto);
-  n = n < K.terrazze[0] ? K.terrazze[0] : n > K.terrazze[1] ? K.terrazze[1] : n;
-  const terrazze = [];
-  const lt = la / n;                                       // semilunghezza di una terrazza
-  for (let t = 0; t < n; t++) {
-    const off = ra + lt * (2 * t + 1);
-    const p = { tipo: 'borgo', cx: sito.x + ux * off, cz: sito.z + uz * off, ux, uz, a: lt, b: lb, r: Pc.raggioCorner.borgo, q: 0, s: 0 };
-    p.q = sottoRettangolo(q, p.cx, p.cz, ux, uz, lt, lb, Pc.passo).media;
-    if (t > 0 && p.q > terrazze[t - 1].q) p.q = terrazze[t - 1].q;   // le terrazze scendono allontanandosi
-    terrazze.push(p);
+  const W = (lu, lv) => [sito.x + ux * lu - uz * lv, sito.z + uz * lu + ux * lv];
+  const hq = (lu, lv) => q(...W(lu, lv));
+  const semeForma = derivaSeme(carta.seme, 970);
+  const caso = (k) => hashUnita(Math.floor(sito.x) + k * 7919, Math.floor(sito.z) - k * 104729, semeForma);
+
+  // ─── Rocca: profilo in 16 direzioni, poi 5–8 vertici ───
+  const cima = hq(0, 0);
+  const raggi = DIR16.map(([c, sn]) => {
+    let r = K.raggio[0];
+    for (let t = K.raggio[0]; t <= K.raggio[1]; t += 1.5) {
+      if (hq(c * t, sn * t) < cima - F.cala) break;
+      r = t;
+    }
+    return r;
+  });
+  const lisci = raggi.map((r, k) => 0.25 * raggi[(k + 15) % 16] + 0.5 * r + 0.25 * raggi[(k + 1) % 16]);
+  const M = F.vertici[0] + Math.floor(caso(1) * (F.vertici[1] - F.vertici[0] + 1));
+  const o = caso(2) * 16;
+  const indici = [];
+  for (let j = 0; j < M; j++) indici.push(Math.floor(o + j * 16 / M) % 16);
+  indici.sort((a, b) => a - b);
+  const roccaL = indici.map((k, j) => {
+    const r = Math.max(K.raggio[0], lisci[k] * (1 - F.ondula / 2 + F.ondula * caso(10 + j)));
+    return [DIR16[k][0] * r, DIR16[k][1] * r];
+  });
+  // Vertici anteriori: A (a sinistra del verso, v > 0) e B (a destra).
+  let iA = 0, iB = 0;
+  for (let i = 0; i < M; i++) {
+    if (roccaL[i][1] + 0.6 * roccaL[i][0] > roccaL[iA][1] + 0.6 * roccaL[iA][0]) iA = i;
+    if (-roccaL[i][1] + 0.6 * roccaL[i][0] > -roccaL[iB][1] + 0.6 * roccaL[iB][0]) iB = i;
   }
-  if (rocca.q < terrazze[0].q + Pc.sopraRocca) rocca.q = terrazze[0].q + Pc.sopraRocca;
-  const piani = [rocca, ...terrazze];
+  if (iA === iB || roccaL[iA][1] <= 0 || roccaL[iB][1] >= 0) return null;
+  const fronte = [];                                         // da B ad A, passando per il davanti (indici crescenti)
+  for (let i = iB; ; i = (i + 1) % M) { fronte.push(roccaL[i]); if (i === iA) break; if (fronte.length > M) return null; }
+  let hU = -Infinity;
+  for (const [u] of roccaL) if (u > hU) hU = u;
+
+  // ─── Borgo: dai vertici A e B gira dall'altra parte ───
+  const la = K.borgo[0] / 2, lb = K.borgo[1] / 2;
+  const Cb = [hU + la * 0.85, 0];
+  const A = roccaL[iA], B = roccaL[iB];
+  const dA = [A[0] - Cb[0], A[1] - Cb[1]], dB = [B[0] - Cb[0], B[1] - Cb[1]];
+  const croce = (a, b) => a[0] * b[1] - a[1] * b[0];
+  const lontani = [];
+  DIR16.forEach(([c, sn], k) => {
+    const d = [c, sn];
+    // Esclusa la fetta (< 180°) che va da A a B passando dietro (verso la rocca).
+    if (croce(dA, d) >= 0 && croce(d, dB) >= 0) return;
+    // Né troppo vicino alle direzioni di A e B (cos 25°): eviterebbe denti nel contorno dove si attacca alla rocca.
+    const lA = Math.sqrt(dA[0] * dA[0] + dA[1] * dA[1]), lB = Math.sqrt(dB[0] * dB[0] + dB[1] * dB[1]);
+    if ((c * dA[0] + sn * dA[1]) / lA > 0.906 || (c * dB[0] + sn * dB[1]) / lB > 0.906) return;
+    const r = 1 / Math.sqrt(Math.sqrt((c / la) ** 4 + (sn / lb) ** 4)) * (1 - F.borgoOndula / 2 + F.borgoOndula * caso(40 + k));
+    let ps = pseudo(c, sn);
+    if (ps > 2) ps -= 4;
+    lontani.push({ ps, p: [Cb[0] + c * r, Cb[1] + sn * r] });
+  });
+  lontani.sort((a, b) => b.ps - a.ps);                       // da A (sinistra) a B (destra)
+  const catena = [A, ...lontani.map((l) => l.p), B];
+  const borgoL = [...catena, ...fronte.slice(1, -1).reverse()];
+  if (catena.length < 4) return null;
+
+  // Ingombri rettangolari (frame u, v) che contengono i poligoni.
+  let ra = 0, rb = 0;
+  for (const [u, v] of roccaL) { ra = Math.max(ra, u < 0 ? -u : u); rb = Math.max(rb, v < 0 ? -v : v); }
+  let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+  for (const [u, v] of borgoL) { u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v); }
+  const [bcx, bcz] = W((u0 + u1) / 2, (v0 + v1) / 2);
+  const mondo = (PL) => PL.map(([u, v]) => W(u, v));
+  const rocca = { tipo: 'rocca', cx: sito.x, cz: sito.z, ux, uz, a: ra, b: rb, r: 0, q: 0, s: 0, poligono: mondo(roccaL) };
+  const borgo = { tipo: 'borgo', cx: bcx, cz: bcz, ux, uz, a: (u1 - u0) / 2, b: (v1 - v0) / 2, r: 0, q: 0, s: 0,
+    poligono: mondo(borgoL), nCatena: catena.length, griglia: null };
+
+  // Quota della rocca: (massimo + media)/2 del terreno dentro il poligono.
+  {
+    let mx = -Infinity, somma = 0, n = 0;
+    for (let lu = -ra; lu <= ra; lu += Pc.passo) for (let lv = -rb; lv <= rb; lv += Pc.passo) {
+      if (!dentroPoligono(roccaL, lu, lv)) continue;
+      const h = hq(lu, lv);
+      mx = Math.max(mx, h); somma += h; n++;
+    }
+    if (!n) return null;
+    rocca.q = (mx + somma / n) / 2;
+  }
+  // Borgo: griglia del pendio naturale lisciato sull'ingombro.
+  {
+    const nu = Math.max(3, Math.round(2 * borgo.a / Pc.griglia) + 1), nv = Math.max(3, Math.round(2 * borgo.b / Pc.griglia) + 1);
+    let h = new Array(nu * nv);
+    for (let j = 0; j < nv; j++) {
+      for (let i = 0; i < nu; i++) {
+        const lu = -borgo.a + 2 * borgo.a * i / (nu - 1), lv = -borgo.b + 2 * borgo.b * j / (nv - 1);
+        h[j * nu + i] = q(bcx + ux * lu - uz * lv, bcz + uz * lu + ux * lv);
+      }
+    }
+    for (let it = 0; it < Pc.liscia; it++) {
+      const t = h.slice();
+      for (let j = 0; j < nv; j++) {
+        for (let i = 0; i < nu; i++) {
+          let somma = 0, n = 0;
+          for (let b2 = -1; b2 <= 1; b2++) for (let a2 = -1; a2 <= 1; a2++) {
+            const ii = i + a2, jj = j + b2;
+            if (ii < 0 || jj < 0 || ii >= nu || jj >= nv) continue;
+            somma += t[jj * nu + ii]; n++;
+          }
+          h[j * nu + i] = somma / n;
+        }
+      }
+    }
+    borgo.griglia = { nu, nv, h };
+    borgo.q = h.reduce((s2, v) => s2 + v, 0) / h.length;
+  }
+  if (borgo.q > rocca.q) return null;                      // il borgo deve stare sotto la rocca
+  // La rocca almeno Pc.sopraRocca m sopra il borgo lungo i lati anteriori (in comune).
+  {
+    let mx = -Infinity;
+    for (let i = 0; i + 1 < fronte.length; i++) {
+      for (let t = 0; t <= 1.0001; t += 0.25) {
+        const u = fronte[i][0] + (fronte[i + 1][0] - fronte[i][0]) * t, v = fronte[i][1] + (fronte[i + 1][1] - fronte[i][1]) * t;
+        const [x, z] = W(u, v);
+        mx = Math.max(mx, quotaPiano(borgo, x, z));
+      }
+    }
+    if (rocca.q < mx + Pc.sopraRocca) rocca.q = mx + Pc.sopraRocca;
+  }
+  const piani = [rocca, borgo];
   // Scarpate: larghe in proporzione al salto sul bordo.
-  let salto = 0, pendenza = 0;
-  for (const p of piani) {
-    const sp = saltoBordo(q, p, Pc.passo);
+  let salto = 0;
+  for (const [p, PL, c] of [[rocca, roccaL, [0, 0]], [borgo, borgoL, Cb]]) {
+    const sp = saltoBordoPoligono(q, p, PL, W, c, Pc.passo);
     if (sp > salto) salto = sp;
     const w = Pc.scarpa.perMetro * sp + Pc.scarpa.margine;
     p.s = w < Pc.scarpa.min ? Pc.scarpa.min : w > Pc.scarpa.max ? Pc.scarpa.max : w;
   }
-  pendenza = 25;                                           // per costruzione (scena.js, TERRAPIENO), sul terrapieno
-  // Fiumi: niente piano né scarpata nella fascia di un fiume o di un torrente (scavaFiumi cambia la quota o c'è
-  // acqua); intanto il pelo dell'acqua più alto nei dintorni.
-  let pelo = -Infinity, conflitto = false;
+  const pendenza = 25;                                     // per costruzione (scena.js, TERRAPIENO), sul terrapieno
+  // Fiumi: niente piano né scarpata nella fascia di un fiume o di un torrente; intanto il pelo dell'acqua più alto
+  // nei dintorni (sull'ingombro rettangolare, che contiene il poligono).
+  let pelo = -Infinity;
   const passoAcqua = 12;
   for (const p of piani) {
-    const A = p.a + p.s + Pc.acqua.margine, B = p.b + p.s + Pc.acqua.margine;
-    const na = Math.ceil(2 * A / (2 * passoAcqua)), nb = Math.ceil(2 * B / (2 * passoAcqua));
-    for (let i = 0; i <= na && !conflitto; i++) {
+    const AA = p.a + p.s + Pc.acqua.margine, BB = p.b + p.s + Pc.acqua.margine;
+    const na = Math.ceil(2 * AA / (2 * passoAcqua)), nb = Math.ceil(2 * BB / (2 * passoAcqua));
+    for (let i = 0; i <= na; i++) {
       for (let j = 0; j <= nb; j++) {
-        const lu = -A + 2 * A * i / na, lv = -B + 2 * B * j / nb;
+        const lu = -AA + 2 * AA * i / na, lv = -BB + 2 * BB * j / nb;
         const x = p.cx + p.ux * lu - p.uz * lv, z = p.cz + p.uz * lu + p.ux * lv;
         const h0 = quotaMondo(carta, x, z, seed), h = scavaFiumi(carta, x, z, h0, _es);
         if (!Number.isNaN(_es.livello) && _es.livello > pelo) pelo = _es.livello;
-        // Dentro piano + scarpata: il fiume non deve toccare la quota.
         const dentro = (lu < 0 ? -lu : lu) <= p.a + p.s && (lv < 0 ? -lv : lv) <= p.b + p.s;
-        if (dentro && (h - h0 > 0.01 || h0 - h > 0.01 || !Number.isNaN(_es.livello))) { conflitto = true; break; }
+        if (dentro && (h - h0 > 0.01 || h0 - h > 0.01 || !Number.isNaN(_es.livello))) return null;
       }
     }
-    if (conflitto) return null;
   }
-  // Sopra l'acqua: il piano più basso almeno Pc.acqua.sopra m sopra il pelo più alto vicino.
+  // Sopra l'acqua: il punto più basso almeno Pc.acqua.sopra m sopra il pelo più alto vicino.
   let alza = 0;
   if (pelo > -Infinity) {
-    const basso = Math.min(...piani.map((p) => p.q));
+    const G = borgo.griglia, basso = Math.min(rocca.q, ...G.h);
     alza = pelo + Pc.acqua.sopra - basso;
     if (alza > Pc.acqua.alzaMax) return null;
-    if (alza > 0) for (const p of piani) if (p.q < pelo + Pc.acqua.sopra) p.q = pelo + Pc.acqua.sopra;
+    if (alza > 0) {
+      for (let k = 0; k < G.h.length; k++) if (G.h[k] < pelo + Pc.acqua.sopra) G.h[k] = pelo + Pc.acqua.sopra;
+      if (rocca.q < pelo + Pc.acqua.sopra) rocca.q = pelo + Pc.acqua.sopra;
+    }
   }
-  // Lavoro di terra: scarto medio tra piano e terreno (m), pesato sull'area.
-  let lavoro = 0, area = 0;
-  for (const p of piani) {
-    lavoro += sottoRettangolo(q, p.cx, p.cz, ux, uz, p.a, p.b, 2 * Pc.passo, p.q).scarto * p.a * p.b;
-    area += p.a * p.b;
+  // Lavoro di terra: scarto medio |terreno − piano| dentro i poligoni.
+  let lavoro = 0, nl = 0;
+  for (const [p, PL] of [[rocca, roccaL], [borgo, borgoL]]) {
+    for (let lu = -Math.max(ra, 2 * borgo.a + hU); lu <= hU + 2 * la + 10; lu += 2 * Pc.passo) {
+      for (let lv = -Math.max(rb, borgo.b + 10); lv <= Math.max(rb, borgo.b + 10); lv += 2 * Pc.passo) {
+        if (!dentroPoligono(PL, lu, lv)) continue;
+        const [x, z] = W(lu, lv);
+        lavoro += Math.abs(q(x, z) - quotaPiano(p, x, z)); nl++;
+      }
+    }
   }
-  return { piani, salto, pendenza, pelo: pelo > -Infinity ? pelo : null, alza: alza > 0 ? alza : 0, lavoro: lavoro / area };
+  // ─── Porte ───
+  // Borgo: sul lato della cinta (non i due attaccati alla rocca) col minor salto tra dentro e fuori; lontano dalla
+  // rocca, su un lato abbastanza lungo per la torre-porta.
+  let porta = null;
+  for (let i = 1; i + 2 < catena.length; i++) {
+    const a = catena[i], b = catena[i + 1], l = Math.sqrt((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2);
+    if (l < F.portaMin) continue;
+    const [nu, nv] = normaleEsterna(a, b, Cb), m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    const [xi, zi] = W(m[0] - nu * 6, m[1] - nv * 6), dentroQ = quotaPiano(borgo, xi, zi);
+    const fuoriQ = hq(m[0] + nu * 10, m[1] + nv * 10);
+    const vicinoRocca = Math.sqrt(m[0] * m[0] + m[1] * m[1]) < hU + la * 0.6 ? 6 : 0;
+    const costo = Math.abs(dentroQ - fuoriQ) + vicinoRocca;
+    if (!porta || costo < porta.costo) porta = { costo, m, n: [nu, nv], salto: Math.abs(dentroQ - fuoriQ) };
+  }
+  if (!porta) return null;
+  // Rocca: sul lato anteriore col salto minore verso il borgo, con spazio davanti (i lati agli estremi A e B danno
+  // sull'angolo stretto tra la rocca e la cinta del borgo: lì la rampa e la via restano schiacciate contro il muro).
+  let portaR = null;
+  for (let i = 0; i + 1 < fronte.length; i++) {
+    const a = fronte[i], b = fronte[i + 1], l = Math.sqrt((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2);
+    if (l < F.portaMin) continue;
+    const [nu, nv] = normaleEsterna(a, b, [0, 0]), m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    const [x, z] = W(m[0] + nu * 8, m[1] + nv * 8), salto2 = rocca.q - quotaPiano(borgo, x, z);
+    let stretto = 0;
+    for (const d of [10, 18, 26]) for (const e of [-8, 0, 8]) {
+      const tu = (b[0] - a[0]) / l, tv = (b[1] - a[1]) / l;
+      if (!dentroPoligono(borgoL, m[0] + nu * d + tu * e, m[1] + nv * d + tv * e)) stretto++;
+    }
+    const costo = salto2 + stretto * 1.5 + (i === 0 || i + 2 === fronte.length ? 1 : 0);
+    if (!portaR || costo < portaR.costo) portaR = { costo, salto: salto2, m, n: [nu, nv], a, b, l };
+  }
+  if (!portaR) return null;
+  {
+    const S = L.spalto, [gx, gz] = W(portaR.m[0] + portaR.n[0] * S.davanti, portaR.m[1] + portaR.n[1] * S.davanti);
+    const G = borgo.griglia;
+    for (let j = 0; j < G.nv; j++) {
+      for (let i = 0; i < G.nu; i++) {
+        const lu = -borgo.a + 2 * borgo.a * i / (G.nu - 1), lv = -borgo.b + 2 * borgo.b * j / (G.nv - 1);
+        const x = bcx + ux * lu - uz * lv, z = bcz + uz * lu + ux * lv;
+        const d = Math.sqrt((x - gx) * (x - gx) + (z - gz) * (z - gz));
+        const t = rocca.q - S.sotto - S.pendenza * (d > S.piano ? d - S.piano : 0);
+        if (G.h[j * G.nu + i] < t) G.h[j * G.nu + i] = t;
+      }
+    }
+    portaR.salto = rocca.q - quotaPiano(borgo, gx, gz);
+  }
+  // ─── Terrazzi sotto la rocca, sui lati del retro ───
+  {
+    const T = L.terrazzi, M2 = roccaL.length;
+    const retro = [];                                        // lati da A a B girando dietro (i → i+1)
+    for (let i = iA; i !== iB; i = (i + 1) % M2) retro.push(i);
+    const quanti = T.quanti[Math.floor(caso(60) * T.quanti.length)];
+    const usati = new Set();
+    for (let t = 0; t < quanti && retro.length; t++) {
+      const lung = 1 + (caso(61 + t) < 0.5 ? 1 : 0);
+      const k0 = Math.floor(caso(62 + t) * retro.length);
+      const lati = [];
+      for (let k = k0; k < retro.length && lati.length < lung; k++) if (!usati.has(retro[k])) lati.push(retro[k]); else break;
+      if (!lati.length) continue;
+      // Vertici della fascia: quelli della rocca e, fuori, spostati lungo la bisettrice esterna.
+      const V = [...lati.map((i) => roccaL[i]), roccaL[(lati[lati.length - 1] + 1) % M2]];
+      const idx = [...lati, (lati[lati.length - 1] + 1) % M2];
+      const O = idx.map((i, k) => {
+        const p0 = roccaL[(i + M2 - 1) % M2], p1 = roccaL[i], p2 = roccaL[(i + 1) % M2];
+        const [n1u, n1v] = normaleEsterna(p0, p1, [0, 0]), [n2u, n2v] = normaleEsterna(p1, p2, [0, 0]);
+        let bu = n1u + n2u, bv = n1v + n2v;
+        const c = Math.sqrt(bu * bu + bv * bv) / 2 || 1;
+        bu /= 2 * c; bv /= 2 * c;
+        const w = (T.largo[0] + (T.largo[1] - T.largo[0]) * caso(70 + t * 9 + k)) / Math.max(c, 0.6);
+        return [p1[0] + bu * w, p1[1] + bv * w];
+      });
+      const PL = [...V, ...O.reverse()];
+      // Dentro il borgo no (la sua cinta parte dai vertici A e B).
+      let tocca = false;
+      for (const [u, v] of PL) if (dentroPoligono(borgoL, u, v)) tocca = true;
+      for (let k = 0; k + 1 < PL.length && !tocca; k++) {
+        const m = [(PL[k][0] + PL[k + 1][0]) / 2, (PL[k][1] + PL[k + 1][1]) / 2];
+        if (dentroPoligono(borgoL, m[0], m[1])) tocca = true;
+      }
+      if (tocca) continue;
+      // Quota: quella media del terreno nella fascia, tra `sotto` m sotto il cortile.
+      let tu0 = Infinity, tu1 = -Infinity, tv0 = Infinity, tv1 = -Infinity;
+      for (const [u, v] of PL) { tu0 = Math.min(tu0, u); tu1 = Math.max(tu1, u); tv0 = Math.min(tv0, v); tv1 = Math.max(tv1, v); }
+      let somma = 0, n = 0, basso = Infinity;
+      for (let lu = tu0; lu <= tu1; lu += 3) for (let lv = tv0; lv <= tv1; lv += 3) {
+        if (!dentroPoligono(PL, lu, lv)) continue;
+        const h = hq(lu, lv);
+        somma += h; n++; if (h < basso) basso = h;
+      }
+      if (n < 4) continue;
+      const qt = Math.min(rocca.q - T.sotto[0], Math.max(rocca.q - T.sotto[1], somma / n));
+      if (basso < qt - T.ripido) continue;
+      if (pelo > -Infinity && qt < pelo + Pc.acqua.sopra) continue;
+      const [tcx, tcz] = W((tu0 + tu1) / 2, (tv0 + tv1) / 2);
+      const terr = { tipo: 'terrazzo', cx: tcx, cz: tcz, ux, uz, a: (tu1 - tu0) / 2, b: (tv1 - tv0) / 2, r: 0, q: qt, s: 0,
+        poligono: mondo(PL), nRocca: V.length };
+      const sp = saltoBordoPoligono(q, terr, PL, W, [0, 0], Pc.passo);
+      const w2 = Pc.scarpa.perMetro * sp + Pc.scarpa.margine;
+      terr.s = w2 < Pc.scarpa.min ? Pc.scarpa.min : w2 > Pc.scarpa.max ? Pc.scarpa.max : w2;
+      // Niente fiumi né torrenti sotto il terrazzo e la sua scarpata.
+      let acqua = false;
+      for (let lu = tu0 - terr.s; lu <= tu1 + terr.s && !acqua; lu += 12) {
+        for (let lv = tv0 - terr.s; lv <= tv1 + terr.s; lv += 12) {
+          const [x, z] = W(lu, lv), h0 = quotaMondo(carta, x, z, seed), h = scavaFiumi(carta, x, z, h0, _es);
+          if (h - h0 > 0.01 || h0 - h > 0.01 || !Number.isNaN(_es.livello)) { acqua = true; break; }
+        }
+      }
+      if (acqua) continue;
+      for (const i of lati) usati.add(i);
+      piani.push(terr);
+    }
+  }
+  const versoMondo = (nu, nv) => [ux * nu - uz * nv, uz * nu + ux * nv];
+  const [pnx, pnz] = versoMondo(...porta.n), [rnx, rnz] = versoMondo(...portaR.n);
+  const [rex, rez] = versoMondo((portaR.b[0] - portaR.a[0]) / portaR.l, (portaR.b[1] - portaR.a[1]) / portaR.l);
+  const [px, pz] = W(...porta.m), [rx, rz] = W(...portaR.m);
+  return {
+    piani, salto, pendenza, pelo: pelo > -Infinity ? pelo : null, alza: alza > 0 ? alza : 0, lavoro: nl ? lavoro / nl : 0,
+    porta: { x: px, z: pz, nx: pnx, nz: pnz, salto: porta.salto },
+    portaRocca: { x: rx, z: rz, nx: rnx, nz: rnz, ex: rex, ez: rez, lato: portaR.l, salto: portaR.salto },
+  };
 }
 
 /**
@@ -536,10 +836,9 @@ function pianifica(carta, sito, classe, L) {
     const e = Math.sqrt(ex * ex + ez * ez) + Math.sqrt(p.a * p.a + p.b * p.b) + p.s;
     if (e > raggio) raggio = e;
   }
-  const ultimo = migliore.piani[migliore.piani.length - 1];
   return {
     piani: migliore.piani, verso: { x: ux, z: uz }, raggioPiani: raggio + 1,
-    porta: { x: ultimo.cx + ux * ultimo.a, z: ultimo.cz + uz * ultimo.a },
+    porta: migliore.porta, portaRocca: migliore.portaRocca,
     terrapieno: { salto: migliore.salto, pendenza: migliore.pendenza, pelo: migliore.pelo, alza: migliore.alza,
       lavoro: migliore.lavoro },
   };
@@ -598,13 +897,18 @@ export function scegliLuoghi(carta, L = LUOGHI) {
     return L.zona.length;
   };
   stime.sort((a, b) => b.s - a.s || a.r - b.r || a.c - b.c);
-  const perZona = Math.ceil(L.candidati / L.zona.length);
+  const perZona = Math.ceil(L.candidati / L.zona.length);   // (le zone esterne contengono le interne)
   const contaZona = new Array(L.zona.length + 1).fill(0), contaValico = new Array(L.zona.length + 1).fill(0);
   const contaValle = new Array(L.zona.length + 1).fill(0);
   const scelte = [];
+  const tessere = new Map();
   for (const st of stime) {
     const z = zonaDi(st.c, st.r);
     if (z >= L.zona.length) continue;
+    const kt = Math.floor(st.c / L.tessera.km) * 1000 + Math.floor(st.r / L.tessera.km);
+    const nt = tessere.get(kt) ?? 0;
+    if (nt >= L.tessera.quanti) continue;
+    tessere.set(kt, nt + 1);
     // Posti riservati ai siti vicino a un valico: con la sola stima entrerebbero di rado.
     if (st.bv >= 0.5 && contaValico[z] < L.riservati) { contaValico[z]++; scelte.push(st); continue; }
     if (st.bc && contaValle[z] < L.riservati) { contaValle[z]++; scelte.push(st); continue; }
@@ -621,21 +925,22 @@ export function scegliLuoghi(carta, L = LUOGHI) {
   }
   validi.sort((a, b) => b.punteggio - a.punteggio || a.z - b.z || a.x - b.x);
 
-  // ─── Scelta: 2–3 siti diversi e distanti, attorno al centro ───
+  // ─── Scelta: siti diversi e distanti (L.numero), dal centro verso fuori ───
   // Ripetuta finché ogni sito scelto ha i suoi piani (passo 2): un sito il cui terrapieno toccherebbe un fiume
   // o starebbe troppo basso sull'acqua si scarta e si sceglie di nuovo.
   const distanzaKm = (a, b) => Math.sqrt((a.x - b.x) * (a.x - b.x) + (a.z - b.z) * (a.z - b.z)) / carta.cella;
   const esclusi = new Set(), piani = new Map();
   let luoghi = [], scalino = null, giri = 0;
-  for (; giri < 12; giri++) {
+  for (; giri < 40; giri++) {
     const pool = validi.filter((s) => !esclusi.has(s));
     ({ luoghi, scalino } = scegli(pool));
-    // Classi: la partenza (il primo, di valle se c'è) è un castello di casata; degli altri, quello col punteggio
-    // più alto è la sede maggiore se i siti sono tre, gli altri rocche minori.
+    // Classi: la partenza (il primo, di valle se c'è) è un castello di casata; degli altri, per punteggio, le sedi
+    // maggiori (almeno una se i siti sono tre o più), poi i castelli di casata, il resto rocche minori.
     const altri = luoghi.slice(1).sort((a, b) => b.punteggio - a.punteggio);
-    const maggiore = luoghi.length === 3 ? altri[0] : null;
+    const nM = altri.length >= 2 ? Math.max(1, Math.round(altri.length * L.quoteClassi.maggiore)) : 0;
+    const nC = Math.round(altri.length * L.quoteClassi.casata);
     luoghi = luoghi.length ? [luoghi[0], ...altri] : [];
-    const classi = luoghi.map((s, k) => (k === 0 ? 'casata' : s === maggiore ? 'maggiore' : 'minore'));
+    const classi = luoghi.map((s, k) => (k === 0 ? 'casata' : k <= nM ? 'maggiore' : k <= nM + nC ? 'casata' : 'minore'));
     let tutti = true;
     luoghi.forEach((s, k) => {
       const chiave = classi[k];
@@ -653,8 +958,10 @@ export function scegliLuoghi(carta, L = LUOGHI) {
 
   function scegli(pool) {
     let luoghi = [], scalino = null;
-    for (let zi = 0; zi < L.zona.length && luoghi.length < 2; zi++) {
-      for (let di = 0; di < L.distanza.length && luoghi.length < 2; di++) {
+    // Dalla zona più stretta e dalla distanza più larga: il primo scalino che arriva a L.numero siti, altrimenti
+    // quello con più siti.
+    for (let zi = 0; zi < L.zona.length && luoghi.length < L.numero; zi++) {
+      for (let di = 0; di < L.distanza.length && luoghi.length < L.numero; di++) {
         const dmin = L.distanza[di];
         const inZona = pool.filter((s) => s.zona <= zi);
         if (!inZona.length) continue;
@@ -668,7 +975,7 @@ export function scegliLuoghi(carta, L = LUOGHI) {
           if (presi.length >= L.numero) break;
           if (!presi.includes(s) && lontano(s)) presi.push(s);
         }
-        if (presi.length >= 2) { luoghi = presi; scalino = { zona: L.zona[zi], distanza: dmin }; }
+        if (presi.length >= 2 && presi.length > luoghi.length) { luoghi = presi; scalino = { zona: L.zona[zi], distanza: dmin }; }
       }
     }
     if (!luoghi.length && pool.length) { luoghi = [pool[0]]; scalino = { zona: Infinity, distanza: Infinity }; }

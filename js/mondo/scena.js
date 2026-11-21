@@ -661,6 +661,29 @@ export function scavaFiumi(carta, x, z, h0, esito = _esito) {
 // blocchi vicini, orizzonte e Carta zoomata combaciano. I piani stanno fuori dalla fascia dei fiumi, quindi
 // l'ordine con scavaFiumi non conta. Solo operazioni esatte (decidono la forma del mondo).
 
+/**
+ * Quota di un piano nel punto (x, z): costante (`p.q`, la rocca) oppure, se il piano ha una `griglia` (il borgo,
+ * M7: pendio naturale lisciato, decisione dell'utente), interpolata bilineare sulla griglia nel punto del contorno
+ * più vicino (fuori dal piano vale quella del bordo: la scarpata parte da lì).
+ * griglia = { nu, nv, h }: nu × nv quote lungo u (da −a ad a) e v (da −b a b), h[j·nu + i].
+ */
+export function quotaPiano(p, x, z) {
+  const G = p.griglia;
+  if (!G) return p.q;
+  const dx = x - p.cx, dz = z - p.cz;
+  let lu = dx * p.ux + dz * p.uz, lv = -dx * p.uz + dz * p.ux;
+  lu = lu < -p.a ? -p.a : lu > p.a ? p.a : lu;
+  lv = lv < -p.b ? -p.b : lv > p.b ? p.b : lv;
+  const fu = (lu + p.a) / (2 * p.a) * (G.nu - 1), fv = (lv + p.b) / (2 * p.b) * (G.nv - 1);
+  let i = Math.floor(fu), j = Math.floor(fv);
+  if (i > G.nu - 2) i = G.nu - 2;
+  if (j > G.nv - 2) j = G.nv - 2;
+  const tu = fu - i, tv = fv - j, h = G.h, n = G.nu;
+  const a = h[j * n + i] + (h[j * n + i + 1] - h[j * n + i]) * tu;
+  const b = h[(j + 1) * n + i] + (h[(j + 1) * n + i + 1] - h[(j + 1) * n + i]) * tu;
+  return a + (b - a) * tv;
+}
+
 /** Distanza con segno (m) dal contorno di un piano: negativa dentro. */
 export function distanzaPiano(p, x, z) {
   const dx = x - p.cx, dz = z - p.cz;
@@ -668,7 +691,23 @@ export function distanzaPiano(p, x, z) {
   const qx = (lu < 0 ? -lu : lu) - (p.a - p.r), qy = (lv < 0 ? -lv : lv) - (p.b - p.r);
   const ex = qx > 0 ? qx : 0, ey = qy > 0 ? qy : 0;
   const m = qx > qy ? qx : qy;
-  return Math.sqrt(ex * ex + ey * ey) + (m < 0 ? m : 0) - p.r;
+  const dr = Math.sqrt(ex * ex + ey * ey) + (m < 0 ? m : 0) - p.r;
+  const P = p.poligono;
+  // Contorno poligonale (rocche e borghi irregolari, M7): distanza con segno dal poligono. L'ingombro rettangolare
+  // lo contiene, quindi fuori dalla portata del terrapieno basta la sua distanza (più piccola o uguale).
+  if (!P || dr > p.s + TERRAPIENO.ritorno) return dr;
+  let d2 = Infinity, dentro = false;
+  for (let i = 0, j = P.length - 1; i < P.length; j = i++) {
+    const xi = P[i][0], zi = P[i][1], xj = P[j][0], zj = P[j][1];
+    if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) dentro = !dentro;
+    const ex2 = xj - xi, ez2 = zj - zi, l2 = ex2 * ex2 + ez2 * ez2;
+    let t = l2 > 0 ? ((x - xi) * ex2 + (z - zi) * ez2) / l2 : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const fx = x - xi - ex2 * t, fz = z - zi - ez2 * t, q2 = fx * fx + fz * fz;
+    if (q2 < d2) d2 = q2;
+  }
+  const d = Math.sqrt(d2);
+  return dentro ? -d : d;
 }
 
 // Terrapieno come quelli veri: dal contorno di ogni piano il terreno può scostarsi dal piano al più di
@@ -699,7 +738,8 @@ export function spianaLuoghi(carta, x, z, h) {
       if (f > ritorno) ritorno = f;
       if (f <= 0) continue;
       if (d < 0) d = 0;
-      const a = p.q - d * T, b = p.q + d * T;
+      const q = p.griglia ? quotaPiano(p, x, z) : p.q;
+      const a = q - d * T, b = q + d * T;
       if (a > lo) lo = a;
       if (b < hi) hi = b;
     }
