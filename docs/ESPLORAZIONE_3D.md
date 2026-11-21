@@ -1206,6 +1206,33 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
        del GDD: o si accetta, o se ne fanno ~20 a 15 km. Seme 12345 (34 rocche): dalla porta del borgo al cortile
        della rocca **34 su 34**; rampe della rocca 30 lungo il muro e 4 dritte; terrazzi: 20 senza, 12 con uno, 2 con
        due; al più ~22.000 triangoli tra rocca e borgo (sede maggiore).
+     - *Terza prova dell'utente* (porta del borgo, colore delle mura). La strada arriva dritta alla porta del borgo
+       lungo la sua normale (ultimi 30 m, `strade.js`, `STRADE.scena.portaDritta`; prima arrivava di sbieco e finiva
+       contro il muro); la rampa fuori dalla porta c'è solo se il terreno scende sotto la soglia di oltre 35 cm (prima
+       i suoi fianchi uscivano comunque, come due panche di pietra). Mura meno piatte: texture dei corsi di mattoni
+       generata una volta e colore per vertice secondo dove guarda la faccia (una luce del cielo fissa di traverso,
+       ±15 %) più chiazze di tono di qualche metro (±8 %), su mura, torri, merli e pietra di rocca e borgo; nessun
+       oggetto né materiale in più. `VERSIONE_GENERATORE` `…strade-3…`. Poi (utente: «meno mattone, più pietra»,
+       niente colori terra/fango, niente aspetto levigato) **pietra grigio-bruna**: texture di conci di lunghezza e
+       corsi di altezza diversi, ognuno col suo tono, macchiati, con grana; chiazze di tono su due scale e una tinta
+       un poco più calda o più fredda a chiazze larghe. Tavullia resta in mattone. Poi (utente) più distanza tra grigi
+       chiari e scuri, soprattutto verso lo scuro (il 15 % dei conci molto scuri, chiazze ±16 % e ±8 %), e un **tono di
+       fondo diverso per ogni luogo**, a caso ma stabile (`TONO_LUOGO`: chiarezza ×0,82–1,10, calore −7…+9 %), uguale
+       per rocca e borgo dello stesso luogo. Poi (utente: castelli molto scuri, tipici del fantasy) ~1 luogo su 5 in
+       **pietra molto scura** e più fredda (chiarezza ×0,45–0,66); su 5 semi 25 rocche scure su 158. Il caso per luogo
+       ora viene da un hash intero (il vecchio `sin(…)·43758` non era uniforme: 13 «scure» su 34 al 20 %).
+       Poi (utente: «niente texture regolari ripetitive», si vedeva una griglia) texture più grande (512 px = 6,4 m),
+       conci con giunti storti e qualcuno alto due corsi, tono di ogni concio da un campo a macchie larghe più una
+       parte sua (chiari e scuri raggruppati, non a scacchiera; conci molto scuri rari), e **scostamento della texture
+       diverso per ogni faccia** (dalla normale e dalla distanza del piano, uguale per i due triangoli della faccia):
+       le ripetizioni non si allineano più da un tratto di muro all'altro.
+     - *Strada e rampa alla porta del borgo* (stessa prova). Le strade di passaggio pagano ×4 sulle scarpate dei
+       terrapieni (+15 m, `STRADE.scena.mura`): girano al largo delle mura invece di costeggiarle (sembravano una
+       seconda strada accanto alla porta); il tratto dritto verso la porta toglie anche i punti che costeggiavano le
+       mura; la quota della strada negli ultimi 30 m va a quella della soglia. Dove il terreno davanti alla porta
+       scende davvero (una conca) la rampa esterna ora ha il **piano in pietra** (prima mancava: il cavaliere
+       camminava sospeso sul terreno) e i fianchi in pendenza (prima a gradini); il suolo della rampa non va mai
+       sotto il terreno. Anche i parapetti della rampa della rocca sono in pendenza.
      - *Misure* (Chromium headless): seguendo la via, dal fuori della porta del borgo al cortile della rocca in
        **24 rocche su 24** (8 semi, tre classi); 32 assalti al borgo e 32 alla rocca per 3 semi: si entra solo dalla
        porta, **nessuna compenetrazione**. Rocca 10

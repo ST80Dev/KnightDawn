@@ -17,7 +17,7 @@
 
 import * as THREE from 'three';
 import { prisma, unisci, dentroPoligono, distanzaContorno, areaPoligono, normaleLato, localeDelLuogo, creaSpinta,
-  scatolaLato, geoTorrePorta } from './rocca3d.js';
+  scatolaLato, geoTorrePorta, materialeMuro, rifinisci, tonoDelLuogo } from './rocca3d.js';
 
 /** Misure secondo la classe del luogo. vicoli: quanti vicoli trasversali. */
 export const CLASSI_BORGO = {
@@ -27,7 +27,7 @@ export const CLASSI_BORGO = {
 };
 
 const PORTA = { larghezza: 3.6, imposta: 3.0, torreLarghezza: 8, torreProfondita: 6, sporgenza: 1, sopraMura: 3.5 };
-const RAMPA_PORTA = { pendenza: 0.2, minima: 3, massima: 24, larghezza: 5 };  // fuori dalla porta, fino al terreno
+const RAMPA_PORTA = { pendenza: 0.2, minima: 3, massima: 24, larghezza: 5, sopra: 0.5 };  // fuori dalla porta, fino al terreno
 const TRATTO = 6;                          // m: lunghezza dei gradoni delle mura sul pendio
 const SCARPA = 0.15;                       // inclinazione della scarpa alla base delle mura (tangente)
 // Strade interne: larghezza (m), quota sopra il terreno (m; diverse, così agli incroci non sfarfallano).
@@ -39,7 +39,8 @@ const STRADE = {
   passo: 2,                                // m tra le sezioni del nastro
 };
 
-const COL = { mattone: '#a8684d', scuro: '#8a523d', pietra: '#c4b597', legno: '#5b3b20' };
+// Pietra grigio-bruna come la rocca, un poco più calda (pietra più comune, meno squadrata).
+const COL = { mattone: '#aaa090', scuro: '#8f8578', pietra: '#c4bcab', legno: '#5b3b20' };
 const LUCE_RIFLESSA = 0.2;                 // come la rocca: i lati in ombra non escono neri
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -146,8 +147,8 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
 
   const mat = {};
   for (const [k, c] of Object.entries(COL)) {
-    mat[k] = new THREE.MeshLambertMaterial({ color: c, flatShading: true });
-    mat[k].emissive.set(c).multiplyScalar(LUCE_RIFLESSA);
+    mat[k] = k === 'legno' ? new THREE.MeshLambertMaterial({ color: c, flatShading: true }) : materialeMuro(tonoDelLuogo(luogo, c), LUCE_RIFLESSA);
+    if (k === 'legno') mat[k].emissive.set(c).multiplyScalar(LUCE_RIFLESSA);
   }
   mat.strada = new THREE.MeshLambertMaterial({ map: texturaCiottolato(), color: '#ffffff' });
   mat.strada.polygonOffset = true;
@@ -291,16 +292,33 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
     }
   }
   const quotaRampaPorta = (d, e) => qSoglia + (terreno(...loc(e, SPOR + lungaPorta)) - qSoglia) * clamp((d - SPOR) / lungaPorta, 0, 1);
+  // La rampa serve solo dove il terreno davanti alla porta scende sotto la soglia: se gli resta vicino (entro
+  // RAMPA_PORTA.sopra m) non c'è (prima i fianchi uscivano comunque, come due panche di pietra ai lati della strada).
+  let rampaVera = false;
   {
     const w = RAMPA_PORTA.larghezza / 2, n = Math.max(2, Math.ceil(lungaPorta / 1.5));
-    for (let i = 0; i < n; i++) {
+    // Un tratto di rampa ha i fianchi su entrambi i lati se da una parte il terreno scende sotto (mai uno solo).
+    // Conta il terreno sotto la rampa, non quello accanto (la strada che arriva rialzata ha le sue scarpe di terra).
+    const sopraTratto = (da, db) => Math.max(...[-1, 0, 1].flatMap((se) => [
+      quotaRampaPorta(da, se * w) - terreno(...loc(se * w, da)), quotaRampaPorta(db, se * w) - terreno(...loc(se * w, db))]));
+    const alti = [];
+    for (let i = 0; i < n; i++) alti.push(sopraTratto(SPOR + lungaPorta * i / n, SPOR + lungaPorta * (i + 1) / n) >= RAMPA_PORTA.sopra);
+    rampaVera = alti.some(Boolean);
+    for (let i = 0; i < n && rampaVera; i++) {
+      // Piano della rampa: un corpo pieno in pietra fino sotto il terreno, la cima in pendenza.
       const da = SPOR + lungaPorta * i / n, db = SPOR + lungaPorta * (i + 1) / n;
+      const pl = [loc(-w, da), loc(w, da), loc(w, db), loc(-w, db)];
+      const ya = quotaRampaPorta(da, 0), yb2 = quotaRampaPorta(db, 0);
+      const yB = Math.min(...pl.map(([u, v]) => terreno(u, v))) - 0.4;
+      parti.pietra.push(prisma(q4(pl), q4(pl), Math.min(yB, ya - 0.3, yb2 - 0.3), [ya, ya, yb2, yb2]));
+      if (!alti[i]) continue;
       for (const se of [-1, 1]) {                         // fianchi in muratura fino sotto il terreno
         const e0 = se * w, e1 = se * (w + 0.5);
-        const yTop = Math.max(quotaRampaPorta(da, e0), quotaRampaPorta(db, e0)) + 0.3;
+        // Cima in pendenza con la rampa (niente gradini).
+        const ya = quotaRampaPorta(da, e0) + 0.3, yb = quotaRampaPorta(db, e0) + 0.3;
         const yBase = Math.min(terreno(...loc(e0, da)), terreno(...loc(e0, db)), terreno(...loc(e1, da)), terreno(...loc(e1, db))) - 0.5;
         const pp = [loc(e0, da), loc(e1, da), loc(e1, db), loc(e0, db)];
-        if (yTop - yBase > 0.6) parti.pietra.push(prisma(q4(pp), q4(pp), yBase, yTop));
+        parti.pietra.push(prisma(q4(pp), q4(pp), yBase, [ya, ya, yb, yb]));
       }
     }
   }
@@ -456,7 +474,7 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
     object.add(m);
   }
   {
-    const geo = new THREE.BoxGeometry(0.85, 1.1, 0.5);
+    const geo = rifinisci(new THREE.BoxGeometry(0.85, 1.1, 0.5), false);
     geo.translate(0, 0.55, 0);
     const im = new THREE.InstancedMesh(geo, mat.mattone, merli.length);
     const m4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), y = new THREE.Vector3(0, 1, 0), s1 = new THREE.Vector3(1, 1, 1);
@@ -488,7 +506,8 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
   function quotaSuolo(x, z) {
     const [u, v] = inLocale(x, z);
     const du = u - gm[0], dv = v - gm[1], e = du * ge[0] + dv * ge[1], d = du * gn[0] + dv * gn[1];
-    if (d > SPOR && d <= SPOR + lungaPorta && Math.abs(e) <= RAMPA_PORTA.larghezza / 2) return quotaRampaPorta(d, e);
+    // Mai sotto il terreno (dove la rampa vi resta vicina il terreno può sporgere di poco).
+    if (rampaVera && d > SPOR && d <= SPOR + lungaPorta && Math.abs(e) <= RAMPA_PORTA.larghezza / 2) return Math.max(quotaRampaPorta(d, 0), terreno(u, v));
     return null;
   }
 
@@ -502,7 +521,7 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
     tipo: 'borgo', luogo, object, solidi, scatole, spingiFuori, quotaSuolo, dentro, inLocale,
     strade,                                       // polilinee locali (u, v): per gli edifici del passo 5
     poligono: BL,
-    porta: { u: gm[0], v: gm[1], nu: gn[0], nv: gn[1], rampa: lungaPorta },
+    porta: { u: gm[0], v: gm[1], nu: gn[0], nv: gn[1], rampa: rampaVera ? lungaPorta : 0 },
     aggiornaLuci() {},                            // luci del borgo: passo 7
     misure: {
       strade: strade.length, torri, merli: merli.length, oggetti: object.children.length,
