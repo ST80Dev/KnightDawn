@@ -1570,7 +1570,19 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      da un rumore su 128 m): arato con solchi, seminato, grano, fieno, maggese; orti più piccoli entro ~0,2 del raggio
      pieno; capezzagne erbose tra un appezzamento e l'altro; dove la campagna finisce si fermano appezzamenti interi.
      Nei campi niente alberi, arbusti né sassi, meno erba. Caricamento di un blocco vicino a un luogo: ~+60 ms.
-     Da fare: siepi e filari, muretti a secco; i campi negli anelli dell'orizzonte (ora solo nel blocco).
+     *Siepi e filari*: il disegno degli appezzamenti (`PARCELLE`) è calcolato uguale dallo shader e da
+     `posizionaVegetazione`: coordinate dei campi per vertice (attributo `aCampi`, interpolato sui triangoli come la
+     scheda video) e una permutazione di 256 interi (`PERM_CAMPI`, texture R8), niente rumori della scheda. Siepi sul
+     40 % dei lati lunghi e sul 20 % dei corti; un quarto sono filari di alberi (pioppi, betulle o querce ogni 9 m).
+     Cespugli ogni 1,7 m a 0,9 m dal confine, solo dove il campo è dipinto; lo shader dipinge sotto la siepe una
+     striscia scura che da lontano, dove i cespugli non si disegnano più, la mostra. Circa 6000 cespugli in un blocco
+     attorno a una rocca. *Strade* (richiesta dell'utente: i campi non tagliati a metà dalle strade, al più fino al
+     margine): quarta componente di `aCampi` = lato e margine della strada; i campi finiscono 1–2 m oltre il margine
+     con erba; da un lato una fascia di campi propria larga 20 m, poi riprende il disegno normale (regola che dipende
+     solo dal punto: blocchi vicini uguali, verificato). Percorso di prova in headless alla partenza (una rocca):
+     triangoli da 583 000 a 596–640 000, CPU della vegetazione come prima (picchi già presenti senza le siepi).
+     Da fare: muretti a secco; i campi negli anelli dell'orizzonte (ora solo nel blocco); il bordo della zona
+     coltivata segue i triangoli del terreno (un po' seghettato).
    - *Scatti*: la ridistribuzione delle istanze (ogni 12 m) si fa a pezzi, al più ~1,5 ms per fotogramma, e mai nel
      fotogramma in cui si rifà l'erba vicina; erba, felci e ciottoli si rifanno uno per fotogramma. In headless nel
      bosco fitto, camminando 200 m: costo peggiore di un fotogramma da ~11 a ~5–6 ms (resta il calcolo dell'erba).
