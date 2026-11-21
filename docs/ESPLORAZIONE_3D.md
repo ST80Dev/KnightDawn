@@ -1731,7 +1731,10 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      fino a 2–3 cm e finiscono dentro l'ultimo ciuffo; ramo e rametti finiscono a 1–2 cm; nel livello medio il fusto
      sale dentro la chioma assottigliandosi. Spessore del tronco proporzionato all'altezza dell'istanza (larghezza =
      altezza ±15 %, prima indipendenti). Cespugli: ciuffi ravvicinati e uno al centro.
-     Bosco fitto in headless: 530 000 triangoli (prima delle chiome nuove 458 000): da misurare sulla scheda.
+     Tronco e rami curvi («stuzzicadenti incastrati»): `ramoCurvo`, tubo lungo una curva Catmull-Rom che si assottiglia;
+     tronco con l'asse un po' storto, cime, rami e rametti in un pezzo solo con piccole pieghe a caso (`piega`); 3–6
+     tratti entro 18 m, 2–4 fino a 50 m.
+     Bosco fitto in headless: ~550 000 triangoli (prima delle chiome nuove 458 000): da misurare sulla scheda.
      *Case fuori dal borgo* (richiesta dell'utente: case isolate o a gruppetti di 2–3 in mezzo o a lato dei campi):
      `CASE_CAMPAGNA` / `caseCampagna(carta)`, siti deterministici per Carta (4–9 gruppi per rocca secondo la classe,
      tra gli orti e il limite dei campi pieni, in piano, all'asciutto, lontano dai terrapieni e tra loro, orientati

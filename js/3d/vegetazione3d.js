@@ -255,6 +255,34 @@ function ramoVerso(x0, y0, z0, x1, y1, z1, r0, r1, colore, lati = 5) {
 }
 
 /**
+ * Ramo curvo (richiesta dell'utente: «rendi curvi tronco alto e rami, sennò resta l'effetto stuzzicadenti incastrati»):
+ * tubo lungo una curva liscia (Catmull-Rom) per `punti`, raggio da r0 a r1, `seg` tratti; colore più scuro all'attacco.
+ */
+function ramoCurvo(punti, r0, r1, colore, lati = 5, seg = 3) {
+  const curva = new THREE.CatmullRomCurve3(punti.map(([x, y, z]) => new THREE.Vector3(x, y, z)), false, 'centripetal');
+  const geo = new THREE.TubeGeometry(curva, seg, 1, lati, false);
+  const p = geo.attributes.position, c = new THREE.Vector3();
+  for (let i = 0; i <= seg; i++) {
+    const t = i / seg, r = r0 + (r1 - r0) * t;
+    curva.getPointAt(t, c);
+    for (let j = 0; j <= lati; j++) {
+      const k = i * (lati + 1) + j;
+      p.setXYZ(k, c.x + (p.getX(k) - c.x) * r, c.y + (p.getY(k) - c.y) * r, c.z + (p.getZ(k) - c.z) * r);
+    }
+  }
+  const y0 = punti[0][1], y1 = punti[punti.length - 1][1];
+  const cs = new THREE.Color(colore), cc = cs.clone().multiplyScalar(0.75);
+  return colora(geo, (col, px, py) => col.copy(cc).lerp(cs, Math.min(1, Math.max(0, (py - y0) / Math.max(0.5, y1 - y0)))));
+}
+
+/** Punto intermedio tra a e b spostato a caso di `k` volte la distanza (piega del ramo). */
+function piega(a, b, f, k, rnd) {
+  const L = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) * k;
+  return [a[0] + (b[0] - a[0]) * f + (rnd() - 0.5) * 2 * L, a[1] + (b[1] - a[1]) * f + (rnd() - 0.5) * L,
+    a[2] + (b[2] - a[2]) * f + (rnd() - 0.5) * 2 * L];
+}
+
+/**
  * Chioma a masse (richiesta dell'utente: chiome «troppo arrotondate o piene, si vede che sono di un gioco»): `masse`
  * gruppi di foglie separati, ognuno con pochi ciuffi e un ramo dal fusto (`da`), sparsi nell'ellissoide (x, y, z, a,
  * b, c) con vuoti in mezzo da cui si vedono cielo e rami. Gli stessi triangoli di una chioma piena (masse × ciuffi).
@@ -290,7 +318,7 @@ function chiomaAMasse({ x = 0, y, z = 0, a, b, c = a, masse, ciuffi, raggio, det
  * Restituisce le parti da unire (il fusto a parte).
  */
 function ramificato({ fusto: hF, cima, rami: nR, parte, inc, lungo, r0, colRamo, ciuffi, rCiuffo, raggio, dettaglio,
-  scuro, chiaro, rnd, piatto = 1, rCima = r0 * 0.6, cime = 1 }) {
+  scuro, chiaro, rnd, piatto = 1, rCima = r0 * 0.6, cime = 1, tronco = null }) {
   const parti = [];
   const inviluppo = { x: 0, y: hF + cima * 0.45, z: 0, a: lungo * 0.95, b: cima * 0.75 + 1, c: lungo * 0.95 };
   const foglie = (x, y, z, k = 1) => parti.push(...chioma({ x, y, z, a: rCiuffo * k * (0.8 + 0.4 * rnd()),
@@ -299,16 +327,23 @@ function ramificato({ fusto: hF, cima, rami: nR, parte, inc, lungo, r0, colRamo,
   // Cima (richiesta dell'utente: «tronco dritto da base a cima che spunta come uno stuzzicadenti»): sopra il fusto il
   // tronco si divide in `cime` fusti storti che divergono (come quercia e castagno), ognuno in due tratti piegati, dal
   // raggio del fusto fino a pochi centimetri; la punta finisce dentro l'ultimo ciuffo, non spunta fuori.
+  // Tronco curvo (se dato `tronco`: raggi alla base e in cima): asse un po' storto, i rami partono dall'asse.
+  const sv = dettaglio ? 1 : 0;
+  const P0 = [0, -0.5, 0], P1 = [(rnd() - 0.5) * 0.35, hF * 0.45, (rnd() - 0.5) * 0.35], P2 = [(rnd() - 0.5) * 0.45, hF, (rnd() - 0.5) * 0.45];
+  if (!tronco) { P1[0] = P1[2] = P2[0] = P2[2] = 0; }
+  const asse = (y) => { const t = Math.min(1, Math.max(0, y / hF)), [A, B, u] = t < 0.45 ? [P0, P1, t / 0.45] : [P1, P2, (t - 0.45) / 0.55];
+    return [A[0] + (B[0] - A[0]) * u, A[2] + (B[2] - A[2]) * u]; };
+  if (tronco) parti.push(ramoCurvo([P0, P1, P2], tronco[0], tronco[1], colRamo, 8, 3 + sv));
   const an0 = rnd() * Math.PI * 2;
   for (let c = 0; c < cime; c++) {
     const a = an0 + c * (Math.PI * 2 / cime) + (rnd() - 0.5) * 0.9;
-    const dev = cime > 1 ? 0.22 + 0.3 * rnd() : 0.08 + 0.1 * rnd();       // scarto dalla verticale (rad)
-    const L = cima * (c === 0 ? 1 : 0.72 + 0.2 * rnd()), rc = rCima * (cime > 1 ? 0.75 : 1);
-    const mx = Math.cos(a) * Math.sin(dev) * L * 0.5, my = hF + Math.cos(dev) * L * 0.5, mz = Math.sin(a) * Math.sin(dev) * L * 0.5;
+    const dev = cime > 1 ? 0.3 + 0.3 * rnd() : 0.1 + 0.12 * rnd();       // scarto dalla verticale (rad)
+    const L = cima * (c === 0 ? 0.92 : 0.72 + 0.2 * rnd()), rc = rCima * (cime > 1 ? 0.75 : 1);
+    const mx = P2[0] + Math.cos(a) * Math.sin(dev) * L * 0.5, my = hF + Math.cos(dev) * L * 0.5, mz = P2[2] + Math.sin(a) * Math.sin(dev) * L * 0.5;
     const a2 = a + (rnd() - 0.5) * 1.4, d2 = dev * (0.4 + 0.6 * rnd());
     const ex = mx + Math.cos(a2) * Math.sin(d2) * L * 0.45, ey = my + Math.cos(d2) * L * 0.45, ez = mz + Math.sin(a2) * Math.sin(d2) * L * 0.45;
-    parti.push(ramoVerso(0, hF - 0.3, 0, mx, my, mz, rc, rc * 0.5, colRamo, 5));
-    parti.push(ramoVerso(mx, my, mz, ex, ey, ez, rc * 0.5, 0.025, colRamo, 4));
+    const b0 = [P2[0], hF - 0.3, P2[2]], m = [mx, my, mz], e = [ex, ey, ez];
+    parti.push(ramoCurvo([b0, piega(b0, m, 0.5, 0.12, rnd), m, piega(m, e, 0.5, 0.14, rnd), e], rc, 0.025, colRamo, 5, 4 + 2 * sv));
     foglie(mx * 0.6 + (rnd() - 0.5) * 0.6, hF + (my - hF) * 0.6, mz * 0.6 + (rnd() - 0.5) * 0.6, 0.9);
     foglie(mx + (rnd() - 0.5) * 0.5, my + 0.2, mz + (rnd() - 0.5) * 0.5, 1.0);
     foglie(ex, ey + 0.15, ez, 1.2);                                        // copre la punta
@@ -326,9 +361,10 @@ function ramificato({ fusto: hF, cima, rami: nR, parte, inc, lungo, r0, colRamo,
     const L1 = L * 0.6, L2 = L * 0.45, el2 = Math.min(1.45, el + (0.26 + 0.35 * rnd()));
     const mx = ca * Math.cos(el) * L1, my = y0 + Math.sin(el) * L1, mz = sa * Math.cos(el) * L1;
     const ex = mx + ca * Math.cos(el2) * L2, ey = my + Math.sin(el2) * L2, ez = mz + sa * Math.cos(el2) * L2;
-    const rr = r0 * (0.32 + 0.12 * rnd());
-    parti.push(ramoVerso(0, y0, 0, mx, my, mz, rr, rr * 0.6, colRamo, 4));
-    parti.push(ramoVerso(mx, my, mz, ex, ey, ez, rr * 0.6, 0.02, colRamo, 4));
+    const rr = r0 * (0.32 + 0.12 * rnd()), [ax, az] = asse(y0);
+    // Ramo curvo in un pezzo: parte dall'asse del tronco, s'inarca e risale; piccole pieghe a caso.
+    const b0 = [ax, y0, az], m = [mx, my, mz], e = [ex, ey, ez];
+    parti.push(ramoCurvo([b0, piega(b0, m, 0.5, 0.14, rnd), m, piega(m, e, 0.5, 0.16, rnd), e], rr, 0.02, colRamo, 4, 4 + 2 * sv));
     // Foglie lungo tutto il ramo (richiesta dell'utente: nel bosco «troppi buchi che fanno vedere i rami»): nel primo
     // tratto, alla piega e in punta; vuoti più piccoli.
     foglie(mx * 0.55, y0 + (my - y0) * 0.55 + 0.25, mz * 0.55, 0.75);
@@ -342,7 +378,8 @@ function ramificato({ fusto: hF, cima, rami: nR, parte, inc, lungo, r0, colRamo,
       const a2 = an + (rnd() < 0.5 ? -1 : 1) * (0.4 + 0.9 * rnd()), l2 = L * (0.2 + 0.35 * rnd());
       const e2 = (-0.15 + 0.85 * rnd());                       // da un po' in giù a molto in su
       const cx2 = bx + Math.cos(a2) * Math.cos(e2) * l2, cy2 = by + Math.sin(e2) * l2, cz2 = bz + Math.sin(a2) * Math.cos(e2) * l2;
-      parti.push(ramoVerso(bx, by, bz, cx2, cy2, cz2, rr * 0.35, 0.015, colRamo, 3));
+      const q0 = [bx, by, bz], q1 = [cx2, cy2, cz2];
+      parti.push(ramoCurvo([q0, piega(q0, q1, 0.5, 0.15, rnd), q1], rr * 0.35, 0.015, colRamo, 3, 2 + sv));
       foglie(cx2, cy2 + 0.1, cz2, 0.6 + 0.35 * rnd());
     }
   }
@@ -470,18 +507,15 @@ function creaModelli() {
   // hanno la stessa forma (stessi ciuffi negli stessi punti), cambia solo quanto sono sfaccettati.
   // Alberi ramificati: foglie lungo i rami a tutte le altezze, vuoti e rami visibili (≈ 30–34 ciuffi come prima).
   const quercia = (det) => { const r = casuale(311); return unisci([
-    fusto(0.46, 0.3, 4.2, 8, COL.corteccia),
-    ...ramificato({ fusto: 4.2, cima: 4.6, rami: 4, cime: 3, parte: [0.55, 1.0], inc: [32, 62], lungo: 3.2, r0: 0.5, rCima: 0.3,
+    ...ramificato({ fusto: 4.2, cima: 4.6, rami: 4, cime: 3, parte: [0.55, 1.0], inc: [32, 62], lungo: 3.2, r0: 0.5, rCima: 0.3, tronco: [0.46, 0.3],
       colRamo: COL.corteccia, ciuffi: 2, rCiuffo: 1.4, raggio: [0.52, 0.85], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r, piatto: 0.85 }),
   ]); };
   const faggio = (det) => { const r = casuale(312); return unisci([
-    fusto(0.36, 0.22, 4.6, 8, COL.cortecciaChiara),
-    ...ramificato({ fusto: 4.6, cima: 6.2, rami: 4, cime: 2, parte: [0.5, 1.0], inc: [45, 75], lungo: 2.7, r0: 0.4, rCima: 0.22,
+    ...ramificato({ fusto: 4.6, cima: 6.2, rami: 4, cime: 3, parte: [0.5, 1.0], inc: [40, 68], lungo: 2.7, r0: 0.4, rCima: 0.22, tronco: [0.36, 0.22],
       colRamo: COL.cortecciaChiara, ciuffi: 2, rCiuffo: 1.3, raggio: [0.5, 0.8], dettaglio: det, scuro: FF[0], chiaro: FF[1], rnd: r }),
   ]); };
   const castagno = (det) => { const r = casuale(313); return unisci([
-    fusto(0.42, 0.26, 3.8, 8, COL.corteccia, { inclinaZ: -0.05 }),
-    ...ramificato({ fusto: 3.8, cima: 4.8, rami: 4, cime: 3, parte: [0.45, 1.0], inc: [35, 68], lungo: 3.0, r0: 0.46, rCima: 0.26,
+    ...ramificato({ fusto: 3.8, cima: 4.8, rami: 4, cime: 3, parte: [0.45, 1.0], inc: [35, 68], lungo: 3.0, r0: 0.46, rCima: 0.26, tronco: [0.42, 0.26],
       colRamo: COL.corteccia, ciuffi: 2, rCiuffo: 1.35, raggio: [0.52, 0.82], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r }),
   ]); };
   // Livelli (prestazioni, dopo la misura dell'utente: 28–30 FPS nel bosco; «meno definizione a centinaia di metri a
@@ -537,8 +571,8 @@ function creaModelli() {
   // Albero di riva (pioppo): colonna alta e stretta, verde più chiaro, corteccia chiara.
   const R = COL.fogliaRiva;
   M.riva = [
-    { fino: 60, varianti: [unisci([fusto(0.38, 0.22, 5.5, 8, COL.cortecciaBetulla),
-      ...ramificato({ fusto: 5.5, cima: 9.5, rami: 6, parte: [0.6, 1.0], inc: [55, 75], lungo: 2.3, r0: 0.3, rCima: 0.22,
+    { fino: 60, varianti: [unisci([
+      ...ramificato({ fusto: 5.5, cima: 9.5, rami: 6, parte: [0.6, 1.0], inc: [55, 75], lungo: 2.3, r0: 0.3, rCima: 0.22, tronco: [0.38, 0.22],
         colRamo: COL.cortecciaBetulla, ciuffi: 2, rCiuffo: 0.95, raggio: [0.45, 0.7], dettaglio: 1, scuro: R[0], chiaro: R[1], rnd })])] },
     { fino: 300, varianti: [unisci([fusto(0.34, 0.04, 9.5, 4, COL.cortecciaBetulla),
       ...chiomaAMasse({ y: 10.3, a: 2.0, b: 5.2, masse: 5, ciuffi: 1, raggio: [1.0, 1.4], dettaglio: 0, scuro: R[0], chiaro: R[1], rnd, schegge: 2 })])] },
