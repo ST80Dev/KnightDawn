@@ -574,7 +574,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     const f = [fu, fv], s = [-fv, fu], h0 = terreno(u, v), L = (1.6 + rnd() * 1.2) * scala, H = (0.8 + rnd() * 0.6) * scala;
     const R = rett([u, v], s, f, L / 2, 0.4 * scala);
     parti.legno.push(segna(prisma(q4(R), q4(R), h0 - 0.1, [h0 + H, h0 + H * 0.9, h0 + H * 0.95, h0 + H]), { tinta: [1.35, 1.2, 1.05] }));
-    scatole.push({ cu: u, cv: v, au: s[0], av: s[1], hl: L / 2, hw: 0.4 * scala });
+    scatole.push({ cu: u, cv: v, au: s[0], av: s[1], hl: L / 2, hw: 0.4 * scala, cima: h0 + H });   // si scavalca se bassa
   }
   /** Botte (o due), di legno. */
   function botte(u, v) {
@@ -583,7 +583,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
       const g = new THREE.CylinderGeometry(0.36, 0.42, 0.95, 9); g.translate(X(u + du, v), h0 + 0.47, Z(u + du, v));
       parti.legno.push(segna(g, { tinta: [1.3, 1.15, 1.0] }));
     }
-    scatole.push({ cu: u + 0.4, cv: v, au: 1, av: 0, hl: 0.9, hw: 0.45 });
+    scatole.push({ cu: u + 0.4, cv: v, au: 1, av: 0, hl: 0.9, hw: 0.45, cima: Math.max(terreno(u, v), terreno(u + 0.85, v)) + 0.95 });
   }
 
   /** Tettoia su quattro pali (fienile, fabbro). */
@@ -672,7 +672,9 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
             parti.legno.push(prisma(q4(Rr), q4(Rr), Math.min(h0, h1) + y - 0.07, [h0 + y + 0.07, h1 + y + 0.07, h1 + y + 0.07, h0 + y + 0.07]));
           }
         }
-        scatole.push({ cu: (A[0] + B[0]) / 2, cv: (A[1] + B[1]) / 2, au: du, av: dv, hl: l / 2, hw: 0.12 });
+        // traversa alta a 1,1 m (+ 7 cm): il recinto si scavalca
+        scatole.push({ cu: (A[0] + B[0]) / 2, cv: (A[1] + B[1]) / 2, au: du, av: dv, hl: l / 2, hw: 0.12,
+          cima: Math.max(terreno(...A), terreno(...B), terreno((A[0] + B[0]) / 2, (A[1] + B[1]) / 2)) + 1.17 });
       }
     }
     // Torce alla porta di taverna e stalla; il fabbro ha la forgia (luce bassa e rossa dalla porta).
@@ -988,7 +990,7 @@ export function creaCaseCampagna(suolo, siti, cx, cz, seme = 7) {
       }
     }
   });
-  function spingiFuori(x, z, raggio) {
+  function spingiFuori(x, z, raggio, yPiedi = -Infinity, superabile = 0) {
     const L = griglia.get(Math.floor(x / G) * 100003 + Math.floor(z / G));
     if (!L) return null;
     let u = x, v = z;
@@ -996,6 +998,7 @@ export function creaCaseCampagna(suolo, siti, cx, cz, seme = 7) {
       let mosso = false;
       for (const i of L) {
         const s = spingiOggetti[i], du = u - s.cu, dv = v - s.cv;
+        if (s.cima !== undefined && s.cima <= yPiedi + superabile) continue;   // basso: si supera
         const a = du * s.au + dv * s.av, b = -du * s.av + dv * s.au;
         const qa = clamp(a, -s.hl, s.hl), qb = clamp(b, -s.hw, s.hw), ea = a - qa, eb = b - qb, d2 = ea * ea + eb * eb;
         if (d2 >= raggio * raggio) continue;
