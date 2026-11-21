@@ -17,7 +17,7 @@
 
 import * as THREE from 'three';
 import { prisma, unisci, dentroPoligono, distanzaContorno, areaPoligono, normaleLato, localeDelLuogo, creaSpinta,
-  scatolaLato, geoTorrePorta, materialeMuro, rifinisci, tonoDelLuogo } from './rocca3d.js';
+  scatolaLato, geoTorrePorta, geoGhiera, materialeMuro, rifinisci, tonoDelLuogo } from './rocca3d.js';
 
 /** Misure secondo la classe del luogo. vicoli: quanti vicoli trasversali. */
 export const CLASSI_BORGO = {
@@ -261,8 +261,10 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
   {
     const base = Math.min(minimoLungo(loc(-gw / 2, SPOR), loc(gw / 2, SPOR), gn[0] * 2, gn[1] * 2), gMin) - 1.5;
     const imposta = gMax + PORTA.imposta;
-    parti.mattone.push(geoTorrePorta({ m: gm, e: ge, n: gn, gw, pw, sporgenza: SPOR, profondita: prof, base,
-      cima: gMax + H + PORTA.sopraMura, soglia: gMin - 0.6, imposta }, X, Z));
+    const tp = { m: gm, e: ge, n: gn, gw, pw, sporgenza: SPOR, profondita: prof, base,
+      cima: gMax + H + PORTA.sopraMura, soglia: gMin - 0.6, imposta };
+    parti.mattone.push(geoTorrePorta(tp, X, Z));
+    parti.pietra.push(...geoGhiera(tp, X, Z));
     const dIn = SPOR - prof;                              // faccia interna
     for (const s of [-1, 1]) {                            // battenti aperti, contro la faccia interna
       const a = loc(s * pw / 2, dIn), b = loc(s * pw, dIn);

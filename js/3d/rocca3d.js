@@ -73,7 +73,12 @@ export function prisma(basso, alto, yb, yt) {
 //     traverso), più una leggera variazione di tono a chiazze di qualche metro;
 //   - texture a corsi di mattoni e conci (scala di grigi, moltiplica il colore del materiale), coordinate dalla
 //     posizione: lungo la faccia e in altezza sulle pareti, in pianta sulle facce orizzontali.
-const GRADAZIONE = { cielo: [-0.6, -0.8], lati: 0.36, chiazze: 0.16, fini: 0.08, tessera: 6.4 };
+// Ombra secondo il sole (materialeMuro): luce del cielo e riflessa × `minimo` sulle facce girate dal sole; la luce
+// riflessa fissa della pietra ridotta (× `riflessa`), perché schiariva uguale tutte le facce in ombra.
+const OMBRA_SOLE = { minimo: 0.38, riflessa: 0.5 };
+const GRADAZIONE = { cielo: [-0.6, -0.8], lati: 0.22, chiazze: 0.16, fini: 0.08, tessera: 6.4,
+  // Piede più scuro (terra, umidità, ombra del terreno): da `piede` × al piede a 1 in `alto` m; galleria delle porte.
+  piede: 0.68, alto: 4, galleria: [0.13, 0.4] };
 // Tono di fondo diverso per ogni luogo (richiesta dell'utente), a caso entro questi limiti: chiarezza (×) e calore
 // (+ più bruno, − più grigio). Rocca e borgo dello stesso luogo hanno lo stesso tono.
 // Una parte dei luoghi (`scuri`) ha pietra molto scura (basalto, pietra annerita: tipico dei castelli fantasy,
@@ -166,7 +171,7 @@ const _h3 = (a, b, c) => { const s = Math.sin(a * 127.1 + b * 311.7 + c * 74.7) 
  * Aggiunge `uv` (dalla posizione) e `color` (lato e chiazze) a una geometria. `orientata` = false per le geometrie
  * a istanze (le normali locali non dicono dove guarda la faccia nel mondo): solo le chiazze.
  */
-export function rifinisci(geo, orientata = true) {
+export function rifinisci(geo, orientata = true, ombra = null) {
   const p = geo.attributes.position, n = geo.attributes.normal, G = GRADAZIONE;
   const lc = Math.hypot(G.cielo[0], G.cielo[1]), cx = G.cielo[0] / lc, cz = G.cielo[1] / lc;
   const uv = new Float32Array(p.count * 2), col = new Float32Array(p.count * 3);
@@ -196,11 +201,11 @@ export function rifinisci(geo, orientata = true) {
       const l = Math.hypot(nx, nz) || 1, tx = -nz / l, tz = nx / l;
       uv[2 * i] = (x * tx + z * tz) / G.tessera + ou; uv[2 * i + 1] = y / G.tessera + ov;
     }
-    let k = 1;
+    let k = ombra ? ombra[i] : 1;
     if (orientata && Math.abs(ny) < 0.7) {
       const l = Math.hypot(nx, nz) || 1;
-      k = 1 - G.lati + G.lati * (0.5 + 0.5 * (nx * cx + nz * cz) / l) * 1.15;
-    } else if (orientata && ny < -0.7) k = 0.7;           // sotto (sporti, parapetti)
+      k *= 1 - G.lati + G.lati * (0.5 + 0.5 * (nx * cx + nz * cz) / l) * 1.15;   // (× l'ombra del pezzo)
+    } else if (orientata && ny < -0.7) k *= 0.7;           // sotto (sporti, parapetti)
     k *= 1 - G.chiazze + 2 * G.chiazze * _h3(Math.floor(x / 4), Math.floor(y / 3), Math.floor(z / 4));
     k *= 1 - G.fini + 2 * G.fini * _h3(Math.floor(x / 1.5) + 7, Math.floor(y / 1.2), Math.floor(z / 1.5) - 3);
     // Un po' più calda o più fredda a chiazze larghe (pietre di cave diverse, licheni, dilavamento).
@@ -214,7 +219,27 @@ export function rifinisci(geo, orientata = true) {
 /** Materiale di muratura: colore × texture dei corsi × colore per vertice (vedi GRADAZIONE). */
 export function materialeMuro(colore, riflessa) {
   const m = new THREE.MeshLambertMaterial({ color: colore, flatShading: true, map: texturaMuro(), vertexColors: true });
-  m.emissive.set(colore).multiplyScalar(riflessa);
+  m.emissive.set(colore).multiplyScalar(riflessa * OMBRA_SOLE.riflessa);
+  // Facce in ombra davvero scure (richiesta dell'utente: una facciata girata dal sole sembrava illuminata come le
+  // altre). Senza ombre portate, la luce del cielo e quella riflessa arrivano uguali su ogni parete verticale: qui
+  // calano sulle facce girate dalla parte opposta al sole (o alla luna, la luce direzionale più forte), fino a
+  // OMBRA_SOLE.minimo. Nessun costo di disegno: due righe nello shader della pietra.
+  m.onBeforeCompile = (sh) => {
+    sh.fragmentShader = sh.fragmentShader.replace('#include <aomap_fragment>', `#include <aomap_fragment>
+      #if NUM_DIR_LIGHTS > 0
+        vec3 dirSole = vec3(0.0);
+        #pragma unroll_loop_start
+        for (int i = 0; i < NUM_DIR_LIGHTS; i++) dirSole += directionalLights[ i ].direction * dot(directionalLights[ i ].color, vec3(0.333));
+        #pragma unroll_loop_end
+        if (dot(dirSole, dirSole) > 1e-6) {
+          float versoSole = dot(normal, normalize(dirSole));
+          float kOmbra = mix(${OMBRA_SOLE.minimo.toFixed(2)}, 1.0, smoothstep(-0.7, 0.5, versoSole));
+          reflectedLight.indirectDiffuse *= kOmbra;
+          totalEmissiveRadiance *= kOmbra;
+        }
+      #endif`);
+  };
+  m.customProgramCacheKey = () => 'muro-ombra-sole';
   return m;
 }
 
@@ -222,21 +247,33 @@ export function materialeMuro(colore, riflessa) {
 export function unisci(parti) {
   if (!parti.length) return null;
   const n = parti.reduce((s, g) => s + (g.index ? g.index.count : g.attributes.position.count), 0);
-  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3);
+  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), ombra = new Float32Array(n);
+  const G = GRADAZIONE;
   let o = 0;
   for (const g0 of parti) {
     const g = g0.index ? g0.toNonIndexed() : g0;
     if (!g.attributes.normal) g.computeVertexNormals();
-    pos.set(g.attributes.position.array, o);
-    nor.set(g.attributes.normal.array, o);
-    o += g.attributes.position.count * 3;
+    const p = g.attributes.position, c = p.count;
+    pos.set(p.array, o * 3);
+    nor.set(g.attributes.normal.array, o * 3);
+    // Ombra di ogni pezzo: piede più scuro (dal suo punto più basso), per i volumi alti almeno 2 m; più quella
+    // propria del pezzo (attributo `ombra`: la galleria delle porte).
+    let y0 = Infinity, y1 = -Infinity;
+    for (let i = 0; i < c; i++) { const y = p.getY(i); if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    const alto = Math.min(G.alto, (y1 - y0) * 0.5), propria = g.attributes.ombra;
+    for (let i = 0; i < c; i++) {
+      let k = 1;
+      if (y1 - y0 >= 2) { const t = Math.min(1, (p.getY(i) - y0) / alto); k = G.piede + (1 - G.piede) * t * t * (3 - 2 * t); }
+      ombra[o + i] = k * (propria ? propria.getX(i) : 1);
+    }
+    o += c;
     g.dispose();
     if (g !== g0) g0.dispose();
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-  rifinisci(geo);
+  rifinisci(geo, true, ombra);
   geo.computeBoundingSphere();
   geo.computeBoundingBox();
   return geo;
@@ -346,19 +383,57 @@ export function geoTorrePorta({ m, e, n, gw, pw, sporgenza, profondita, base, ci
   foro.absarc(0, imposta, pw / 2, 0, Math.PI, false);
   foro.lineTo(-pw / 2, soglia);
   s.holes.push(foro);
-  const geo = new THREE.ExtrudeGeometry(s, { depth: profondita, bevelEnabled: false, curveSegments: 10 }).toNonIndexed();
+  // 4 tratti in profondità: la galleria ha vertici anche in mezzo, dove è più buia.
+  const geo = new THREE.ExtrudeGeometry(s, { depth: profondita, steps: 4, bevelEnabled: false, curveSegments: 10 }).toNonIndexed();
   // Forma: x lungo ±e (il segno tiene il sistema destrorso), y quota, profondità da fuori (sporgenza) verso dentro.
   const sg = e[0] * n[1] - e[1] * n[0] > 0 ? -1 : 1;
   const p = geo.attributes.position;
+  geo.computeVertexNormals();
+  const sxs = new Float32Array(p.count), ys = new Float32Array(p.count), zs = new Float32Array(p.count), nzs = new Float32Array(p.count);
   for (let i = 0; i < p.count; i++) {
+    sxs[i] = p.getX(i); ys[i] = p.getY(i); zs[i] = p.getZ(i); nzs[i] = geo.attributes.normal.getZ(i);
     const sx = p.getX(i) * sg, y = p.getY(i), d = sporgenza - p.getZ(i);
     const u = m[0] + e[0] * sx + n[0] * d, v = m[1] + e[1] * sx + n[1] * d;
     p.setXYZ(i, X(u, v), y, Z(u, v));
   }
+  // Galleria: le facce del passaggio (sul contorno del foro, normale di traverso alla profondità) più scure, di
+  // più a metà galleria; la luce entra dalle due bocche.
+  const nrm = geo.attributes.normal, ombra = new Float32Array(p.count), [g0, g1] = GRADAZIONE.galleria;
+  for (let i = 0; i < p.count; i++) {
+    const sx = sxs[i], y = ys[i], z = zs[i];
+    const sulForo = Math.abs(sx) <= pw / 2 + 1e-3 && y >= soglia - 1e-3 && y <= imposta + pw / 2 + 1e-3;
+    if (!sulForo || Math.abs(nzs[i]) > 0.5) { ombra[i] = 1; continue; }
+    const dentro = Math.min(z, profondita - z) / (profondita / 2);           // 0 alle bocche, 1 a metà
+    ombra[i] = g1 + (g0 - g1) * Math.min(1, dentro * 1.6);
+  }
   geo.deleteAttribute('normal');
   geo.deleteAttribute('uv');
   geo.computeVertexNormals();
+  geo.setAttribute('ombra', new THREE.BufferAttribute(ombra, 1));
   return geo;
+}
+
+/**
+ * Ghiera dell'arco in pietra chiara, sulle due facce della torre-porta: sporge un poco e fa leggere l'arco anche
+ * in ombra. Stessi parametri di geoTorrePorta.
+ */
+export function geoGhiera({ m, e, n, pw, sporgenza, profondita, imposta }, X, Z) {
+  const r0 = pw / 2, r1 = pw / 2 + 0.5, sp = 0.32;
+  const s = new THREE.Shape();
+  s.moveTo(r1, 0); s.absarc(0, 0, r1, 0, Math.PI, false); s.lineTo(-r0, 0); s.absarc(0, 0, r0, Math.PI, 0, true); s.closePath();
+  const sg = e[0] * n[1] - e[1] * n[0] > 0 ? -1 : 1, parti = [];
+  for (const faccia of [-0.12, profondita - sp + 0.12]) {      // poco fuori dalla faccia esterna e da quella interna
+    const g = new THREE.ExtrudeGeometry(s, { depth: sp, bevelEnabled: false, curveSegments: 10 }).toNonIndexed();
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const sx = p.getX(i) * sg, y = p.getY(i) + imposta, d = sporgenza - (p.getZ(i) + faccia);
+      const u = m[0] + e[0] * sx + n[0] * d, v = m[1] + e[1] * sx + n[1] * d;
+      p.setXYZ(i, X(u, v), y, Z(u, v));
+    }
+    g.deleteAttribute('normal'); g.deleteAttribute('uv'); g.computeVertexNormals();
+    parti.push(g);
+  }
+  return parti;
 }
 
 /** Merlo a coda di rondine: base all'origine, faccia verso +Z. */
@@ -680,8 +755,10 @@ export function createRocca(suolo, luogo, ox, oz) {
   {
     const qT = quoteLungo([gm[0] - ge[0] * GW / 2, gm[1] - ge[1] * GW / 2], [gm[0] + ge[0] * GW / 2, gm[1] + ge[1] * GW / 2], gn, [SPOR + 1, 0]);
     const base = Math.min(qT.min, piano) - 1.5, imposta = piano + PORTA.imposta;
-    parti.mattone.push(geoTorrePorta({ m: gm, e: ge, n: gn, gw: GW, pw: PW, sporgenza: SPOR, profondita: PORTA.profondita,
-      base, cima: cima + PORTA.sopraMura, soglia: piano - 0.4, imposta }, X, Z));
+    const tp = { m: gm, e: ge, n: gn, gw: GW, pw: PW, sporgenza: SPOR, profondita: PORTA.profondita,
+      base, cima: cima + PORTA.sopraMura, soglia: piano - 0.4, imposta };
+    parti.mattone.push(geoTorrePorta(tp, X, Z));
+    parti.pietra.push(...geoGhiera(tp, X, Z));
     const dentroT = SPOR - PORTA.profondita;             // faccia interna (negativa: dentro la cinta)
     // Battenti aperti contro la faccia interna; lastrico del passaggio.
     for (const s of [-1, 1]) {
