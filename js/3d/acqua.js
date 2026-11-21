@@ -391,10 +391,11 @@ function unisci(parti) {
 }
 
 /**
- * Ponti del blocco. `attraversamenti` da generaScena (acqua.attraversamenti), `altezza(x, z)` il terreno disegnato.
+ * Ponti del blocco. `attraversamenti` da generaScena (acqua.attraversamenti), `altezza(x, z)` il terreno disegnato,
+ * `quotaStrada(x, z)` (facoltativa) la carreggiata che arriva al ponte, o null fuori da essa.
  * Restituisce { gruppo, ponti: [{ object, solidi, quotaSuolo, spingiFuori }] }.
  */
-export function creaPonti(attraversamenti, altezza) {
+export function creaPonti(attraversamenti, altezza, quotaStrada = null) {
   const gruppo = new THREE.Group();
   gruppo.name = 'ponti';
   const ponti = [];
@@ -411,7 +412,17 @@ export function creaPonti(attraversamenti, altezza) {
     const piano = (u) => at.quota + schiena * 4 * (u / L) * (1 - u / L);
     // Testate raccordate al terreno disegnato: ogni estremo parte alla quota del terreno lì (niente gradino né per l'occhio
     // né per i piedi) e raggiunge il piano con una rampa dolce (pendenza ≤ PONTE.raccordo) entro metà della luce.
-    const hA = altezza(at.x0, at.z0), hB = altezza(at.x1, at.z1);
+    // Testate alla quota della carreggiata che arriva (rialzata sul terreno: partire dal terreno lasciava un gradino
+    // di 30–50 cm tra strada e ponte, segnalato dall'utente), se più alta; altrimenti al terreno.
+    // Media su tutta la larghezza: dove il terreno pende di traverso, un impalcato piatto alla quota dell'asse lasciava
+    // su un lato uno scalino oltre i 40 cm (il gradino che il cavaliere sale da solo); così si divide tra i due lati.
+    const suoloTestata = (x, z) => Math.max(altezza(x, z), quotaStrada?.(x, z) ?? -Infinity);
+    const testata = (x, z) => {
+      let s = 0;
+      for (let k = -2; k <= 2; k++) { const v = k / 2 * (W / 2 - 0.3); s += suoloTestata(x - uz * v, z + ux * v); }
+      return s / 5;
+    };
+    const hA = testata(at.x0, at.z0), hB = testata(at.x1, at.z1);
     const RA = Math.min(L / 2, Math.max(1, Math.abs(piano(0) - hA) / PONTE.raccordo));
     const RB = Math.min(L / 2, Math.max(1, Math.abs(piano(L) - hB) / PONTE.raccordo));
     const dolce = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
@@ -499,6 +510,7 @@ export function creaPonti(attraversamenti, altezza) {
     const dentro = W / 2 - (pietra ? P.spessoreParapetto : 0.2);   // carreggiata utile tra i parapetti
     ponti.push({
       object: mesh, solidi: [mesh], materiale: at.materiale, luce: L,
+      asse: { x0: at.x0, z0: at.z0, x1: at.x1, z1: at.z1 },   // testate (per le prove dalla console)
       quotaSuolo(x, z) {
         const [u, v] = locale(x, z);
         return u >= 0 && u <= L && Math.abs(v) <= W / 2 ? cima(u) : null;

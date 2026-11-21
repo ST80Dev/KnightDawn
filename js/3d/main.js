@@ -428,6 +428,18 @@ function cercaPortaVicina() {
   if (personaVicina) _invitoPorta.textContent = `${PORTA.nomeTasto}: parla — ${personaVicina.nome}`;
   else if (portaVicina) _invitoPorta.textContent = `${PORTA.nomeTasto}: entra — ${portaVicina.nome}`;
 }
+
+// Scavalcamento (Spazio, contestuale; niente salto libero): l'invito compare quando davanti, entro un metro, c'è
+// un ostacolo o uno stacco che si può superare (knight3d.js, cercaScavalco). Cercato ogni ~0,2 s.
+let scavalcaRichiesto = false, _invitoScavalco = null, _tScavalco = 0;
+function cercaScavalcoVicino(dt) {
+  if ((_tScavalco += dt) < 0.2) return;
+  _tScavalco = 0;
+  const p = knight && !cronista && !percorso && !inPausa && !knight.stato.scavalco ? knight.cercaScavalco() : null;
+  if (!_invitoScavalco) { _invitoScavalco = avvisoHud('', 'messaggio'); _invitoScavalco.style.top = '80px'; }
+  _invitoScavalco.hidden = !p || portaVicina || personaVicina;
+  if (p) _invitoScavalco.textContent = `Spazio: ${p.tipo === 'sali' ? 'sali' : 'scavalca'}`;
+}
 function apriCronista(e) {
   chiudiCronista();
   tasti.clear();
@@ -591,7 +603,10 @@ function* preparaMondo(desc) {
   const ter = yield* createTerrainAPezzi(meta, heights, false, coloreMondo(carta, Calendar.stagione));
   yield 'terreno';
   const acque = creaAcqueScena(dati, meta, COLORE_ACQUA, meta.centroMondo);
-  const pp = creaPonti(dati.attraversamenti, dati.altezza);
+  // Suolo delle carreggiate: serve ai ponti (testate alla quota della strada, non del terreno: niente gradino) e poi
+  // al suolo composto della Scena.
+  const strade = suoloStrade(acque, (x, z) => ter.getHeight(x, z));   // con la rampa dal prato sul bordo (#181)
+  const pp = creaPonti(dati.attraversamenti, dati.altezza, strade.quotaSuolo);
   yield 'acque e ponti';
   const roc = yield* costruisciRocche(cx, cz, ter);
   yield 'rocche';
@@ -629,7 +644,7 @@ function* preparaMondo(desc) {
   // Shader e texture pronti prima dello scambio (note di M1): niente compilazioni né caricamenti nel suo fotogramma.
   yield* preparaScheda([ter.mesh, acque, pp.gruppo, ...roc.map((r) => r.object), veg.oggetto, camp?.object,
     oriz.oggetto, oriz.acqua]);
-  return { desc: { ...desc, cx, cz }, scostamento: { x: desc.cx - cx, z: desc.cz - cz }, meta, dati, ter, acque, pp, roc,
+  return { desc: { ...desc, cx, cz }, scostamento: { x: desc.cx - cx, z: desc.cz - cz }, meta, dati, ter, acque, strade, pp, roc,
     veg, camp, msCot, oriz };
 }
 
@@ -697,7 +712,9 @@ function applicaMondo(p) {
   acqua = orizzonte.acqua;
   if (acqua) scene.add(acqua);
   // Le strade per ultime: sotto un ponte la carreggiata nell'alveo non deve vincere sull'impalcato.
-  _suolo = componiSuolo(terrain, [...rocche, ...ponti, suoloStrade(acqueScena, (x, z) => terrain.getHeight(x, z))]);
+  // Le rocce basse (fino a 40 cm) fanno suolo: ci si sale sopra come su un gradino (knight3d.js).
+  _suolo = componiSuolo(terrain, [...rocche, ...ponti, p.strade ?? suoloStrade(acqueScena, (x, z) => terrain.getHeight(x, z))],
+    vegetazione?.quotaOstacoli ? [vegetazione] : []);
   // Persone ai loro posti e per le strade (passo 7), sul suolo composto. Al cambio di blocco (scambiaBlocco) si rifanno
   // con rocche e borghi, già nelle coordinate del blocco nuovo: non serve spostarle (abitanti.sposta resta per altri usi).
   if (rocche.length) {
@@ -754,7 +771,7 @@ async function caricaScena(desc) {
     acqua.name = 'acqua';
     scene.add(acqua);
   }
-  _suolo = componiSuolo(terrain, castle ? [castle] : [...rocche, ...ponti]);
+  _suolo = componiSuolo(terrain, castle ? [castle] : [...rocche, ...ponti], vegetazione?.quotaOstacoli ? [vegetazione] : []);
   scenaAttuale = desc;
   statPendenze = misuraPendenze(terrain);
   cieloScena.invalida();                   // ricalcola le luci (anche quelle proprie del castello)
@@ -960,14 +977,14 @@ async function init() {
     get terrain() { return terrain; }, get knight() { return knight; }, get castle() { return castle; },
     get carta() { return carta; }, get scena() { return scenaAttuale; }, get orizzonte() { return orizzonte; },
     get rocche() { return rocche; }, get campagna() { return campagna; }, get abitanti() { return abitanti; },
-    get vegetazione() { return vegetazione; }, get cavallo() { return cavallo; },
+    get vegetazione() { return vegetazione; }, get cavallo() { return cavallo; }, get ponti() { return ponti; },
     caricaScena, posizionaCavaliere, minimappa,
     /** M7, passo 9: ricentra il blocco (su { x, z } del mondo, o sul cavaliere) — per il percorso di prova. */
     cambiaBlocco: (x, z) => cambiaBlocco(Number.isFinite(x) && Number.isFinite(z) ? { x, z } : null),
     get cambiBlocco() { return { quanti: cambiBlocco, ms: msCambioBlocco, totale: msTotaleBlocco, inCorso: !!preparazione, ultimo: ultimoCambio }; },
   };
 
-  avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no'
+  avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no · Spazio: scavalca'
     + ' · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: Carta (clic: vai lì)'
     + ' · N: minimappa grande · +/−: zoom minimappa'
     + ' · F2: qualità · F3: info · F8: nuova partita',
@@ -1105,6 +1122,7 @@ window.addEventListener('keydown', (e) => {
     if (azione) { azione.esegui(); return; }
   }
   if (e.code.startsWith('Arrow')) e.preventDefault();
+  if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) scavalcaRichiesto = true; }
   tasti.add(e.code);
   if (e.code === 'KeyC' && !e.repeat && knight) cambiaModoCamera();
   if (e.code === 'KeyN' && !e.repeat) minimappa.alterna();
@@ -1128,13 +1146,15 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => tasti.delete(e.code));
 window.addEventListener('blur', () => tasti.clear());   // niente tasti "incollati" cambiando finestra
 
-const _input = { avanti: 0, gira: 0, giroMouse: 0, corsa: false, camminata: false };
+const _input = { avanti: 0, gira: 0, giroMouse: 0, corsa: false, camminata: false, scavalca: false };
 function leggiInput() {
   _input.avanti = (premuto('avanti') ? 1 : 0) - (premuto('indietro') ? 1 : 0);
   _input.gira = (premuto('destra') ? 1 : 0) - (premuto('sinistra') ? 1 : 0);
   _input.giroMouse = cam.prendiGiroMouse();
   _input.corsa = premuto('corsa') && !sfinito();
   _input.camminata = camminata || sfinito();
+  _input.scavalca = scavalcaRichiesto;
+  scavalcaRichiesto = false;
   return _input;
 }
 
@@ -1594,6 +1614,7 @@ function frame(now) {
     if (cavallo && !inPausa && !cronista) cavallo.update(dt);
     if (abitanti && !inPausa && !cronista && !percorso) abitanti.update(dt, knight.stato, 1 - _luceGiorno);
     cercaPortaVicina();
+    cercaScavalcoVicino(dt);
     tt = segna('cavaliere e tempo', tt);
     aggiornaCielo();
     castle?.aggiornaLuci(now / 1000, 1 - _luceGiorno);

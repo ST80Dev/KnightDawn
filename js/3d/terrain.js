@@ -944,8 +944,10 @@ function proceduralHeights(meta) {
  * così cavaliere e camera non distinguono tra i due.
  * @param {object} terrain  oggetto restituito da loadTerrain
  * @param {Array<{quotaSuolo:(x:number, z:number) => (number|null)}>} strutture
+ * @param {Array<{quotaOstacoli:(x:number, z:number) => (number|null)}>} [sopra] oggetti bassi su cui si sale
+ *   (rocce sotto il mezzo metro: gradini): la loro sommità vale come suolo se è più alta.
  */
-export function componiSuolo(terrain, strutture) {
+export function componiSuolo(terrain, strutture, sopra = []) {
   function costruita(x, z) {
     for (const s of strutture) {
       const h = s.quotaSuolo(x, z);
@@ -954,15 +956,24 @@ export function componiSuolo(terrain, strutture) {
     return null;
   }
   function getHeight(x, z) {
-    const h = costruita(x, z);
-    return h !== null ? h : terrain.getHeight(x, z);
+    const c = costruita(x, z);
+    let h = c !== null ? c : terrain.getHeight(x, z);
+    for (const o of sopra) {
+      const t = o.quotaOstacoli(x, z);
+      if (t !== null && t > h) h = t;
+    }
+    return h;
+  }
+  /** Pendenza del solo terreno naturale (0 sulle superfici costruite): per le pareti, che i gradini non sono. */
+  function getSlopeNaturale(x, z) {
+    return costruita(x, z) === null ? terrain.getSlope(x, z) : 0;
   }
   function getSlope(x, z) {
-    if (costruita(x, z) === null) return terrain.getSlope(x, z);
+    if (costruita(x, z) === null && !sopra.some((o) => o.quotaOstacoli(x, z) !== null)) return terrain.getSlope(x, z);
     const e = 0.3;
     const gx = (getHeight(x + e, z) - getHeight(x - e, z)) / (2 * e);
     const gz = (getHeight(x, z + e) - getHeight(x, z - e)) / (2 * e);
     return Math.atan(Math.hypot(gx, gz)) * 180 / Math.PI;
   }
-  return { ...terrain, terreno: terrain, getHeight, getSlope };
+  return { ...terrain, terreno: terrain, getHeight, getSlope, getSlopeNaturale };
 }
