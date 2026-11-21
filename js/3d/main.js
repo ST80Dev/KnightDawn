@@ -40,7 +40,11 @@ const NEBBIA_ORIZZONTE = [10000, 170000];
 const LONTANO = 130000;                   // m: distanza massima disegnata dalla camera
 const PARAMETRI = new URL(window.location.href).searchParams;
 const TAVULLIA = PARAMETRI.get('terreno') === 'tavullia';
-const PROVA_PRESTAZIONI = PARAMETRI.has('prova');             // percorso di prova: niente salvataggi (vedi init)   // scena di prova (terreno reale, castello)
+const PROVA_PRESTAZIONI = PARAMETRI.has('prova');             // percorso di prova: niente salvataggi (vedi init)
+const CENTRO_PROVA = (() => {                                   // ?centro=x,z (m del mondo) per il percorso di prova
+  const v = (PARAMETRI.get('centro') || '').split(',').map(Number);
+  return v.length === 2 && v.every(Number.isFinite) ? v : null;
+})();   // scena di prova (terreno reale, castello)
 const COLORE_ACQUA = '#4d7282';
 const PROFONDITA_GUADO = 0.9;             // m d'acqua oltre i quali il cavaliere non entra (fiumi piccoli: si guadano)
 
@@ -48,7 +52,28 @@ const PROFONDITA_GUADO = 0.9;             // m d'acqua oltre i quali il cavalier
 const canvas = document.getElementById('scena');
 // Buffer di profondità logaritmico: dal cavaliere a pochi metri fino all'orizzonte a ~110 km senza che le
 // superfici lontane (costa e mare, versanti vicini) si contendano i pixel.
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
+// Profondità (docs/PRESTAZIONI.md, passo 2). Predefinita: **invertita** (EXT_clip_control). Misura sulla scheda di
+// riferimento, bosco fitto: 46,3 → 71,7 FPS rispetto alla logaritmica, che scrive la profondità in ogni pixel e impedisce
+// alla scheda di scartare in anticipo i pixel nascosti; nessuno sfarfallio visto dall'utente. Se il browser non ha
+// EXT_clip_control si ripiega sulla logaritmica (con la normale, da 0,2 m a 130 km, il lontano sfarfallerebbe).
+// Per le prove: ?profondita=log | invertita | normale e ?msaa=0 (senza MSAA: +24 % FPS nel bosco fitto, ma bordi
+// seghettati: candidato per un preset «basso»).
+const PROFONDITA = (() => {
+  const scelta = PARAMETRI.get('profondita');
+  if (['log', 'invertita', 'normale'].includes(scelta)) return scelta;
+  try {
+    const gl = document.createElement('canvas').getContext('webgl2');
+    const ok = !!gl && (gl.getSupportedExtensions() || []).includes('EXT_clip_control');
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
+    return ok ? 'invertita' : 'log';
+  } catch {
+    return 'log';
+  }
+})();
+const renderer = new THREE.WebGLRenderer({
+  canvas, antialias: PARAMETRI.get('msaa') !== '0',
+  logarithmicDepthBuffer: PROFONDITA === 'log', reversedDepthBuffer: PROFONDITA === 'invertita',
+});
 const profilatore = creaProfilatore(renderer);   // tempi GPU/CPU (docs/PRESTAZIONI.md, passo 1)
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -683,6 +708,10 @@ async function init() {
         posizionaCavaliere(p.x, p.z, p.direzione);
         messaggio('Il punto salvato era dentro le mura di una rocca: si riparte fuori dalla porta del borgo.');
       }
+    } else if (PROVA_PRESTAZIONI && CENTRO_PROVA) {
+      // Percorso di prova in un punto scelto (?centro=x,z in metri del mondo): cavaliere al centro del blocco.
+      await caricaScena({ tipo: 'mondo', cx: CENTRO_PROVA[0], cz: CENTRO_PROVA[1] });
+      posizionaCavaliere(0, 0, Math.PI);
     } else {
       const sito = carta.luoghi?.find((l) => l.partenza);
       if (sito) {
@@ -971,7 +1000,8 @@ function fineDelPercorso() {
     `Knight Dawn — percorso di prova (${new Date().toISOString().slice(0, 16).replace('T', ' ')})`,
     `scheda: ${P.scheda}`,
     `timer GPU: ${P.timerGPU ? 'sì' : 'no'} · profondità invertita possibile: ${P.clipControl ? 'sì' : 'no'}`
-      + ` · MSAA ${P.campioniMSAA}× · profondità logaritmica: ${P.profonditaLog ? 'sì' : 'no'} · ${buf.x}×${buf.y} pixel`,
+      + ` · MSAA ${P.campioniMSAA}× · profondità: ${P.profonditaLog ? 'logaritmica' : P.profonditaInvertita ? 'invertita' : 'normale'}`
+      + ` · ${buf.x}×${buf.y} pixel`,
     `scena: ${scenaAttuale?.tipo === 'mondo' ? `seme ${carta?.seme}, centro ${scenaAttuale.cx}, ${scenaAttuale.cz}` : scenaAttuale?.tipo}`
       + ` · vegetazione ${vegetazioneVisibile ? 'accesa' : 'spenta'}`,
     st ? `FPS medio ${fmt(st.fps, 1)} (${fmt(st.msMedio, 1)} ms) · 1% peggiori ${fmt(st.fps1, 1)} FPS`
@@ -1081,7 +1111,7 @@ function aggiornaPannello(now) {
     + ` · ${ri.calls} chiamate · ${fmt(ri.triangles / 1000)} mila triangoli · ${buf.x}×${buf.y} pixel`;
   const P = profilatore.info;
   testo += `\nscheda: ${P.scheda}\n  timer GPU: ${P.timerGPU ? 'sì' : 'no'} · profondità invertita possibile: ${P.clipControl ? 'sì' : 'no'}`
-    + ` · MSAA ${P.campioniMSAA}× · profondità logaritmica: ${P.profonditaLog ? 'sì' : 'no'}`;
+    + ` · MSAA ${P.campioniMSAA}× · profondità: ${P.profonditaLog ? 'logaritmica' : P.profonditaInvertita ? 'invertita' : 'normale'}`;
   testo += `\nCPU: logica ${fmt(ri.msLogica, 1)} ms · invio comandi ${fmt(ri.msInvio, 1)} ms`;
   if (msCottura != null) testo += ` · suolo cotto in ${fmt(msCottura)} ms`;
   if (!P.timerGPU) testo += '\nGPU: timer non disponibili su questa scheda o browser (usare F4)';
