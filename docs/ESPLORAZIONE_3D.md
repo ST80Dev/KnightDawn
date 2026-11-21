@@ -1233,6 +1233,13 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
        scende davvero (una conca) la rampa esterna ora ha il **piano in pietra** (prima mancava: il cavaliere
        camminava sospeso sul terreno) e i fianchi in pendenza (prima a gradini); il suolo della rampa non va mai
        sotto il terreno. Anche i parapetti della rampa della rocca sono in pendenza.
+     - *Ombre delle mura* (utente: «troppe poche sfumature», l'arco della porta non si distingueva, una facciata in
+       ombra sembrava illuminata come le altre). Nello shader della pietra (`materialeMuro`) la luce del cielo e
+       quella riflessa calano fino a ×0,38 sulle facce girate dal sole (o dalla luna: la luce direzionale più forte),
+       e la luce riflessa fissa è dimezzata: le facce in ombra sono davvero scure e cambiano con l'ora. La galleria
+       delle porte è scura (×0,13–0,40, più a metà); una **ghiera** di pietra chiara sporge attorno all'arco sulle due
+       facce; il piede delle mura e delle torri è più scuro (×0,68, in 4 m). Corretto un errore: la gradazione per lato
+       sovrascriveva quella del pezzo (piede, galleria), che quindi non c'era sulle pareti verticali.
      - *Misure* (Chromium headless): seguendo la via, dal fuori della porta del borgo al cortile della rocca in
        **24 rocche su 24** (8 semi, tre classi); 32 assalti al borgo e 32 alla rocca per 3 semi: si entra solo dalla
        porta, **nessuna compenetrazione**. Rocca 10
