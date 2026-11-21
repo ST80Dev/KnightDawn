@@ -389,6 +389,49 @@ const CAMPI = ['ramo', 'campo', 'alberi', 'limite', 'conifera', 'pino', 'secco',
   'sasso', 'masso', 'affioramento', 'tronco', 'foresta', 'erba', 'felce', 'frana', 'ciottolo'];
 
 /**
+ * Quanto bosco (0–1) in un punto: il bosco della copertura (radure, alpeggi) con i bordi organici, i boschi di versante
+ * sui pendii, disboscato nella campagna attorno ai luoghi. Unica definizione: la usano densitaVertice (gli alberi del
+ * blocco) e boscoMondo (il colore della Carta). `pend`: pendenza «di zona» in gradi (come il colore, ~60 m).
+ */
+function forestaPunto(cp, pend, x, z, semeBordo, coltivato, sabbia, palude) {
+  const V = VEGETAZIONE;
+  // Bosco: lo stesso «quanto bosco» del colore (radure, alpeggi), con bordi organici e non a righello.
+  const vista = cp.bosco * (1 - 0.8 * cp.radura) * (1 - cp.alpeggio);
+  const e = cp.bosco > 0 ? V.bosco.bordo.ampiezza * fbm(x, z, semeBordo, V.bosco.bordo.lunghezza, 2) : 0;
+  // Boschi di versante: anche fuori dal bosco della Carta, sui pendii (non in sabbia, palude, neve).
+  const W = V.versante;
+  let versante = smoothstep(W.pendenza[0], W.pendenza[1], pend) * (1 - smoothstep(W.troppo[0], W.troppo[1], pend));
+  if (versante > 0) {
+    versante *= smoothstep(W.umidita[0], W.umidita[1], cp.umidita) * (1 - sabbia) * (1 - palude) * (1 - cp.neveFissa)
+      * smoothstep(W.soglia[0], W.soglia[1], fbm(x, z, semeBordo ^ 0x3c6ef372, W.lunghezza, 2));
+  }
+  // Campagna attorno a rocche e borghi (coltivato 0–1): il bosco è disboscato, restano alberi isolati e siepi.
+  return Math.max(smoothstep(V.bosco.soglia[0], V.bosco.soglia[1], vista + e), versante) * (1 - 0.92 * coltivato);
+}
+
+/**
+ * Bosco della Carta come funzione pura (richiesta della sessione M6, colore «naturale» della Carta):
+ * (x, z, h, pendenza in gradi di zona) → { foresta, visibile } 0–1. `foresta` è quella di densitaVertice (bosco con
+ * bordi, versante, campagna); `visibile` è il bosco che si vede davvero (anche limite degli alberi e roccia), lo stesso
+ * che dà la lettiera. Senza distanza dall'acqua né rive (servono la griglia del blocco). `out` facoltativo da riusare.
+ */
+export function boscoMondo(carta, stagione = 0) {
+  const copertura = coperturaMondo(carta, stagione), cp = nuovaCopertura();
+  const semeBordo = derivaSeme(carta.seme, 401), campagna = campagnaMondo(carta);
+  return (x, z, h, pendenza, out = { foresta: 0, visibile: 0 }) => {
+    copertura(cp, x, z, h, pendenza);
+    let sabbia = 0, palude = 0;
+    for (let k = 0; k < 4; k++) {
+      if (cp.bi[k] === BIOMA.SABBIA) sabbia += cp.w[k]; else if (cp.bi[k] === BIOMA.PALUDE) palude += cp.w[k];
+    }
+    const V = VEGETAZIONE, f = forestaPunto(cp, pendenza, x, z, semeBordo, campagna(x, z), sabbia, palude);
+    const limite = smoothstep(CLIMA.bosco + V.limiteAlberi[0], CLIMA.bosco + V.limiteAlberi[1], cp.T);
+    out.foresta = f; out.visibile = f * limite * (1 - cp.roccia);
+    return out;
+  };
+}
+
+/**
  * Densità per vertice della griglia del blocco: per ogni tipo la probabilità che una cella della sua griglia abbia
  * un oggetto, più i pesi delle specie di albero. `pend` è la pendenza «di zona» (come il colore), `pf` quella fine.
  */
@@ -402,18 +445,7 @@ function densitaVertice(cp, pend, pf, distAcqua, x, z, semeBordo, D, i, coltivat
     else if (b === BIOMA.PALUDE) palude += w;
     else if (b === BIOMA.PIANURA_N || b === BIOMA.PIANURA_S) nordSud += w;
   }
-  // Bosco: lo stesso «quanto bosco» del colore (radure, alpeggi), con bordi organici e non a righello.
-  const vista = cp.bosco * (1 - 0.8 * cp.radura) * (1 - cp.alpeggio);
-  const e = cp.bosco > 0 ? V.bosco.bordo.ampiezza * fbm(x, z, semeBordo, V.bosco.bordo.lunghezza, 2) : 0;
-  // Boschi di versante: anche fuori dal bosco della Carta, sui pendii (non in sabbia, palude, neve).
-  const W = V.versante;
-  let versante = smoothstep(W.pendenza[0], W.pendenza[1], pend) * (1 - smoothstep(W.troppo[0], W.troppo[1], pend));
-  if (versante > 0) {
-    versante *= smoothstep(W.umidita[0], W.umidita[1], cp.umidita) * (1 - sabbia) * (1 - palude) * (1 - cp.neveFissa)
-      * smoothstep(W.soglia[0], W.soglia[1], fbm(x, z, semeBordo ^ 0x3c6ef372, W.lunghezza, 2));
-  }
-  // Campagna attorno a rocche e borghi (coltivato 0–1): il bosco è disboscato, restano alberi isolati e siepi.
-  const foresta = Math.max(smoothstep(V.bosco.soglia[0], V.bosco.soglia[1], vista + e), versante) * (1 - 0.92 * coltivato);
+  const foresta = forestaPunto(cp, pend, x, z, semeBordo, coltivato, sabbia, palude);
   const limite = smoothstep(CLIMA.bosco + V.limiteAlberi[0], CLIMA.bosco + V.limiteAlberi[1], cp.T);
   const ripido = 1 - smoothstep(V.pendenza.alberi[0], V.pendenza.alberi[1], pf);
   const riva = distAcqua >= V.riva.celle[0] && distAcqua <= V.riva.celle[1] && cp.T > 3 ? 1 : 0;
