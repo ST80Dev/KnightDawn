@@ -1763,7 +1763,42 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      fascia di 4 celle (~30 m) dai fiumi con densità degli alberi fino a 0,42 (pesi 1 / 0,85 / 0,6 / 0,3 per cella),
      specie di riva (pioppi, betulle), più tronchi caduti; nuovo tipo `ramo` (rami secchi a terra, si attraversano;
      anche pochi nei boschi). Blocco arido con ~1,6 km di fiume: alberi da 482 a 809, 36 tronchi, ~600 rami.
-     Limite: il bosco lontano oltre il blocco non ha ancora la fascia lungo i fiumi.
+     Bosco lontano: lungo i tracciati dei fiumi fuori dal blocco (`tracciatiFiumi`) tre file di sagome di riva per lato
+     (a 4, 12, 22 m oltre la sponda, probabilità 0,85 / 0,6 / 0,3; passo che cresce con la distanza, reticolo del
+     mondo): ~1700 sagome in più in un blocco con un fiume (prima 43 sagome lontane in quella zona arida).
+     *Ghiaia sulle rive* (richiesta dell'utente: «un po' di ghiaia sui bordi ogni tanto», non sotto l'acqua): quarta
+     componente di `aSuolo`, a chiazze su ~35 m nelle prime due celle dai fiumi, dipinta nel suolo cotto.
+     *Massi erratici* (`VEGETAZIONE.erratici`): pochi massi di 4–8 m isolati nei prati (non nel bosco, nei campi,
+     vicino a strade, case e terrapieni). *Alberi lungo le strade* (`stradaAlberi`): a tratti, a 2,5–5 m dal bordo,
+     fuori dal bosco; poi ridotti (richiesta dell'utente: «il mondo medievale è più casuale, non un viale»): pochi
+     tratti, radi, sparsi tra 2,5 e 10 m dal bordo (~50 in un blocco).
+     *Chiome e cespugli* (richiesta dell'utente: chiome «troppo arrotondate o piene, si vede che sono di un gioco»;
+     arbusti «con pezzi vuoti, fatti da più elementi, non un blocco come un masso»; senza appesantire): `chiomaAMasse`,
+     la chioma in 4–7 masse separate, ognuna con pochi ciuffi e un ramo dal fusto (`ramoVerso`), con vuoti da cui si
+     vedono cielo e rami; stesso numero di ciuffi di prima (latifoglie, alberi di riva, livello medio con 4 masse).
+     Cespugli di 4–6 ciuffi bassi su rametti, il più basso a terra. Niente foglie con alpha test (costose sulla
+     scheda di riferimento). Poi, su richiesta dell'utente («rami e foglie mischiati anche più in basso, buchi che fanno
+     vedere i rami anche in alto; non un disegno da bambini»): latifoglie e alberi di riva `ramificato`: fusto corto, una
+     cima che prosegue, 5–6 rami principali da altezze diverse con 2 rametti l'uno; foglie in gruppi di 2 ciuffi piccoli
+     lungo i rami, sulle punte e lungo la cima, a tutte le altezze. Livelli: pieni entro 18 m, ciuffi semplici fino a
+     50 m, medio (3 masse) fino a 200 m, poi sagome (rifatte dai modelli nuovi). Rami (richiesta dell'utente: «troppo
+     fuori dal tronco, cadrebbero; tutti lunghi uguali e con le stesse angolazioni»): 35–75° sull'orizzontale, due
+     tratti con il secondo che piega in su, lunghezze 45–115 %, direzioni irregolari, 1–3 rametti, punte coperte di
+     foglie; più foglie lungo i rami nel bosco («troppi buchi»). Ciuffi a *schegge* («niente marshmallow di verde,
+     senza arrivare alle foglie singole»): ogni ciuffo è un grappolo di tetraedri appiattiti orientati a caso (12 da
+     vicino, 5–6 più lontano e nel livello medio), luce secondo l'inviluppo dell'intera chioma; anche i cespugli.
+     Correzioni successive dell'utente: con le sole schegge «sembrano alberi spogli» e poi «torna un po' alle
+     rotondità»: ogni ciuffo ha un *nucleo* tondeggiante (icosaedro deformato; ottaedro nel livello medio) e poche
+     schegge piccole di frangia (4 entro 18 m, 1 fino a 50 m, 2 nel medio), forme miste tetraedri/ottaedri; rami più
+     corti (−30 %) e ciuffi più grandi, chiome compatte. Tronco («stuzzicadenti dritto da base a cima», «troncato in
+     cima»): sopra il fusto si divide in 2–3 cime storte (quercia e castagno 3, faggio 2, riva 1) che si assottigliano
+     fino a 2–3 cm e finiscono dentro l'ultimo ciuffo; ramo e rametti finiscono a 1–2 cm; nel livello medio il fusto
+     sale dentro la chioma assottigliandosi. Spessore del tronco proporzionato all'altezza dell'istanza (larghezza =
+     altezza ±15 %, prima indipendenti). Cespugli: ciuffi ravvicinati e uno al centro.
+     Tronco e rami curvi («stuzzicadenti incastrati»): `ramoCurvo`, tubo lungo una curva Catmull-Rom che si assottiglia;
+     tronco con l'asse un po' storto, cime, rami e rametti in un pezzo solo con piccole pieghe a caso (`piega`); 3–6
+     tratti entro 18 m, 2–4 fino a 50 m.
+     Bosco fitto in headless: ~550 000 triangoli (prima delle chiome nuove 458 000): da misurare sulla scheda.
      *Case fuori dal borgo* (richiesta dell'utente: case isolate o a gruppetti di 2–3 in mezzo o a lato dei campi):
      `CASE_CAMPAGNA` / `caseCampagna(carta)`, siti deterministici per Carta (4–9 gruppi per rocca secondo la classe,
      tra gli orti e il limite dei campi pieni, in piano, all'asciutto, lontano dai terrapieni e tra loro, orientati

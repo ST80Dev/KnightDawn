@@ -131,8 +131,11 @@ function cono(r, h, lati, y, scuro, chiaro, { seme = 1, frastaglio = 0.15, x = 0
  * mescolate a quelle dei ciuffi: niente aspetto a palle sfaccettate. Dentro e sotto più scuro (ombra delle foglie).
  */
 function chioma({ x = 0, y, z = 0, a, b, c = a, ciuffi, raggio, dettaglio = 1, scuro, chiaro, rnd, morbido = 0.75,
-  pieno = 0.55, sotto = 0.35 }) {
+  pieno = 0.55, sotto = 0.35, schegge = 0, inviluppo = null, leggero = false }) {
   const parti = [];
+  // Luce e colore secondo l'inviluppo dell'intera chioma (se dato): un albero fatto di gruppi di foglie si illumina
+  // come una chioma sola, non come tante palle.
+  const E = inviluppo || { x, y, z, a, b, c };
   const ca = new THREE.Color(scuro), cb = new THREE.Color(chiaro), tinta = new THREE.Color();
   for (let k = 0; k < ciuffi; k++) {
     // Direzione a caso; meno ciuffi sotto (la chioma è più piena in alto e ai lati).
@@ -143,23 +146,62 @@ function chioma({ x = 0, y, z = 0, a, b, c = a, ciuffi, raggio, dettaglio = 1, s
     const t = pieno + (1 - pieno) * rnd();
     const px = x + dx * a * t, py = y + dy * b * t, pz = z + dz * c * t;
     const r = raggio[0] + (raggio[1] - raggio[0]) * rnd();
-    const geo = new THREE.IcosahedronGeometry(r, dettaglio);
-    const p = geo.attributes.position, seme = rnd() * 10;
-    for (let i = 0; i < p.count; i++) {
-      _v.set(p.getX(i), p.getY(i), p.getZ(i));
-      const f = bozza(_v.x / r, _v.y / r, _v.z / r, seme, 0.22);
-      p.setXYZ(i, _v.x * f + px, _v.y * f * 0.85 + py, _v.z * f + pz);
+    let geo;
+    if (schegge) {
+      // Ciuffo a schegge (richiesta dell'utente: niente «marshmallow di verde attaccati ai rami», senza arrivare alle
+      // foglie singole): `schegge` tetraedri appiattiti orientati a caso dentro il ciuffo, contorno frastagliato.
+      // Nucleo pieno (richiesta dell'utente: con le sole schegge «sembrano tutti alberi spogli»): un solido irregolare
+      // dentro il ciuffo chiude la vista; le schegge intorno fanno il bordo frastagliato.
+      // Forme miste (richiesta dell'utente: «un mix di forme»): nucleo a volte tondeggiante (icosaedro), a volte
+      // spigoloso (ottaedro); schegge tetraedri o ottaedri.
+      // (oltre i 18 m solo ottaedri: 8 triangoli invece di 20; la scelta a caso si fa comunque, stesse forme ai due livelli)
+      // Un passo indietro verso il tondo (richiesta dell'utente: «buchi evidenti nelle chiome»): nucleo più grande,
+      // icosaedro deformato (bozza), poche schegge più piccole che fanno solo da frangia («torna un po' alle rotondità,
+      // sennò si va troppo verso le singole foglie»). Livello medio (`leggero`, migliaia di alberi): ottaedro, 8 triangoli.
+      const tondo = rnd() < 0.55 && dettaglio;
+      const nucleo = leggero ? new THREE.OctahedronGeometry(r * 0.95, 0) : new THREE.IcosahedronGeometry(r * (tondo ? 0.95 : 0.88), 0);
+      { const pn = nucleo.attributes.position, sn = rnd() * 10, rn = r * 0.9;
+        for (let i = 0; i < pn.count; i++) {
+          _v.set(pn.getX(i), pn.getY(i), pn.getZ(i));
+          const f = bozza(_v.x / rn, _v.y / rn, _v.z / rn, sn, 0.2);
+          pn.setXYZ(i, _v.x * f, _v.y * f, _v.z * f);
+        } }
+      nucleo.scale(1, 0.82, 1);
+      nucleo.rotateY(rnd() * 6.283);
+      nucleo.translate(px, py, pz);
+      nucleo.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(nucleo.attributes.position.count * 3), 3));
+      const pezzi = [nucleo];
+      for (let j = 0; j < schegge; j++) {
+        const g = rnd() < 0.6 ? new THREE.TetrahedronGeometry(r * (0.4 + 0.2 * rnd())) : new THREE.OctahedronGeometry(r * (0.3 + 0.15 * rnd()));
+        g.scale(1, 0.6 + 0.25 * rnd(), 1);
+        g.rotateX(rnd() * 6.283); g.rotateY(rnd() * 6.283); g.rotateZ(rnd() * 6.283);
+        let qx, qy, qz, q2;
+        do { qx = rnd() * 2 - 1; qy = rnd() * 2 - 1; qz = rnd() * 2 - 1; q2 = qx * qx + qy * qy + qz * qz; } while (q2 > 1);
+        g.translate(px + qx * r * 0.8, py + qy * r * 0.6, pz + qz * r * 0.8);
+        g.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 3), 3));
+        pezzi.push(g);
+      }
+      geo = unisci(pezzi);
+    } else {
+      geo = new THREE.IcosahedronGeometry(r, dettaglio);
+      const p0 = geo.attributes.position, seme = rnd() * 10;
+      for (let i = 0; i < p0.count; i++) {
+        _v.set(p0.getX(i), p0.getY(i), p0.getZ(i));
+        const f = bozza(_v.x / r, _v.y / r, _v.z / r, seme, 0.22);
+        p0.setXYZ(i, _v.x * f + px, _v.y * f * 0.85 + py, _v.z * f + pz);
+      }
     }
+    const p = geo.attributes.position;
     geo.computeVertexNormals();
     const nf = geo.attributes.normal;
     for (let i = 0; i < p.count; i++) {
-      _n.set((p.getX(i) - x) / (a * a), (p.getY(i) - y) / (b * b), (p.getZ(i) - z) / (c * c)).normalize().multiplyScalar(morbido);
+      _n.set((p.getX(i) - E.x) / (E.a * E.a), (p.getY(i) - E.y) / (E.b * E.b), (p.getZ(i) - E.z) / (E.c * E.c)).normalize().multiplyScalar(morbido);
       _v.set(nf.getX(i), nf.getY(i), nf.getZ(i)).multiplyScalar(1 - morbido).add(_n).normalize();
       nf.setXYZ(i, _v.x, _v.y, _v.z);
     }
     tinta.setRGB(1 + (rnd() - 0.5) * 0.16, 1 + (rnd() - 0.5) * 0.12, 1 + (rnd() - 0.5) * 0.16);
     parti.push(colora(geo, (col, qx, qy, qz) => {
-      const ex = (qx - x) / a, ey = (qy - y) / b, ez = (qz - z) / c;
+      const ex = (qx - E.x) / E.a, ey = (qy - E.y) / E.b, ez = (qz - E.z) / E.c;
       const fuori = Math.min(1.15, Math.sqrt(ex * ex + ey * ey + ez * ez));   // 0 al centro, ~1 sulla superficie
       const alto = Math.min(1, Math.max(0, (ey + 1) / 2));
       col.copy(ca).lerp(cb, alto * 0.8 + 0.2 * fuori).multiplyScalar(0.62 + 0.38 * fuori).multiply(tinta);
@@ -201,6 +243,149 @@ function palco(r, h, y, scuro, chiaro, rnd, { lati = 16, punte = 0.22, segmenti 
 }
 
 /** Rami principali che dal fusto salgono dentro la chioma. */
+/** Ramo da (x0, y0, z0) a (x1, y1, z1): cilindro aperto che si assottiglia, orientato lungo il segmento. */
+function ramoVerso(x0, y0, z0, x1, y1, z1, r0, r1, colore, lati = 5) {
+  const v = new THREE.Vector3(x1 - x0, y1 - y0, z1 - z0), L = v.length();
+  const geo = new THREE.CylinderGeometry(r1, r0, L, lati, 1, true);
+  geo.translate(0, L / 2, 0);
+  geo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), v.normalize()));
+  geo.translate(x0, y0, z0);
+  const cs = new THREE.Color(colore), cc = cs.clone().multiplyScalar(0.75);
+  return colora(geo, (c, px, py) => c.copy(cc).lerp(cs, Math.min(1, Math.max(0, (py - y0) / Math.max(0.5, y1 - y0)))));
+}
+
+/**
+ * Ramo curvo (richiesta dell'utente: «rendi curvi tronco alto e rami, sennò resta l'effetto stuzzicadenti incastrati»):
+ * tubo lungo una curva liscia (Catmull-Rom) per `punti`, raggio da r0 a r1, `seg` tratti; colore più scuro all'attacco.
+ */
+function ramoCurvo(punti, r0, r1, colore, lati = 5, seg = 3) {
+  const curva = new THREE.CatmullRomCurve3(punti.map(([x, y, z]) => new THREE.Vector3(x, y, z)), false, 'centripetal');
+  const geo = new THREE.TubeGeometry(curva, seg, 1, lati, false);
+  const p = geo.attributes.position, c = new THREE.Vector3();
+  for (let i = 0; i <= seg; i++) {
+    const t = i / seg, r = r0 + (r1 - r0) * t;
+    curva.getPointAt(t, c);
+    for (let j = 0; j <= lati; j++) {
+      const k = i * (lati + 1) + j;
+      p.setXYZ(k, c.x + (p.getX(k) - c.x) * r, c.y + (p.getY(k) - c.y) * r, c.z + (p.getZ(k) - c.z) * r);
+    }
+  }
+  const y0 = punti[0][1], y1 = punti[punti.length - 1][1];
+  const cs = new THREE.Color(colore), cc = cs.clone().multiplyScalar(0.75);
+  return colora(geo, (col, px, py) => col.copy(cc).lerp(cs, Math.min(1, Math.max(0, (py - y0) / Math.max(0.5, y1 - y0)))));
+}
+
+/** Punto intermedio tra a e b spostato a caso di `k` volte la distanza (piega del ramo). */
+function piega(a, b, f, k, rnd) {
+  const L = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) * k;
+  return [a[0] + (b[0] - a[0]) * f + (rnd() - 0.5) * 2 * L, a[1] + (b[1] - a[1]) * f + (rnd() - 0.5) * L,
+    a[2] + (b[2] - a[2]) * f + (rnd() - 0.5) * 2 * L];
+}
+
+/**
+ * Chioma a masse (richiesta dell'utente: chiome «troppo arrotondate o piene, si vede che sono di un gioco»): `masse`
+ * gruppi di foglie separati, ognuno con pochi ciuffi e un ramo dal fusto (`da`), sparsi nell'ellissoide (x, y, z, a,
+ * b, c) con vuoti in mezzo da cui si vedono cielo e rami. Gli stessi triangoli di una chioma piena (masse × ciuffi).
+ */
+function chiomaAMasse({ x = 0, y, z = 0, a, b, c = a, masse, ciuffi, raggio, dettaglio = 1, scuro, chiaro, rnd,
+  da = null, colRamo = COL.corteccia, rRamo = 0.1, alto = 0.25, schegge = 0 }) {
+  const parti = [], centri = [];
+  for (let m = 0, tent = 0; m < masse && tent < 200; tent++) {
+    let dx = rnd() * 2 - 1, dy = rnd() * 1.3 - 0.3 + alto, dz = rnd() * 2 - 1;
+    const l = Math.hypot(dx, dy, dz);
+    if (l < 0.05 || l > 1.4) continue;
+    dx /= l; dy /= l; dz /= l;
+    const t = 0.5 + 0.45 * rnd();
+    const px = x + dx * a * t, py = y + dy * b * t, pz = z + dz * c * t;
+    const ma = Math.min(a, c) * (0.3 + 0.2 * rnd());
+    if (centri.some(([qx, qy, qz, qa]) => Math.hypot(px - qx, py - qy, pz - qz) < 0.95 * (ma + qa))) continue;
+    centri.push([px, py, pz, ma]);
+    parti.push(...chioma({ x: px, y: py, z: pz, a: ma, b: ma * (0.65 + 0.3 * rnd()), c: ma * (0.8 + 0.35 * rnd()),
+      ciuffi, raggio, dettaglio, scuro, chiaro, rnd, pieno: 0.35, sotto: 0.3, morbido: 0.7, schegge, leggero: true, inviluppo: { x, y, z, a, b, c } }));
+    if (da) parti.push(ramoVerso(da[0] + (rnd() - 0.5) * 0.3, da[1] + rnd() * 0.8, da[2] + (rnd() - 0.5) * 0.3,
+      x + (px - x) * 0.85, py - ma * 0.4, z + (pz - z) * 0.85, rRamo, rRamo * 0.35, colRamo, 4));
+    m++;
+  }
+  return parti;
+}
+
+/**
+ * Albero ramificato (richiesta dell'utente: «rami e foglie mischiati in modo naturale anche più in basso, buchi di
+ * foglie che fanno vedere i rami anche in alto; non un disegno da bambini»). Fusto fino a `fusto` m, poi una cima
+ * (`cima`) che prosegue; `rami` rami principali che partono dal fusto tra `parte`[0] e `parte`[1] della sua altezza,
+ * inclinati tra `inc` gradi dall'orizzontale, lunghi `lungo`; ognuno con 2 rametti. Le foglie sono ciuffetti lungo i rami
+ * (a metà, verso la punta, sulle punte dei rametti) e lungo la cima: vuoti a tutte le altezze, rami visibili dentro.
+ * Restituisce le parti da unire (il fusto a parte).
+ */
+function ramificato({ fusto: hF, cima, rami: nR, parte, inc, lungo, r0, colRamo, ciuffi, rCiuffo, raggio, dettaglio,
+  scuro, chiaro, rnd, piatto = 1, rCima = r0 * 0.6, cime = 1, tronco = null }) {
+  const parti = [];
+  const inviluppo = { x: 0, y: hF + cima * 0.45, z: 0, a: lungo * 0.95, b: cima * 0.75 + 1, c: lungo * 0.95 };
+  const foglie = (x, y, z, k = 1) => parti.push(...chioma({ x, y, z, a: rCiuffo * k * (0.8 + 0.4 * rnd()),
+    b: rCiuffo * k * piatto * (0.65 + 0.3 * rnd()), c: rCiuffo * k * (0.8 + 0.4 * rnd()), ciuffi, raggio, dettaglio,
+    scuro, chiaro, rnd, pieno: 0.3, sotto: 0.35, morbido: 0.7, schegge: dettaglio ? 4 : 1, inviluppo }));
+  // Cima (richiesta dell'utente: «tronco dritto da base a cima che spunta come uno stuzzicadenti»): sopra il fusto il
+  // tronco si divide in `cime` fusti storti che divergono (come quercia e castagno), ognuno in due tratti piegati, dal
+  // raggio del fusto fino a pochi centimetri; la punta finisce dentro l'ultimo ciuffo, non spunta fuori.
+  // Tronco curvo (se dato `tronco`: raggi alla base e in cima): asse un po' storto, i rami partono dall'asse.
+  const sv = dettaglio ? 1 : 0;
+  const P0 = [0, -0.5, 0], P1 = [(rnd() - 0.5) * 0.35, hF * 0.45, (rnd() - 0.5) * 0.35], P2 = [(rnd() - 0.5) * 0.45, hF, (rnd() - 0.5) * 0.45];
+  if (!tronco) { P1[0] = P1[2] = P2[0] = P2[2] = 0; }
+  const asse = (y) => { const t = Math.min(1, Math.max(0, y / hF)), [A, B, u] = t < 0.45 ? [P0, P1, t / 0.45] : [P1, P2, (t - 0.45) / 0.55];
+    return [A[0] + (B[0] - A[0]) * u, A[2] + (B[2] - A[2]) * u]; };
+  if (tronco) parti.push(ramoCurvo([P0, P1, P2], tronco[0], tronco[1], colRamo, 8, 3 + sv));
+  const an0 = rnd() * Math.PI * 2;
+  for (let c = 0; c < cime; c++) {
+    const a = an0 + c * (Math.PI * 2 / cime) + (rnd() - 0.5) * 0.9;
+    const dev = cime > 1 ? 0.3 + 0.3 * rnd() : 0.1 + 0.12 * rnd();       // scarto dalla verticale (rad)
+    const L = cima * (c === 0 ? 0.92 : 0.72 + 0.2 * rnd()), rc = rCima * (cime > 1 ? 0.75 : 1);
+    const mx = P2[0] + Math.cos(a) * Math.sin(dev) * L * 0.5, my = hF + Math.cos(dev) * L * 0.5, mz = P2[2] + Math.sin(a) * Math.sin(dev) * L * 0.5;
+    const a2 = a + (rnd() - 0.5) * 1.4, d2 = dev * (0.4 + 0.6 * rnd());
+    const ex = mx + Math.cos(a2) * Math.sin(d2) * L * 0.45, ey = my + Math.cos(d2) * L * 0.45, ez = mz + Math.sin(a2) * Math.sin(d2) * L * 0.45;
+    const b0 = [P2[0], hF - 0.3, P2[2]], m = [mx, my, mz], e = [ex, ey, ez];
+    parti.push(ramoCurvo([b0, piega(b0, m, 0.5, 0.12, rnd), m, piega(m, e, 0.5, 0.14, rnd), e], rc, 0.025, colRamo, 5, 4 + 2 * sv));
+    foglie(mx * 0.6 + (rnd() - 0.5) * 0.6, hF + (my - hF) * 0.6, mz * 0.6 + (rnd() - 0.5) * 0.6, 0.9);
+    foglie(mx + (rnd() - 0.5) * 0.5, my + 0.2, mz + (rnd() - 0.5) * 0.5, 1.0);
+    foglie(ex, ey + 0.15, ez, 1.2);                                        // copre la punta
+  }
+  // Rami principali (richiesta dell'utente: «rami troppo fuori dal tronco, cadrebbero per gravità; direzioni e lunghezze
+  // diverse»): direzioni irregolari (angolo aureo più caso), lunghezze molto diverse, due tratti con il secondo che
+  // piega in su; rametti 1–3 con angoli e lunghezze diverse; ogni punta coperta di foglie.
+  let an = rnd() * Math.PI * 2;
+  for (let k = 0; k < nR; k++) {
+    an += 2.39996 + (rnd() - 0.5) * 1.2;
+    const y0 = hF * (parte[0] + (parte[1] - parte[0]) * ((k * 0.618 + rnd() * 0.35) % 1));
+    const el = (inc[0] + (inc[1] - inc[0]) * rnd()) * Math.PI / 180, L = lungo * (0.55 + 0.55 * rnd());
+    const ca = Math.cos(an), sa = Math.sin(an);
+    // Primo tratto (60 %) e secondo che sale di 15–35° in più.
+    const L1 = L * 0.6, L2 = L * 0.45, el2 = Math.min(1.45, el + (0.26 + 0.35 * rnd()));
+    const mx = ca * Math.cos(el) * L1, my = y0 + Math.sin(el) * L1, mz = sa * Math.cos(el) * L1;
+    const ex = mx + ca * Math.cos(el2) * L2, ey = my + Math.sin(el2) * L2, ez = mz + sa * Math.cos(el2) * L2;
+    const rr = r0 * (0.32 + 0.12 * rnd()), [ax, az] = asse(y0);
+    // Ramo curvo in un pezzo: parte dall'asse del tronco, s'inarca e risale; piccole pieghe a caso.
+    const b0 = [ax, y0, az], m = [mx, my, mz], e = [ex, ey, ez];
+    parti.push(ramoCurvo([b0, piega(b0, m, 0.5, 0.14, rnd), m, piega(m, e, 0.5, 0.16, rnd), e], rr, 0.02, colRamo, 4, 4 + 2 * sv));
+    // Foglie lungo tutto il ramo (richiesta dell'utente: nel bosco «troppi buchi che fanno vedere i rami»): nel primo
+    // tratto, alla piega e in punta; vuoti più piccoli.
+    foglie(mx * 0.55, y0 + (my - y0) * 0.55 + 0.25, mz * 0.55, 0.75);
+    foglie(mx, my + 0.2, mz, 0.9);
+    foglie(ex, ey + 0.1, ez, 1.1);
+    const nRam = 1 + Math.floor(rnd() * 3);
+    for (let j = 0; j < nRam; j++) {
+      const t = 0.3 + 0.6 * rnd(), seg = t < 0.6;
+      const bx = seg ? mx * t / 0.6 : mx + (ex - mx) * (t - 0.6) / 0.4, by = seg ? y0 + (my - y0) * t / 0.6 : my + (ey - my) * (t - 0.6) / 0.4;
+      const bz = seg ? mz * t / 0.6 : mz + (ez - mz) * (t - 0.6) / 0.4;
+      const a2 = an + (rnd() < 0.5 ? -1 : 1) * (0.4 + 0.9 * rnd()), l2 = L * (0.2 + 0.35 * rnd());
+      const e2 = (-0.15 + 0.85 * rnd());                       // da un po' in giù a molto in su
+      const cx2 = bx + Math.cos(a2) * Math.cos(e2) * l2, cy2 = by + Math.sin(e2) * l2, cz2 = bz + Math.sin(a2) * Math.cos(e2) * l2;
+      const q0 = [bx, by, bz], q1 = [cx2, cy2, cz2];
+      parti.push(ramoCurvo([q0, piega(q0, q1, 0.5, 0.15, rnd), q1], rr * 0.35, 0.015, colRamo, 3, 2 + sv));
+      foglie(cx2, cy2 + 0.1, cz2, 0.6 + 0.35 * rnd());
+    }
+  }
+  return parti;
+}
+
 function rami(n, y0, lunghezza, colore, rnd) {
   return Array.from({ length: n }, (_, k) => {
     const a = (k / n) * Math.PI * 2 + rnd() * 0.8, inc = 0.55 + rnd() * 0.35;
@@ -320,31 +505,32 @@ function creaModelli() {
   // Latifoglie: quercia (larga e bassa), faggio (ovale e alto), castagno (irregolare, a due masse).
   // `det`: dettaglio dei ciuffi (1 = 80 triangoli, 0 = 20). Ogni specie ha il suo generatore: i due livelli vicini
   // hanno la stessa forma (stessi ciuffi negli stessi punti), cambia solo quanto sono sfaccettati.
+  // Alberi ramificati: foglie lungo i rami a tutte le altezze, vuoti e rami visibili (≈ 30–34 ciuffi come prima).
   const quercia = (det) => { const r = casuale(311); return unisci([
-    fusto(0.46, 0.3, 5.0, 8, COL.corteccia), ...rami(4, 3.6, 3.4, COL.corteccia, r),
-    ...chioma({ y: 7.6, a: 4.6, b: 3.1, ciuffi: 30, raggio: [0.8, 1.45], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r }),
+    ...ramificato({ fusto: 4.2, cima: 4.6, rami: 4, cime: 3, parte: [0.55, 1.0], inc: [32, 62], lungo: 3.2, r0: 0.5, rCima: 0.3, tronco: [0.46, 0.3],
+      colRamo: COL.corteccia, ciuffi: 2, rCiuffo: 1.4, raggio: [0.52, 0.85], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r, piatto: 0.85 }),
   ]); };
   const faggio = (det) => { const r = casuale(312); return unisci([
-    fusto(0.36, 0.22, 6.5, 8, COL.cortecciaChiara), ...rami(3, 4.8, 3.0, COL.cortecciaChiara, r),
-    ...chioma({ y: 9.4, a: 3.2, b: 4.4, ciuffi: 28, raggio: [0.75, 1.3], dettaglio: det, scuro: FF[0], chiaro: FF[1], rnd: r }),
+    ...ramificato({ fusto: 4.6, cima: 6.2, rami: 4, cime: 3, parte: [0.5, 1.0], inc: [40, 68], lungo: 2.7, r0: 0.4, rCima: 0.22, tronco: [0.36, 0.22],
+      colRamo: COL.cortecciaChiara, ciuffi: 2, rCiuffo: 1.3, raggio: [0.5, 0.8], dettaglio: det, scuro: FF[0], chiaro: FF[1], rnd: r }),
   ]); };
   const castagno = (det) => { const r = casuale(313); return unisci([
-    fusto(0.42, 0.26, 5.2, 8, COL.corteccia, { inclinaZ: -0.05 }), ...rami(3, 3.8, 3.2, COL.corteccia, r),
-    ...chioma({ x: 0.8, y: 8.0, a: 3.4, b: 2.9, ciuffi: 20, raggio: [0.75, 1.3], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r }),
-    ...chioma({ x: -2.4, y: 6.5, z: 0.6, a: 2.2, b: 1.9, ciuffi: 10, raggio: [0.7, 1.1], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r }),
+    ...ramificato({ fusto: 3.8, cima: 4.8, rami: 4, cime: 3, parte: [0.45, 1.0], inc: [35, 68], lungo: 3.0, r0: 0.46, rCima: 0.26, tronco: [0.42, 0.26],
+      colRamo: COL.corteccia, ciuffi: 2, rCiuffo: 1.35, raggio: [0.52, 0.82], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r }),
   ]); };
   // Livelli (prestazioni, dopo la misura dell'utente: 28–30 FPS nel bosco; «meno definizione a centinaia di metri a
   // favore del realismo entro i 50 m»): vicino fino a 60 m, più ricco; medio fino a 300 m
   // con 3 ciuffi semplici (~70 triangoli); lontano un ciuffo solo e un fusto a 3 lati (~26).
   const latMedio = (a, b, y) => unisci([
-    fusto(0.4, 0.26, y - b * 0.6, 4, COL.corteccia),
-    ...chioma({ y, a, b, ciuffi: 3, raggio: [2.2, 2.8], dettaglio: 0, scuro: F[0], chiaro: F[1], rnd, morbido: 0.85, pieno: 0.3 }),
+    fusto(0.4, 0.05, y - b * 0.1, 4, COL.corteccia),     // si assottiglia dentro la chioma, niente moncone in vista
+    ...chiomaAMasse({ y, a, b, masse: 3, ciuffi: 1, raggio: [1.5, 1.95], dettaglio: 0, scuro: F[0], chiaro: F[1], rnd, schegge: 2 }),
   ]);
   M.latifoglia = [
     // Misura nel bosco fitto (UHD 730): ~135 latifoglie entro 60 m da ~2450 triangoli valevano gran parte dei 6 ms
     // della vegetazione. Ciuffi pieni entro 25 m; da 25 a 60 m stessa chioma a ciuffi semplici (~650 triangoli).
-    { fino: 25, varianti: [quercia(1), faggio(1), castagno(1)] },
-    { fino: 60, varianti: [quercia(0), faggio(0), castagno(0)] },
+    // Alberi ramificati (~46 ciuffi in gruppi da 2): pieni entro 18 m, ciuffi semplici fino a 50 m (stessa forma).
+    { fino: 18, varianti: [quercia(1), faggio(1), castagno(1)] },
+    { fino: 50, varianti: [quercia(0), faggio(0), castagno(0)] },
     // Medio fino a 200 m (prima 300; misura nel bosco fitto dopo la Carta rigenerata: vegetazione 7,2 ms contro 6,5 di
     // budget, ~4400 latifoglie medie per ~300 000 triangoli); oltre, sagome.
     { fino: 200, varianti: [latMedio(4.2, 3.1, 7.6), latMedio(3.2, 4.2, 9.2)] },
@@ -385,10 +571,11 @@ function creaModelli() {
   // Albero di riva (pioppo): colonna alta e stretta, verde più chiaro, corteccia chiara.
   const R = COL.fogliaRiva;
   M.riva = [
-    { fino: 60, varianti: [unisci([fusto(0.38, 0.14, 14, 8, COL.cortecciaBetulla), ...rami(3, 5, 3.0, COL.cortecciaBetulla, rnd),
-      ...chioma({ y: 10.5, a: 2.0, b: 5.4, ciuffi: 28, raggio: [0.65, 1.05], scuro: R[0], chiaro: R[1], rnd })])] },
-    { fino: 300, varianti: [unisci([fusto(0.34, 0.2, 6, 4, COL.cortecciaBetulla),
-      ...chioma({ y: 10.5, a: 1.9, b: 5.2, ciuffi: 3, raggio: [1.6, 2.0], dettaglio: 0, scuro: R[0], chiaro: R[1], rnd, morbido: 0.85, pieno: 0.4 })])] },
+    { fino: 60, varianti: [unisci([
+      ...ramificato({ fusto: 5.5, cima: 9.5, rami: 6, parte: [0.6, 1.0], inc: [55, 75], lungo: 2.3, r0: 0.3, rCima: 0.22, tronco: [0.38, 0.22],
+        colRamo: COL.cortecciaBetulla, ciuffi: 2, rCiuffo: 0.95, raggio: [0.45, 0.7], dettaglio: 1, scuro: R[0], chiaro: R[1], rnd })])] },
+    { fino: 300, varianti: [unisci([fusto(0.34, 0.04, 9.5, 4, COL.cortecciaBetulla),
+      ...chiomaAMasse({ y: 10.3, a: 2.0, b: 5.2, masse: 5, ciuffi: 1, raggio: [1.0, 1.4], dettaglio: 0, scuro: R[0], chiaro: R[1], rnd, schegge: 2 })])] },
     { fino: Infinity, sagoma: [SAGOME.riva] },
   ];
 
@@ -409,12 +596,26 @@ function creaModelli() {
     { fino: 40, varianti: [siepe(1, 7), siepe(1, 7)] },
     { fino: 180, varianti: [siepe(0, 5)] },
   ];
+  // Cespugli (richiesta dell'utente: «pezzi vuoti, fatti da più elementi, non un blocco unico come un masso»):
+  // 3–5 ciuffi distinti su rametti dalla base, con spazi in mezzo.
+  const cesp = (n, larg, alt, ciuffi, det) => {
+    const parti = [];
+    for (let k = 0; k < n; k++) {
+      // Ciuffi bassi: il più basso tocca terra, gli altri a altezze diverse; nessuno sospeso sopra un gambo. Ciuffi
+      // ravvicinati e uno al centro (richiesta dell'utente: «sembrano mezzi spogli»): vuoti piccoli, non trasparenze.
+      const an = (k / n) * Math.PI * 2 + rnd() * 1.2, d = k === 1 ? 0 : larg * (0.15 + 0.45 * rnd()), r = 0.3 + 0.18 * rnd();
+      const h = Math.max(r * 0.55, alt * (k === 0 ? 0.15 : 0.2 + 0.5 * rnd()));
+      const x = Math.cos(an) * d, z = Math.sin(an) * d;
+      parti.push(...chioma({ x, y: h, z, a: r, b: r * (0.7 + 0.3 * rnd()), ciuffi, raggio: [0.3, 0.46], dettaglio: det,
+        scuro: C[0], chiaro: C[1], rnd, sotto: 0.3, pieno: 0.3, morbido: 0.6, schegge: det ? 6 : 2,
+        inviluppo: { x: 0, y: alt * 0.5, z: 0, a: larg + 0.3, b: alt * 0.7 + 0.2, c: larg + 0.3 } }));
+      if (det) parti.push(ramoVerso(0, 0, 0, x * 0.85, h - r * 0.5, z * 0.85, 0.035, 0.015, COL.corteccia, 3));
+    }
+    return unisci(parti);
+  };
   M.cespuglio = [
-    { fino: 35, varianti: [
-      unisci(chioma({ y: 0.55, a: 1.0, b: 0.65, ciuffi: 7, raggio: [0.4, 0.6], scuro: C[0], chiaro: C[1], rnd, sotto: 0, pieno: 0.3 })),
-      unisci(chioma({ y: 0.7, a: 0.8, b: 0.85, ciuffi: 7, raggio: [0.35, 0.55], scuro: C[0], chiaro: C[1], rnd, sotto: 0, pieno: 0.3 })),
-    ] },
-    { fino: 160, varianti: [unisci(chioma({ y: 0.55, a: 0.9, b: 0.65, ciuffi: 3, raggio: [0.5, 0.7], dettaglio: 0, scuro: C[0], chiaro: C[1], rnd, sotto: 0, morbido: 0.85 }))] },
+    { fino: 35, varianti: [cesp(6, 0.9, 0.9, 2, 1), cesp(5, 0.75, 1.0, 2, 1)] },
+    { fino: 160, varianti: [cesp(4, 0.8, 0.8, 1, 0)] },
   ];
   M['arbusto alto'] = [
     { fino: 35, varianti: [unisci(chioma({ y: 0.35, a: 1.4, b: 0.45, ciuffi: 8, raggio: [0.4, 0.6], scuro: MG[0], chiaro: MG[1], rnd, sotto: 0, pieno: 0.3 }))] },
@@ -1063,7 +1264,7 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
   const nVertici = terrain ? terrain.meta.cols * terrain.meta.rows : 0;
   let coloriTerreno = null;
   if (superficie && pos.suolo && superficie.geometry.attributes.position.count === nVertici) {
-    superficie.geometry.setAttribute('aSuolo', new THREE.BufferAttribute(pos.suolo, 3));
+    superficie.geometry.setAttribute('aSuolo', new THREE.BufferAttribute(pos.suolo, 4));
     // Campi coltivati: coordinate degli appezzamenti per vertice (PARCELLE, vegetazione.js).
     if (pos.aCampi) superficie.geometry.setAttribute('aCampi', new THREE.BufferAttribute(pos.aCampi, 4));
     coloriTerreno = superficie.geometry.attributes.color?.array || null;
@@ -1109,9 +1310,11 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
       const v2 = (v * 7.13) % 1, v3 = (v * 3.71) % 1;
       e.set(roccia ? (v - 0.5) * 0.5 : (v2 - 0.5) * 0.06, rot, roccia ? (v3 - 0.5) * 0.4 : (v3 - 0.5) * 0.06);
       q.setFromEuler(e);
-      const largo = roccia ? 0.7 + 0.8 * v3 : 0.8 + 0.45 * v3;
       const v4 = (v * 17.31) % 1;              // altezza indipendente dalla larghezza (richiesta dell'utente)
       const alto = roccia ? 0.55 + 0.7 * v : (albero ? 0.72 + 0.56 * v4 : 0.85 + 0.3 * v4);
+      // Alberi: larghezza (e quindi spessore del tronco) proporzionata all'altezza, ±15 % (richiesta dell'utente:
+      // «tronchi tutti uguali alla base»); arbusti e rocce come prima.
+      const largo = roccia ? 0.7 + 0.8 * v3 : albero ? alto * (0.85 + 0.3 * v3) : 0.8 + 0.45 * v3;
       sc.set(s * largo, s * alto, s * (roccia ? 0.7 + 0.7 * v2 : largo * (0.9 + 0.2 * v2)));
       if (muro) {                              // muretti: diritti, lungo il confine, solo un po' più alti o bassi
         e.set(0, rot, 0); q.setFromEuler(e);

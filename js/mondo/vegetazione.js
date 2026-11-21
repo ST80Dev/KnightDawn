@@ -13,7 +13,7 @@
 
 import { BIOMA, CLIMA, limiteNevi } from './carta.js';
 import { fbm, derivaSeme, smoothstep, hash2, mulberry32 } from './rumore.js';
-import { specchio, distanzaPiano, livelloLago, quotaFinale } from './scena.js';
+import { specchio, distanzaPiano, livelloLago, quotaFinale, tracciatiFiumi } from './scena.js';
 import { distanzaStrada } from './strade.js';
 
 // ─── 1. Copertura del terreno (condivisa con il colore) ───────────────────
@@ -184,6 +184,12 @@ export const VEGETAZIONE = {
   versante: { pendenza: [15, 22], troppo: [34, 40], lunghezza: 350, soglia: [-0.05, 0.2], umidita: [0.3, 0.45] },
   // Alberi isolati veri (deciso con l'utente): uno ogni ~100–150 m nei prati.
   isolati: { base: 0.0012, umidita: 0.0025 },
+  // Massi erratici: pochi massi molto grandi (4–8 m) isolati nei prati, segni nel paesaggio (una cella di `passo` m
+  // ogni tanto). Alberi lungo le strade: a tratti (rumore su `lunghezza` m), a `banda` m dal bordo della carreggiata.
+  erratici: { passo: 220, probabilita: 0.3, scala: [1.8, 3.2] },
+  // (richiesta dell'utente: «non esagerare, il mondo medievale è più casuale, non piantati lungo il percorso»): pochi
+  // tratti, radi, sparsi in una fascia larga: alberi rimasti accanto alla strada, non un viale.
+  stradaAlberi: { passo: 3, banda: [2.5, 10], probabilita: 0.07, lunghezza: 260, soglia: 0.32 },
   limiteAlberi: [-0.5, 2],               // °C attorno a CLIMA.bosco: gli alberi si diradano e si abbassano
   pendenza: { alberi: [30, 40], arbusti: [36, 46], pareti: 48 },   // gradi (pendenza fine della mesh)
   riva: { celle: [1, 3], densita: 0.22, canne: 0.35 },             // celle di 7,8 m dall'acqua
@@ -203,6 +209,8 @@ export const VEGETAZIONE = {
   // fascia di `fascia` (peso per cella di distanza dal fiume, dalla prima), densità `bosco`, specie di riva.
   fiume: { sassi: 0.6, massi: 0.25, ciottoli: 0.45,
     fascia: [1, 0.85, 0.6, 0.3], bosco: 0.42, tronchi: 0.12, rami: 0.22,
+    // Ghiaia sulle rive (suolo, quarta componente): peso per cella dal fiume (0 = il fiume), a chiazze su ~35 m.
+    ghiaia: { celle: [1, 0.9, 0.45], lunghezza: 35, soglia: [0.05, 0.3] },
     alveo: { passo: 2.5, probabilita: 0.22, massi: 0.25, profondita: 1.2, affiora: [0.05, 0.4] } },
 };
 
@@ -747,7 +755,9 @@ export function posizionaVegetazione(o) {
   // dove il bosco è diradato (campagna attorno ai luoghi, margini) non restano macchie scure senza alberi sopra.
   // Bosco fitto: ~1 albero per cella di vertici (densità 0,62 su celle di 6 m) → piena da 0,7.
   // Terza componente: campi coltivati (CAMPI_COLTIVATI), fino a pochi metri dal piede delle scarpate.
-  const suolo = new Float32Array(n * 3);
+  // Quarta componente: ghiaia sulle rive dei fiumi, a chiazze (richiesta dell'utente: «un po' di ghiaia sui bordi ogni
+  // tanto», non sotto l'acqua).
+  const suolo = new Float32Array(n * 4), sG = derivaSeme(seme, 461);
   for (let i = 0; i < n; i++) {
     const r = (i / cols) | 0, c = i - r * cols;
     const oltre = piani.length ? oltreScarpata(cx - half + c * cell, cz - half + r * cell) : Infinity;
@@ -760,10 +770,18 @@ export function posizionaVegetazione(o) {
       }
     }
     const sotto = smoothstep(0.12, 0.7, somma / peso);
-    suolo[i * 3] = D.foresta[i] * sotto * smoothstep(V.spianata, V.spianata + 30, oltre);
-    suolo[i * 3 + 1] = dist[i] === 0 ? 1 : Math.max(0, 1 - (dist[i] - 1) / (V.acquaCelle - 1));
-    suolo[i * 3 + 2] = D.campo[i] * smoothstep(2, 12, oltre)
+    suolo[i * 4] = D.foresta[i] * sotto * smoothstep(V.spianata, V.spianata + 30, oltre);
+    suolo[i * 4 + 1] = dist[i] === 0 ? 1 : Math.max(0, 1 - (dist[i] - 1) / (V.acquaCelle - 1));
+    suolo[i * 4 + 2] = D.campo[i] * smoothstep(2, 12, oltre)
       * (caseQui.length ? smoothstep(KC.aia[0] - 4, KC.aia[0] + 4, dCasa(cx - half + c * cell, cz - half + r * cell)) : 1);
+    // Quarta componente: 1 − ghiaia (con l'attributo assente WebGL dà w = 1, cioè niente ghiaia, non tutto ghiaia).
+    const dF = distFiume[i];
+    suolo[i * 4 + 3] = 1;
+    if (dF <= 2) {
+      const G = V.fiume.ghiaia;
+      suolo[i * 4 + 3] = 1 - G.celle[dF] * smoothstep(G.soglia[0], G.soglia[1],
+        fbm(cx - half + c * cell, cz - half + r * cell, sG, G.lunghezza, 2));
+    }
   }
 
   // Coordinate dei campi per vertice (PARCELLE): q lungo e di traverso al verso del borgo, piegate; terza
@@ -781,7 +799,7 @@ export function posizionaVegetazione(o) {
       let serve = false;
       for (let dr = -1; dr <= 1 && !serve; dr++) for (let dc = -1; dc <= 1; dc++) {
         const rr = r + dr, cc = c + dc;
-        if (rr >= 0 && rr < cols && cc >= 0 && cc < cols && suolo[(rr * cols + cc) * 3 + 2] > 0) { serve = true; break; }
+        if (rr >= 0 && rr < cols && cc >= 0 && cc < cols && suolo[(rr * cols + cc) * 4 + 2] > 0) { serve = true; break; }
       }
       if (!serve) continue;
       const dx = x - campi.x, dz = z - campi.z;
@@ -816,7 +834,7 @@ export function posizionaVegetazione(o) {
   if (aCampi) {
     let qx0 = Infinity, qx1 = -Infinity, qy0 = Infinity, qy1 = -Infinity;
     for (let i = 0; i < n; i++) {
-      if (suolo[i * 3 + 2] <= 0.05) continue;
+      if (suolo[i * 4 + 2] <= 0.05) continue;
       const qx = aCampi[i * 4], qy = aCampi[i * 4 + 1];
       if (qx < qx0) qx0 = qx; if (qx > qx1) qx1 = qx; if (qy < qy0) qy0 = qy; if (qy > qy1) qy1 = qy;
     }
@@ -848,7 +866,7 @@ export function posizionaVegetazione(o) {
       if ((w < 0 ? 1 : 0) !== ls || Math.abs(w) < PC.strada.margine[1]) return;
       parcella(triangolo(aCampi, 4, 0), triangolo(aCampi, 4, 1) + ls * PC.strada.lato, 0, ver);
       if (ver.i !== i || ver.j !== j || (lato ? ver.fu : ver.fv) > S.striscia[0]) return;
-      if (triangolo(suolo, 3, 2) < 0.12 + 0.6 * hashCampi(i, j + 41) / 255 + 0.04) return;   // campo non dipinto
+      if (triangolo(suolo, 4, 2) < 0.12 + 0.6 * hashCampi(i, j + 41) / 255 + 0.04) return;   // campo non dipinto
       if (oltreScarpata(P.x, P.z) < 3 || oltreStrada(P.x, P.z) < V.strada.libero) return;
       if (dCasa(P.x, P.z) < KC.aia[1] + 2) return;
       const h = hash2(ix, iz, sS);
@@ -904,6 +922,35 @@ export function posizionaVegetazione(o) {
         }
       }
     }
+  }
+
+  // Massi erratici nei prati (non nel bosco, nei campi, vicino a strade, case e terrapieni).
+  {
+    const ER = V.erratici, sR = derivaSeme(seme, 462);
+    griglia(ER.passo, sR, (ix, iz, X, Z, lx, lz, u) => {
+      if (u >= ER.probabilita) return;
+      trova(lx, lz);
+      if (!asciutta() || pendenzaFine() > 22 || campo(D.foresta) > 0.3 || campo(D.campo) > 0.05 || campo(D.erba) < 0.05) return;
+      if (oltreScarpata(X, Z) < 10 || oltreStrada(X, Z) < 6 || dCasa(X, Z) < 30) return;
+      const h = hash2(ix, iz, sR ^ 0x2545f491);
+      buffer.masso.push(lx, quota(), lz, ER.scala[0] + (ER.scala[1] - ER.scala[0]) * (h & 0xffff) / 65536,
+        ((h >>> 16) & 0x3ff) / 1024 * 2 * Math.PI, (h >>> 26) / 64);
+    });
+  }
+  // Alberi lungo le strade: a tratti, fuori dal bosco (lì ci sono già), all'asciutto, sotto il limite degli alberi.
+  if (o.carta?.strade) {
+    const SR = V.stradaAlberi, sR = derivaSeme(seme, 463);
+    griglia(SR.passo, sR, (ix, iz, X, Z, lx, lz, u) => {
+      if (u >= SR.probabilita) return;
+      const m = oltreStrada(X, Z);
+      if (m < SR.banda[0] || m > SR.banda[1] || fbm(X, Z, sR ^ 0x7f4a7c15, SR.lunghezza, 1) < SR.soglia) return;
+      trova(lx, lz);
+      if (!asciutta() || pendenzaFine() > 25 || campo(D.foresta) > 0.5 || campo(D.limite) < 0.3) return;
+      if (oltreScarpata(X, Z) < 5 || dCasa(X, Z) < KC.aia[1]) return;
+      const h = hash2(ix, iz, sR ^ 0x68e31da4) / 4294967296;
+      const tipo = campo(D.conifera) > 0.6 ? T.conifera : h < 0.6 ? T.riva : T.latifoglia;
+      emetti(tipo, ix, iz, sR, lx, lz, quota(), 0.85 + 0.3 * campo(D.limite));
+    });
   }
 
   // Pietre nell'alveo dei fiumi (non laghi né mare): sul fondo, solo dove affiorano o restano a pelo d'acqua.
@@ -994,6 +1041,8 @@ export const SAGOME = { latifogliaTonda: 0, latifogliaOvale: 1, conifera: 2, pin
 
 /** Parametri del bosco lontano ([Ipotesi] da tarare guardando e misurando). */
 export const BOSCO_LONTANO = {
+  // Fascia lungo i fiumi: [metri oltre la sponda, probabilità] per fila; passo di base lungo il fiume (m).
+  fiumi: { passo: 12, fasce: [[4, 0.85], [12, 0.6], [22, 0.3]] },
   griglia: 50,          // m: passo della griglia grossolana su cui si valutano copertura e quota
   raggio: 3000,         // m (in quadrato, dal centro del blocco): oltre, il bosco resta un colore
   // Prestazioni (misura della sessione M1: 137 000 sagome con alpha test raddoppiavano il fotogramma): oltre `da` m
@@ -1083,6 +1132,43 @@ export function boscoLontano(carta, cx, cz, half, quota, stagione = 0) {
         const eta = 0.45 + 1.0 * (((h2 >>> 8) & 0xff) / 256) ** 1.4;
         const scala = eta * (0.55 + 0.45 * campo(lim, x, z));
         out.push(x, y, z, scala, tessera);
+      }
+    }
+  }
+  // Fascia alberata lungo i fiumi anche da lontano (richiesta dell'utente: «a grandi linee, una fascia alberata»):
+  // lungo i tracciati dei fiumi fuori dal blocco, sui due lati, file di sagome di riva a `fasce` m oltre la sponda,
+  // con passo che cresce con la distanza come il resto del bosco lontano. Posizioni su un reticolo del mondo (`passo`)
+  // per non cambiare a ogni spostamento del blocco.
+  const RF = B.fiumi;
+  if (RF) {
+    const sF = derivaSeme(carta.seme, 471);
+    for (const pz of tracciatiFiumi(carta, cx, cz, half, false, R)) {
+      for (let k = 0; k + 7 < pz.length; k += 4) {
+        const ax = pz[k], az = pz[k + 1], bx = pz[k + 4], bz = pz[k + 5], w = pz[k + 3];
+        const lun = Math.hypot(bx - ax, bz - az);
+        if (lun < 1e-3) continue;
+        const tx = (bx - ax) / lun, tz = (bz - az) / lun;
+        const d = Math.max(Math.abs(ax), Math.abs(az));
+        const passo = Math.max(RF.passo, B.cella * d / half);
+        const t = Math.min(1, Math.max(0, (d - B.dirada.da) / (B.dirada.a - B.dirada.da)));
+        const dirada = 1 - (1 - B.dirada.fino) * t;
+        for (let u = 0; u < lun; u += passo) {
+          const px = ax + tx * u, pzz = az + tz * u;
+          RF.fasce.forEach(([dist, prob], fi) => {
+            for (const lato of [-1, 1]) {
+              const x = px - tz * lato * (w / 2 + dist), z = pzz + tx * lato * (w / 2 + dist);
+              const ix = Math.round((cx + x) / RF.passo), iz = Math.round((cz + z) / RF.passo);
+              const h = hash2(ix, iz, sF ^ (fi * 0x9e3779b9));
+              if (h / 4294967296 >= prob * dirada) continue;
+              if (Math.max(Math.abs(x), Math.abs(z)) < half || campo(lim, x, z) < 0.3) continue;
+              const y = quota(x, z);
+              if (Number.isNaN(y) || y < 0.5 || !Number.isNaN(livelloLago(carta, cx + x, cz + z))) continue;
+              const eta = 0.6 + 0.9 * (((h >>> 8) & 0xff) / 256) ** 1.4;
+              out.push(x + ((h >>> 16) & 0xff) / 255 * 4 - 2, y, z, eta * (0.55 + 0.45 * campo(lim, x, z)),
+                h & 1 ? SAGOME.riva : SAGOME.latifogliaTonda);
+            }
+          });
+        }
       }
     }
   }
