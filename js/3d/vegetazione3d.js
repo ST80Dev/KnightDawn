@@ -689,60 +689,151 @@ function materialeFili(opz) {
 }
 
 // ─── Visuale pulita (richiesta dell'utente: nel bosco tronchi e chiome si mettevano tra la camera e il cavaliere) ───
-// Ciò che sta tra la camera e il cavaliere si dirada «a retino»: ogni oggetto ha un grado di dissolvenza calcolato
-// nello shader dalla posizione dell'istanza (tutto l'albero insieme, non un buco nel mezzo) e perde pixel secondo
-// una trama 4×4 fissa sullo schermo; del tutto diradato non si disegna proprio. Niente trasparenze ordinate.
-//  - alberi, arbusti, rocce: spariti se più vicini alla camera del cavaliere di `prima` m (lungo la direzione di
-//    vista, sul piano); visibili da `dopo` m prima di lui in poi; vicino alla linea camera→cavaliere (entro
-//    `largo` m più il raggio della chioma) spariscono fino alla sua altezza: così sparisce anche l'abete col tronco
-//    di fianco al cavaliere ma la chioma davanti. Accanto e davanti al cavaliere il resto rimane.
-//  - erba e felci: solo quelle a ridosso della camera (entro `vicino` m).
-// Valori provabili dalla console: kd.vegetazione.cfgVisuale (x = prima, y = dopo, z = largo, w = vicino).
+// Si dirada «a retino» solo ciò che copre davvero il cavaliere (seconda richiesta dell'utente: prima sparivano anche
+// siepi, alberi e muretti di lato, a 3–4 m, che non coprivano niente). Ogni oggetto è approssimato con dei volumi nel
+// suo sistema (ruotati e scalati come l'istanza): il tronco sotto la chioma e la chioma (o l'oggetto intero) divisa in
+// FASCE_VISUALE fasce di altezza. Ogni volume è un cilindro verticale (alberi, cespugli, rocce: segue la sagoma rotonda
+// o a cono, mentre una scatola «occupa» anche gli angoli vuoti) oppure, se la fascia è allungata (muretti), una
+// scatola. Lo shader porta nel sistema dell'istanza i segmenti camera → piedi, busto e testa del cavaliere e controlla
+// se attraversano i volumi, allargati di tre margini: nessuno = visibile, tutti = sparito, in mezzo = retino
+// (passaggio graduale). I segmenti si fermano poco prima del cavaliere: il tronco contro cui sta camminando resta.
+// Ciò che tocca l'obiettivo (entro il margine) si dirada anch'esso. Trama 4×4 fissa sullo schermo; del tutto diradato
+// non si disegna proprio. Niente trasparenze ordinate. Erba e felci: solo quelle a ridosso della camera.
+// Il calcolo si fa solo per gli oggetti vicini alla linea camera→cavaliere (gli altri escono subito).
+// Valori provabili dalla console: kd.vegetazione.cfgVisuale (x = margine minimo, y = margine massimo, z = di quanto
+// i segmenti si fermano prima del cavaliere, w = raggio attorno alla camera per erba e felci), in metri.
 
-const VISUALE = { prima: 1.8, dopo: 0.5, largo: 1.4, vicino: 1.6 };
+const VISUALE = { margineMin: 0.1, margineMax: 0.6, arretra: 0.4, vicino: 1.6 };
+const ALTEZZE_CAVALIERE = [0.15, 0.95, 1.75];   // m: piedi, busto, testa
+const FASCE_VISUALE = 4;                         // fasce della chioma; più il tronco
+const VOLUMI_VISUALE = FASCE_VISUALE + 1;
+const ALLUNGATA = 1.4;                           // rapporto dei lati oltre il quale una fascia è una scatola
 
-/** Raggio orizzontale massimo di una geometria (m, prima della scala dell'istanza). */
-function raggioOrizzontale(geo) {
+/**
+ * Volumi per la visuale nel sistema della geometria: il primo è il tronco (sotto la chioma; vuoto se non c'è), poi
+ * FASCE_VISUALE fasce della chioma (o dell'oggetto intero) di uguale altezza. La chioma comincia dove i vertici superano
+ * metà del raggio orizzontale massimo. Per ogni volume: min e max (scatola) e, in `cil`, centro x, z, raggio e 1 se
+ * cilindro / 0 se scatola. min > max = volume vuoto.
+ */
+function volumiVisuale(geo) {
   const p = geo.attributes.position;
-  let r = 0;
-  for (let i = 0; i < p.count; i++) r = Math.max(r, Math.hypot(p.getX(i), p.getZ(i)));
-  return r;
+  let rMax = 0, yTop = -Infinity;
+  for (let i = 0; i < p.count; i++) { rMax = Math.max(rMax, Math.hypot(p.getX(i), p.getZ(i))); yTop = Math.max(yTop, p.getY(i)); }
+  let yChioma = Infinity;
+  for (let i = 0; i < p.count; i++) if (Math.hypot(p.getX(i), p.getZ(i)) > 0.5 * rMax) yChioma = Math.min(yChioma, p.getY(i));
+  const alta = Math.max(yTop - yChioma, 1e-3);
+  const scatole = Array.from({ length: VOLUMI_VISUALE }, () => new THREE.Box3());
+  const membri = Array.from({ length: VOLUMI_VISUALE }, () => []);
+  const v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    const metti = (k) => { scatole[k].expandByPoint(v); membri[k].push(i); };
+    if (v.y < yChioma) { metti(0); continue; }
+    const g = (v.y - yChioma) / alta * FASCE_VISUALE, f = Math.min(FASCE_VISUALE - 1, Math.floor(g));
+    metti(f + 1);
+    if (f > 0 && g - f < 1e-6) metti(f);         // vertice al confine: in entrambe le fasce, niente fessure
+  }
+  const min = [], max = [], cil = [];
+  scatole.forEach((S, k) => {
+    if (S.isEmpty()) {
+      min.push(new THREE.Vector3(1, 1, 1)); max.push(new THREE.Vector3(-1, -1, -1)); cil.push(new THREE.Vector4());
+      return;
+    }
+    min.push(S.min.clone()); max.push(S.max.clone());
+    const lx = S.max.x - S.min.x, lz = S.max.z - S.min.z;
+    const cx = (S.min.x + S.max.x) / 2, cz = (S.min.z + S.max.z) / 2;
+    let r = 0;
+    for (const i of membri[k]) r = Math.max(r, Math.hypot(p.getX(i) - cx, p.getZ(i) - cz));
+    cil.push(new THREE.Vector4(cx, cz, r, Math.max(lx, lz) / Math.max(Math.min(lx, lz), 1e-3) > ALLUNGATA ? 0 : 1));
+  });
+  return { min, max, cil, raggio: rMax };
 }
 
 /**
- * Aggiunge al materiale il diradamento della visuale. modo: 'pieno' (alberi, arbusti, rocce) | 'vicino' (erba, felci).
- * `raggio`: raggio orizzontale della geometria (solo 'pieno').
+ * Aggiunge al materiale il diradamento della visuale. modo: 'pieno' (alberi, arbusti, rocce, muretti) | 'vicino'
+ * (erba, felci). `geo`: la geometria della mesh (solo 'pieno', per i volumi).
  */
-function conVisuale(mat, uni, modo, raggio = 0) {
+function conVisuale(mat, uni, modo, geo = null) {
+  const vol = modo === 'pieno' ? volumiVisuale(geo) : null;
   const prima = mat.onBeforeCompile.bind(mat);
   mat.onBeforeCompile = (sh, renderer) => {
     prima(sh, renderer);
     sh.uniforms.uCav = uni.uCav;
     sh.uniforms.uVisuale = uni.uVisuale;
     sh.uniforms.uVisCfg = uni.uVisCfg;
-    sh.uniforms.uRaggio = { value: raggio };
+    if (vol) {
+      sh.uniforms.uVol0 = { value: vol.min };
+      sh.uniforms.uVol1 = { value: vol.max };
+      sh.uniforms.uVolC = { value: vol.cil };
+      sh.uniforms.uRaggio = { value: vol.raggio };
+    }
     const calcolo = modo === 'pieno' ? `
+      mat4 kdM = modelMatrix * instanceMatrix;
+      vec3 kdO = kdM[3].xyz;
+      vec3 kdS2 = vec3(dot(kdM[0].xyz, kdM[0].xyz), dot(kdM[1].xyz, kdM[1].xyz), dot(kdM[2].xyz, kdM[2].xyz));
+      vec3 kdSc = sqrt(kdS2);
       vec2 kdAsse = uCav.xz - cameraPosition.xz;
       float kdL = length(kdAsse);
       vec2 kdU = kdAsse / max(kdL, 1e-3);
       vec2 kdRel = kdO.xz - cameraPosition.xz;
-      float kdT = dot(kdRel, kdU);                                   // profondità lungo la vista
-      float kdD = abs(dot(kdRel, vec2(-kdU.y, kdU.x)));               // distanza dalla linea camera→cavaliere
-      float kdProf = 1.0 - smoothstep(kdL - uVisCfg.x, kdL - uVisCfg.y, kdT);
-      float kdR = uRaggio * length(instanceMatrix[0].xyz);           // raggio della chioma dell'istanza
-      float kdLinea = (1.0 - smoothstep(kdL - 0.6, kdL, kdT)) * (1.0 - smoothstep(uVisCfg.z + kdR, uVisCfg.z + kdR + 1.0, kdD));
-      vKdDirada = max(kdProf, kdLinea) * uVisuale;` : `
+      float kdR = uRaggio * max(kdSc.x, kdSc.z) + uVisCfg.y;
+      float kdT = dot(kdRel, kdU);
+      vKdDirada = 0.0;
+      // Solo gli oggetti che possono stare tra camera e cavaliere (gli altri: niente calcolo)
+      if (uVisuale > 0.0 && kdT > -kdR && kdT < kdL + kdR && abs(dot(kdRel, vec2(-kdU.y, kdU.x))) < kdR + 1.0) {
+        // Segmenti nel sistema dell'istanza: colonne ortogonali (rotazione per scala lungo gli assi)
+        vec3 kdA = cameraPosition - kdO;
+        vec3 kdPa = vec3(dot(kdA, kdM[0].xyz), dot(kdA, kdM[1].xyz), dot(kdA, kdM[2].xyz)) / kdS2;
+        vec3 kdFine = vec3(uCav.x - kdU.x * uVisCfg.z, 0.0, uCav.z - kdU.y * uVisCfg.z) - kdO;
+        float kdColpi = 0.0;
+        for (int i = 0; i < 3; i++) {
+          vec3 kdB = kdFine + vec3(0.0, uCav.y + (i == 0 ? ${ALTEZZE_CAVALIERE[0].toFixed(2)} : i == 1 ? ${ALTEZZE_CAVALIERE[1].toFixed(2)} : ${ALTEZZE_CAVALIERE[2].toFixed(2)}), 0.0);
+          vec3 kdPb = vec3(dot(kdB, kdM[0].xyz), dot(kdB, kdM[1].xyz), dot(kdB, kdM[2].xyz)) / kdS2;
+          float kdC = 0.0;
+          for (int j = 0; j < 3; j++) {
+            float m = mix(uVisCfg.x, uVisCfg.y, float(j) * 0.5);
+            vec3 mg = vec3(m) / kdSc;
+            float mr = m / (0.5 * (kdSc.x + kdSc.z));
+            bool kdColpo = false;
+            for (int f = 0; f < ${VOLUMI_VISUALE}; f++) kdColpo = kdColpo || kdSegVolume(kdPa, kdPb, uVol0[f] - mg, uVol1[f] + mg, uVolC[f], mr);
+            if (kdColpo) kdC += 1.0;
+          }
+          kdColpi = max(kdColpi, kdC);
+        }
+        vKdDirada = kdColpi / 3.0;
+      }` : `
+      vec3 kdO = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
       vKdDirada = (1.0 - smoothstep(uVisCfg.w * 0.5, uVisCfg.w, distance(kdO, cameraPosition))) * uVisuale;`;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
 uniform vec3 uCav;
 uniform float uVisuale;
 uniform vec4 uVisCfg;
+varying float vKdDirada;${vol ? `
+uniform vec3 uVol0[${VOLUMI_VISUALE}], uVol1[${VOLUMI_VISUALE}];
+uniform vec4 uVolC[${VOLUMI_VISUALE}];
 uniform float uRaggio;
-varying float vKdDirada;`)
+// Il segmento p→q attraversa il volume? s0, s1: scatola già allargata (vuota se s0 > s1); c: centro x, z, raggio,
+// 1 = cilindro verticale tra s0.y e s1.y (raggio allargato di mr) / 0 = la scatola stessa.
+bool kdSegVolume(vec3 p, vec3 q, vec3 s0, vec3 s1, vec4 c, float mr) {
+  if (any(greaterThan(s0, s1))) return false;
+  vec3 d = q - p;
+  d += step(abs(d), vec3(1e-5)) * 1e-5;
+  vec3 t0 = (s0 - p) / d, t1 = (s1 - p) / d;
+  vec3 tmin = min(t0, t1), tmax = max(t0, t1);
+  if (c.w < 0.5) return max(max(tmin.x, tmin.y), max(tmin.z, 0.0)) <= min(min(tmax.x, tmax.y), min(tmax.z, 1.0));
+  // cilindro: tratto in cui la quota sta nella fascia ∩ tratto in cui la distanza orizzontale è entro il raggio
+  float a0 = max(tmin.y, 0.0), a1 = min(tmax.y, 1.0);
+  vec2 w = p.xz - c.xy;
+  float r = c.z + mr;
+  float A = dot(d.xz, d.xz), B = dot(w, d.xz), C = dot(w, w) - r * r;
+  float D = B * B - A * C;
+  if (D < 0.0) return false;
+  float sq = sqrt(D);
+  return max(a0, (-B - sq) / A) <= min(a1, (-B + sq) / A);
+}` : ''}`)
       .replace('#include <project_vertex>', `#include <project_vertex>
-    {
-      vec3 kdO = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;${calcolo}
+    {${calcolo}
       if (vKdDirada > 0.999) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);   // tutto diradato: fuori dallo schermo
     }`);
     sh.fragmentShader = sh.fragmentShader
@@ -756,7 +847,7 @@ const float KD_RETINO[16] = float[16](0., 8., 2., 10., 12., 4., 14., 6., 3., 11.
   }`);
   };
   const chiave = mat.customProgramCacheKey.bind(mat);
-  mat.customProgramCacheKey = () => `${chiave()}|kd-visuale-${modo}-1`;
+  mat.customProgramCacheKey = () => `${chiave()}|kd-visuale-${modo}-4`;
   return mat;
 }
 
@@ -888,7 +979,7 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
   const uniVis = {
     uCav: { value: new THREE.Vector3() },
     uVisuale: { value: 0 },                   // 0 finché non arriva la posizione del cavaliere
-    uVisCfg: { value: new THREE.Vector4(VISUALE.prima, VISUALE.dopo, VISUALE.largo, VISUALE.vicino) },
+    uVisCfg: { value: new THREE.Vector4(VISUALE.margineMin, VISUALE.margineMax, VISUALE.arretra, VISUALE.vicino) },
   };
 
   // Sagome: atlante (serve il renderer) e mesh delle sagome del blocco, comune a tutti gli alberi.
@@ -956,8 +1047,7 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
     }
     const mesh = livelli.map((L) => (L.sagoma ? [] : L.varianti).map((geo, vi) => {
       const m = new THREE.InstancedMesh(geo,
-        conVisuale(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: !!L.piatto }), uniVis, 'pieno',
-          raggioOrizzontale(geo)), t.n);
+        conVisuale(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: !!L.piatto }), uniVis, 'pieno', geo), t.n);
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(t.n * 3), 3);
       m.instanceColor.setUsage(THREE.DynamicDrawUsage);
