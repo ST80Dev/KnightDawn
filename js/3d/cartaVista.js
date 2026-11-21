@@ -14,6 +14,8 @@ import { verificaFiumi, verificaPanorami, verificaVarieta, verificaLuoghi } from
 import { semeDaTesto, derivaSeme } from '../mondo/rumore.js';
 import { quotaFinale, livelloLago, raffinaZona, percorsiFiumi } from '../mondo/scena.js';
 import { raffinaStrade, percorsiStrade, STRADE } from '../mondo/strade.js';
+import * as THREE from 'three';
+import { coloreMondo } from './terrain.js';
 
 // Colori del rilievo: SOLO quota (metri), a un solo tono, più alto = più scuro. Niente verdi, ocra o
 // bianchi: si leggerebbero come biomi (prati, deserti, neve), che arrivano al passo 7 come livello a sé.
@@ -45,7 +47,25 @@ const COLORE_FIUME = '#2f6690';
 const COLORE_STRADA = 'rgba(122, 74, 38, 0.95)';   // strade di terra battuta
 const COLORE_SENTIERO = 'rgba(150, 40, 30, 0.9)';
 // [classe, spessore (come i fiumi), tratteggio]: dalla più importante.
-const STILE_STRADE = [['maestra', 1.3, []], ['carrareccia', 0.9, []], ['mulattiera', 0.8, [3, 2]], ['sentiero', 0.7, [1.5, 2]]];
+const STILE_STRADE = [['maestra', 1.6, []], ['carrareccia', 1.2, []], ['mulattiera', 1.0, [3, 2]], ['sentiero', 0.9, [1.5, 2]]];
+// Nella Carta zoomata: larghezza minima in pixel per classe (si leggono sul rilievo) e bordino chiaro attorno.
+const STRADE_ZOOM = { minimo: { maestra: 3.2, carrareccia: 2.6, mulattiera: 2.1, sentiero: 1.7 }, bordo: 1.6,
+  coloreBordo: 'rgba(238, 224, 190, 0.85)' };
+
+/**
+ * Colore «naturale» del terreno in un punto (x, z in m, quota h, pendenza in gradi), in RGB 0–255 sRGB: lo stesso del
+ * terreno delle Scene (coloreMondo: biomi, bosco, campagna, roccia, ghiaioni, neve), per vedere sulla Carta boschi,
+ * radure, campi e spianate rocciose [chiesto dall'utente, novembre 2026].
+ */
+function coloreNaturale(carta) {
+  const f = coloreMondo(carta, typeof Calendar !== 'undefined' ? Calendar.stagione : 0);
+  const c = new THREE.Color(), t = { r: 0, g: 0, b: 0 };
+  return (x, z, h, pendenza) => {
+    f(c, x, z, h, pendenza);
+    c.getRGB(t, THREE.SRGBColorSpace);
+    return [t.r * 255, t.g * 255, t.b * 255];
+  };
+}
 const COSTA = [70, 52, 30];
 const ESAGERAZIONE = 6;           // quanto il rilievo pesa nell'ombreggiatura
 const COLORE_PANORAMA = 'rgba(150, 40, 30, 0.9)';
@@ -96,6 +116,7 @@ export function disegnaRilievo(carta, pixel = new Uint8ClampedArray(carta.cols *
     return v > 0 ? v : 0;                       // il mare è piatto per l'ombreggiatura
   };
   const piatto = LUCE[2];
+  const naturale = livello === 'naturale' && carta.bioma ? coloreNaturale(carta) : null;
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
       const i = y * cols + x;
@@ -110,7 +131,10 @@ export function disegnaRilievo(carta, pixel = new Uint8ClampedArray(carta.cols *
         const l = Math.sqrt(dx * dx + dy * dy + 1);
         const luce = (-dx * LUCE[0] - dy * LUCE[1] + LUCE[2]) / l / piatto;
         const ombra = 0.55 + 0.45 * Math.min(1.5, Math.max(0, luce));
-        const base = livello === 'temperatura' && carta.temperatura ? tinta(SCALA_T, carta.temperatura[i])
+        const pend = Math.atan(Math.hypot(dx, dy) / ESAGERAZIONE) * 180 / Math.PI;
+        const base = lago(i) ? LAGO
+          : naturale ? naturale((x + 0.5) * carta.cella, (y + 0.5) * carta.cella, quota[i], pend)
+          : livello === 'temperatura' && carta.temperatura ? tinta(SCALA_T, carta.temperatura[i])
           : livello === 'umidita' && carta.umidita ? tinta(SCALA_U, carta.umidita[i])
             : livello === 'biomi' && carta.bioma ? (carta.valico?.[i] ? COLORE_VALICO : COLORI_BIOMI[carta.bioma[i]])
               : tinta(TERRA, lago(i) ? livelloAcqua[i] : quota[i]);
@@ -152,7 +176,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
       <button type="button" class="casuale">Seme casuale</button>
       <button type="button" class="panorami" title="Mostra le alture da cui si vede lontano (regola dei punti panoramici)">Punti panoramici</button>
       <select class="livello" title="Che cosa mostra la Carta">
-        <option value="rilievo">Rilievo</option><option value="temperatura">Temperatura</option>
+        <option value="naturale">Naturale</option><option value="rilievo">Rilievo</option><option value="temperatura">Temperatura</option>
         <option value="umidita">Umidità</option><option value="biomi">Biomi</option>
       </select>
       <button type="button" class="intera" title="Tutta la Carta">Vista intera</button>
@@ -174,7 +198,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
   contenitore.appendChild(el);
   const elLegenda = el.querySelector('.legenda');
   const selLivello = el.querySelector('.livello');
-  let livello = 'rilievo';
+  let livello = 'naturale';
   const sfumatura = (scala) => 'linear-gradient(to right, ' + scala.map(([, c], k) => `rgb(${c.join(',')}) ${k / (scala.length - 1) * 100}%`).join(', ') + ')';
   const pallino = (c) => `<i style="width:10px;background:rgb(${c.join(',')})"></i>`;
   function legenda() {
@@ -364,9 +388,10 @@ export function createCartaVista(contenitore, opzioni = {}) {
   // ─── Rilievo fine della parte visibile (da zoom DETTAGLIO.da) ───
   let dettaglio = null;                          // { img (canvas), x0, y0, w, h (km), eq (m), chiave }
   let chiaveInCorso = '', lavoro = 0, attesa = 0;
-  const chiaveVista = () => `${carta.seme}|${vista.cx}|${vista.cy}|${vista.z}|${larghezza}|${altezza}`;
+  const chiaveVista = () => `${carta.seme}|${vista.cx}|${vista.cy}|${vista.z}|${larghezza}|${altezza}|${livello}`;
+  const conDettaglio = () => livello === 'rilievo' || livello === 'naturale';
   function chiediDettaglio() {
-    if (vista.z < DETTAGLIO.da || livello !== 'rilievo') { clearTimeout(attesa); chiaveInCorso = ''; lavoro++; return; }
+    if (vista.z < DETTAGLIO.da || !conDettaglio()) { clearTimeout(attesa); chiaveInCorso = ''; lavoro++; return; }
     const k = chiaveVista();
     if (k === chiaveInCorso || dettaglio?.chiave === k) return;
     clearTimeout(attesa);
@@ -415,14 +440,21 @@ export function createCartaVista(contenitore, opzioni = {}) {
         t = performance.now();
       }
     }
-    // Equidistanza delle curve: circa un quarto dei metri per campione, a valori tondi.
-    const eq = DETTAGLIO.equidistanze.find((e) => e >= k * C / 4) ?? 500;
+    // Equidistanza delle curve [rivista con l'utente: prima un quarto dei metri per campione, troppo fitte]: circa
+    // 2 volte i metri per campione, a valori tondi (8 volte più rade di prima); una curva marcata ogni cinque.
+    const eq = DETTAGLIO.equidistanze.find((e) => e >= k * C * 2) ?? 500;
+    const naturale = livello === 'naturale' && c0.bioma ? coloreNaturale(c0) : null;
     const img = document.createElement('canvas');
     img.width = nx; img.height = ny;
     const g = img.getContext('2d'), dati = g.createImageData(nx, ny), px = dati.data;
     const H = (c, r) => h[Math.min(ny - 1, Math.max(0, r)) * nx + Math.min(nx - 1, Math.max(0, c))];
     const passoM = 2 * k * C / DETTAGLIO.esagerazione, piatto = LUCE[2];
     for (let r = 0; r < ny; r++) {
+      if (naturale && performance.now() - t > DETTAGLIO.budget) {   // il colore naturale costa: a pezzi
+        await new Promise(requestAnimationFrame);
+        if (mio !== lavoro || carta !== c0) return;
+        t = performance.now();
+      }
       for (let c = 0; c < nx; c++) {
         const i = r * nx + c, v = h[i];
         let col;
@@ -435,15 +467,19 @@ export function createCartaVista(contenitore, opzioni = {}) {
           let f = 0.55 + 0.45 * Math.min(1.5, Math.max(0, luce));
           const b = Math.floor(v / eq);             // curva di livello: cambia fascia verso destra o in basso
           const bd = Math.floor(H(c + 1, r) / eq), bg = Math.floor(H(c, r + 1) / eq);
-          if (b !== bd || b !== bg) f *= Math.max(b, bd, bg) % 5 === 0 ? 0.55 : 0.78;
-          col = tinta(TERRA, v).map((x) => x * f);
+          const marcata = Math.max(b, bd, bg) % 5 === 0;
+          if (b !== bd || b !== bg) f *= naturale ? (marcata ? 0.72 : 0.88) : (marcata ? 0.55 : 0.78);
+          const base = naturale
+            ? naturale((x0 + (c + 0.5) * k) * C, (y0 + (r + 0.5) * k) * C, v, Math.atan(Math.hypot(dx, dy) / DETTAGLIO.esagerazione) * 180 / Math.PI)
+            : tinta(TERRA, v);
+          col = base.map((x) => x * f);
         }
         const p = i * 4;
         px[p] = col[0]; px[p + 1] = col[1]; px[p + 2] = col[2]; px[p + 3] = 255;
       }
     }
     g.putImageData(dati, 0, 0);
-    dettaglio = { img, x0, y0, w: nx * k, h: ny * k, eq, chiave, percorsi, strade };
+    dettaglio = { img, x0, y0, w: nx * k, h: ny * k, eq, chiave, percorsi, strade, livello };
     if (chiaveInCorso === chiave) chiaveInCorso = '';
     ridisegna();
   }
@@ -458,7 +494,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
     // Vista intera: celle nette. Da ×3: rilievo sfumato (più leggibile; coordinate e clic restano esatti).
     ctx.imageSmoothingEnabled = vista.z >= 3;
     ctx.drawImage(rilievo, 0, 0);
-    if (dettaglio && dettaglio.chiave.startsWith(carta.seme + '|') && vista.z >= DETTAGLIO.da && livello === 'rilievo') {
+    if (dettaglio && dettaglio.chiave.startsWith(carta.seme + '|') && vista.z >= DETTAGLIO.da && conDettaglio() && dettaglio.livello === livello) {
       ctx.imageSmoothingEnabled = true;            // i laghi ci sono già, con la forma che hanno nelle Scene
       ctx.drawImage(dettaglio.img, dettaglio.x0, dettaglio.y0, dettaglio.w, dettaglio.h);
     } else {
@@ -486,17 +522,21 @@ export function createCartaVista(contenitore, opzioni = {}) {
     if (stradeFini) {
       // Il tracciato delle Scene (tornanti compresi), largo almeno ~1 pixel.
       const C = carta.cella;
-      for (const [classe, w, trattino] of STILE_STRADE) {
+      const linea = (f) => {
+        ctx.beginPath();
+        ctx.moveTo(f.x[0] / C, f.z[0] / C);
+        for (let i = 1; i < f.x.length; i++) ctx.lineTo(f.x[i] / C, f.z[i] / C);
+        ctx.stroke();
+      };
+      const larga = (classe) => Math.max(STRADE_ZOOM.minimo[classe] * dpr / s, 2 * STRADE.classi[classe].semi / C);
+      // Prima il bordino chiaro di tutte le strade, poi le strade: si leggono anche sul rilievo scuro.
+      ctx.strokeStyle = STRADE_ZOOM.coloreBordo;
+      for (const f of stradeFini) { ctx.lineWidth = larga(f.classe) + 2 * STRADE_ZOOM.bordo * dpr / s; linea(f); }
+      for (const [classe, , trattino] of STILE_STRADE) {
         ctx.strokeStyle = classe === 'sentiero' ? COLORE_SENTIERO : COLORE_STRADA;
-        ctx.lineWidth = Math.max(w * dpr / s, 2 * STRADE.classi[classe].semi / C);
-        ctx.setLineDash(trattino.map((t) => t * spessore));
-        for (const f of stradeFini) {
-          if (f.classe !== classe) continue;
-          ctx.beginPath();
-          ctx.moveTo(f.x[0] / C, f.z[0] / C);
-          for (let i = 1; i < f.x.length; i++) ctx.lineTo(f.x[i] / C, f.z[i] / C);
-          ctx.stroke();
-        }
+        ctx.lineWidth = larga(classe);
+        ctx.setLineDash(trattino.map((t) => t * larga(classe) * 1.5));
+        for (const f of stradeFini) if (f.classe === classe) linea(f);
       }
       ctx.setLineDash([]);
     } else if (tracciatiStrade) {
@@ -648,7 +688,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
     elInfo.textContent = `${diPartita() ? 'mondo della partita' : 'anteprima'} · ${carta.cols}×${carta.rows} km`
       + ` · mare ${fmt(st.frazioneMare * 100, 1)} % · ${carta.daCache ? 'dalla cache' : `${fmt(st.ms)} ms`}`
       + ` · controllo ${carta.controllo} · zoom ×${fmt(vista.z, 1)}`
-      + (vista.z < DETTAGLIO.da || livello !== 'rilievo' ? '' : dettaglio?.chiave === chiaveVista()
+      + (vista.z < DETTAGLIO.da || !conDettaglio() ? '' : dettaglio?.chiave === chiaveVista()
         ? ` · rilievo delle Scene, curve ogni ${dettaglio.eq} m${dettaglio.percorsi ? ' · fiumi come nelle Scene' : ''}${dettaglio.strade ? ' · strade come nelle Scene' : ''}`
         : ' · calcolo del rilievo delle Scene…');
     chiediDettaglio();
