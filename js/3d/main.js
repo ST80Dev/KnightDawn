@@ -52,10 +52,24 @@ const PROFONDITA_GUADO = 0.9;             // m d'acqua oltre i quali il cavalier
 const canvas = document.getElementById('scena');
 // Buffer di profondità logaritmico: dal cavaliere a pochi metri fino all'orizzonte a ~110 km senza che le
 // superfici lontane (costa e mare, versanti vicini) si contendano i pixel.
-// Prove di prestazioni (docs/PRESTAZIONI.md, passo 2): ?profondita=log (predefinita) | invertita | normale e ?msaa=0
-// per misurare quanto costano profondità logaritmica e MSAA sulla scheda vera. «invertita» e «normale» possono far
-// sfarfallare le superfici lontane o sovrapposte (strade, fiumi): servono solo a misurare.
-const PROFONDITA = ['invertita', 'normale'].includes(PARAMETRI.get('profondita')) ? PARAMETRI.get('profondita') : 'log';
+// Profondità (docs/PRESTAZIONI.md, passo 2). Predefinita: **invertita** (EXT_clip_control). Misura sulla scheda di
+// riferimento, bosco fitto: 46,3 → 71,7 FPS rispetto alla logaritmica, che scrive la profondità in ogni pixel e impedisce
+// alla scheda di scartare in anticipo i pixel nascosti; nessuno sfarfallio visto dall'utente. Se il browser non ha
+// EXT_clip_control si ripiega sulla logaritmica (con la normale, da 0,2 m a 130 km, il lontano sfarfallerebbe).
+// Per le prove: ?profondita=log | invertita | normale e ?msaa=0 (senza MSAA: +24 % FPS nel bosco fitto, ma bordi
+// seghettati: candidato per un preset «basso»).
+const PROFONDITA = (() => {
+  const scelta = PARAMETRI.get('profondita');
+  if (['log', 'invertita', 'normale'].includes(scelta)) return scelta;
+  try {
+    const gl = document.createElement('canvas').getContext('webgl2');
+    const ok = !!gl && (gl.getSupportedExtensions() || []).includes('EXT_clip_control');
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
+    return ok ? 'invertita' : 'log';
+  } catch {
+    return 'log';
+  }
+})();
 const renderer = new THREE.WebGLRenderer({
   canvas, antialias: PARAMETRI.get('msaa') !== '0',
   logarithmicDepthBuffer: PROFONDITA === 'log', reversedDepthBuffer: PROFONDITA === 'invertita',

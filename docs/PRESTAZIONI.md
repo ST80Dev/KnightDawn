@@ -72,6 +72,11 @@ Nel codice di oggi [Probabile, da confermare con le misure del passo 1]:
    dà precisione solo con un buffer di profondità in virgola mobile: con quello del canvas (24 bit interi) e la scena da
    0,2 m a 130 km può far sfarfallare il lontano; le prove dicono quanto vale il guadagno prima di riscrivere il
    renderer (profondità invertita su un render target a 32 bit, o due passate lontano/vicino).
+   **Deciso con l'utente (21/11/2026):** profondità **invertita** predefinita (bosco fitto 46,3 → 71,7 FPS; nessuno
+   sfarfallio visto dall'utente; con la logaritmica il polygonOffset delle strade non valeva, ora sì), ripiego sulla
+   logaritmica se manca `EXT_clip_control`. **MSAA resta acceso** (senza: +24 % ma bordi seghettati; candidato per un
+   preset «basso»). Nel bosco fitto la vegetazione resta oltre il budget (8,8–10,3 ms): latifoglie vicine ~2.450
+   triangoli l'una e 59k sagome nel blocco, alla sessione vegetazione.
    Seguito: (guadagni grandi, senza toccare i contenuti):
    - togliere la profondità logaritmica: provare `reversedDepthBuffer` (presente in three r187, richiede
      `EXT_clip_control`); se la precisione non basta, due passate (lontano: orizzonte con near ~300 m; poi si azzera la
@@ -157,6 +162,9 @@ Scheda Intel UHD 730 (il browser Brave nasconde il nome), 1920×935, seme 570549
 | 20/11/2026 | main dopo #122–#123 (riferimento) | 38,0 | 19,9 | 24,7 | **16,7** | 4,9 | 0,1 | 0,1 | 1,8 | 301 | 859 mila |
 | 20/11/2026 | main dopo #124–#125 (terreno cotto, sagome) ⚠ | 43,8 | 20,0 | 17,5 | 5,5 | **10,8** | 0,0 | 0,1 | 1,0 | 127 | 1222 mila |
 | 20/11/2026 | main dopo #126 (partenza standard) | **75,7** | 49,8 | **11,4** | 5,1 | 3,4 | 0,2 | 0,1 | 1,0 | 310 | 720 mila |
+| 21/11/2026 | bosco fitto (`&centro=99937,43289`), profondità logaritmica, MSAA | 46,3 | 24,9 | 16,4 | 4,9 | 10,3 | 0,0 | 0,1 | 0,9 | 127 | 1234 mila |
+| 21/11/2026 | bosco fitto, **profondità invertita**, MSAA | **71,7** | 33,2 | 13,3 | 4,4 | 8,8 | 0,0 | 0,1 | 0,3 | 127 | 1253 mila |
+| 21/11/2026 | bosco fitto, profondità logaritmica, senza MSAA | 57,3 | 25,0 | 13,7 | 3,3 | 9,5 | 0,0 | 0,1 | 0,6 | 127 | 1234 mila |
 
 Terza riga (stessa partenza della prima): obiettivo di 60 FPS raggiunto con margine (GPU 11,4 ms su 13,5; CPU 3,4 ms di
 media, 21,7 ms di massimo). Vegetazione: sagome lontane 1,2 · sagome nel blocco 0,4 · erba 1,3 · resto 0,5 ms. Resta da
