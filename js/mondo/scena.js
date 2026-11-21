@@ -881,6 +881,56 @@ export function centroBlocco(v) {
 export function generaScena(carta, cx, cz) { return completa(generaScenaAPezzi(carta, cx, cz)); }
 
 /** generaScena a pezzi (blocco che segue il cavaliere, js/3d/blocchi.js): yield tra i tratti e ogni 4 righe. */
+/**
+ * Ripiano della strada sul terreno disegnato (segnalato dall'utente: carreggiata inclinata di traverso sui pendii). La
+ * quota vera ha già carreggiata e banchina piane (spianaStrade), ma il blocco la disegna con un vertice ogni 7,8 m: i
+ * triangoli sotto la carreggiata andavano da un vertice sul ripiano a uno sulla scarpata ed erano inclinati. Qui i
+ * vertici delle celle che la carreggiata tocca prendono la quota della strada nel punto più vicino: un ripiano di una
+ * cella sotto la strada, la scarpata nelle celle accanto. Non si toccano: il bordo del blocco (giunture con i vicini e
+ * l'orizzonte), l'acqua, i terrapieni dei luoghi, i sentieri, i vertici che si sposterebbero più di `salto` m (l'altro
+ * lato di un tornante), i dintorni delle porte di rocche e borghi (le rampe).
+ */
+// porta: striscia lasciata alla rampa fuori dalla porta (m lungo la normale della porta, dietro, di lato).
+export const SOTTO_STRADA = { semiMinima: 1, passoLato: 1, salto: 3, porta: { lungo: 32, dietro: 8, lato: 11 } };
+function spianaSottoStrade(carta, cx, cz, heights, fiume, lago, n, cell, half, strade, quote) {
+  const S = SOTTO_STRADA, meglio = new Float32Array(n * n).fill(Infinity), val = new Float32Array(n * n);
+  strade.forEach((t, s) => {
+    const q = quote[s], m = t.length / 3;
+    for (let k = 0; k < m; k++) {
+      const x = t[k * 3], z = t[k * 3 + 1], w = t[k * 3 + 2];
+      if (w < S.semiMinima) continue;
+      const a = Math.max(0, k - 1), b = Math.min(m - 1, k + 1);
+      let dx = t[b * 3] - t[a * 3], dz = t[b * 3 + 1] - t[a * 3 + 1];
+      const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+      for (let o = -w; o <= w + 1e-6; o += Math.min(S.passoLato, w)) {
+        const px = x - dz * o, pz = z + dx * o;
+        const c0 = Math.floor((px + half) / cell), r0 = Math.floor((pz + half) / cell);
+        for (let dr = 0; dr <= 1; dr++) for (let dc = 0; dc <= 1; dc++) {
+          const c = c0 + dc, r = r0 + dr;
+          if (c < 1 || r < 1 || c > n - 2 || r > n - 2) continue;           // il bordo resta com'è
+          const i = r * n + c, d = Math.hypot(-half + c * cell - x, -half + r * cell - z);
+          if (d < meglio[i]) { meglio[i] = d; val[i] = q[k]; }
+        }
+      }
+    }
+  });
+  const vicini = (carta.luoghi || []).filter((l) => Math.abs(l.x - cx) < half + 2000 && Math.abs(l.z - cz) < half + 2000);
+  const piani = vicini.flatMap((l) => l.piani || []);
+  // Davanti alle porte la rampa di pietra (js/3d/borgo3d.js) scende fino al terreno: abbassarlo la lascerebbe sospesa.
+  const porte = vicini.flatMap((l) => [l.porta, l.portaRocca]).filter(Boolean);
+  for (let i = 0; i < n * n; i++) {
+    if (meglio[i] === Infinity || !Number.isNaN(fiume[i]) || !Number.isNaN(lago[i])) continue;
+    if (Math.abs(val[i] - heights[i]) > S.salto) continue;
+    const x = cx - half + (i % n) * cell, z = cz - half + Math.floor(i / n) * cell;
+    if (piani.some((p) => distanzaPiano(p, x, z) < 1)) continue;
+    if (porte.some((q) => {
+      const ox = x - q.x, oz = z - q.z, lungo = ox * (q.nx ?? 0) + oz * (q.nz ?? 0), lato = Math.abs(-ox * (q.nz ?? 0) + oz * (q.nx ?? 0));
+      return q.nx === undefined ? Math.hypot(ox, oz) < S.porta.lungo : lungo > -S.porta.dietro && lungo < S.porta.lungo && lato < S.porta.lato;
+    })) continue;
+    heights[i] = val[i];
+  }
+}
+
 export function* generaScenaAPezzi(carta, cx, cz) {
   const t0 = performance.now();
   cx = centroBlocco(cx); cz = centroBlocco(cz);
@@ -902,6 +952,11 @@ export function* generaScenaAPezzi(carta, cx, cz) {
       lago[i] = livelloLago(carta, x, z);
     }
   }
+  // Strade nel blocco (nastro della carreggiata, js/3d/acqua.js) e ripiano sotto la carreggiata sul terreno disegnato.
+  const quoteStrade = [];
+  const strade = stradeBlocco(carta, cx, cz, half, 2, quoteStrade);
+  spianaSottoStrade(carta, cx, cz, heights, fiume, lago, n, cell, half, strade, quoteStrade);
+  yield;
   // Tracciati dei fiumi nel blocco (coordinate locali, tagliati sul bordo): per il nastro d'acqua.
   const tracciati = tracciatiFiumi(carta, cx, cz, half, true);
   const meta = {
@@ -910,10 +965,7 @@ export function* generaScenaAPezzi(carta, cx, cz) {
     seme: carta.seme, centroMondo: { x: cx, z: cz },
     ms: performance.now() - t0, msFiumi, msStrade,
   };
-  // Strade nel blocco (nastro della carreggiata, js/3d/acqua.js) e quota del terreno disegnato (triangoli NO–SE come
-  // terrain.getHeight) per appoggiarlo.
-  const quoteStrade = [];
-  const strade = stradeBlocco(carta, cx, cz, half, 2, quoteStrade);
+  // Quota del terreno disegnato (triangoli NO–SE come terrain.getHeight) per appoggiarci il nastro della strada.
   const altezza = (x, z) => {
     let fx = (x + half) / cell, fz = (z + half) / cell;
     fx = Math.min(Math.max(fx, 0), n - 1); fz = Math.min(Math.max(fz, 0), n - 1);
