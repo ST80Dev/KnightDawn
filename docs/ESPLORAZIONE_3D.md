@@ -1567,7 +1567,10 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      `erbaAttorno`; 32 per l'erba) e si scrive in un buffer a parte copiato alla fine; erba e ridistribuzione
      dividono un tetto unico di ~1,5 ms per fotogramma. Percorso di prova in headless: picco da 21 a ~3,2 ms. Bosco
      fitto: latifoglie medie fino a 200 m invece di 300 (poi sagome): triangoli della vegetazione da 649 000 a
-     478 000, sagome +2 600; a vista uguale.
+     478 000, sagome +2 600; a vista uguale. Misura dell'utente dopo: partenza risolta (aggiorna al più 3,1 ms);
+     bosco fitto 7,0 ms, il costo passato alle sagome (2,5 ms, 38 800, pixel sovrapposti con alpha test). Sagome del
+     blocco diradate già da 300 m (prima 600) con densità (300/d)^k, k scelto perché al bordo valga il 36 % del bosco
+     lontano: in headless da 38 900 a 30 800.
    - *Campi coltivati* (dopo la milestone Prestazioni; decisioni dell'utente: niente stagioni, estensione come
      proposta più «qualcosa intorno a case isolate e villaggi»): `CAMPAGNA.raggi` per tipo di luogo (rocca secondo la
      classe 0,5–2 km; `villaggio` 0,3–0,7 km e `casa` 70–200 m già pronti per quando la milestone dei luoghi li
