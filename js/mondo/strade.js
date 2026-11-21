@@ -679,6 +679,8 @@ function tracciaTratto(carta, tr, W = STRADE.scena.corridoio) {
     }
     if (!resto.length) continue;
     if (inizio) { fx = [...X, ...resto]; fz = [...Z, ...restoZ]; } else { fx = [...resto, ...X.reverse()]; fz = [...restoZ, ...Z.reverse()]; }
+    // Raccordo: niente gomito dove il tratto dritto incontra il resto (estremi fermi, la porta resta in asse).
+    fx = liscia(fx, 1, 2); fz = liscia(fz, 1, 2);
   }
   // Quota della strada: il terreno lungo il percorso, saltando l'acqua (lì passerà un ponte o un guado), lisciata.
   const m = fx.length, h = new Array(m), bagnato = new Uint8Array(m);

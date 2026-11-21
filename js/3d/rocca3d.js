@@ -26,8 +26,10 @@ const SOPRA_TORRI = 4;
 // Terrazzi sotto la rocca (js/mondo/luoghi.js, piani di tipo 'terrazzo'): cinta bassa con torricelle sugli spigoli.
 const TERRAZZO = { altezza: 3.5, spessore: 1.4, torre: 2.2, sopraTorre: 2, tratto: 6 };
 
+// Pietra grigio-bruna (richiesta dell'utente: «meno mattone, più pietra», niente colori terra/fango): i nomi
+// restano quelli di prima (mattone = muratura principale, scuro = scarpe, pietra = cornici e lastrici).
 const COL = {
-  mattone: '#a4634a', scuro: '#8a523d', pietra: '#c4b597', merlo: '#9b5c44',
+  mattone: '#aa9d87', scuro: '#8d8170', pietra: '#c4baa5', merlo: '#a29682',
   legno: '#5b3b20', ferro: '#2e2b28', terra: '#9c8762',
 };
 const LUCE_RIFLESSA = 0.2;                // come castle3d.js: i lati in ombra non escono neri
@@ -70,9 +72,13 @@ export function prisma(basso, alto, yb, yt) {
 //     traverso), più una leggera variazione di tono a chiazze di qualche metro;
 //   - texture a corsi di mattoni e conci (scala di grigi, moltiplica il colore del materiale), coordinate dalla
 //     posizione: lungo la faccia e in altezza sulle pareti, in pianta sulle facce orizzontali.
-const GRADAZIONE = { cielo: [-0.6, -0.8], lati: 0.3, chiazze: 0.08, tessera: 2.4 };
+const GRADAZIONE = { cielo: [-0.6, -0.8], lati: 0.36, chiazze: 0.12, fini: 0.06, tessera: 3.2 };
 let _muro = null;
-/** Texture dei corsi di muratura (256 px = GRADAZIONE.tessera m): mattoni sfalsati, malta chiara, toni vari. */
+/**
+ * Texture della muratura di pietra (256 px = GRADAZIONE.tessera m), ripetibile: corsi di altezza diversa, conci di
+ * lunghezza diversa, ognuno col suo tono (grigio, bruno, qualcuno più caldo o più freddo), macchiato e coi bordi
+ * scuri; malta grigia. In scala di grigi caldi: moltiplica il colore del materiale.
+ */
 export function texturaMuro() {
   if (_muro) return _muro;
   const N = 256, c = document.createElement('canvas');
@@ -80,20 +86,53 @@ export function texturaMuro() {
   const g = c.getContext('2d');
   let seme = 777;
   const rnd = () => ((seme = (seme * 1103515245 + 12345) >>> 0) / 4294967296);
-  g.fillStyle = 'rgb(236,232,226)';                      // malta
+  g.fillStyle = 'rgb(150,146,138)';                      // malta
   g.fillRect(0, 0, N, N);
-  const righe = 10, alto = N / righe, lungo = 64;
-  for (let r = 0; r < righe; r++) {
-    const sfasa = r % 2 ? lungo / 2 : 0;
-    for (let x = -lungo; x < N + lungo; x += lungo) {
-      const v = 175 + Math.floor(rnd() * 60), cal = Math.floor(rnd() * 10);
-      g.fillStyle = `rgb(${v + cal},${v},${v - cal})`;
-      g.fillRect(x + sfasa + 2, r * alto + 2, lungo - 4, alto - 4);
-      // Qualche segno più scuro dentro il mattone.
-      g.fillStyle = `rgba(60,40,30,${0.08 + rnd() * 0.1})`;
-      g.fillRect(x + sfasa + 2 + rnd() * (lungo - 14), r * alto + 3 + rnd() * (alto - 10), 6 + rnd() * 10, 2 + rnd() * 3);
+  // Corsi: altezze tra 18 e 34 px (~0,22–0,42 m) che sommano esattamente a N.
+  const corsi = [];
+  for (let y = 0; y < N;) {
+    let h = 18 + Math.floor(rnd() * 17);
+    if (N - (y + h) < 18) h = N - y;
+    corsi.push([y, h]); y += h;
+  }
+  const concio = (x, y, w, h) => {
+    const v = 150 + Math.floor(rnd() * 95), t = Math.floor(rnd() * 22) - 8;   // t: > 0 più bruno, < 0 più grigio
+    const col = (d) => `rgb(${clamp(v + t + d, 0, 255)},${clamp(v + d, 0, 255)},${clamp(v - t * 0.8 + d - 4, 0, 255)})`;
+    const gx = x + 1.5, gy = y + 1.5, gw = w - 3, gh = h - 3;
+    g.fillStyle = col(0);
+    g.beginPath();                                       // spigoli un po' smussati e irregolari
+    const sm = 2 + rnd() * 3;
+    g.moveTo(gx + sm, gy); g.lineTo(gx + gw - sm * rnd(), gy); g.lineTo(gx + gw, gy + sm);
+    g.lineTo(gx + gw - rnd() * 2, gy + gh - sm); g.lineTo(gx + gw - sm, gy + gh); g.lineTo(gx + sm * rnd(), gy + gh);
+    g.lineTo(gx, gy + gh - sm); g.lineTo(gx + rnd() * 2, gy + sm); g.closePath(); g.fill();
+    // Macchie e venature.
+    for (let k = 0; k < 6; k++) {
+      g.fillStyle = `rgba(${rnd() < 0.5 ? '40,34,28' : '255,250,240'},${0.05 + rnd() * 0.1})`;
+      g.beginPath();
+      g.ellipse(gx + rnd() * gw, gy + rnd() * gh, 2 + rnd() * gw * 0.3, 1 + rnd() * gh * 0.3, rnd() * 3, 0, Math.PI * 2);
+      g.fill();
+    }
+    // Ombra in basso e luce in alto: il concio sporge un poco dalla malta.
+    g.fillStyle = 'rgba(30,25,20,0.22)'; g.fillRect(gx + 1, gy + gh - 2, gw - 2, 2);
+    g.fillStyle = 'rgba(255,250,240,0.12)'; g.fillRect(gx + 1, gy, gw - 2, 1.5);
+  };
+  for (const [y, h] of corsi) {
+    let x = -Math.floor(rnd() * 40);
+    while (x < N) {
+      const w = 34 + Math.floor(rnd() * 56);
+      const fine = Math.min(x + w, N + 60);
+      for (const dx of [0, -N]) if (x + dx < N && fine + dx > 0) concio(x + dx, y, fine - x, h);
+      if (fine > N) concio(x - N, y, fine - x, h);       // chi esce a destra rientra a sinistra
+      x = fine;
     }
   }
+  // Grana fine su tutto.
+  const img = g.getImageData(0, 0, N, N), d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const k = (rnd() - 0.5) * 18;
+    d[i] = clamp(d[i] + k, 0, 255); d[i + 1] = clamp(d[i + 1] + k, 0, 255); d[i + 2] = clamp(d[i + 2] + k, 0, 255);
+  }
+  g.putImageData(img, 0, 0);
   _muro = new THREE.CanvasTexture(c);
   _muro.colorSpace = THREE.SRGBColorSpace;
   _muro.wrapS = _muro.wrapT = THREE.RepeatWrapping;
@@ -122,7 +161,10 @@ export function rifinisci(geo, orientata = true) {
       k = 1 - G.lati + G.lati * (0.5 + 0.5 * (nx * cx + nz * cz) / l) * 1.15;
     } else if (orientata && ny < -0.7) k = 0.7;           // sotto (sporti, parapetti)
     k *= 1 - G.chiazze + 2 * G.chiazze * _h3(Math.floor(x / 4), Math.floor(y / 3), Math.floor(z / 4));
-    col[3 * i] = col[3 * i + 1] = col[3 * i + 2] = Math.min(1, k);
+    k *= 1 - G.fini + 2 * G.fini * _h3(Math.floor(x / 1.5) + 7, Math.floor(y / 1.2), Math.floor(z / 1.5) - 3);
+    // Un po' più calda o più fredda a chiazze larghe (pietre di cave diverse, licheni, dilavamento).
+    const tinta = (_h3(Math.floor(x / 7) - 11, Math.floor(y / 5), Math.floor(z / 7) + 5) - 0.5) * 0.08;
+    col[3 * i] = Math.min(1, k * (1 + tinta)); col[3 * i + 1] = Math.min(1, k); col[3 * i + 2] = Math.min(1, k * (1 - tinta));
   }
   geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));

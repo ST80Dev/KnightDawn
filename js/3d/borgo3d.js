@@ -39,7 +39,8 @@ const STRADE = {
   passo: 2,                                // m tra le sezioni del nastro
 };
 
-const COL = { mattone: '#a8684d', scuro: '#8a523d', pietra: '#c4b597', legno: '#5b3b20' };
+// Pietra grigio-bruna come la rocca, un poco più calda (pietra più comune, meno squadrata).
+const COL = { mattone: '#aaa090', scuro: '#8f8578', pietra: '#c4bcab', legno: '#5b3b20' };
 const LUCE_RIFLESSA = 0.2;                 // come la rocca: i lati in ombra non escono neri
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);

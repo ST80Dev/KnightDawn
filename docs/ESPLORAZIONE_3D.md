@@ -1212,7 +1212,10 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
        i suoi fianchi uscivano comunque, come due panche di pietra). Mura meno piatte: texture dei corsi di mattoni
        generata una volta e colore per vertice secondo dove guarda la faccia (una luce del cielo fissa di traverso,
        ±15 %) più chiazze di tono di qualche metro (±8 %), su mura, torri, merli e pietra di rocca e borgo; nessun
-       oggetto né materiale in più. `VERSIONE_GENERATORE` `…strade-3…`.
+       oggetto né materiale in più. `VERSIONE_GENERATORE` `…strade-3…`. Poi (utente: «meno mattone, più pietra»,
+       niente colori terra/fango, niente aspetto levigato) **pietra grigio-bruna**: texture di conci di lunghezza e
+       corsi di altezza diversi, ognuno col suo tono, macchiati, con grana; chiazze di tono su due scale e una tinta
+       un poco più calda o più fredda a chiazze larghe. Tavullia resta in mattone.
      - *Misure* (Chromium headless): seguendo la via, dal fuori della porta del borgo al cortile della rocca in
        **24 rocche su 24** (8 semi, tre classi); 32 assalti al borgo e 32 alla rocca per 3 semi: si entra solo dalla
        porta, **nessuna compenetrazione**. Rocca 10
