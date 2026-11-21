@@ -200,18 +200,20 @@ export function createCastle(terrain, opzioni = {}) {
   // quella con la pendenza minore). Raccorda in linea retta il piano al terreno al suo piede.
   const RA = cfg.rampa;
   const larghezzaRampa = P.larghezza + 0.6;
+  // Piede della rampa: il terreno, oppure (M7) il pavimento della prima terrazza del borgo (`cfg.quotaPiede`).
+  const piede = (lx, lz) => cfg.quotaPiede ?? quota(lx, lz);
   let lunghezzaRampa = RA.lunghezzaMin;
   {
     let migliore = Infinity;
     for (let l = RA.lunghezzaMin; l <= RA.lunghezzaMax; l += 0.5) {
-      const g = Math.abs(piano - quota(0, gz0 - l)) / l;
+      const g = Math.abs(piano - piede(0, gz0 - l)) / l;
       if (g < migliore) { migliore = g; lunghezzaRampa = l; }
       if (g <= RA.pendenzaMax) break;
     }
   }
   function quotaRampa(lx, lz) {
     const t = clamp((gz0 - lz) / lunghezzaRampa, 0, 1);
-    return piano + (quota(lx, gz0 - lunghezzaRampa) - piano) * t;
+    return piano + (piede(lx, gz0 - lunghezzaRampa) - piano) * t;
   }
 
   const mat = {};
