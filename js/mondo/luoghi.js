@@ -65,6 +65,10 @@ export const LUOGHI = {
     maggiore: { rocca: [84, 74], raggio: [28, 41], borgo: [130, 200] },
   },
   forma: { cala: 5, vertici: [5, 8], ondula: 0.16, borgoOndula: 0.2, portaMin: 10 },
+  // Arrivo alla porta del borgo: profilo del terreno fuori dalla porta (m), tratto più ripido su `finestra` m e pendenza
+  // media; oltre `ripido` / `media` (tangenti, ~13% e 10%) il lato costa `peso` / `pesoMedia` m di salto per unità.
+  // `pesoDirezione`: la stessa ripidezza conta anche nella scelta dell'orientamento del borgo (accanto al lavoro di terra).
+  portaArrivo: { da: 10, fino: 250, passo: 10, finestra: 40, ripido: 0.13, media: 0.1, peso: 60, pesoMedia: 30, pesoDirezione: 1 },
   // Spalto davanti alla porta della rocca: il borgo scende dalla rocca, e una rampa in muratura dal cortile al pendio
   // verrebbe lunga 30–40 m. Il terreno del borgo si rialza in un dosso di terra fino a `sotto` m sotto il cortile, piatto
   // per `piano` m attorno al punto davanti alla porta e poi in discesa a `pendenza`: la rampa resta di pochi metri.
@@ -691,8 +695,20 @@ function pianiInDirezione(carta, sito, classe, dir, seed, L) {
     }
   }
   // ─── Porte ───
-  // Borgo: sul lato della cinta (non i due attaccati alla rocca) col minor salto tra dentro e fuori; lontano dalla
-  // rocca, su un lato abbastanza lungo per la torre-porta.
+  // Borgo: sul lato della cinta (non i due attaccati alla rocca) col minor salto tra dentro e fuori e con l'arrivo da
+  // fuori più dolce (richiesta dell'utente, seme 395728: la porta dava su un versante a 30° e non si saliva); lontano
+  // dalla rocca, su un lato abbastanza lungo per la torre-porta.
+  const P = L.portaArrivo;
+  const arrivo = (m, nu, nv) => {
+    // Profilo del terreno lungo la normale, da `da` a `fino` m fuori dalla porta: pendenza media e tratto più ripido.
+    const hs = [];
+    for (let d = P.da; d <= P.fino; d += P.passo) hs.push(hq(m[0] + nu * d, m[1] + nv * d));
+    let ripido = 0;
+    const k = Math.round(P.finestra / P.passo);
+    for (let i = 0; i + k < hs.length; i++) ripido = Math.max(ripido, Math.abs(hs[i + k] - hs[i]) / P.finestra);
+    const media = Math.abs(hs[hs.length - 1] - hs[0]) / (P.fino - P.da);
+    return { ripido, media };
+  };
   let porta = null;
   for (let i = 1; i + 2 < catena.length; i++) {
     const a = catena[i], b = catena[i + 1], l = Math.sqrt((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2);
@@ -701,8 +717,10 @@ function pianiInDirezione(carta, sito, classe, dir, seed, L) {
     const [xi, zi] = W(m[0] - nu * 6, m[1] - nv * 6), dentroQ = quotaPiano(borgo, xi, zi);
     const fuoriQ = hq(m[0] + nu * 10, m[1] + nv * 10);
     const vicinoRocca = Math.sqrt(m[0] * m[0] + m[1] * m[1]) < hU + la * 0.6 ? 6 : 0;
-    const costo = Math.abs(dentroQ - fuoriQ) + vicinoRocca;
-    if (!porta || costo < porta.costo) porta = { costo, m, n: [nu, nv], salto: Math.abs(dentroQ - fuoriQ) };
+    const ar = arrivo(m, nu, nv);
+    const ripidezza = P.peso * Math.max(0, ar.ripido - P.ripido) + P.pesoMedia * Math.max(0, ar.media - P.media);
+    const costo = Math.abs(dentroQ - fuoriQ) + vicinoRocca + ripidezza;
+    if (!porta || costo < porta.costo) porta = { costo, ripidezza, m, n: [nu, nv], salto: Math.abs(dentroQ - fuoriQ), arrivo: ar };
   }
   if (!porta) return null;
   // Rocca: sul lato anteriore col salto minore verso il borgo, con spazio davanti (i lati agli estremi A e B danno
@@ -808,6 +826,7 @@ function pianiInDirezione(carta, sito, classe, dir, seed, L) {
   const [px, pz] = W(...porta.m), [rx, rz] = W(...portaR.m);
   return {
     piani, salto, pendenza, pelo: pelo > -Infinity ? pelo : null, alza: alza > 0 ? alza : 0, lavoro: nl ? lavoro / nl : 0,
+    ripidezzaArrivo: porta.ripidezza,
     porta: { x: px, z: pz, nx: pnx, nz: pnz, salto: porta.salto },
     portaRocca: { x: rx, z: rz, nx: rnx, nz: rnz, ex: rex, ez: rez, lato: portaR.l, salto: portaR.salto },
   };
@@ -826,7 +845,8 @@ function pianifica(carta, sito, classe, L) {
     const r = pianiInDirezione(carta, sito, classe, dir, seed, L);
     if (!r) continue;
     const preferita = dir[0] === sito.verso.x && dir[1] === sito.verso.z;
-    const costo = r.lavoro * (preferita ? 0.8 : 1);
+    // Anche l'arrivo alla porta del borgo: un orientamento con la porta su un versante ripido costa di più.
+    const costo = r.lavoro * (preferita ? 0.8 : 1) + L.portaArrivo.pesoDirezione * r.ripidezzaArrivo;
     if (!migliore || costo < migliore.costo) { migliore = { ...r, costo }; dirMigliore = dir; }
   }
   if (!migliore) return null;
