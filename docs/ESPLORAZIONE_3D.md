@@ -1682,6 +1682,17 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      sbatte); aperture naturali: ogni tratto di 28 m ha col 60 % un'apertura larga 2,6–6 m in un punto a caso (anche
      nella striscia del suolo cotto). I muretti restano con un varco solo per lato. Prova: camminando verso una siepe
      il cavaliere si ferma a 0,6–1,2 m (11 su 12; il dodicesimo passa da un'apertura).
+     *Fiumi* (richiesta dell'utente: «molte pietre di diverse dimensioni lungo gli argini e in mezzo al corso d'acqua,
+     senza esagerare»): distanza dai soli fiumi (non laghi né mare); sulle prime due celle di riva più sassi, ciottoli
+     e qualche masso (`VEGETAZIONE.fiume`); nell'alveo, dove l'acqua è fonda al più 1,2 m, pietre su una griglia di
+     2,5 m (22 %, meno dove è più fonda; massi dove supera 0,45 m), alla quota scelta perché la cima affiori di
+     5–40 cm (l'acqua è quasi opaca: sommerse non si vedrebbero). In un blocco con ~1,6 km di fiume: ~300 pietre
+     nell'alveo e ~850 in più sulle rive. Le prove di regressione contano a parte le pietre nell'alveo.
+     *Bosco ripariale* (richiesta dell'utente: «lungo i fiumi un po' più alberi, qualche tronco e rami sul bordo»):
+     fascia di 4 celle (~30 m) dai fiumi con densità degli alberi fino a 0,42 (pesi 1 / 0,85 / 0,6 / 0,3 per cella),
+     specie di riva (pioppi, betulle), più tronchi caduti; nuovo tipo `ramo` (rami secchi a terra, si attraversano;
+     anche pochi nei boschi). Blocco arido con ~1,6 km di fiume: alberi da 482 a 809, 36 tronchi, ~600 rami.
+     Limite: il bosco lontano oltre il blocco non ha ancora la fascia lungo i fiumi.
      *Case fuori dal borgo* (richiesta dell'utente: case isolate o a gruppetti di 2–3 in mezzo o a lato dei campi):
      `CASE_CAMPAGNA` / `caseCampagna(carta)`, siti deterministici per Carta (4–9 gruppi per rocca secondo la classe,
      tra gli orti e il limite dei campi pieni, in piano, all'asciutto, lontano dai terrapieni e tra loro, orientati

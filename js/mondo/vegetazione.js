@@ -168,6 +168,7 @@ export const TIPI = [
   { nome: 'masso', gruppo: 'rocce', passo: 16, scala: [0.4, 3.4], curva: 2.5 },
   { nome: 'affioramento', gruppo: 'rocce', passo: 40, scala: [0.7, 1.5] },
   { nome: 'tronco', gruppo: 'bosco', passo: 15, scala: [0.7, 1.2] },
+  { nome: 'ramo', gruppo: 'bosco', passo: 5, scala: [0.6, 1.3] },     // rami secchi a terra (rive dei fiumi, boschi)
   { nome: 'muretto', gruppo: 'muri', scala: [0.95, 1.1] },
   { nome: 'siepe', gruppo: 'arbusti', scala: [1.0, 1.25] },          // cespugli fitti delle siepi (PARCELLE)          // sui confini dei campi vicino al borgo (PARCELLE)
 ];
@@ -195,6 +196,14 @@ export const VEGETAZIONE = {
   // Solo vicino al cavaliere (erbaAttorno): probabilità per cella di 1,1 m (erba), 2,2 m (felci), 1,6 m (ciottoli).
   // Erba e felci più rade (richiesta dell'utente): il prato lo fa soprattutto lo shader del terreno (colori, chiaroscuri).
   vicino: { erba: 0.4, felce: 0.12, ciottolo: 1, passoErba: 1.1, passoFelci: 2.2, passoCiottoli: 1.6 },
+  // Fiumi: in più sulle rive (densità per cella di riva) e nell'alveo dove l'acqua è bassa: pietre che affiorano o
+  // stanno a pelo d'acqua (l'acqua è quasi opaca), una cella della griglia ogni `passo` m con probabilità
+  // `probabilita` (meno dove è più fonda), di cui `massi` sono massi.
+  // Bosco ripariale (richiesta dell'utente: «lungo i fiumi un po' più alberi, qualche tronco e rami sul bordo»):
+  // fascia di `fascia` (peso per cella di distanza dal fiume, dalla prima), densità `bosco`, specie di riva.
+  fiume: { sassi: 0.6, massi: 0.25, ciottoli: 0.45,
+    fascia: [1, 0.85, 0.6, 0.3], bosco: 0.42, tronchi: 0.12, rami: 0.22,
+    alveo: { passo: 2.5, probabilita: 0.22, massi: 0.25, profondita: 1.2, affiora: [0.05, 0.4] } },
 };
 
 const _cop = nuovaCopertura();
@@ -376,14 +385,14 @@ export function caseCampagna(carta) {
   return out;
 }
 
-const CAMPI = ['campo', 'alberi', 'limite', 'conifera', 'pino', 'secco', 'riva', 'cespuglio', 'alto', 'sterpo', 'canne',
+const CAMPI = ['ramo', 'campo', 'alberi', 'limite', 'conifera', 'pino', 'secco', 'riva', 'cespuglio', 'alto', 'sterpo', 'canne',
   'sasso', 'masso', 'affioramento', 'tronco', 'foresta', 'erba', 'felce', 'frana', 'ciottolo'];
 
 /**
  * Densità per vertice della griglia del blocco: per ogni tipo la probabilità che una cella della sua griglia abbia
  * un oggetto, più i pesi delle specie di albero. `pend` è la pendenza «di zona» (come il colore), `pf` quella fine.
  */
-function densitaVertice(cp, pend, pf, distAcqua, x, z, semeBordo, D, i, coltivato = 0) {
+function densitaVertice(cp, pend, pf, distAcqua, x, z, semeBordo, D, i, coltivato = 0, distFiume = 99) {
   const V = VEGETAZIONE;
   const prato = 1 - Math.max(cp.roccia, cp.neve, cp.ghiaia * 2);
   let sabbia = 0, palude = 0, nordSud = 0;
@@ -408,15 +417,17 @@ function densitaVertice(cp, pend, pf, distAcqua, x, z, semeBordo, D, i, coltivat
   const limite = smoothstep(CLIMA.bosco + V.limiteAlberi[0], CLIMA.bosco + V.limiteAlberi[1], cp.T);
   const ripido = 1 - smoothstep(V.pendenza.alberi[0], V.pendenza.alberi[1], pf);
   const riva = distAcqua >= V.riva.celle[0] && distAcqua <= V.riva.celle[1] && cp.T > 3 ? 1 : 0;
+  // Fascia del bosco ripariale lungo i fiumi (non sopra il limite degli alberi né dove fa troppo freddo).
+  const fasciaF = distFiume >= 1 && distFiume <= V.fiume.fascia.length && cp.T > 3 ? V.fiume.fascia[distFiume - 1] : 0;
   const isolati = (V.isolati.base + V.isolati.umidita * cp.umidita) * (1 + 2 * coltivato) * (1 - foresta) * prato * (1 - 0.8 * sabbia);
   const asciutto = distAcqua >= 1 ? 1 : 0;
   D.alberi[i] = asciutto * (1 - cp.neveFissa) * (1 - cp.roccia) * (1 - 0.8 * cp.ghiaia) * ripido * limite
-    * Math.max(V.bosco.densita * foresta, isolati, riva * V.riva.densita, 0.04 * palude);
+    * Math.max(V.bosco.densita * foresta, isolati, riva * V.riva.densita, fasciaF * V.fiume.bosco, 0.04 * palude);
   D.limite[i] = limite;
   D.conifera[i] = Math.max(smoothstep(8, 3, cp.T), 0.6 * cp.monte);
   D.pino[i] = smoothstep(12, 16, cp.T) * smoothstep(0.55, 0.35, cp.umidita);
   D.secco[i] = 0.5 * palude + 0.15 * sabbia + 0.05 * foresta;   // legno morto: qualche albero secco anche nel bosco
-  D.riva[i] = riva * 0.8;
+  D.riva[i] = Math.max(riva * 0.8, fasciaF * 1.3);
   // Arbusti: macchia sui pendii (dove il colore la dipinge), margini e sottobosco, prati; sopra il limite degli
   // alberi ginepri e mughi; nel secco sterpi.
   const neve = 1 - cp.neve;
@@ -433,14 +444,18 @@ function densitaVertice(cp, pend, pf, distAcqua, x, z, semeBordo, D, i, coltivat
   const monte = Math.max(cp.alto, cp.monte);
   D.frana[i] = asciutto * smoothstep(22, 38, pf) * monte * smoothstep(0.05, 0.35, fbm(x, z, semeBordo ^ 0x1b873593, 200, 2));
   const sponda = distAcqua >= 1 && distAcqua <= 2 ? 1 : 0;           // ghiaia e sassi sulle rive
+  // Rive dei fiumi (richiesta dell'utente: «pietre di diverse dimensioni lungo gli argini, senza esagerare»): in più
+  // della sponda generica, sassi, ciottoli e qualche masso; di più sulla prima cella.
+  const rivaF = distFiume === 1 ? 1 : distFiume === 2 ? 0.5 : 0;
   D.sasso[i] = asciutto * (1 - 0.7 * cp.neve) * (0.015 + 0.25 * cp.roccia + 1.4 * cp.ghiaia + 0.15 * piede + 0.12 * monte
-    + 0.3 * D.frana[i] + 0.2 * sponda);
+    + 0.3 * D.frana[i] + 0.2 * sponda + V.fiume.sassi * rivaF);
   D.masso[i] = asciutto * (1 - 0.5 * cp.neve) * (0.015 + 2 * cp.ghiaia + 0.3 * cp.roccia * cp.alto + 0.25 * piede
-    + 0.05 * monte + 0.7 * D.frana[i]);
+    + 0.05 * monte + 0.7 * D.frana[i] + V.fiume.massi * rivaF);
   D.ciottolo[i] = asciutto * (1 - 0.8 * cp.neve) * Math.min(0.5, 0.02 + 0.3 * cp.roccia + 1.2 * cp.ghiaia + 0.15 * monte
-    + 0.2 * piede + 0.35 * sponda) * V.vicino.ciottolo;
+    + 0.2 * piede + 0.35 * sponda + V.fiume.ciottoli * rivaF) * V.vicino.ciottolo;
   D.affioramento[i] = asciutto * (0.7 * cp.chiazze + 0.1 * cp.roccia);
-  D.tronco[i] = asciutto * 0.06 * foresta * limite;
+  D.tronco[i] = asciutto * (0.06 * foresta + V.fiume.tronchi * fasciaF) * limite;
+  D.ramo[i] = asciutto * (0.03 * foresta + V.fiume.rami * fasciaF) * (1 - cp.neve);
   // Vicino al cavaliere (erbaAttorno): ciuffi d'erba nei prati, felci nel sottobosco umido. E per il suolo (shader del
   // terreno): quanto bosco c'è sopra (lettiera).
   D.foresta[i] = foresta * limite * (1 - cp.roccia);
@@ -457,7 +472,7 @@ function densitaVertice(cp, pend, pf, distAcqua, x, z, semeBordo, D, i, coltivat
   if (campo > 0) {
     // Netto: lo shader disegna un appezzamento già da campo ≈ 0,12–0,7 (soglia per appezzamento).
     const via = 1 - K.oggetti * smoothstep(0.05, 0.35, campo);
-    for (const k of ['alberi', 'cespuglio', 'alto', 'sterpo', 'sasso', 'masso', 'affioramento', 'tronco', 'ciottolo']) D[k][i] *= via;
+    for (const k of ['alberi', 'cespuglio', 'alto', 'sterpo', 'sasso', 'masso', 'affioramento', 'tronco', 'ramo', 'ciottolo']) D[k][i] *= via;
     D.erba[i] *= 1 - K.erba * campo;
   }
 }
@@ -504,6 +519,27 @@ export function posizionaVegetazione(o) {
     }
   }
 
+  // Distanza (in celle, fino a 3) dai soli fiumi: rive e alvei con sassi e massi (non laghi e mare).
+  const DF = V.fiume.fascia.length + 1;
+  const distFiume = new Uint8Array(n).fill(DF);
+  if (o.acqua) {
+    const cf = [];
+    for (let i = 0; i < n; i++) {
+      if (o.acqua.fiume[i] > heights[i] - 0.05 && !(o.acqua.lago[i] > heights[i] - 0.05)) { distFiume[i] = 0; cf.push(i); }
+    }
+    for (let q = 0; q < cf.length; q++) {
+      const i = cf[q], d = distFiume[i] + 1;
+      if (d >= DF) continue;
+      const r = (i / cols) | 0, c = i - r * cols;
+      for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) {
+        const rr = r + b, cc = c + a;
+        if (rr < 0 || cc < 0 || rr >= cols || cc >= cols) continue;
+        const j = rr * cols + cc;
+        if (distFiume[j] > d) { distFiume[j] = d; cf.push(j); }
+      }
+    }
+  }
+
   // Densità per vertice.
   const D = {};
   for (const k of CAMPI) D[k] = new Float32Array(n);
@@ -519,7 +555,7 @@ export function posizionaVegetazione(o) {
       const pf = Math.atan(Math.hypot(fx, fz)) * 180 / Math.PI;
       const x = cx - half + c * cell, z = cz - half + r * cell;
       copertura(_cop, x, z, heights[i], pend);
-      densitaVertice(_cop, pend, pf, dist[i], x, z, semeBordo, D, i, coltivatoIn(luoghi, x, z, semeCampagna));
+      densitaVertice(_cop, pend, pf, dist[i], x, z, semeBordo, D, i, coltivatoIn(luoghi, x, z, semeCampagna), distFiume[i]);
     }
   }
   const msCampi = performance.now() - t0;
@@ -644,7 +680,7 @@ export function posizionaVegetazione(o) {
   // Gli altri tipi: ognuno la sua griglia.
   const regole = {
     cespuglio: D.cespuglio, 'arbusto alto': D.alto, sterpo: D.sterpo, canne: D.canne,
-    sasso: D.sasso, masso: D.masso, affioramento: D.affioramento, tronco: D.tronco,
+    sasso: D.sasso, masso: D.masso, affioramento: D.affioramento, tronco: D.tronco, ramo: D.ramo,
   };
   TIPI.forEach((t, k) => {
     if (t.gruppo === 'alberi') return;
@@ -836,6 +872,39 @@ export function posizionaVegetazione(o) {
         }
       }
     }
+  }
+
+  // Pietre nell'alveo dei fiumi (non laghi né mare): sul fondo, solo dove affiorano o restano a pelo d'acqua.
+  if (o.acqua) {
+    const A = V.fiume.alveo, sA = derivaSeme(seme, 460), F = o.acqua.fiume, Lg = o.acqua.lago;
+    griglia(A.passo, sA, (ix, iz, X, Z, lx, lz, u) => {
+      trova(lx, lz);
+      const i = _r * cols + _c;
+      // I fiumi sono larghi uno o due vertici: il pelo è la media dei vertici bagnati della cella, e il punto è
+      // nell'alveo se il fondo sta sotto.
+      let pelo = 0, nb = 0;
+      for (const k of [i, i + 1, i + cols, i + cols + 1]) {
+        if (Lg[k] > heights[k] - 0.05) return;
+        if (F[k] > heights[k] - 0.05) { pelo += F[k]; nb++; }
+      }
+      if (!nb) return;
+      pelo /= nb;
+      const fondo = quota(), prof = pelo - fondo;
+      if (prof <= 0.03 || prof > A.profondita || u >= A.probabilita * (1 - 0.6 * prof / A.profondita)) return;
+      // Grandezza scelta perché la pietra affiori di `affiora` m (l'acqua è quasi opaca: sommersa non si vedrebbe):
+      // sassi dove l'acqua è bassa, massi dove è più fonda o a caso.
+      // La cima affiora di `affiora` m: la quota della pietra si sceglie per questo (la parte sotto il pelo resta
+      // nascosta dall'acqua). Altezza della cima come la mesh in vegetazione3d.js: cima del modello per unità di scala
+      // (prudente) × fattore d'altezza delle rocce (0,55 + 0,7·v), meno l'affondamento delle rocce (0,15·scala).
+      const h = hash2(ix, iz, sA ^ 0x2545f491), e = A.affiora[0] + (A.affiora[1] - A.affiora[0]) * (h & 0xff) / 255;
+      const masso = prof > 0.45 || ((h >>> 8) & 0xff) / 256 < A.massi;
+      const t = masso ? T.masso : T.sasso, v = (h >>> 26) / 64;
+      const sc = masso ? 0.6 + 1.0 * ((h >>> 16) & 0xff) / 255 : 0.9 + 1.1 * ((h >>> 16) & 0xff) / 255;
+      const cima = sc * ((masso ? 0.75 : 0.2) * (0.55 + 0.7 * v) - 0.15);
+      const y = Math.max(fondo, pelo + e - cima);
+      if (y + cima < pelo + 0.03) return;
+      buffer[t.nome].push(lx, y, lz, sc, ((h >>> 4) & 0x3ff) / 1024 * 2 * Math.PI, v);
+    });
   }
 
   const tipi = {};
