@@ -203,6 +203,8 @@ export const VEGETAZIONE = {
   // fascia di `fascia` (peso per cella di distanza dal fiume, dalla prima), densità `bosco`, specie di riva.
   fiume: { sassi: 0.6, massi: 0.25, ciottoli: 0.45,
     fascia: [1, 0.85, 0.6, 0.3], bosco: 0.42, tronchi: 0.12, rami: 0.22,
+    // Ghiaia sulle rive (suolo, quarta componente): peso per cella dal fiume (0 = il fiume), a chiazze su ~35 m.
+    ghiaia: { celle: [1, 0.9, 0.45], lunghezza: 35, soglia: [0.05, 0.3] },
     alveo: { passo: 2.5, probabilita: 0.22, massi: 0.25, profondita: 1.2, affiora: [0.05, 0.4] } },
 };
 
@@ -747,7 +749,9 @@ export function posizionaVegetazione(o) {
   // dove il bosco è diradato (campagna attorno ai luoghi, margini) non restano macchie scure senza alberi sopra.
   // Bosco fitto: ~1 albero per cella di vertici (densità 0,62 su celle di 6 m) → piena da 0,7.
   // Terza componente: campi coltivati (CAMPI_COLTIVATI), fino a pochi metri dal piede delle scarpate.
-  const suolo = new Float32Array(n * 3);
+  // Quarta componente: ghiaia sulle rive dei fiumi, a chiazze (richiesta dell'utente: «un po' di ghiaia sui bordi ogni
+  // tanto», non sotto l'acqua).
+  const suolo = new Float32Array(n * 4), sG = derivaSeme(seme, 461);
   for (let i = 0; i < n; i++) {
     const r = (i / cols) | 0, c = i - r * cols;
     const oltre = piani.length ? oltreScarpata(cx - half + c * cell, cz - half + r * cell) : Infinity;
@@ -760,10 +764,16 @@ export function posizionaVegetazione(o) {
       }
     }
     const sotto = smoothstep(0.12, 0.7, somma / peso);
-    suolo[i * 3] = D.foresta[i] * sotto * smoothstep(V.spianata, V.spianata + 30, oltre);
-    suolo[i * 3 + 1] = dist[i] === 0 ? 1 : Math.max(0, 1 - (dist[i] - 1) / (V.acquaCelle - 1));
-    suolo[i * 3 + 2] = D.campo[i] * smoothstep(2, 12, oltre)
+    suolo[i * 4] = D.foresta[i] * sotto * smoothstep(V.spianata, V.spianata + 30, oltre);
+    suolo[i * 4 + 1] = dist[i] === 0 ? 1 : Math.max(0, 1 - (dist[i] - 1) / (V.acquaCelle - 1));
+    suolo[i * 4 + 2] = D.campo[i] * smoothstep(2, 12, oltre)
       * (caseQui.length ? smoothstep(KC.aia[0] - 4, KC.aia[0] + 4, dCasa(cx - half + c * cell, cz - half + r * cell)) : 1);
+    const dF = distFiume[i];
+    if (dF <= 2) {
+      const G = V.fiume.ghiaia;
+      suolo[i * 4 + 3] = G.celle[dF] * smoothstep(G.soglia[0], G.soglia[1],
+        fbm(cx - half + c * cell, cz - half + r * cell, sG, G.lunghezza, 2));
+    }
   }
 
   // Coordinate dei campi per vertice (PARCELLE): q lungo e di traverso al verso del borgo, piegate; terza
@@ -781,7 +791,7 @@ export function posizionaVegetazione(o) {
       let serve = false;
       for (let dr = -1; dr <= 1 && !serve; dr++) for (let dc = -1; dc <= 1; dc++) {
         const rr = r + dr, cc = c + dc;
-        if (rr >= 0 && rr < cols && cc >= 0 && cc < cols && suolo[(rr * cols + cc) * 3 + 2] > 0) { serve = true; break; }
+        if (rr >= 0 && rr < cols && cc >= 0 && cc < cols && suolo[(rr * cols + cc) * 4 + 2] > 0) { serve = true; break; }
       }
       if (!serve) continue;
       const dx = x - campi.x, dz = z - campi.z;
@@ -816,7 +826,7 @@ export function posizionaVegetazione(o) {
   if (aCampi) {
     let qx0 = Infinity, qx1 = -Infinity, qy0 = Infinity, qy1 = -Infinity;
     for (let i = 0; i < n; i++) {
-      if (suolo[i * 3 + 2] <= 0.05) continue;
+      if (suolo[i * 4 + 2] <= 0.05) continue;
       const qx = aCampi[i * 4], qy = aCampi[i * 4 + 1];
       if (qx < qx0) qx0 = qx; if (qx > qx1) qx1 = qx; if (qy < qy0) qy0 = qy; if (qy > qy1) qy1 = qy;
     }
@@ -848,7 +858,7 @@ export function posizionaVegetazione(o) {
       if ((w < 0 ? 1 : 0) !== ls || Math.abs(w) < PC.strada.margine[1]) return;
       parcella(triangolo(aCampi, 4, 0), triangolo(aCampi, 4, 1) + ls * PC.strada.lato, 0, ver);
       if (ver.i !== i || ver.j !== j || (lato ? ver.fu : ver.fv) > S.striscia[0]) return;
-      if (triangolo(suolo, 3, 2) < 0.12 + 0.6 * hashCampi(i, j + 41) / 255 + 0.04) return;   // campo non dipinto
+      if (triangolo(suolo, 4, 2) < 0.12 + 0.6 * hashCampi(i, j + 41) / 255 + 0.04) return;   // campo non dipinto
       if (oltreScarpata(P.x, P.z) < 3 || oltreStrada(P.x, P.z) < V.strada.libero) return;
       if (dCasa(P.x, P.z) < KC.aia[1] + 2) return;
       const h = hash2(ix, iz, sS);

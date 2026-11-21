@@ -980,7 +980,7 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
   const nVertici = terrain ? terrain.meta.cols * terrain.meta.rows : 0;
   let coloriTerreno = null;
   if (superficie && pos.suolo && superficie.geometry.attributes.position.count === nVertici) {
-    superficie.geometry.setAttribute('aSuolo', new THREE.BufferAttribute(pos.suolo, 3));
+    superficie.geometry.setAttribute('aSuolo', new THREE.BufferAttribute(pos.suolo, 4));
     // Campi coltivati: coordinate degli appezzamenti per vertice (PARCELLE, vegetazione.js).
     if (pos.aCampi) superficie.geometry.setAttribute('aCampi', new THREE.BufferAttribute(pos.aCampi, 4));
     coloriTerreno = superficie.geometry.attributes.color?.array || null;
