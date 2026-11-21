@@ -15,7 +15,7 @@
 // oltre la pendenza massima conta come la strada a tornanti che servirebbe: dislivello / p_max × `tornanti`.
 
 import { BIOMA, ACQUA } from './carta.js';
-import { quotaMondo, scavaFiumi, livelloLago, distanzaPiano, raffinaZona } from './scena.js';
+import { quotaMondo, scavaFiumi, livelloLago, distanzaPiano, raffinaZona, quotaPiano } from './scena.js';
 import { smoothstep } from './rumore.js';
 
 export const STRADE = {
@@ -53,6 +53,7 @@ export const STRADE = {
     cella: 20,                  // m: griglia del tracciato fine
     corridoio: 450,             // m dalla rete
     attrazione: 0.6,            // costo in più al bordo del corridoio (cresce col quadrato)
+    mura: { oltre: 15, costo: 4 },  // scarpate dei terrapieni (+ oltre m): costo × questo (strade al largo delle mura)
     oltre: 6,                   // oltre pmax il costo cresce di × (1 + oltre·(p − pmax)/pmax): gli strappi brevi si
                                 // accettano, le salite lunghe e ripide si girano (tornanti)
     fisso: { raggio: 150, passo: 50 },   // m: il punto fisso tra due tratti si sposta sul terreno più dolce vicino
@@ -525,7 +526,7 @@ function stradeScena(carta) {
 function portaIn(carta, x, z) {
   for (const l of carta.luoghi ?? []) {
     const P = l.porta;
-    if (P && P.nx !== undefined && Math.abs(P.x - x) < 1 && Math.abs(P.z - z) < 1) return P;
+    if (P && P.nx !== undefined && Math.abs(P.x - x) < 1 && Math.abs(P.z - z) < 1) return { ...P, borgo: l.piani?.[1] };
   }
   return null;
 }
@@ -563,6 +564,7 @@ function tracciaTratto(carta, tr, W = STRADE.scena.corridoio) {
   }
   const A = { x: px[0], z: pz[0] }, B = { x: px[np - 1], z: pz[np - 1] };
   const hq = new Float64Array(N).fill(NaN), acqua = new Float32Array(N);   // 0 asciutto, >0 metri d'acqua
+  const mura = new Uint8Array(N);                                       // 1: scarpata di un terrapieno
   const esito = { quota: 0, livello: NaN };
   const piani = [];
   for (const l of carta.luoghi ?? []) for (const p of l.piani ?? []) piani.push(p);
@@ -575,7 +577,12 @@ function tracciaTratto(carta, tr, W = STRADE.scena.corridoio) {
     // Terrapieni di rocca e borgo: niente strada sui piani (le scarpate sì: la porta sta sul bordo del borgo,
     // tra le scarpate dei terrazzi), tranne vicino agli estremi.
     const vicino = Math.hypot(x - A.x, z - A.z) < 40 || Math.hypot(x - B.x, z - B.z) < 40;
-    if (!vicino && piani.some((p) => distanzaPiano(p, x, z) < 0)) continue;
+    let dp = Infinity, sp = 0;
+    for (const p of piani) { const d = distanzaPiano(p, x, z); if (d < dp) { dp = d; sp = p.s; } }
+    if (!vicino && dp < 0) continue;
+    // Sulle scarpate dei terrapieni (rasente alle mura) costa di più, tranne vicino agli estremi: le strade di
+    // passaggio girano al largo, alla porta si arriva per la diramazione.
+    if (!vicino && dp < sp + S.mura.oltre) mura[k] = 1;
     hq[k] = h;
     acqua[k] = Number.isNaN(esito.livello) ? 0 : Math.max(0.01, esito.livello - h);
   }
@@ -625,6 +632,7 @@ function tracciaTratto(carta, tr, W = STRADE.scena.corridoio) {
       if (w > 0) costo *= w > 0.9 ? S.acqua : S.guado;
       const via = Math.sqrt(d2[kk]) / W;
       costo += L * S.attrazione * via * via;
+      if (mura[kk]) costo *= S.mura.costo;
       if (pk >= 0) costo += S.svolta * (1 - (ux * DX[v] + uz * DY[v]) / LUNGO[v]) / 2;
       const nd = d + costo;
       if (nd < dist[kk]) { dist[kk] = nd; da[kk] = k; coda.spingi(kk, nd); }
@@ -673,10 +681,17 @@ function tracciaTratto(carta, tr, W = STRADE.scena.corridoio) {
     if (!P) continue;
     const R = S.portaDritta, X = [], Z = [];
     for (let t = 0; t < R - 1e-6; t += S.passo) { X.push(P.x + P.nx * t); Z.push(P.z + P.nz * t); }
-    const resto = [], restoZ = [];
-    for (let i = 0; i < fx.length; i++) {
-      if (Math.hypot(fx[i] - ex, fz[i] - ez) > R) { resto.push(fx[i]); restoZ.push(fz[i]); }
+    // Via tutti i punti fino all'ultimo (dalla porta) ancora vicino o non ancora davanti alla porta: se il
+    // tracciato costeggiava le mura prima di arrivare, quel pezzo resterebbe come una seconda strada accanto.
+    const n0 = fx.length, ord = inizio ? (i) => i : (i) => n0 - 1 - i;
+    let ultimo = -1;
+    for (let i = 0; i < n0; i++) {
+      const k = ord(i), dx = fx[k] - P.x, dz = fz[k] - P.z, d = Math.hypot(dx, dz), davanti = dx * P.nx + dz * P.nz;
+      if (d <= R || (d < 4 * R && davanti < R)) ultimo = i;
     }
+    const resto = [], restoZ = [];
+    for (let i = ultimo + 1; i < n0; i++) { const k = ord(i); resto.push(fx[k]); restoZ.push(fz[k]); }
+    if (!inizio) { resto.reverse(); restoZ.reverse(); }
     if (!resto.length) continue;
     if (inizio) { fx = [...X, ...resto]; fz = [...Z, ...restoZ]; } else { fx = [...resto, ...X.reverse()]; fz = [...restoZ, ...Z.reverse()]; }
     // Raccordo: niente gomito dove il tratto dritto incontra il resto (estremi fermi, la porta resta in asse).
@@ -691,7 +706,27 @@ function tracciaTratto(carta, tr, W = STRADE.scena.corridoio) {
     if (prima >= 0 && i - prima > 1) for (let j = prima + 1; j < i; j++) h[j] = h[prima] + (h[i] - h[prima]) * (j - prima) / (i - prima);
     prima = i;
   }
-  const hh = liscia(h, ...S.profilo);
+  let hh = liscia(h, ...S.profilo);
+  // Alla porta di un borgo la strada arriva alla quota della soglia (il pendio del borgo appena dentro), salendo o
+  // scendendo in linea retta negli ultimi S.portaDritta m: davanti alla porta niente gradino e niente rampa lunga.
+  hh = hh.slice();
+  for (const inizio of [true, false]) {
+    const k0 = inizio ? 0 : m - 1, P = portaIn(carta, fx[k0], fz[k0]);
+    if (!P || !P.borgo) continue;
+    const qs = quotaPiano(P.borgo, P.x - P.nx * 3, P.z - P.nz * 3), R = S.portaDritta;
+    let kR = k0;
+    for (let i = 0; i < m; i++) {
+      const k = inizio ? i : m - 1 - i;
+      if (Math.hypot(fx[k] - P.x, fz[k] - P.z) > R) { kR = k; break; }
+    }
+    const hR = hh[kR], dR = Math.max(1, Math.hypot(fx[kR] - P.x, fz[kR] - P.z));
+    for (let i = 0; i < m; i++) {
+      const k = inizio ? i : m - 1 - i;
+      if (k === kR) break;
+      const d = Math.hypot(fx[k] - P.x, fz[k] - P.z);
+      hh[k] = qs + (hR - qs) * Math.min(1, d / dR);
+    }
+  }
   return { x: Float64Array.from(fx), z: Float64Array.from(fz), h: Float64Array.from(hh), semi: K.semi, ok: !!cammino };
 }
 

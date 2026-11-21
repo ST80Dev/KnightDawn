@@ -45,9 +45,10 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
 // ─── Geometrie comuni (anche per il borgo) ────────────────────────────────
 
-/** Prisma a facce piane tra due quadrilateri orizzontali (punti [x, z], stesso ordine), facce verso l'esterno. */
+/** Prisma a facce piane tra due quadrilateri (punti [x, z], stesso ordine), facce verso l'esterno. */
 export function prisma(basso, alto, yb, yt) {
-  const V = [...basso.map(([x, z]) => [x, yb, z]), ...alto.map(([x, z]) => [x, yt, z])];
+  // yt: un numero (cima piana) o 4 quote, una per vertice di `alto` (cima in pendenza: parapetti delle rampe).
+  const V = [...basso.map(([x, z]) => [x, yb, z]), ...alto.map(([x, z], i) => [x, Array.isArray(yt) ? yt[i] : yt, z])];
   const C = [0, 1, 2].map((k) => V.reduce((s, v) => s + v[k], 0) / 8);
   const facce = [[0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]];
   const pos = [];
@@ -72,7 +73,7 @@ export function prisma(basso, alto, yb, yt) {
 //     traverso), più una leggera variazione di tono a chiazze di qualche metro;
 //   - texture a corsi di mattoni e conci (scala di grigi, moltiplica il colore del materiale), coordinate dalla
 //     posizione: lungo la faccia e in altezza sulle pareti, in pianta sulle facce orizzontali.
-const GRADAZIONE = { cielo: [-0.6, -0.8], lati: 0.36, chiazze: 0.16, fini: 0.08, tessera: 3.2 };
+const GRADAZIONE = { cielo: [-0.6, -0.8], lati: 0.36, chiazze: 0.16, fini: 0.08, tessera: 6.4 };
 // Tono di fondo diverso per ogni luogo (richiesta dell'utente), a caso entro questi limiti: chiarezza (×) e calore
 // (+ più bruno, − più grigio). Rocca e borgo dello stesso luogo hanno lo stesso tono.
 // Una parte dei luoghi (`scuri`) ha pietra molto scura (basalto, pietra annerita: tipico dei castelli fantasy,
@@ -80,59 +81,73 @@ const GRADAZIONE = { cielo: [-0.6, -0.8], lati: 0.36, chiazze: 0.16, fini: 0.08,
 const TONO_LUOGO = { chiaro: [0.82, 1.1], scuri: 0.2, scuro: [0.45, 0.66], caldo: [-0.07, 0.09] };
 let _muro = null;
 /**
- * Texture della muratura di pietra (256 px = GRADAZIONE.tessera m), ripetibile: corsi di altezza diversa, conci di
- * lunghezza diversa, ognuno col suo tono (grigio, bruno, qualcuno più caldo o più freddo), macchiato e coi bordi
- * scuri; malta grigia. In scala di grigi caldi: moltiplica il colore del materiale.
+ * Texture della muratura di pietra (512 px = GRADAZIONE.tessera m, 80 px/m), ripetibile e poco regolare (richiesta
+ * dell'utente: niente trama a griglia): corsi di altezza diversa, conci di lunghezza diversa con giunti storti,
+ * qualcuno alto due corsi; il tono di ogni concio segue un campo a macchie larghe più una parte sua, così chiari e
+ * scuri si raggruppano invece di fare una scacchiera. In scala di grigi caldi: moltiplica il colore del materiale.
  */
 export function texturaMuro() {
   if (_muro) return _muro;
-  const N = 256, c = document.createElement('canvas');
+  const N = 512, c = document.createElement('canvas');
   c.width = c.height = N;
   const g = c.getContext('2d');
   let seme = 777;
   const rnd = () => ((seme = (seme * 1103515245 + 12345) >>> 0) / 4294967296);
-  g.fillStyle = 'rgb(150,146,138)';                      // malta
+  // Campo di tono a macchie larghe, ripetibile: somma di onde con periodo intero sulla tessera.
+  const onde = Array.from({ length: 6 }, () => ({ a: 1 + Math.floor(rnd() * 3), b: Math.floor(rnd() * 3), f: rnd() * 6.28, w: 0.5 + rnd() }));
+  const campo = (x, y) => {
+    let v = 0, t = 0;
+    for (const o of onde) { v += o.w * Math.sin(2 * Math.PI * (o.a * x + o.b * y) / N + o.f); t += o.w; }
+    return v / t;                                         // circa −1…1
+  };
+  g.fillStyle = 'rgb(140,136,128)';                      // malta
   g.fillRect(0, 0, N, N);
-  // Corsi: altezze tra 18 e 34 px (~0,22–0,42 m) che sommano esattamente a N.
   const corsi = [];
   for (let y = 0; y < N;) {
-    let h = 18 + Math.floor(rnd() * 17);
-    if (N - (y + h) < 18) h = N - y;
+    let h = 16 + Math.floor(rnd() * 26);
+    if (N - (y + h) < 16) h = N - y;
     corsi.push([y, h]); y += h;
   }
   const concio = (x, y, w, h) => {
-    // Toni più distanti, soprattutto verso lo scuro (richiesta dell'utente): qualche concio molto scuro.
-    const q = rnd(), v = q < 0.15 ? 85 + Math.floor(rnd() * 40) : 125 + Math.floor(rnd() * 120);
+    const m = campo(x + w / 2, y + h / 2);
+    let v = 178 + m * 34 + (rnd() - 0.5) * 50;
+    if (rnd() < 0.06) v -= 45;                           // qualche concio scuro, raro
+    v = clamp(Math.round(v), 80, 245);
     const t = Math.floor(rnd() * 22) - 8;                // > 0 più bruno, < 0 più grigio
     const col = (d) => `rgb(${clamp(v + t + d, 0, 255)},${clamp(v + d, 0, 255)},${clamp(v - t * 0.8 + d - 4, 0, 255)})`;
-    const gx = x + 1.5, gy = y + 1.5, gw = w - 3, gh = h - 3;
+    const gx = x + 1.5, gy = y + 1.5, gw = w - 3, gh = h - 3, j = () => (rnd() - 0.5) * 4;
     g.fillStyle = col(0);
-    g.beginPath();                                       // spigoli un po' smussati e irregolari
-    const sm = 2 + rnd() * 3;
-    g.moveTo(gx + sm, gy); g.lineTo(gx + gw - sm * rnd(), gy); g.lineTo(gx + gw, gy + sm);
-    g.lineTo(gx + gw - rnd() * 2, gy + gh - sm); g.lineTo(gx + gw - sm, gy + gh); g.lineTo(gx + sm * rnd(), gy + gh);
-    g.lineTo(gx, gy + gh - sm); g.lineTo(gx + rnd() * 2, gy + sm); g.closePath(); g.fill();
-    // Macchie e venature.
-    for (let k = 0; k < 6; k++) {
-      g.fillStyle = `rgba(${rnd() < 0.5 ? '40,34,28' : '255,250,240'},${0.05 + rnd() * 0.1})`;
+    g.beginPath();                                       // giunti storti, spigoli smussati
+    g.moveTo(gx + 3 + j(), gy + j() * 0.5); g.lineTo(gx + gw * 0.5 + j(), gy + j() * 0.5); g.lineTo(gx + gw - 3 + j(), gy + j() * 0.5);
+    g.lineTo(gx + gw + j(), gy + gh * 0.5 + j()); g.lineTo(gx + gw - 3 + j(), gy + gh + j() * 0.5);
+    g.lineTo(gx + gw * 0.5 + j(), gy + gh + j() * 0.5); g.lineTo(gx + 3 + j(), gy + gh + j() * 0.5); g.lineTo(gx + j(), gy + gh * 0.5 + j());
+    g.closePath(); g.fill();
+    for (let k = 0; k < 7; k++) {                        // macchie e venature
+      g.fillStyle = `rgba(${rnd() < 0.55 ? '40,34,28' : '255,250,240'},${0.04 + rnd() * 0.1})`;
       g.beginPath();
-      g.ellipse(gx + rnd() * gw, gy + rnd() * gh, 2 + rnd() * gw * 0.3, 1 + rnd() * gh * 0.3, rnd() * 3, 0, Math.PI * 2);
+      g.ellipse(gx + rnd() * gw, gy + rnd() * gh, 2 + rnd() * gw * 0.3, 1 + rnd() * gh * 0.35, rnd() * 3, 0, Math.PI * 2);
       g.fill();
     }
-    // Ombra in basso e luce in alto: il concio sporge un poco dalla malta.
-    g.fillStyle = 'rgba(30,25,20,0.22)'; g.fillRect(gx + 1, gy + gh - 2, gw - 2, 2);
-    g.fillStyle = 'rgba(255,250,240,0.12)'; g.fillRect(gx + 1, gy, gw - 2, 1.5);
+    g.fillStyle = 'rgba(30,25,20,0.2)'; g.fillRect(gx + 2, gy + gh - 2, gw - 4, 2);
+    g.fillStyle = 'rgba(255,250,240,0.1)'; g.fillRect(gx + 2, gy, gw - 4, 1.5);
   };
-  for (const [y, h] of corsi) {
-    let x = -Math.floor(rnd() * 40);
+  // Conci alti due corsi: si segnano e il corso sotto lascia il posto.
+  const occupato = [];
+  corsi.forEach(([y, h], ri) => {
+    let x = -Math.floor(rnd() * 60);
     while (x < N) {
-      const w = 34 + Math.floor(rnd() * 56);
-      const fine = Math.min(x + w, N + 60);
-      for (const dx of [0, -N]) if (x + dx < N && fine + dx > 0) concio(x + dx, y, fine - x, h);
-      if (fine > N) concio(x - N, y, fine - x, h);       // chi esce a destra rientra a sinistra
+      const w = 30 + Math.floor(rnd() * 80);
+      const fine = x + w;
+      const libero = !occupato.some((o) => o.ri === ri && o.x0 < fine && o.x1 > x);
+      if (libero) {
+        const doppio = ri + 1 < corsi.length && rnd() < 0.08;
+        const hh = doppio ? h + corsi[ri + 1][1] : h;
+        if (doppio) occupato.push({ ri: ri + 1, x0: x, x1: fine });
+        for (const dx of [0, -N, N]) if (x + dx < N && fine + dx > 0) concio(x + dx, y, w, hh);
+      }
       x = fine;
     }
-  }
+  });
   // Grana fine su tutto.
   const img = g.getImageData(0, 0, N, N), d = img.data;
   for (let i = 0; i < d.length; i += 4) {
@@ -155,12 +170,31 @@ export function rifinisci(geo, orientata = true) {
   const p = geo.attributes.position, n = geo.attributes.normal, G = GRADAZIONE;
   const lc = Math.hypot(G.cielo[0], G.cielo[1]), cx = G.cielo[0] / lc, cz = G.cielo[1] / lc;
   const uv = new Float32Array(p.count * 2), col = new Float32Array(p.count * 3);
+  // Geometrie non indicizzate (quelle unite): coordinate per triangolo dalla normale della sua faccia, e uno
+  // scostamento della texture diverso per ogni piano (stessa normale e distanza → stesso scostamento: i due
+  // triangoli di una faccia combaciano), così le ripetizioni non si allineano da un tratto di muro all'altro.
+  const perFaccia = orientata && !geo.index && p.count % 3 === 0;
+  let fnx = 0, fny = 1, fnz = 0, ou = 0, ov = 0;
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-    const nx = n ? n.getX(i) : 0, ny = n ? n.getY(i) : 1, nz = n ? n.getZ(i) : 0;
-    if (Math.abs(ny) > 0.7) { uv[2 * i] = x / G.tessera; uv[2 * i + 1] = z / G.tessera; } else {
+    let nx = n ? n.getX(i) : 0, ny = n ? n.getY(i) : 1, nz = n ? n.getZ(i) : 0;
+    if (perFaccia) {
+      if (i % 3 === 0) {
+        const ax = p.getX(i + 1) - x, ay = p.getY(i + 1) - y, az = p.getZ(i + 1) - z;
+        const bx = p.getX(i + 2) - x, by = p.getY(i + 2) - y, bz = p.getZ(i + 2) - z;
+        fnx = ay * bz - az * by; fny = az * bx - ax * bz; fnz = ax * by - ay * bx;
+        const l = Math.hypot(fnx, fny, fnz) || 1;
+        fnx /= l; fny /= l; fnz /= l;
+        if (fnx * nx + fny * ny + fnz * nz < 0) { fnx = -fnx; fny = -fny; fnz = -fnz; }
+        const dp = fnx * x + fny * y + fnz * z;
+        ou = _h3(Math.round(fnx * 40), Math.round(fnz * 40) + Math.round(fny * 7) * 97, Math.round(dp * 2));
+        ov = _h3(Math.round(fnz * 40) - 5, Math.round(fnx * 40) + 13, Math.round(dp * 2) + 71);
+      }
+      nx = fnx; ny = fny; nz = fnz;
+    }
+    if (Math.abs(ny) > 0.7) { uv[2 * i] = x / G.tessera + ou; uv[2 * i + 1] = z / G.tessera + ov; } else {
       const l = Math.hypot(nx, nz) || 1, tx = -nz / l, tz = nx / l;
-      uv[2 * i] = (x * tx + z * tz) / G.tessera; uv[2 * i + 1] = y / G.tessera;
+      uv[2 * i] = (x * tx + z * tz) / G.tessera + ou; uv[2 * i + 1] = y / G.tessera + ov;
     }
     let k = 1;
     if (orientata && Math.abs(ny) < 0.7) {
@@ -759,7 +793,7 @@ export function createRocca(suolo, luogo, ox, oz) {
         const qa = [rampa.start[0] + rampa.dir[0] * t0 + rpu * sp, rampa.start[1] + rampa.dir[1] * t0 + rpv * sp];
         const qb = [rampa.start[0] + rampa.dir[0] * t1 + rpu * sp, rampa.start[1] + rampa.dir[1] * t1 + rpv * sp];
         const hw = RAMPA.muretto / 2, pp = [[qa[0] - rpu * hw, qa[1] - rpv * hw], [qb[0] - rpu * hw, qb[1] - rpv * hw], [qb[0] + rpu * hw, qb[1] + rpv * hw], [qa[0] + rpu * hw, qa[1] + rpv * hw]];
-        parti.scuro.push(prisma(quad(pp), quad(pp), yb, Math.max(y0, y1) + RAMPA.parapetto));
+        parti.scuro.push(prisma(quad(pp), quad(pp), yb, [y0, y1, y1, y0].map((y) => y + RAMPA.parapetto)));   // in pendenza
         scatole.push({ cu: (qa[0] + qb[0]) / 2, cv: (qa[1] + qb[1]) / 2, au: rampa.dir[0], av: rampa.dir[1], hl: (t1 - t0) / 2 + 0.05, hw });
       }
     }

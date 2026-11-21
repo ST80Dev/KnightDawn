@@ -1221,6 +1221,18 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
        per rocca e borgo dello stesso luogo. Poi (utente: castelli molto scuri, tipici del fantasy) ~1 luogo su 5 in
        **pietra molto scura** e più fredda (chiarezza ×0,45–0,66); su 5 semi 25 rocche scure su 158. Il caso per luogo
        ora viene da un hash intero (il vecchio `sin(…)·43758` non era uniforme: 13 «scure» su 34 al 20 %).
+       Poi (utente: «niente texture regolari ripetitive», si vedeva una griglia) texture più grande (512 px = 6,4 m),
+       conci con giunti storti e qualcuno alto due corsi, tono di ogni concio da un campo a macchie larghe più una
+       parte sua (chiari e scuri raggruppati, non a scacchiera; conci molto scuri rari), e **scostamento della texture
+       diverso per ogni faccia** (dalla normale e dalla distanza del piano, uguale per i due triangoli della faccia):
+       le ripetizioni non si allineano più da un tratto di muro all'altro.
+     - *Strada e rampa alla porta del borgo* (stessa prova). Le strade di passaggio pagano ×4 sulle scarpate dei
+       terrapieni (+15 m, `STRADE.scena.mura`): girano al largo delle mura invece di costeggiarle (sembravano una
+       seconda strada accanto alla porta); il tratto dritto verso la porta toglie anche i punti che costeggiavano le
+       mura; la quota della strada negli ultimi 30 m va a quella della soglia. Dove il terreno davanti alla porta
+       scende davvero (una conca) la rampa esterna ora ha il **piano in pietra** (prima mancava: il cavaliere
+       camminava sospeso sul terreno) e i fianchi in pendenza (prima a gradini); il suolo della rampa non va mai
+       sotto il terreno. Anche i parapetti della rampa della rocca sono in pendenza.
      - *Misure* (Chromium headless): seguendo la via, dal fuori della porta del borgo al cortile della rocca in
        **24 rocche su 24** (8 semi, tre classi); 32 assalti al borgo e 32 alla rocca per 3 semi: si entra solo dalla
        porta, **nessuna compenetrazione**. Rocca 10
