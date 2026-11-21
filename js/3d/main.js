@@ -571,8 +571,36 @@ function* preparaMondo(desc) {
   yield 'orizzonte: luoghi';
   veg?.aggiungiLontano(carta, cx, cz, oriz.quota, Calendar.stagione);
   yield 'bosco lontano';
+  // Shader e texture pronti prima dello scambio (note di M1): niente compilazioni né caricamenti nel suo fotogramma.
+  yield* preparaScheda([ter.mesh, acque, pp.gruppo, ...roc.map((r) => r.object), veg.oggetto, camp?.object,
+    oriz.oggetto, oriz.acqua]);
   return { desc: { ...desc, cx, cz }, scostamento: { x: desc.cx - cx, z: desc.cz - cz }, meta, dati, ter, acque, pp, roc,
     veg, camp, msCot, oriz };
+}
+
+/**
+ * Compila in parallelo i materiali degli oggetti non ancora in scena, con le luci della scena (compileAsync: fa yield
+ * della promessa e avanzaBlocco aspetta senza fermare i fotogrammi), poi carica sulla scheda le loro texture, una per pezzo.
+ * Le geometrie salgono al primo disegno.
+ */
+function* preparaScheda(oggetti) {
+  const texture = new Set();
+  const raccogli = (v) => { if (v?.isTexture) texture.add(v); };
+  for (const o of oggetti) {
+    if (!o) continue;
+    yield renderer.compileAsync(o, camera, scene);
+    o.traverse((m) => {
+      for (const mat of [m.material].flat()) {
+        if (!mat) continue;
+        for (const v of Object.values(mat)) raccogli(v);
+        for (const u of Object.values(mat.uniforms || {})) raccogli(u?.value);
+      }
+    });
+  }
+  for (const t of texture) {
+    renderer.initTexture(t);
+    yield 'texture';
+  }
 }
 
 /** Mette in scena una Scena del mondo preparata da preparaMondo (la scena attuale è già stata tolta). */
@@ -1119,6 +1147,7 @@ let msCottura = null;                    // ms della cottura del colore del bloc
 let msCambioBlocco = null, cambiBlocco = 0;   // M7, passo 9: fotogramma più lungo dell'ultimo cambio di blocco e quanti (F3)
 let msTotaleBlocco = null;                // ms dall'inizio della preparazione allo scambio (F3)
 let ultimoCambio = null;                  // dettagli dell'ultimo cambio (kd.cambiBlocco)
+let tScambio = null;                      // quando è avvenuto lo scambio: il fotogramma dopo misura il disegno che segue
 let preparazione = null;                  // { gen, t0, picco } preparazione del blocco nuovo in sottofondo
 // Finché il cambio non resta sotto ~50 ms per fotogramma, solo con ?blocchi nell'indirizzo: senza, il cavaliere si
 // ferma al bordo come prima.
@@ -1165,9 +1194,15 @@ function avanzaBlocco() {
   if (!preparazione) return;
   const t0 = performance.now(), fine = t0 + MS_PREPARAZIONE;
   const P = preparazione;
+  if (P.attesa) return;                   // compilazione in parallelo non ancora finita
   let r, t = t0;
   do {
     r = P.gen.next();
+    if (typeof r.value?.then === 'function') {
+      P.attesa = true;
+      r.value.then(() => { P.attesa = false; }, () => { P.attesa = false; });
+      r.value = 'compilazione';
+    }
     const t1 = performance.now();
     // I pezzi più lunghi, per capire dove spezzare ancora (kd.cambiBlocco.ultimo.lunghi).
     const nome = typeof r.value === 'string' ? r.value : `dopo ${P.ultimo ?? 'inizio'}`;
@@ -1175,7 +1210,7 @@ function avanzaBlocco() {
     if (t1 - t > 8) P.lunghi.push(`${nome} ${Math.round(t1 - t)}`);
     P.n++;
     t = t1;
-  } while (!r.done && t < fine);
+  } while (!r.done && !P.attesa && t < fine);
   if (r.done) {
     scambiaBlocco(r.value);
     P.scambio = performance.now() - t;
@@ -1185,6 +1220,7 @@ function avanzaBlocco() {
     msCambioBlocco = P.picco;
     msTotaleBlocco = performance.now() - P.t0;
     ultimoCambio = { picco: P.picco, totale: msTotaleBlocco, pezzi: P.n, lunghi: P.lunghi, scambio: P.scambio };
+    tScambio = performance.now();
     preparazione = null;
   }
 }
@@ -1345,6 +1381,7 @@ function aggiornaPannello(now) {
   testo += `\nCPU: logica ${fmt(ri.msLogica, 1)} ms · invio comandi ${fmt(ri.msInvio, 1)} ms`;
   if (msCottura != null) testo += ` · suolo cotto in ${fmt(msCottura)} ms`;
   if (msCambioBlocco != null) testo += ` · cambi di blocco ${cambiBlocco} (l'ultimo: fotogramma più lungo ${fmt(msCambioBlocco)} ms`
+    + (ultimoCambio?.disegno != null ? `, disegno dopo lo scambio ${fmt(ultimoCambio.disegno)} ms` : '')
     + (msTotaleBlocco != null ? `, in tutto ${fmt(msTotaleBlocco / 1000, 1)} s)` : ')');
   if (!P.timerGPU) testo += '\nGPU: timer non disponibili su questa scheda o browser (usare F4)';
   else if ((percorso ? percorso.modo : provaPrestazioni === 1 ? 'gruppi' : 'normale') === 'gruppi') {
@@ -1449,6 +1486,11 @@ function frame(now) {
   const dtReale = Math.max(0, (now - tPrec) / 1000);
   const dt = THREE.MathUtils.clamp(dtReale, 0, DT_MAX);
   tPrec = now;
+  if (tScambio != null && ultimoCambio) {
+    // Dallo scambio all'inizio di questo fotogramma: il disegno del blocco nuovo (geometrie sulla scheda) compreso.
+    ultimoCambio.disegno = t0 - tScambio;
+    tScambio = null;
+  }
   if (cartaVista.aperta) return;           // la Carta copre tutto: niente tempo di gioco, niente disegno
   if (provaAutomatica && knight && caricamento.hidden && (attesaProva += dt) > 3) { provaAutomatica = false; avviaPercorso(); }
   if (knight) {

@@ -1357,7 +1357,9 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
      medio) restano lunghi, tutti atomici: posizionamento della vegetazione ~850 ms, `creaVegetazione` ~250, bosco
      lontano ~120, rocche e borghi ~90; le parti della scena, del terreno e dell'orizzonte stanno sotto ~26 ms. Mancano
      le versioni a pezzi di Vegetazione e M7 (chieste) e il caricamento sulla scheda e la compilazione degli shader
-     prima dello scambio (note di M1); intanto resta con `?blocchi`.
+     prima dello scambio (note di M1); intanto resta con `?blocchi`. Poi aggiunti: shader compilati in parallelo
+     (`compileAsync`, la preparazione aspetta senza fermare i fotogrammi) e texture caricate sulla scheda prima dello
+     scambio; F3 mostra anche il disegno del fotogramma dopo lo scambio (le geometrie salgono lì).
    - *Note della sessione M1 (prestazioni)*, da rispettare alla tappa 2: nel fotogramma del cambio non devono cadere
      la cottura del suolo (`cuociSuolo`, render 2048²), il caricamento sulla scheda di terreno, istanze della vegetazione
      e texture (ombre, piede, cotto) né compilazioni di shader: tutto nella preparazione, uno per fotogramma
