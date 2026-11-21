@@ -2027,6 +2027,10 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      ~3 m. Pino domestico rifatto (`pinoDomestico`): fusto storto che si apre in 2–3 branche, ombrello largo e piatto
      con un gruppo di ciuffi su ogni branca e uno al centro (~1150 triangoli vicino, ~100 medio). Bosco fitto invariato
      (763 000 contro 769 000 triangoli in headless, con le fasce di passaggio).
+     Cime senza ciuffi staccati (richiesta dell'utente: in punta ai pioppi e ai faggi un ciuffo chiaro sopra un tratto
+     di ramo nudo, ripetuto su ogni albero uguale): foglie lungo tutta la cima (metà del primo tratto, piega, metà del
+     secondo solo entro 18 m, punta) con l'ultimo ciuffo centrato un po' sotto la punta; cime più corte (faggio 5,2 m,
+     pioppo 3 m). Bosco fitto: 568 000 triangoli contro 553 000.
      Bosco fitto in headless: ~550 000 triangoli (prima delle chiome nuove 458 000): da misurare sulla scheda.
      *Case fuori dal borgo* (richiesta dell'utente: case isolate o a gruppetti di 2–3 in mezzo o a lato dei campi):
      `CASE_CAMPAGNA` / `caseCampagna(carta)`, siti deterministici per Carta (4–9 gruppi per rocca secondo la classe,

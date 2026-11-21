@@ -318,9 +318,13 @@ function ramificato({ fusto: hF, cima, rami: nR, parte, inc, lungo, r0, colRamo,
     const ex = mx + Math.cos(a2) * Math.sin(d2) * L * 0.45, ey = my + Math.cos(d2) * L * 0.45, ez = mz + Math.sin(a2) * Math.sin(d2) * L * 0.45;
     const b0 = [P2[0], hF - 0.3, P2[2]], m = [mx, my, mz], e = [ex, ey, ez];
     parti.push(ramoCurvo([b0, piega(b0, m, 0.5, 0.12, rnd), m, piega(m, e, 0.5, 0.14, rnd), e], rc, 0.025, colRamo, 5, 4 + 2 * sv));
-    foglie(mx * 0.6 + (rnd() - 0.5) * 0.6, hF + (my - hF) * 0.6, mz * 0.6 + (rnd() - 0.5) * 0.6, 0.9);
-    foglie(mx + (rnd() - 0.5) * 0.5, my + 0.2, mz + (rnd() - 0.5) * 0.5, 1.0);
-    foglie(ex, ey + 0.15, ez, 1.2);                                        // copre la punta
+    // Foglie lungo tutta la cima, senza tratti nudi (richiesta dell'utente: ciuffi in punta «staccati» dal resto, sopra
+    // un pezzo di ramo nudo): a metà del primo tratto, alla piega, a metà del secondo e sulla punta, che resta dentro
+    // l'ultimo ciuffo (centro un po' sotto la punta, non sopra).
+    foglie(P2[0] + (mx - P2[0]) * 0.55, hF + (my - hF) * 0.55, P2[2] + (mz - P2[2]) * 0.55, 0.95);
+    foglie(mx, my, mz, 1.0);
+    if (dettaglio) foglie((mx + ex) / 2, (my + ey) / 2, (mz + ez) / 2, 0.95);   // oltre i 18 m il buco non si vede
+    foglie(ex, ey - rCiuffo * 0.25, ez, 0.9);                              // copre la punta
   }
   // Rami principali (richiesta dell'utente: «rami troppo fuori dal tronco, cadrebbero per gravità; direzioni e lunghezze
   // diverse»): direzioni irregolari (angolo aureo più caso), lunghezze molto diverse, due tratti con il secondo che
@@ -509,7 +513,7 @@ function creaModelli() {
       colRamo: COL.corteccia, ciuffi: 2, rCiuffo: 1.4, raggio: [0.52, 0.85], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r, piatto: 0.85 }),
   ]); };
   const faggio = (det) => { const r = casuale(312); return unisci([
-    ...ramificato({ fusto: 4.6, cima: 6.2, rami: 4, cime: 3, parte: [0.5, 1.0], inc: [40, 68], lungo: 2.7, r0: 0.4, rCima: 0.22, tronco: [0.36, 0.22],
+    ...ramificato({ fusto: 4.6, cima: 5.2, rami: 4, cime: 3, parte: [0.5, 1.0], inc: [40, 68], lungo: 2.7, r0: 0.4, rCima: 0.22, tronco: [0.36, 0.22],
       colRamo: COL.cortecciaChiara, ciuffi: 2, rCiuffo: 1.3, raggio: [0.5, 0.8], dettaglio: det, scuro: FF[0], chiaro: FF[1], rnd: r }),
   ]); };
   const castagno = (det) => { const r = casuale(313); return unisci([
@@ -594,7 +598,7 @@ function creaModelli() {
     { fino: 60, varianti: [unisci([
       // (richiesta dell'utente: «pali con ciuffi in cima»: prima una cima nuda di ~9 m con tre ciuffi; ora cima corta e
       // più rami ripidi lungo il fusto, colonna di foglie da ~3 m in su)
-      ...ramificato({ fusto: 4.6, cima: 3.6, rami: 8, parte: [0.3, 1.0], inc: [58, 78], lungo: 2.0, r0: 0.3, rCima: 0.2, tronco: [0.36, 0.2],
+      ...ramificato({ fusto: 4.6, cima: 3.0, rami: 8, parte: [0.3, 1.0], inc: [58, 78], lungo: 2.0, r0: 0.3, rCima: 0.2, tronco: [0.36, 0.2],
         colRamo: COL.cortecciaBetulla, ciuffi: 2, rCiuffo: 1.05, raggio: [0.45, 0.7], dettaglio: 1, scuro: R[0], chiaro: R[1], rnd })])] },
     { fino: 300, varianti: [unisci([fusto(0.34, 0.04, 8, 4, COL.cortecciaBetulla),
       ...chioma({ y: 5.8, a: 1.8, b: 3.4, ciuffi: 10, raggio: [1.05, 1.35], dettaglio: 0, scuro: R[0], chiaro: R[1], rnd, pieno: 0.2,
