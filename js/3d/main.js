@@ -17,9 +17,9 @@ import { createKnight } from './knight3d.js';
 import { createCavallo } from './cavallo3d.js';
 import { createFollowCamera } from './camera.js';
 import { createCastle } from './castle3d.js';
-import { createRocca } from './rocca3d.js';
+import { createRoccaAPezzi } from './rocca3d.js';
 import { creaCaseCampagna, quotaFinestre } from './edifici3d.js';
-import { createBorgo } from './borgo3d.js';
+import { createBorgoAPezzi } from './borgo3d.js';
 import { createCartaVista } from './cartaVista.js';
 import { creaOrizzonteAPezzi } from './orizzonte.js';
 import { creaAcqueScena, creaPonti } from './acqua.js';
@@ -27,8 +27,8 @@ import { vicinoAlBordo, trasla } from './blocchi.js';
 import { generaCartaAsincrona, verificaSemi } from '../mondo/generatore.js';
 import { generaScenaAPezzi, centroBlocco, quotaFinale } from '../mondo/scena.js';
 import { distanzaStrada } from '../mondo/strade.js';
-import { posizionaVegetazione, coperturaMondo, coperturaTavullia } from '../mondo/vegetazione.js';
-import { creaVegetazione } from './vegetazione3d.js';
+import { posizionaVegetazione, posizionaVegetazioneAPezzi, coperturaMondo, coperturaTavullia } from '../mondo/vegetazione.js';
+import { creaVegetazione, creaVegetazioneAPezzi } from './vegetazione3d.js';
 import { creaAbitanti } from './abitanti3d.js';
 import { semeDaTesto, completa } from '../mondo/rumore.js';
 import { creaCielo, posizioneSole, visibilitaDelGiorno } from './cielo.js';
@@ -515,7 +515,8 @@ function contaPercorso() {
 
 function libera(oggetto) {
   oggetto.traverse((o) => {
-    o.geometry?.dispose();
+    // Modelli della vegetazione condivisi tra i blocchi (userData.condivisa): li usa già il blocco nuovo.
+    if (!o.geometry?.userData.condivisa) o.geometry?.dispose();
     for (const m of Array.isArray(o.material) ? o.material : o.material ? [o.material] : []) m.dispose();
   });
 }
@@ -536,7 +537,7 @@ function misuraPendenze(t) {
  * coordinate del blocco. Il terreno sotto viene dal blocco e, fuori, dalla stessa quota del mondo (quotaFinale):
  * una rocca tagliata dal bordo del blocco si costruisce intera.
  */
-function costruisciRocche(cx, cz, ter) {
+function* costruisciRocche(cx, cz, ter) {
   const half = ter.size / 2, out = [];
   const suoloMondo = {
     getHeight: (x, z) => (Math.abs(x) <= half && Math.abs(z) <= half ? ter.getHeight(x, z) : quotaFinale(carta, x + cx, z + cz)),
@@ -547,10 +548,10 @@ function costruisciRocche(cx, cz, ter) {
     if (Math.abs(x) > half + m || Math.abs(z) > half + m) continue;
     // Carte di prima delle forme irregolari (senza poligoni): niente rocca (la cache si rigenera con la versione).
     if (!l.piani[0].poligono) continue;
-    const rocca = createRocca(suoloMondo, l, x, z);         // cinta poligonale, porta verso il borgo (M7)
+    const rocca = yield* createRoccaAPezzi(suoloMondo, l, x, z);         // cinta poligonale, porta verso il borgo (M7)
     out.push(rocca);
     // M7, passo 4: il borgo murato in pendio, addossato alla rocca.
-    if (l.piani.length > 1) out.push(createBorgo(suoloMondo, l, x, z, rocca));
+    if (l.piani.length > 1) out.push(yield* createBorgoAPezzi(suoloMondo, l, x, z, rocca));
   }
   return out;
 }
@@ -591,15 +592,15 @@ function* preparaMondo(desc) {
   const acque = creaAcqueScena(dati, meta, COLORE_ACQUA, meta.centroMondo);
   const pp = creaPonti(dati.attraversamenti, dati.altezza);
   yield 'acque e ponti';
-  const roc = costruisciRocche(cx, cz, ter);
+  const roc = yield* costruisciRocche(cx, cz, ter);
   yield 'rocche';
-  const posVeg = posizionaVegetazione({
+  const posVeg = yield* posizionaVegetazioneAPezzi({
     heights, cols: meta.cols, cell: meta.cellSize, cx, cz, acqua: dati,
     copertura: coperturaMondo(carta, Calendar.stagione), seme: carta.seme, carta,
     piani: (carta.luoghi || []).flatMap((l) => l.piani || []), mare: true,
-  });
+  }, MS_PEZZO);
   yield 'posizione vegetazione';
-  const veg = creaVegetazione(posVeg, ter, renderer);
+  const veg = yield* creaVegetazioneAPezzi(posVeg, ter, renderer, MS_PEZZO);   // il terreno nuovo, mai quello in scena
   yield 'vegetazione';
   // Case di campagna (passo 5) sui siti della vegetazione (aia e orto già liberi attorno).
   let camp = null;
@@ -619,8 +620,11 @@ function* preparaMondo(desc) {
   const oriz = yield* creaOrizzonteAPezzi(carta, cx, cz, ter, COLORE_ACQUA, Calendar.stagione);
   // Bosco lontano: sagome degli alberi negli anelli fino a ~4 km (niente stacco al bordo del blocco).
   yield 'orizzonte: luoghi';
-  veg?.aggiungiLontano(carta, cx, cz, oriz.quota, Calendar.stagione);
+  yield* veg.aggiungiLontanoAPezzi(carta, cx, cz, oriz.quota, Calendar.stagione, MS_PEZZO);
   yield 'bosco lontano';
+  // Prima ombra del sole sulla vegetazione: senza, il primo aggiorna() dopo lo scambio la calcola tutta.
+  yield* veg.preparaOmbre(sole.position, MS_PEZZO);
+  yield 'ombre';
   // Shader e texture pronti prima dello scambio (note di M1): niente compilazioni né caricamenti nel suo fotogramma.
   yield* preparaScheda([ter.mesh, acque, pp.gruppo, ...roc.map((r) => r.object), veg.oggetto, camp?.object,
     oriz.oggetto, oriz.acqua]);
@@ -1191,10 +1195,11 @@ let msTotaleBlocco = null;                // ms dall'inizio della preparazione a
 let ultimoCambio = null;                  // dettagli dell'ultimo cambio (kd.cambiBlocco)
 let tScambio = null;                      // quando è avvenuto lo scambio: il fotogramma dopo misura il disegno che segue
 let preparazione = null;                  // { gen, t0, picco } preparazione del blocco nuovo in sottofondo
-// Finché il cambio non resta sotto ~50 ms per fotogramma, solo con ?blocchi nell'indirizzo: senza, il cavaliere si
-// ferma al bordo come prima.
-const SEGUI_BLOCCO = PARAMETRI.has('blocchi');
+// Il blocco segue il cavaliere (tappa 2: tutto a pezzi, nessun fotogramma oltre ~25 ms in headless). Con ?blocchi=no
+// nell'indirizzo si torna al cavaliere che si ferma al bordo (per confronti).
+const SEGUI_BLOCCO = PARAMETRI.get('blocchi') !== 'no';
 const MS_PREPARAZIONE = 4;                // ms per fotogramma dati alla preparazione del blocco nuovo
+const MS_PEZZO = 2;                       // ms per pezzo chiesti ai generatori a pezzi (vegetazione: ~2 dentro i 4)
 
 /** Mette in scena il blocco preparato: cavaliere, cavallo e camera restano nello stesso punto del mondo. */
 function scambiaBlocco(p) {

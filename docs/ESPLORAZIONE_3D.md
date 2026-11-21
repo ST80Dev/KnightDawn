@@ -1409,6 +1409,14 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
      prima dello scambio (note di M1); intanto resta con `?blocchi`. Poi aggiunti: shader compilati in parallelo
      (`compileAsync`, la preparazione aspetta senza fermare i fotogrammi) e texture caricate sulla scheda prima dello
      scambio; F3 mostra anche il disegno del fotogramma dopo lo scambio (le geometrie salgono lì).
+   - **Tappa 2 fatta** (da provare nel browser): nel generatore entrano le versioni a pezzi di Vegetazione
+     (`posizionaVegetazioneAPezzi`, `creaVegetazioneAPezzi`, `aggiungiLontanoAPezzi`, `preparaOmbre`) e di M7
+     (`createRoccaAPezzi`, `createBorgoAPezzi`: `costruisciRocche` è un generatore), con ~2 ms per pezzo dentro i
+     4 ms per fotogramma; `libera()` salta i modelli condivisi della vegetazione (`userData.condivisa`). Headless
+     (seme 570549): pezzo più lungo 22–24 ms (la cottura del suolo, un render 2048² che sulla scheda vera costa
+     pochi ms), gli altri ≤ 16 ms, scambio 10–12 ms; il cavaliere resta nello stesso punto del mondo. **Il blocco
+     segue il cavaliere senza parametri**; `?blocchi=no` lo spegne (cavaliere fermo al bordo, per confronti).
+     Ancora da fare se serve: cottura del suolo divisa (se sulla scheda dell'utente lo scatto si vede).
    - *Note della sessione M1 (prestazioni)*, da rispettare alla tappa 2: nel fotogramma del cambio non devono cadere
      la cottura del suolo (`cuociSuolo`, render 2048²), il caricamento sulla scheda di terreno, istanze della vegetazione
      e texture (ombre, piede, cotto) né compilazioni di shader: tutto nella preparazione, uno per fotogramma
