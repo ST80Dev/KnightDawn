@@ -198,24 +198,61 @@ export const VEGETAZIONE = {
 const _cop = nuovaCopertura();
 
 /**
- * Campagna attorno ai luoghi (rocche e borghi, carta.luoghi): nel Medioevo i primi 1–2 km erano coltivati e
- * disboscati. Distanza dal luogo più vicino con un bordo irregolare (rumore su ~600 m, ±300 m).
+ * Campagna attorno ai luoghi (carta.luoghi): nel Medioevo i primi 1–2 km attorno a un borgo erano coltivati e
+ * disboscati. Estensione per tipo di luogo (raggio pieno, raggio dove finisce; m): rocche con borgo secondo la classe,
+ * e già pronti i luoghi minori che arriveranno con la milestone dei luoghi (villaggi, case isolate: decisione
+ * dell'utente, «qualcosa intorno a case isolate e villaggi»). Bordo irregolare: rumore su `lunghezza` m, ampio
+ * `ampiezza` volte il raggio esterno.
  */
-export const CAMPAGNA = { raggio: [700, 1600], bordo: { lunghezza: 600, ampiezza: 300 } };
+export const CAMPAGNA = {
+  raggi: {
+    rocca: { minore: [500, 1150], casata: [700, 1600], maggiore: [900, 2000] },
+    villaggio: [300, 700],
+    casa: [70, 200],
+  },
+  bordo: { lunghezza: 600, ampiezza: 0.19 },
+};
+function raggiCampagna(l) {
+  const R = CAMPAGNA.raggi[l.tipo];
+  if (!R) return null;
+  return Array.isArray(R) ? R : (R[l.classe] || R.casata);
+}
 function coltivatoIn(luoghi, x, z, seme) {
   if (!luoghi || !luoghi.length) return 0;
-  let d = Infinity;
-  for (const l of luoghi) { const dd = Math.hypot(x - l.x, z - l.z); if (dd < d) d = dd; }
-  if (d > CAMPAGNA.raggio[1] + CAMPAGNA.bordo.ampiezza) return 0;
-  d += CAMPAGNA.bordo.ampiezza * fbm(x, z, seme, CAMPAGNA.bordo.lunghezza, 2);
-  return 1 - smoothstep(CAMPAGNA.raggio[0], CAMPAGNA.raggio[1], d);
+  let v = 0;
+  for (const l of luoghi) {
+    const R = raggiCampagna(l);
+    if (!R) continue;
+    const amp = CAMPAGNA.bordo.ampiezza * R[1];
+    let d = Math.hypot(x - l.x, z - l.z);
+    if (d > R[1] + amp) continue;
+    d += amp * fbm(x, z, seme, Math.min(CAMPAGNA.bordo.lunghezza, 3 * R[1]), 2);
+    const c = 1 - smoothstep(R[0], R[1], d);
+    if (c > v) v = c;
+  }
+  return v;
 }
 /** La campagna della Carta come funzione (x, z) → 0–1: la usa anche il colore del terreno (coloreMondo). */
 export function campagnaMondo(carta) {
   const seme = derivaSeme(carta.seme, 402);
   return (x, z) => coltivatoIn(carta.luoghi, x, z, seme);
 }
-const CAMPI = ['alberi', 'limite', 'conifera', 'pino', 'secco', 'riva', 'cespuglio', 'alto', 'sterpo', 'canne',
+
+/**
+ * Campi coltivati (dipinti dallo shader del terreno, js/3d/terrain.js): dove la campagna è piena, in piano, all'asciutto
+ * e senza roccia, neve né ghiaia. Il disegno degli appezzamenti (arato, seminato, grano, prato da sfalcio, maggese,
+ * orti) è dello shader e finisce nel colore cotto del blocco: nel gioco non costa. Qui solo dove possono stare
+ * (`campo` per vertice, terza componente di `suolo`) e l'orientamento (quello del borgo più vicino). Niente stagioni
+ * (decisione dell'utente). Nei campi niente alberi, cespugli né sassi.
+ */
+export const CAMPI_COLTIVATI = {
+  coltivato: [0.45, 0.8],          // da quanta campagna cominciano i campi (0–1)
+  pendenza: [9, 16],               // gradi (pendenza fine): pieni sotto, nessuno sopra (colline lavorate)
+  oggetti: 0.95,                   // quanto tolgono alberi, arbusti e sassi
+  erba: 0.6,                       // quanto tolgono i ciuffi d'erba vicini
+};
+
+const CAMPI = ['campo', 'alberi', 'limite', 'conifera', 'pino', 'secco', 'riva', 'cespuglio', 'alto', 'sterpo', 'canne',
   'sasso', 'masso', 'affioramento', 'tronco', 'foresta', 'erba', 'felce', 'frana', 'ciottolo'];
 
 /**
@@ -286,6 +323,19 @@ function densitaVertice(cp, pend, pf, distAcqua, x, z, semeBordo, D, i, coltivat
   D.erba[i] = asciutto * neve * (1 - cp.roccia) * Math.max(0, 1 - 2 * cp.ghiaia) * (1 - 0.95 * foresta) * (1 - 0.7 * sabbia)
     * (1 - smoothstep(38, 46, pf)) * V.vicino.erba;
   D.felce[i] = asciutto * neve * foresta * limite * smoothstep(0.3, 0.55, cp.umidita) * V.vicino.felce;
+  // Campi coltivati: in piano, all'asciutto (non sulle rive), senza roccia, neve, ghiaia, sabbia né palude.
+  const K = CAMPI_COLTIVATI;
+  const campo = coltivato > 0 && distAcqua >= 3
+    ? smoothstep(K.coltivato[0], K.coltivato[1], coltivato) * (1 - smoothstep(K.pendenza[0], K.pendenza[1], pf))
+      * prato * (1 - cp.neve) * (1 - sabbia) * (1 - palude)
+    : 0;
+  D.campo[i] = campo;
+  if (campo > 0) {
+    // Netto: lo shader disegna un appezzamento già da campo ≈ 0,12–0,7 (soglia per appezzamento).
+    const via = 1 - K.oggetti * smoothstep(0.05, 0.35, campo);
+    for (const k of ['alberi', 'cespuglio', 'alto', 'sterpo', 'sasso', 'masso', 'affioramento', 'tronco', 'ciottolo']) D[k][i] *= via;
+    D.erba[i] *= 1 - K.erba * campo;
+  }
 }
 
 /**
@@ -483,7 +533,8 @@ export function posizionaVegetazione(o) {
   // La lettiera segue gli alberi davvero piantati (chiome sfocate su 3×3 vertici, ~23 m), non solo la copertura:
   // dove il bosco è diradato (campagna attorno ai luoghi, margini) non restano macchie scure senza alberi sopra.
   // Bosco fitto: ~1 albero per cella di vertici (densità 0,62 su celle di 6 m) → piena da 0,7.
-  const suolo = new Float32Array(n * 2);
+  // Terza componente: campi coltivati (CAMPI_COLTIVATI), fino a pochi metri dal piede delle scarpate.
+  const suolo = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) {
     const r = (i / cols) | 0, c = i - r * cols;
     const oltre = piani.length ? oltreScarpata(cx - half + c * cell, cz - half + r * cell) : Infinity;
@@ -496,8 +547,9 @@ export function posizionaVegetazione(o) {
       }
     }
     const sotto = smoothstep(0.12, 0.7, somma / peso);
-    suolo[i * 2] = D.foresta[i] * sotto * smoothstep(V.spianata, V.spianata + 30, oltre);
-    suolo[i * 2 + 1] = dist[i] === 0 ? 1 : Math.max(0, 1 - (dist[i] - 1) / (V.acquaCelle - 1));
+    suolo[i * 3] = D.foresta[i] * sotto * smoothstep(V.spianata, V.spianata + 30, oltre);
+    suolo[i * 3 + 1] = dist[i] === 0 ? 1 : Math.max(0, 1 - (dist[i] - 1) / (V.acquaCelle - 1));
+    suolo[i * 3 + 2] = D.campo[i] * smoothstep(2, 12, oltre);
   }
 
   /**
@@ -534,7 +586,17 @@ export function posizionaVegetazione(o) {
     return esito;
   }
 
-  return { tipi, ms: performance.now() - t0, msCampi, suolo, erbaAttorno };
+  // Orientamento dei campi: lungo il verso del luogo più vicino con campagna (i solchi seguono il borgo).
+  let campi = null, dMin = Infinity;
+  for (const l of luoghi || []) {
+    const R = raggiCampagna(l), d = Math.hypot(l.x - cx, l.z - cz);
+    if (!R || d > R[1] * (1 + CAMPAGNA.bordo.ampiezza) + half * 1.5 || d >= dMin) continue;
+    dMin = d;
+    const pr = l.piani?.[0];
+    const ux = pr?.ux ?? 1, uz = pr?.uz ?? 0, k = Math.hypot(ux, uz) || 1;
+    campi = { x: l.x, z: l.z, ux: ux / k, uz: uz / k, orti: R[0] * 0.2 };
+  }
+  return { tipi, ms: performance.now() - t0, msCampi, suolo, campi, erbaAttorno };
 }
 
 // ─── Bosco lontano (sagome negli anelli dell'orizzonte) ──────────────────
