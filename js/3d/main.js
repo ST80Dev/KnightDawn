@@ -21,6 +21,7 @@ import { createRocca } from './rocca3d.js';
 import { creaCaseCampagna, quotaFinestre } from './edifici3d.js';
 import { createBorgo } from './borgo3d.js';
 import { createCartaVista } from './cartaVista.js';
+import { creaMinimappa } from './minimappa.js';
 import { creaOrizzonteAPezzi } from './orizzonte.js';
 import { creaAcqueScena, creaPonti } from './acqua.js';
 import { vicinoAlBordo, trasla } from './blocchi.js';
@@ -955,7 +956,7 @@ async function init() {
     get carta() { return carta; }, get scena() { return scenaAttuale; }, get orizzonte() { return orizzonte; },
     get rocche() { return rocche; }, get campagna() { return campagna; }, get abitanti() { return abitanti; },
     get vegetazione() { return vegetazione; }, get cavallo() { return cavallo; },
-    caricaScena, posizionaCavaliere,
+    caricaScena, posizionaCavaliere, minimappa,
     /** M7, passo 9: ricentra il blocco (su { x, z } del mondo, o sul cavaliere) — per il percorso di prova. */
     cambiaBlocco: (x, z) => cambiaBlocco(Number.isFinite(x) && Number.isFinite(z) ? { x, z } : null),
     get cambiBlocco() { return { quanti: cambiBlocco, ms: msCambioBlocco, totale: msTotaleBlocco, inCorso: !!preparazione, ultimo: ultimoCambio }; },
@@ -963,6 +964,7 @@ async function init() {
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no'
     + ' · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: Carta (clic: vai lì)'
+    + ' · N: minimappa grande · +/−: zoom minimappa'
     + ' · F2: qualità · F3: info · F8: nuova partita',
   'aiuto');
 }
@@ -1009,7 +1011,7 @@ const tasti = new Set();
 
 // Vista di sviluppo della Carta (M): mentre è aperta il gioco è fermo e la scena 3D non si disegna.
 const cartaVista = createCartaVista(document.body, {
-  onCambio: () => tasti.clear(),
+  onCambio: (aperta) => { tasti.clear(); minimappa?.nascondi(!!aperta); },
   cartaAttuale: () => carta,
   generaCarta: (seme, avanzamento) => generaCartaAsincrona(seme, { avanzamento, cache: !PARAMETRI.has('rigenera') }),
   verificaSemi,
@@ -1027,6 +1029,36 @@ const cartaVista = createCartaVista(document.body, {
     entraTavullia().catch((err) => { console.error('[scena]', err); messaggio(`Errore: ${err.message}`); });
   },
 });
+// Minimappa (js/3d/minimappa.js): in basso a destra durante il gioco di persona, solo nel mondo generato.
+const nelMondo = () => scenaAttuale?.tipo === 'mondo' && knight && carta;
+const minimappa = creaMinimappa(document.body, {
+  carta: () => carta,
+  posizione: () => (nelMondo() ? { x: scenaAttuale.cx + knight.stato.x, z: scenaAttuale.cz + knight.stato.z,
+    direzione: knight.stato.direzione } : null),
+  cavallo: () => (nelMondo() && cavallo ? { x: scenaAttuale.cx + cavallo.stato.x, z: scenaAttuale.cz + cavallo.stato.z } : null),
+  blocco: () => (nelMondo() ? { x: scenaAttuale.cx, z: scenaAttuale.cz, half: terrain.size / 2 } : null),
+  onVai: (x, z) => {
+    vaiA(x, z).catch((err) => { console.error('[minimappa]', err); messaggio(`Errore: ${err.message}`); });
+  },
+});
+
+/**
+ * SOLO per le prove (clic sulla minimappa allargata): porta il cavaliere nel punto (x, z) del mondo. Dentro il blocco
+ * disegnato lo sposta e basta; fuori carica la Scena centrata lì, come un clic sulla Carta.
+ */
+async function vaiA(x, z) {
+  if (!nelMondo() || percorso) return;
+  const lx = x - scenaAttuale.cx, lz = z - scenaAttuale.cz, half = terrain.size / 2;
+  if (Math.max(Math.abs(lx), Math.abs(lz)) < half - 5) {
+    if (!suolo.percorribile(lx, lz)) { messaggio('Lì c\'è acqua troppo profonda.', 2500); return; }
+    posizionaCavaliere(lx - scostamento.x, lz - scostamento.z, knight.stato.direzione);
+    salvaOra();
+    return;
+  }
+  if (quotaFinale(carta, x, z) < -PROFONDITA_GUADO) { messaggio('Lì c\'è il mare.', 2500); return; }
+  await entraDallaCarta(carta, x / carta.cella, z / carta.cella);
+}
+
 const TASTI_MOVIMENTO = {
   avanti:   ['KeyW', 'ArrowUp'],
   indietro: ['KeyS', 'ArrowDown'],
@@ -1070,6 +1102,10 @@ window.addEventListener('keydown', (e) => {
   if (e.code.startsWith('Arrow')) e.preventDefault();
   tasti.add(e.code);
   if (e.code === 'KeyC' && !e.repeat && knight) cambiaModoCamera();
+  if (e.code === 'KeyN' && !e.repeat) minimappa.alterna();
+  // Zoom della minimappa: per carattere (sulla tastiera italiana + e − non hanno i codici di quella americana).
+  if ((e.key === '+' || e.code === 'NumpadAdd') && !e.repeat) minimappa.zoom(-1);
+  if ((e.key === '-' || e.code === 'NumpadSubtract') && !e.repeat) minimappa.zoom(1);
   if (TASTI_CAMMINATA.includes(e.code) && !e.repeat) camminata = !camminata;
   if (e.code === 'KeyR' && !e.repeat) riposa();
   if (e.code === 'KeyT' && !e.repeat) avanza();
@@ -1566,6 +1602,9 @@ function frame(now) {
     aggiornaStato();
     aggiornaIndicatoreAndatura();
     tt = segna('interfaccia', tt);
+    minimappa.nascondi(!!percorso);        // percorso di prova: misure confrontabili con quelle di prima
+    minimappa.aggiorna(now);
+    tt = segna('minimappa', tt);
     if (percorso) {
       const r = percorso.aggiorna(dtReale, camera, (x, z) => suolo.getHeight(x, z));
       if (r.azzera) {
