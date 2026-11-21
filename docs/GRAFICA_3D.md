@@ -82,7 +82,9 @@ Segnalazione dell'utente: «sembra un nastro di stoffa appoggiato sul rilievo»,
 - Shader: bordo frastagliato (fino al 22% della semilarghezza, rumore del mondo con periodo 8192 m, quindi uguale tra
   blocchi) che sfuma nell'erba calpestata; chiazze di tono; sassolini tondi entro 30 m. Costo trascurabile (pochi pixel).
 
-## Foschia e visibilità (`aggiornaNebbia` in `js/3d/main.js`)
+## Foschia e visibilità (`aggiornaNebbia` in `js/3d/cielo.js`)
+
+> Da sostituire con la foschia standard del meteo (`docs/ESPLORAZIONE_3D.md`, «Cielo e meteo», decisione 8).
 
 Segnalazione dell'utente (tramite M6): da 1500 m si vedeva quasi tutta la mappa (foschia fissa 10–170 km). Ora la fine
 della foschia è tirata per giorno dal seme e dal giorno del calendario: densa 40–50 km (15 %), di norma 55–75 km (60 %),

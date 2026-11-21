@@ -656,7 +656,6 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
 // momento le ombre finte della vegetazione (si spostano col sole) e il micro-rilievo della normale vicino alla camera.
 // Da lontano le mipmap fanno il lavoro che faceva lo spegnimento delle ottave.
 const LATO_COTTO = 2048;
-let _cotto = null;                         // texture del blocco attuale: si libera quando si cuoce il successivo
 
 /**
  * Cuoce il colore del blocco e passa il suo materiale alla modalità cotta. Da chiamare dopo createTerrain del mondo
@@ -700,8 +699,12 @@ export function cuociSuolo(renderer, terrain) {
   renderer.setRenderTarget(prima);
   renderer.autoClear = autoClear;
   cuoci.dispose();
-  if (_cotto) _cotto.dispose();
-  _cotto = rt;
+  // La texture appartiene al materiale del suo blocco: si libera con lui (dispose del materiale) o se lo stesso blocco
+  // si ricuoce. Non al blocco successivo: con il blocco che segue il cavaliere (M7 passo 9) il nuovo si cuoce mentre
+  // il vecchio è ancora in vista.
+  if (mat.userData.rtCotto) mat.userData.rtCotto.dispose();
+  else mat.addEventListener('dispose', () => mat.userData.rtCotto?.dispose());
+  mat.userData.rtCotto = rt;
   mat.userData.uniformi.uCotto.value = rt.texture;
   mat.defines = { ...(mat.defines || {}), SUOLO_COTTO: '' };
   mat.needsUpdate = true;
