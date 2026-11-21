@@ -12,7 +12,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { loadTerrain, componiSuolo, createTerrain, coloreMondo, cuociSuolo } from './terrain.js';
+import { loadTerrain, componiSuolo, createTerrainAPezzi, coloreMondo, cuociSuolo } from './terrain.js';
 import { createKnight } from './knight3d.js';
 import { createCavallo } from './cavallo3d.js';
 import { createFollowCamera } from './camera.js';
@@ -21,14 +21,15 @@ import { createRocca } from './rocca3d.js';
 import { creaCaseCampagna } from './edifici3d.js';
 import { createBorgo } from './borgo3d.js';
 import { createCartaVista } from './cartaVista.js';
-import { creaOrizzonte } from './orizzonte.js';
+import { creaOrizzonteAPezzi } from './orizzonte.js';
 import { creaAcqueScena, creaPonti } from './acqua.js';
+import { vicinoAlBordo, trasla } from './blocchi.js';
 import { generaCartaAsincrona, verificaSemi } from '../mondo/generatore.js';
-import { generaScena, centroBlocco, quotaFinale } from '../mondo/scena.js';
+import { generaScenaAPezzi, centroBlocco, quotaFinale } from '../mondo/scena.js';
 import { distanzaStrada } from '../mondo/strade.js';
 import { posizionaVegetazione, coperturaMondo, coperturaTavullia } from '../mondo/vegetazione.js';
 import { creaVegetazione } from './vegetazione3d.js';
-import { semeDaTesto } from '../mondo/rumore.js';
+import { semeDaTesto, completa } from '../mondo/rumore.js';
 import { creaCielo, posizioneSole, visibilitaDelGiorno } from './cielo.js';
 import { creaProfilatore, creaPercorso, GRUPPI, FAMIGLIE, BUDGET_GPU, budgetDi, creaQualita } from './prestazioni.js';
 
@@ -426,25 +427,18 @@ function costruisciRocche(cx, cz, ter) {
   return out;
 }
 
-/**
- * Carica una Scena al posto di quella attuale.
- * @param {{tipo:'tavullia'} | {tipo:'mondo', cx:number, cz:number}} desc
- */
-async function caricaScena(desc) {
+/** Toglie dalla scena gli oggetti della Scena attuale; se `subito` li libera ora, altrimenti a pezzi (M7, passo 9). */
+function togliScenaAttuale(subito = true) {
   for (const o of [terrain?.mesh, acqua, castle?.object, orizzonte?.oggetto, acqueScena, vegetazione?.oggetto,
     ...rocche.map((r) => r.object), gruppoPonti, campagna?.object]) {
-    if (o) { scene.remove(o); libera(o); }
+    if (!o) continue;
+    scene.remove(o);
+    if (subito) libera(o); else daLiberare.push(o);
   }
   rocche = [];
   campagna = null;
   ponti = []; gruppoPonti = null;
   vegetazione = null;
-  scostamento = { x: 0, z: 0 };
-  if (desc.tipo === 'mondo') {
-    const cx = centroBlocco(desc.cx), cz = centroBlocco(desc.cz);
-    scostamento = { x: desc.cx - cx, z: desc.cz - cz };
-    desc = { ...desc, cx, cz };
-  }
   castle = null;
   acqua = null;
   orizzonte = null;
@@ -453,7 +447,139 @@ async function caricaScena(desc) {
   emissivi = [];
   ostacoli.length = 0;
   occlusori.length = 0;
+}
+const daLiberare = [];                    // oggetti del blocco vecchio da liberare uno per fotogramma (passo 9)
 
+/**
+ * Scena del mondo centrata in (desc.cx, desc.cz), preparata a pezzi senza toccare quella attuale (M7, passo 9): un
+ * generatore che fa yield tra un lavoro e l'altro e restituisce gli oggetti pronti per applicaMondo.
+ */
+function* preparaMondo(desc) {
+  const cx = centroBlocco(desc.cx), cz = centroBlocco(desc.cz);
+  const { meta, heights, acqua: dati } = yield* generaScenaAPezzi(carta, cx, cz);
+  const ter = yield* createTerrainAPezzi(meta, heights, false, coloreMondo(carta, Calendar.stagione));
+  yield 'terreno';
+  const acque = creaAcqueScena(dati, meta, COLORE_ACQUA, meta.centroMondo);
+  const pp = creaPonti(dati.attraversamenti, dati.altezza);
+  yield 'acque e ponti';
+  const roc = costruisciRocche(cx, cz, ter);
+  yield 'rocche';
+  const posVeg = posizionaVegetazione({
+    heights, cols: meta.cols, cell: meta.cellSize, cx, cz, acqua: dati,
+    copertura: coperturaMondo(carta, Calendar.stagione), seme: carta.seme, carta,
+    piani: (carta.luoghi || []).flatMap((l) => l.piani || []), mare: true,
+  });
+  yield 'posizione vegetazione';
+  const veg = creaVegetazione(posVeg, ter, renderer);
+  yield 'vegetazione';
+  // Case di campagna (passo 5) sui siti della vegetazione (aia e orto già liberi attorno).
+  let camp = null;
+  if (posVeg.case?.length) {
+    const half = ter.size / 2;
+    const suoloC = { getHeight: (x, z) => (Math.abs(x) <= half && Math.abs(z) <= half ? ter.getHeight(x, z) : quotaFinale(carta, x + cx, z + cz)) };
+    camp = creaCaseCampagna(suoloC, posVeg.case, cx, cz, carta.seme);
+    yield 'case';
+  }
+  // Colore del blocco in una texture (docs/PRESTAZIONI.md, passo 3): dopo la vegetazione, che aggiunge al terreno
+  // l'attributo aSuolo (lettiera sotto il bosco, fango vicino all'acqua) letto dalla cottura.
+  const msCot = cuociSuolo(renderer, ter);
+  // I materiali nuovi nascono con il rilievo; il terreno qui non è ancora nella scena, si cerca in lui.
+  if (qualita.chiave === 'basso') applicaRilievo(false, ter.mesh);
+  yield 'cottura';
+  // Orizzonte: terreno lontano fino a ~110 km. Le pareti laterali del blocco si vedrebbero dall'esterno.
+  const oriz = yield* creaOrizzonteAPezzi(carta, cx, cz, ter, COLORE_ACQUA, Calendar.stagione);
+  // Bosco lontano: sagome degli alberi negli anelli fino a ~4 km (niente stacco al bordo del blocco).
+  yield 'orizzonte: luoghi';
+  veg?.aggiungiLontano(carta, cx, cz, oriz.quota, Calendar.stagione);
+  yield 'bosco lontano';
+  // Shader e texture pronti prima dello scambio (note di M1): niente compilazioni né caricamenti nel suo fotogramma.
+  yield* preparaScheda([ter.mesh, acque, pp.gruppo, ...roc.map((r) => r.object), veg.oggetto, camp?.object,
+    oriz.oggetto, oriz.acqua]);
+  return { desc: { ...desc, cx, cz }, scostamento: { x: desc.cx - cx, z: desc.cz - cz }, meta, dati, ter, acque, pp, roc,
+    veg, camp, msCot, oriz };
+}
+
+/**
+ * Compila in parallelo i materiali degli oggetti non ancora in scena, con le luci della scena (compileAsync: fa yield
+ * della promessa e avanzaBlocco aspetta senza fermare i fotogrammi), poi carica sulla scheda le loro texture, una per pezzo.
+ * Le geometrie salgono al primo disegno.
+ */
+function* preparaScheda(oggetti) {
+  const texture = new Set();
+  const raccogli = (v) => { if (v?.isTexture) texture.add(v); };
+  for (const o of oggetti) {
+    if (!o) continue;
+    yield renderer.compileAsync(o, camera, scene);
+    o.traverse((m) => {
+      for (const mat of [m.material].flat()) {
+        if (!mat) continue;
+        for (const v of Object.values(mat)) raccogli(v);
+        for (const u of Object.values(mat.uniforms || {})) raccogli(u?.value);
+      }
+    });
+  }
+  for (const t of texture) {
+    renderer.initTexture(t);
+    yield 'texture';
+  }
+}
+
+/** Mette in scena una Scena del mondo preparata da preparaMondo (la scena attuale è già stata tolta). */
+function applicaMondo(p) {
+  scostamento = p.scostamento;
+  terrain = p.ter;
+  acqueScena = p.acque;
+  if (acqueScena) scene.add(acqueScena);
+  ({ gruppo: gruppoPonti, ponti } = p.pp);
+  scene.add(gruppoPonti);
+  ostacoli.push(...ponti);
+  occlusori.push(...ponti.flatMap((q) => q.solidi));
+  const { meta, dati } = p;
+  livelliAcqua = { fiume: dati.fiume, lago: dati.lago, cols: meta.cols, cell: meta.cellSize, half: meta.sizeMeters / 2 };
+  rocche = p.roc;
+  for (const r of rocche) {
+    scene.add(r.object);
+    raccogliEmissivi(r.object);
+    ostacoli.push(r);
+    occlusori.push(...r.solidi);
+  }
+  vegetazione = p.veg;
+  campagna = p.camp;
+  if (campagna) {
+    scene.add(campagna.object);
+    raccogliEmissivi(campagna.object);
+    ostacoli.push(campagna);
+    occlusori.push(...campagna.solidi);
+  }
+  msCottura = p.msCot;
+  vegetazione.oggetto.visible = vegetazioneVisibile;
+  scene.add(vegetazione.oggetto);
+  ostacoli.push(vegetazione);              // tronchi, massi, affioramenti e sassi grandi
+  scene.add(terrain.mesh);
+  orizzonte = p.oriz;
+  scene.add(orizzonte.oggetto);
+  const pareti = terrain.mesh.getObjectByName('terreno-bordo');
+  if (pareti) pareti.visible = false;
+  acqua = orizzonte.acqua;
+  if (acqua) scene.add(acqua);
+  _suolo = componiSuolo(terrain, [...rocche, ...ponti]);
+  scenaAttuale = p.desc;
+  statPendenze = misuraPendenze(terrain);
+  cieloScena.invalida();                   // ricalcola le luci
+}
+
+/**
+ * Carica una Scena al posto di quella attuale.
+ * @param {{tipo:'tavullia'} | {tipo:'mondo', cx:number, cz:number}} desc
+ */
+async function caricaScena(desc) {
+  preparazione = null;                    // un cambio di blocco in corso non vale più
+  togliScenaAttuale(true);
+  scostamento = { x: 0, z: 0 };
+  if (desc.tipo === 'mondo') {
+    applicaMondo(completa(preparaMondo(desc)));
+    return;
+  }
   if (desc.tipo === 'tavullia') {
     terrain = await loadTerrain('tavullia');
     if (terrain.isFallback) avvisoHud('Dati del terreno reale non trovati: terreno procedurale di prova.');
@@ -462,44 +588,6 @@ async function caricaScena(desc) {
     raccogliEmissivi(castle.object);
     ostacoli.push(castle);
     occlusori.push(...castle.solidi);
-  } else {
-    const { meta, heights, acqua: dati } = generaScena(carta, desc.cx, desc.cz);
-    terrain = createTerrain(meta, heights, false, coloreMondo(carta, Calendar.stagione));
-    acqueScena = creaAcqueScena(dati, meta, COLORE_ACQUA, meta.centroMondo);
-    if (acqueScena) scene.add(acqueScena);
-    ({ gruppo: gruppoPonti, ponti } = creaPonti(dati.attraversamenti, dati.altezza));
-    scene.add(gruppoPonti);
-    ostacoli.push(...ponti);
-    occlusori.push(...ponti.flatMap((p) => p.solidi));
-    livelliAcqua = { fiume: dati.fiume, lago: dati.lago, cols: meta.cols, cell: meta.cellSize, half: meta.sizeMeters / 2 };
-    rocche = costruisciRocche(desc.cx, desc.cz, terrain);
-    for (const r of rocche) {
-      scene.add(r.object);
-      raccogliEmissivi(r.object);
-      ostacoli.push(r);
-      occlusori.push(...r.solidi);
-    }
-    const posVeg = posizionaVegetazione({
-      heights, cols: meta.cols, cell: meta.cellSize, cx: desc.cx, cz: desc.cz, acqua: dati,
-      copertura: coperturaMondo(carta, Calendar.stagione), seme: carta.seme, carta,
-      piani: (carta.luoghi || []).flatMap((l) => l.piani || []), mare: true,
-    });
-    vegetazione = creaVegetazione(posVeg, terrain, renderer);
-    // Case di campagna (passo 5) sui siti della vegetazione (aia e orto già liberi attorno).
-    if (posVeg.case?.length) {
-      const half = terrain.size / 2, cx0 = desc.cx, cz0 = desc.cz;
-      const suoloC = { getHeight: (x, z) => (Math.abs(x) <= half && Math.abs(z) <= half ? terrain.getHeight(x, z) : quotaFinale(carta, x + cx0, z + cz0)) };
-      campagna = creaCaseCampagna(suoloC, posVeg.case, desc.cx, desc.cz, carta.seme);
-      scene.add(campagna.object);
-      raccogliEmissivi(campagna.object);
-      ostacoli.push(campagna);
-      occlusori.push(...campagna.solidi);
-    }
-    // Colore del blocco in una texture (docs/PRESTAZIONI.md, passo 3): dopo la vegetazione, che aggiunge al terreno
-    // l'attributo aSuolo (lettiera sotto il bosco, fango vicino all'acqua) letto dalla cottura.
-    msCottura = cuociSuolo(renderer, terrain);
-    // I materiali nuovi nascono con il rilievo; il terreno qui non è ancora nella scena, si cerca in lui.
-    if (qualita.chiave === 'basso') applicaRilievo(false, terrain.mesh);
   }
   if (desc.tipo === 'tavullia') {
     // Profilo fisso di collina temperata; niente vegetazione sul colle del castello e sulla rampa.
@@ -516,17 +604,7 @@ async function caricaScena(desc) {
   ostacoli.push(vegetazione);              // tronchi, massi, affioramenti e sassi grandi
   scene.add(terrain.mesh);
 
-  if (desc.tipo === 'mondo') {
-    // Orizzonte: terreno lontano fino a ~110 km. Le pareti laterali del blocco si vedrebbero dall'esterno.
-    orizzonte = creaOrizzonte(carta, desc.cx, desc.cz, terrain, COLORE_ACQUA, Calendar.stagione);
-    scene.add(orizzonte.oggetto);
-    const pareti = terrain.mesh.getObjectByName('terreno-bordo');
-    if (pareti) pareti.visible = false;
-    acqua = orizzonte.acqua;
-    if (acqua) scene.add(acqua);
-    // Bosco lontano: sagome degli alberi negli anelli fino a ~4 km (niente stacco al bordo del blocco).
-    vegetazione?.aggiungiLontano(carta, desc.cx, desc.cz, orizzonte.quota, Calendar.stagione);
-  } else if (terrain.minElev < 0) {
+  if (terrain.minElev < 0) {
     acqua = new THREE.Mesh(
       new THREE.PlaneGeometry(terrain.size, terrain.size).rotateX(-Math.PI / 2),
       new THREE.MeshLambertMaterial({ color: COLORE_ACQUA, transparent: true, opacity: 0.88 }));
@@ -741,6 +819,9 @@ async function init() {
     get rocche() { return rocche; }, get campagna() { return campagna; },
     get vegetazione() { return vegetazione; }, get cavallo() { return cavallo; },
     caricaScena, posizionaCavaliere,
+    /** M7, passo 9: ricentra il blocco (su { x, z } del mondo, o sul cavaliere) — per il percorso di prova. */
+    cambiaBlocco: (x, z) => cambiaBlocco(Number.isFinite(x) && Number.isFinite(z) ? { x, z } : null),
+    get cambiBlocco() { return { quanti: cambiBlocco, ms: msCambioBlocco, totale: msTotaleBlocco, inCorso: !!preparazione, ultimo: ultimoCambio }; },
   };
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no'
@@ -960,6 +1041,86 @@ function gruppoDi(o) {
 
 // ─── Percorso di prova (F9 con F3 aperto, o ?prova nell'indirizzo) ───────
 let msCottura = null;                    // ms della cottura del colore del blocco (F3)
+let msCambioBlocco = null, cambiBlocco = 0;   // M7, passo 9: fotogramma più lungo dell'ultimo cambio di blocco e quanti (F3)
+let msTotaleBlocco = null;                // ms dall'inizio della preparazione allo scambio (F3)
+let ultimoCambio = null;                  // dettagli dell'ultimo cambio (kd.cambiBlocco)
+let tScambio = null;                      // quando è avvenuto lo scambio: il fotogramma dopo misura il disegno che segue
+let preparazione = null;                  // { gen, t0, picco } preparazione del blocco nuovo in sottofondo
+// Finché il cambio non resta sotto ~50 ms per fotogramma, solo con ?blocchi nell'indirizzo: senza, il cavaliere si
+// ferma al bordo come prima.
+const SEGUI_BLOCCO = PARAMETRI.has('blocchi');
+const MS_PREPARAZIONE = 4;                // ms per fotogramma dati alla preparazione del blocco nuovo
+
+/** Mette in scena il blocco preparato: cavaliere, cavallo e camera restano nello stesso punto del mondo. */
+function scambiaBlocco(p) {
+  const c0 = terrain.meta.centroMondo, k = knight.stato;
+  togliScenaAttuale(false);               // il blocco vecchio si libera a pezzi nei fotogrammi seguenti
+  applicaMondo(p);
+  const c1 = terrain.meta.centroMondo;
+  scostamento = { x: 0, z: 0 };
+  trasla(c0.x - c1.x, c0.z - c1.z, [k, cavallo?.stato, _prec], [camera.position]);
+  if (cavallo && !ostacoli.includes(cavallo)) ostacoli.push(cavallo);
+  cam?.riattiva();
+  cambiBlocco++;
+}
+
+/**
+ * M7, passo 9 (js/3d/blocchi.js): il blocco si ricentra sul cavaliere quando si avvicina al bordo. Il blocco nuovo si
+ * prepara in sottofondo, pochi ms per fotogramma (avanzaBlocco), mentre si continua a giocare su quello attuale; pronto,
+ * si scambia. `dove` (facoltativo): punto del mondo { x, z } su cui centrare, subito e tutto in una volta (comando
+ * kd.cambiaBlocco per il percorso di prova).
+ */
+function cambiaBlocco(dove = null) {
+  if (!knight || scenaAttuale?.tipo !== 'mondo') return;
+  const c0 = terrain.meta.centroMondo, k = knight.stato;
+  if (dove) {
+    preparazione = null;
+    const t0 = performance.now();
+    scambiaBlocco(completa(preparaMondo({ tipo: 'mondo', cx: dove.x, cz: dove.z })));
+    msCambioBlocco = performance.now() - t0;
+    return;
+  }
+  if (preparazione) return;
+  preparazione = { gen: preparaMondo({ tipo: 'mondo', cx: c0.x + k.x, cz: c0.z + k.z }), t0: performance.now(), picco: 0, n: 0, lunghi: [] };
+}
+
+/** Un fotogramma di lavoro sul cambio di blocco: un oggetto vecchio da liberare, qualche ms di preparazione. */
+function avanzaBlocco() {
+  const vecchio = daLiberare.pop();
+  if (vecchio) libera(vecchio);
+  if (!preparazione) return;
+  const t0 = performance.now(), fine = t0 + MS_PREPARAZIONE;
+  const P = preparazione;
+  if (P.attesa) return;                   // compilazione in parallelo non ancora finita
+  let r, t = t0;
+  do {
+    r = P.gen.next();
+    if (typeof r.value?.then === 'function') {
+      P.attesa = true;
+      r.value.then(() => { P.attesa = false; }, () => { P.attesa = false; });
+      r.value = 'compilazione';
+    }
+    const t1 = performance.now();
+    // I pezzi più lunghi, per capire dove spezzare ancora (kd.cambiBlocco.ultimo.lunghi).
+    const nome = typeof r.value === 'string' ? r.value : `dopo ${P.ultimo ?? 'inizio'}`;
+    if (typeof r.value === 'string') P.ultimo = r.value;
+    if (t1 - t > 8) P.lunghi.push(`${nome} ${Math.round(t1 - t)}`);
+    P.n++;
+    t = t1;
+  } while (!r.done && !P.attesa && t < fine);
+  if (r.done) {
+    scambiaBlocco(r.value);
+    P.scambio = performance.now() - t;
+  }
+  P.picco = Math.max(P.picco, performance.now() - t0);
+  if (r.done) {
+    msCambioBlocco = P.picco;
+    msTotaleBlocco = performance.now() - P.t0;
+    ultimoCambio = { picco: P.picco, totale: msTotaleBlocco, pezzi: P.n, lunghi: P.lunghi, scambio: P.scambio };
+    tScambio = performance.now();
+    preparazione = null;
+  }
+}
 let percorso = null;
 let percorsoNormale = null;               // istantanea alla fine del giro normale
 let provaAutomatica = PROVA_PRESTAZIONI;
@@ -1117,6 +1278,9 @@ function aggiornaPannello(now) {
     + (qualita.adatta < 1 ? ` (adattiva ×${fmt(qualita.adatta, 2)})` : '');
   testo += `\nCPU: logica ${fmt(ri.msLogica, 1)} ms · invio comandi ${fmt(ri.msInvio, 1)} ms`;
   if (msCottura != null) testo += ` · suolo cotto in ${fmt(msCottura)} ms`;
+  if (msCambioBlocco != null) testo += ` · cambi di blocco ${cambiBlocco} (l'ultimo: fotogramma più lungo ${fmt(msCambioBlocco)} ms`
+    + (ultimoCambio?.disegno != null ? `, disegno dopo lo scambio ${fmt(ultimoCambio.disegno)} ms` : '')
+    + (msTotaleBlocco != null ? `, in tutto ${fmt(msTotaleBlocco / 1000, 1)} s)` : ')');
   if (!P.timerGPU) testo += '\nGPU: timer non disponibili su questa scheda o browser (usare F4)';
   else if ((percorso ? percorso.modo : provaPrestazioni === 1 ? 'gruppi' : 'normale') === 'gruppi') {
     testo += '\nGPU per gruppo: ' + GRUPPI.map((g) => {
@@ -1220,6 +1384,11 @@ function frame(now) {
   const dtReale = Math.max(0, (now - tPrec) / 1000);
   const dt = THREE.MathUtils.clamp(dtReale, 0, DT_MAX);
   tPrec = now;
+  if (tScambio != null && ultimoCambio) {
+    // Dallo scambio all'inizio di questo fotogramma: il disegno del blocco nuovo (geometrie sulla scheda) compreso.
+    ultimoCambio.disegno = t0 - tScambio;
+    tScambio = null;
+  }
   if (cartaVista.aperta) return;           // la Carta copre tutto: niente tempo di gioco, niente disegno
   if (provaAutomatica && knight && caricamento.hidden && (attesaProva += dt) > 3) { provaAutomatica = false; avviaPercorso(); }
   if (knight) {
@@ -1227,6 +1396,8 @@ function frame(now) {
       // Percorso di prova: tempo di gioco fermo, la camera segue il giro fisso.
     } else if (!inPausa) {
       knight.update(dt, leggiInput());
+      if (SEGUI_BLOCCO && scenaAttuale?.tipo === 'mondo' && vicinoAlBordo(knight.stato.x, knight.stato.z, terrain.size / 2)) cambiaBlocco();
+      avanzaBlocco();
       contaPercorso();
       const passi = Calendar.avanzaTempoReale(dt);
       if (knight.stato.velEffettiva < FERMO) Knight.riposaPassi(passi);
@@ -1238,6 +1409,7 @@ function frame(now) {
     aggiornaCielo();
     castle?.aggiornaLuci(now / 1000, 1 - _luceGiorno);
     for (const r of rocche) r.aggiornaLuci(now / 1000, 1 - _luceGiorno);
+    orizzonte?.luciLontane?.(1 - _luceGiorno);   // M7, passo 8: luci dei borghi lontani (orizzonte.js)
     tt = segna('cielo e luci', tt);
     aggiornaStato();
     aggiornaIndicatoreAndatura();

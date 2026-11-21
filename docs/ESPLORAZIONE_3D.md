@@ -1306,9 +1306,68 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
    centinaio di metri; FPS di notte nel borgo; le persone non si attraversano.
 8. **Da lontano.** Sagoma negli anelli, luci lontane. *Prova:* dal fondovalle a 2–5 km la rocca si
    riconosce di giorno e di notte; nessuna rocca «doppia» tra modello e sagoma; FPS invariati fuori dal sito.
+   **Fatto (sessione M6, da provare dall'utente):** `sagomeLuoghi` in `orizzonte.js`. Per i luoghi che la Scena non
+   costruisce (stessa regola di `costruisciRocche`, quindi niente rocca doppia): entro 6 km cinte di rocca e borgo
+   (altezze di `MISURE_ROCCA` e `CLASSI_BORGO`), torri agli spigoli della rocca, mastio, una massa di tetti nel borgo;
+   tra 6 e 18 km solo il mastio. Di notte 4/7/11 luci per borgo (minore, casata, maggiore) sopra i tetti, punti che
+   ignorano la nebbia, fino a 10 km (`luciLontane(notte)`, chiamata in `main.js` con le luci delle rocche). Una mesh
+   per tutte le sagome (~250 triangoli per luogo) e un `Points` per le luci: 2 chiamate. Provato in una scena di prova
+   (seme 570549, rocca di partenza a 3, 6 e 9 km): di giorno mastio e mura sulla cresta, di notte le luci del borgo.
 9. **Blocco che segue il cavaliere** (se l'utente lo approva in M7, punto 6). *Prova:* dal borgo di partenza
    si sale al crinale in 15–20 minuti reali senza fermarsi al bordo e senza stacchi visibili né cali di FPS al
    cambio di blocco; rocca e borgo restano al loro posto; tornando indietro si ritrova tutto.
+   **Piano (sessione M6, da approvare):**
+   - *Cosa costa oggi* (caricaScena, headless, seme 570549): blocco con fiumi e strade ~0,35 s, orizzonte ~0,5–0,6 s,
+     vegetazione ~0,4 s (posizionamento + costruzione), rocche, case e suolo cotto il resto: **1,3–1,6 s in un colpo
+     solo**. Fatto a ogni cambio di blocco (ogni ~1 km di cammino) sarebbe uno scatto di un secondo e più.
+   - *Quando*: il cavaliere a meno di ~350 m dal bordo del blocco (cioè ~650 m dal centro) → si prepara il blocco
+     centrato su di lui (griglia di `centroBlocco`), lo si sostituisce quando è pronto. Il bordo vero non si raggiunge
+     mai (oggi a 2 m il cavaliere si ferma).
+   - *Il cambio*: tutto si sposta di (vecchio centro − nuovo centro): cavaliere, cavallo, camera, persone. Le rocche
+     e le case già costruite che restano vicine si **spostano** (sono già oggetti del mondo), quelle che escono si
+     liberano, quelle che entrano si costruiscono. Terreno, acque, ponti, orizzonte, vegetazione si rifanno. Salvataggi
+     già in coordinate del mondo: invariati.
+   - *Tappe*:
+     1. **Cambio con pausa breve**: tutto come oggi, ma senza schermata di caricamento e con lo spostamento dello stato;
+        si misura la pausa sulla scheda dell'utente. Serve a verificare che niente si perda o si sposti male.
+     2. **Preparazione a pezzi in sottofondo**: il nuovo blocco si calcola a fette tra un fotogramma e l'altro (righe
+        della griglia, un tratto di fiume o di strada, un anello dell'orizzonte, una parte della vegetazione per volta,
+        entro ~4 ms per fotogramma: regola di `docs/PRESTAZIONI.md`); il cambio diventa un solo fotogramma (solo
+        l'invio delle geometrie alla scheda, preparato in anticipo). Obiettivo: nessuno scatto oltre ~50 ms.
+     3. *Se non basta*: posizionamento della vegetazione e quote del blocco nel Worker (moduli già senza grafica).
+   - *Chi tocca cosa*: l'orchestrazione è nuova e sta quasi tutta in `main.js` (caricaScena). Proposta: un modulo nuovo
+     `js/3d/blocchi.js` per la preparazione a pezzi e il cambio, così `main.js` resta leggibile e i conflitti con le
+     altre sessioni restano pochi (file nuovo: serve la conferma, regola 2). Le funzioni delle altre sessioni si
+     usano così come sono (`creaVegetazione`, `costruisciRocche`, `creaCaseCampagna`), chiedendo solo la versione «a
+     pezzi» dove servirà (Vegetazione per il posizionamento).
+   - *Prova*: dal borgo di partenza al crinale senza fermarsi; F3 con i ms del cambio; percorso di prova con un tratto
+     che attraversa due bordi di blocco.
+   - **Tappa 1 fatta** (approvata dall'utente con il file `js/3d/blocchi.js`): `vicinoAlBordo` e `trasla` in
+     `blocchi.js`, `cambiaBlocco` in `main.js` (ricarica la Scena centrata sul cavaliere, sposta cavaliere, cavallo,
+     camera e il punto della fatica; F3: numero e ms dei cambi; `kd.cambiaBlocco(x, z)` per il percorso di prova).
+     Prova in headless (seme 570549): dopo il cambio il cavaliere è nello stesso punto del mondo e alla stessa quota
+     (1224,29 m), nessun errore; **pausa 2,8 s** (headless). Attiva solo con `?blocchi` nell'indirizzo finché c'è la
+     pausa: senza, il cavaliere si ferma al bordo come prima.
+   - **Tappa 2, prima parte fatta**: `caricaScena` del mondo è diviso in `preparaMondo` (generatore: `generaScenaAPezzi`,
+     `createTerrainAPezzi`, `creaOrizzonteAPezzi` con le acque lontane a pezzi, e un `yield` tra un lavoro e l'altro) e
+     `applicaMondo`; il caricamento normale li usa di seguito e fa quello che faceva. Con `?blocchi`, vicino al bordo la
+     preparazione avanza ~4 ms per fotogramma (`avanzaBlocco` in `main.js`, perché tocca le sue variabili); pronta, lo
+     scambio dura ~10 ms (headless) e il blocco vecchio si libera un oggetto per fotogramma. Il cavaliere resta nello stesso
+     punto del mondo. `kd.cambiBlocco.ultimo.lunghi` elenca i pezzi oltre 8 ms. In headless (CPU più lenta di un PC
+     medio) restano lunghi, tutti atomici: posizionamento della vegetazione ~850 ms, `creaVegetazione` ~250, bosco
+     lontano ~120, rocche e borghi ~90; le parti della scena, del terreno e dell'orizzonte stanno sotto ~26 ms. Mancano
+     le versioni a pezzi di Vegetazione e M7 (chieste) e il caricamento sulla scheda e la compilazione degli shader
+     prima dello scambio (note di M1); intanto resta con `?blocchi`. Poi aggiunti: shader compilati in parallelo
+     (`compileAsync`, la preparazione aspetta senza fermare i fotogrammi) e texture caricate sulla scheda prima dello
+     scambio; F3 mostra anche il disegno del fotogramma dopo lo scambio (le geometrie salgono lì).
+   - *Note della sessione M1 (prestazioni)*, da rispettare alla tappa 2: nel fotogramma del cambio non devono cadere
+     la cottura del suolo (`cuociSuolo`, render 2048²), il caricamento sulla scheda di terreno, istanze della vegetazione
+     e texture (ombre, piede, cotto) né compilazioni di shader: tutto nella preparazione, uno per fotogramma
+     (`renderer.initTexture`, `renderer.compileAsync` o un render del gruppo nuovo in un bersaglio 1×1). Il blocco vecchio
+     si libera a pezzi nei fotogrammi dopo (`dispose`), non nel cambio. Al più due blocchi e due orizzonti in memoria,
+     mai un terzo in anticipo. Orizzonte: spostando il centro di ~1 km le fasce degli anelli cambiano posto; se i
+     rilievi vicini «saltano» si rifà solo l'anello 1 e si spostano gli altri. La tappa 1 (pausa ~1,5 s) solo come prova,
+     non a lungo in `main`. Un comando per forzare un cambio di blocco da codice (in `kd`) per il percorso di prova.
 
 ### Accettazione
 
