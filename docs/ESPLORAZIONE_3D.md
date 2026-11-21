@@ -771,10 +771,13 @@ con copertura, fiumi mostrati, clima, luoghi, nomi e fazioni generati dalle stes
 - Copernicus e Terrarium includono edifici e alberi (modelli di superficie): i paesi veri lasciano
   piccoli rilievi dove nel gioco non ci sono.
 
-## M7 — Rocca e borgo — in pausa
+## M7 — Rocca e borgo — fase corrente
 
-> **In pausa** (novembre 2026, decisione dell'utente) durante la milestone «Prestazioni»: `docs/PRESTAZIONI.md`.
-> Si riprende quando quella è chiusa, con le regole per i contenuti nuovi (borgo, cavallo, persone) scritte lì.
+> Ripresa dopo la milestone «Prestazioni» (chiusa dall'utente): i contenuti nuovi seguono le regole di
+> `docs/PRESTAZIONI.md`, passo 6 (borgo, cavallo e persone insieme ≤ 3 ms GPU e ≤ 120 chiamate; case ≤ 1.500 / 200
+> triangoli; componenti ripetuti in InstancedMesh condivise, ≤ 40 chiamate per il borgo; ≤ 8 materiali; niente
+> interni; nessuna PointLight oltre le 4–6 previste) e passano dal percorso di prova (`?seme=570549&prova`, anche
+> con `&centro=` sul borgo).
 
 > **Riallineato (novembre 2026)** alla regione di 120×90 km, alla gerarchia di densità, al castello di valle,
 > ai valichi tra grandi valli e al tempo ×10 (`docs/GDD.md` §2 «Dimensioni e densità», «Valichi e forcelle»;
@@ -1138,6 +1141,28 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
    borgo, via in rampa, raccordo con la rocca; ancora senza edifici; partenza fuori dalla porta del borgo.
    *Prova:* da fuori si capisce dove si è (rocca sopra le mura, crinale dietro); si entra, si sale alla
    rocca, nessun punto in cui si cade tra muro e terreno o si resta incastrati.
+   **Stato: fatto, da provare dall'utente.** Nuovo `js/3d/borgo3d.js` (approvato), agganciato in `main.js` accanto a
+   ogni rocca (stessa interfaccia: collisioni, suolo costruito, camera, F3).
+   - *Forma:* il borgo occupa le terrazze del terrapieno (passo 2) lungo il verso: pavimento piano per terrazza; tra una
+     terrazza e la successiva un **muro di contenimento** (dal pavimento basso a 1 m sopra quello alto) con un varco al
+     centro e la **rampa della via** (4 m, al più 25 %, nella terrazza più bassa, con muretti ai lati); **cinta** a
+     gradoni (alta 6/7/8 m sopra il pavimento per rocca minore, casata, sede maggiore; scarpa esterna; base sotto il
+     terreno esterno), retro che si aggancia alle torri anteriori della rocca; **torri quadrate** agli angoli e lungo
+     i lati ogni ~35 m; **torre-porta** con arco e battenti aperti sul lato di fondo, dove arriva la strada (la porta
+     è il nodo della rete delle strade); **rampa fuori dalla porta** fino al terreno (al più 20 %, 3–24 m: senza, un
+     gradino di 40 cm bloccava l'ingresso). Merli rettangolari in istanza.
+   - *Rocca:* la rampa della porta della rocca ora scende al **pavimento della prima terrazza** (`quotaPiede`, nuova
+     opzione di `castle3d.js`) e finisce dentro di essa, anche più ripida (seme 99454: 11 m in 25 m): lunga 40 m,
+     attraversava la terrazza e finiva sopra la rampa della via, e il cavaliere si fermava.
+   - *Prestazioni* (regole di `docs/PRESTAZIONI.md`, passo 6): un borgo = **6 oggetti disegnati** (5 geometrie unite
+     per materiale + merli in un'istanza) e 2.900–7.500 triangoli; 5 materiali. Percorso di prova headless con
+     `&centro=` sul borgo del seme 570549 (59000, 46000): 261 chiamate, 644 mila triangoli in tutta la scena; tempi
+     GPU non misurabili in headless (rendering software): **la misura vera va fatta sulla scheda dell'utente**.
+   - *Misure* (Chromium headless, 5 semi × 3 luoghi = 15 borghi, tutte e tre le classi, 1–4 terrazze): dal fuori
+     della porta del borgo al cortile della rocca lungo la via **in 15 su 15** (27–55 s di cammino), nessuna
+     compenetrazione; 32 assalti alle mura per i borghi di 3 semi: si entra solo dall'assalto allineato alla porta.
+   Limiti: terrazze ancora vuote (case e edifici al passo 5); pavimenti di terra uniforme; contorno rettangolare
+   (una forma più irregolare con le case); salti grandi tra rocca e prima terrazza danno rampe ripide (fino a ~25°).
 5. **Edifici e case.** Edifici nominati, case per lotto secondo la classe, instancing, geometrie fuse,
    collisioni a griglia, texture da codice. *Prova:* le classi si distinguono a colpo d'occhio; FPS su PC
    medio nel borgo e nella rocca, anche nel borgo più grande; chiamate e triangoli in F3 entro il budget;
