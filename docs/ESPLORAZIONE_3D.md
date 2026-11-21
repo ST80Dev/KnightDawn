@@ -2234,6 +2234,114 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
 - Il cavaliere è ancora 86 oggetti (`PRESTAZIONI.md` passo 5): con il cavallo le chiamate dei personaggi salgono di ~12,
   dentro le 120 del budget.
 
+## Cielo e meteo (in parallelo a M7) — piano da approvare
+
+> Avviata dalla sessione «M1 - Grafica» su richiesta dell'utente (novembre 2026), in parallelo a M7. Riferimenti:
+> M5 «Ciclo giorno/notte» (sopra), `docs/GRAFICA_3D.md` «Foschia e visibilità», `docs/PRESTAZIONI.md` (budget
+> «acqua, cielo, effetti» 1,5 ms GPU e ≤ 10 chiamate; oggi 0,3–0,6 ms). **Stato: piano da approvare.**
+
+**Decisioni già prese dall'utente.**
+1. File nuovo **`js/3d/cielo.js`** (deroga alla regola 2): ci va tutto ciò che è cielo, oggi in `main.js` (`COLORE_CIELO`,
+   `CICLO`, `posizioneSole`, luci sole/luna/emisfera e loro colori, `NEBBIA`, `aggiornaNebbia`, `VISIBILITA`,
+   `farDelGiorno`, `visibilitaDelGiorno`). In `main.js` restano gli agganci.
+2. **Meteo solo grafico:** nessun effetto su Forza, velocità, incontri. Gli effetti sul gioco verranno con la logica.
+3. **Niente cambi durante il gioco di persona:** meteo e visibilità si decidono entrando in una Scena (o al cambio di
+   giorno sulla Carta) e restano fissi finché si è nella Scena; nuvole ferme. Il sole invece continua a muoversi
+   (ritmo ×10: un'ora canonica ~18 min reali, un giorno ~2 h 24 min), quindi luce e colori delle nuvole cambiano con l'ora.
+
+**Cosa c'è oggi** [Certo, dal codice]: `scene.background` è un colore unico uguale alla nebbia (niente sfumatura, sole,
+luna, stelle, nuvole). La nebbia di giorno va da 1,5 km a 40–150 km (tiro del giorno, interpolato con continuità tra un
+giorno e il successivo: oggi cambia mentre si è nella Scena); di notte si stringe a ~110 m. La luna è una luce fissa
+alta a sud-est. Tre cose leggono la luce del sole e dovranno sapere quanto è «diretta»: ombre finte della vegetazione
+(`vegetazione.aggiorna(…, sole.position, luceGiorno)`), ombre del suolo (`terrain.js`), ombre delle mura
+(`materialeMuro` in `rocca3d.js`, che prende la direzione della luce direzionale più forte).
+
+### Decisioni tecniche (proposte)
+
+1. **Cupola del cielo:** una sfera attorno alla camera (raggio ~100 km, dentro il `far` di 130 km), disegnata per prima,
+   senza nebbia né scrittura di profondità; uno shader solo: gradiente zenit → orizzonte, disco e alone del sole, disco
+   della luna, nuvole. **Il colore all'orizzonte è il colore della nebbia** (stesso valore, calcolato in un punto): il
+   terreno lontano sfuma nel cielo senza stacco, anche dalle alture dove l'orizzonte scende sotto la linea dell'occhio
+   (sotto l'orizzonte la cupola resta color nebbia). 1 chiamata.
+2. **Nuvole ferme:** una texture di copertura (1024², rumore frattale da codice) **cotta sulla GPU all'ingresso nella
+   Scena**, nello stesso render target riusato (nessuna texture nuova durante il gioco). Proiettata come uno strato a
+   quota fissa (si stringe verso l'orizzonte e si perde nella foschia). Lo shader la legge una volta per pixel e la
+   illumina con sole e colore del momento (bianche a mezzogiorno, rosate al tramonto, grigio scuro di notte). Forma per
+   tipo di giornata: cumuli sparsi, velo uniforme (cirrostrati), coperto con chiazze più scure.
+3. **Stelle:** ~2000 punti in una chiamata, solo di notte, spenti dove ci sono nuvole (leggono la stessa texture).
+   Luna come disco nella cupola, nella direzione della luce lunare; fasi della luna dal giorno [facoltativo].
+4. **Meteo del giorno:** tiro deterministico da seme e giorno, con persistenza (un rumore sui giorni, così le giornate
+   vengono a «fronti» di 2–4 giorni e non a caso giorno per giorno), pesato dalla stagione. Tipi proposti
+   [valori da tarare guardando]:
+
+   | Tipo | Cielo | Luce del sole | Visibilità (fine foschia) |
+   |---|---|---|---|
+   | sereno | azzurro, poche nuvole | piena | normale o limpida |
+   | poco nuvoloso | cumuli sparsi | piena | normale |
+   | velato | velo lattiginoso, sole con alone | ×0,6 | densa o normale (afa) |
+   | coperto | grigio chiaro uniforme | ×0,2, emisfera più forte e grigia | normale |
+   | pioggia | grigio scuro | ×0,1 | 15–30 km (cortina di pioggia) |
+   | nebbia | grigio chiaro | ×0,3 | 0,6–2,5 km, inizio a ~100 m |
+
+   **Correzione al brief:** «pioggia e vento → limpida» vale per il **giorno dopo** la pioggia, non durante: mentre piove
+   si vede meno. Propongo: giornata limpida più probabile dopo una giornata di pioggia.
+5. **Luci col meteo:** con poca luce diretta il sole cala e l'emisfera sale e si ingrigisce (luce diffusa); il cielo
+   non è più azzurro. `cielo.js` espone un valore `luceDiretta` (0–1) per chi disegna ombre finte (vegetazione, suolo,
+   mura), che le attenua col cielo coperto. Le sessioni proprietarie decidono come usarlo (vedi «Accordi»).
+6. **Pioggia (e neve d'inverno, domanda 2):** strisce sottili in una scatola di ~40 m attorno alla camera che segue il
+   suo movimento; la caduta è animata nello shader dei vertici (nessun lavoro della CPU). 1 chiamata, poche migliaia di
+   strisce (niente interni per ora, quindi nessun riparo da gestire).
+7. **Per le prove:** `?meteo=sereno|nuvoloso|velato|coperto|pioggia|nebbia` forza il tipo; il pannello `F3` mostra tipo,
+   visibilità e `luceDiretta`. Il percorso di prova usa il meteo forzato a sereno se non indicato (numeri confrontabili
+   con la tabella di `docs/PRESTAZIONI.md`); il caso peggiore si misura con `&meteo=pioggia`.
+
+**Budget** [Ipotesi, da misurare sulla UHD 730]: cupola con nuvole 0,2–0,4 ms (un pixel di cielo costa una lettura di
+texture), stelle < 0,05, pioggia 0,1–0,3; cottura delle nuvole all'ingresso ~2–5 ms una volta, nel caricamento. Con
+l'acqua (0,3–0,6) si resta sotto 1,5 ms e ≤ 10 chiamate (cupola 1, stelle 1, pioggia 1).
+
+### Passi (ciascuno provato nel browser e dal percorso di prova `?seme=570549&prova`, anche `&centro=99937,43289`)
+
+0. **Spostamento in `cielo.js`, comportamento identico.** Solo codice spostato; in `main.js` gli agganci (crea, aggiorna
+   ogni fotogramma, nebbia sul punto osservato, testo per F3). Verifica: immagini headless a 4 ore (6, 12, 19:30, 0)
+   identiche pixel per pixel prima e dopo; poi prova dell'utente.
+1. **Foschia fissa per Scena.** Il tiro del giorno si fa entrando nella Scena e resta quello; niente più interpolazione
+   continua. Di notte la nebbia si stringe come oggi.
+2. **Cupola a gradiente, sole e luna, alba e tramonto.** Zenit più scuro e saturo, orizzonte = nebbia; al crepuscolo il
+   cielo è caldo verso il sole e freddo dalla parte opposta (la nebbia resta di un colore solo: domanda 4).
+3. **Stelle di notte.**
+4. **Meteo del giorno senza nuvole disegnate:** tiro, tipi, luci, visibilità, `?meteo=`, F3. Qui si provano con M7 le
+   mura col cielo coperto e con Vegetazione le ombre finte.
+5. **Nuvole ferme** per tipo di giornata, illuminate dall'ora.
+6. **Pioggia attorno alla camera e nebbia vera** (e neve se approvata).
+7. **Chiusura:** percorso di prova sereno e con pioggia, righe nella tabella di `docs/PRESTAZIONI.md`, documenti aggiornati.
+
+### Accordi con le altre sessioni (da prendere)
+
+- **M1 - Grafica:** gruppo «cielo» separato nel profilatore (oggi cupola e nuvole finirebbero in «resto»); foschia di
+  M1 spostata in `cielo.js`.
+- **M7:** `materialeMuro` scurisce fino a ×0,38 le facce girate dalla luce più forte; col cielo coperto la luce più forte
+  resta il sole indebolito e le mura avrebbero ombre nette sotto un cielo senza sole. Proposta: attenuare con `luceDiretta`.
+- **Vegetazione:** ombre finte attenuate con `luceDiretta`.
+- **M6:** l'orizzonte usa la nebbia di scena: nessun cambio atteso.
+
+### Rischi
+
+- [Probabile] Il punto delicato è l'orizzonte: se il colore della cupola in basso e quello della nebbia non coincidono
+  esattamente si vede una riga. Si calcolano nello stesso punto.
+- [Ipotesi] Nuvole proiettate su uno strato piatto possono sembrare «dipinte» vicino all'orizzonte; si sfumano lì.
+- [Certo] Dopo lo spostamento, `main.js` e `cielo.js` si toccano da più sessioni: modifiche minime e `main` unito spesso.
+
+### Da decidere con l'utente
+
+1. **Dormire nella Scena** (`R` fino a Prima): il giorno cambia d'un colpo, senza vederlo. Propongo di rifare lì il tiro
+   del meteo (resta valido «niente cambi visibili durante il gioco»).
+2. **Neve d'inverno e in quota** al posto della pioggia: stesso sistema, costo uguale. Propongo di includerla nel passo 6.
+3. **Meteo uguale in tutto il mondo o per zona** (fascia climatica della cella: il sud arido piove meno)? Propongo
+   per zona, con lo stesso tiro del giorno.
+4. **Foschia calda verso il sole al tramonto:** la nebbia di Three.js ha un colore solo; colorarla secondo la direzione
+   richiede di cambiare il pezzo di shader della nebbia per tutti i materiali (come già fatto per la distanza in
+   `main.js`). Costo basso, ma tocca tutto: propongo di farlo dopo il passo 2 solo se la riga al tramonto si nota.
+
 ## Fuori dal prototipo (non farlo ora)
 
 Multiplayer, server/VPS, NPC con IA, mobile/touch, modelli esterni, combattimento in 3D, ombre di
