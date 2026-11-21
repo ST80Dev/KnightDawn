@@ -16,6 +16,7 @@ import { quotaFinale, livelloLago, raffinaZona, percorsiFiumi } from '../mondo/s
 import { raffinaStrade, percorsiStrade, STRADE } from '../mondo/strade.js';
 import * as THREE from 'three';
 import { coloreMondo } from './terrain.js';
+import { boscoMondo } from '../mondo/vegetazione.js';
 
 // Colori del rilievo: SOLO quota (metri), a un solo tono, più alto = più scuro. Niente verdi, ocra o
 // bianchi: si leggerebbero come biomi (prati, deserti, neve), che arrivano al passo 7 come livello a sé.
@@ -58,14 +59,21 @@ const STRADE_ZOOM = { minimo: { maestra: 3.2, carrareccia: 2.6, mulattiera: 2.1,
  * radure, campi e spianate rocciose [chiesto dall'utente, novembre 2026].
  */
 function coloreNaturale(carta) {
-  const f = coloreMondo(carta, typeof Calendar !== 'undefined' ? Calendar.stagione : 0);
+  const stagione = typeof Calendar !== 'undefined' ? Calendar.stagione : 0;
+  const f = coloreMondo(carta, stagione);
+  // Il bosco vero (anche quello di versante, che nelle Scene fanno gli alberi e non il colore del terreno): dalla
+  // stessa funzione della vegetazione (boscoMondo, js/mondo/vegetazione.js), verso il verde scuro delle chiome.
+  const bosco = boscoMondo(carta, stagione), b = { foresta: 0, visibile: 0 };
   const c = new THREE.Color(), t = { r: 0, g: 0, b: 0 };
   return (x, z, h, pendenza) => {
     f(c, x, z, h, pendenza);
+    bosco(x, z, h, pendenza, b);
+    if (b.visibile > 0) c.lerp(CHIOME, b.visibile * 0.85);
     c.getRGB(t, THREE.SRGBColorSpace);
     return [t.r * 255, t.g * 255, t.b * 255];
   };
 }
+const CHIOME = new THREE.Color('#2f4f22');     // verde scuro delle chiome viste dall'alto
 const COSTA = [70, 52, 30];
 const ESAGERAZIONE = 6;           // quanto il rilievo pesa nell'ombreggiatura
 const COLORE_PANORAMA = 'rgba(150, 40, 30, 0.9)';
