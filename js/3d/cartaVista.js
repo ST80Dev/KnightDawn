@@ -449,8 +449,8 @@ export function createCartaVista(contenitore, opzioni = {}) {
       }
     }
     // Equidistanza delle curve [rivista con l'utente: prima un quarto dei metri per campione, troppo fitte]: circa
-    // 2 volte i metri per campione, a valori tondi (8 volte più rade di prima); una curva marcata ogni cinque.
-    const eq = DETTAGLIO.equidistanze.find((e) => e >= k * C * 2) ?? 500;
+    // 5 volte i metri per campione, a valori tondi (~20 volte più rade di prima); una curva marcata ogni cinque.
+    const eq = DETTAGLIO.equidistanze.find((e) => e >= k * C * 5) ?? 500;
     const naturale = livello === 'naturale' && c0.bioma ? coloreNaturale(c0) : null;
     const img = document.createElement('canvas');
     img.width = nx; img.height = ny;
