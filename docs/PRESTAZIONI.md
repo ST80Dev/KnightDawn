@@ -192,6 +192,9 @@ Scheda Intel UHD 730 (il browser Brave nasconde il nome), 1920×935, seme 570549
 | 21/11/2026 | bosco fitto, main dopo #130–#132 (latifoglie leggere, vegetazione a pezzi, profondità invertita) | **83,1** | **49,8** | **10,9** | 4,4 | 6,5 | 0,0 | 0,1 | 0,3 | 131 | 1000 mila |
 | 21/11/2026 | **nuova base** partenza (rocca), main dopo #135–#140 (meno mare, borgo, campi, curvatura, foschia) | 99,2 ¹ | 98,0 ¹ | 7,2 | 3,8 | 2,6 | 0,3 | 0,1 | 0,4 | 272 | 708 mila |
 | 21/11/2026 | **nuova base** bosco fitto, stessa versione | 77,6 | 49,8 | 11,3 | 3,8 | **7,2** ⚠ | 0,0 | 0,1 | 0,2 | 128 | 1085 mila |
+| 21/11/2026 | partenza dopo #141 (siepi) | 98,2 ¹ | **50,3** ⚠ | 6,9 | 3,9 | 2,2 | 0,3 | 0,1 | 0,4 | 272 | 660 mila |
+| 21/11/2026 | **base attuale** partenza, main dopo #143 (erba vicina a fasce, latifoglie medie a 200 m) | 100,0 ¹ | **99,0** | 6,7 | 3,8 | 2,0 | 0,3 | 0,1 | 0,3 | 272 | 655 mila |
+| 21/11/2026 | **base attuale** bosco fitto, stessa versione | **82,1** | 49,8 ² | 11,1 | 4,0 | 7,0 ⚠ | 0,0 | 0,1 | 0,2 | 127 | 898 mila |
 
 Nuova base (21/11/2026, qualità alta = media sullo schermo di riferimento al 100 %). Le Carte sono rigenerate (#135):
 la scena della partenza e il bosco non sono gli stessi di prima, quindi il confronto con le righe precedenti è solo
@@ -203,6 +206,16 @@ indicativo. ¹ Alla partenza gli FPS sono fermi alla frequenza dello schermo (~1
   del processore era 7,2 ms. Non perde fotogrammi (peggiore 20,2 ms) ma va riportato sotto ~8 ms prima di borgo
   abitato e personaggi. Segnalato alla sessione Vegetazione.
 - Terreno 3,8 ms in entrambi i punti (era 4,4–5,1).
+
+Dopo #141 (siepi) lo scatto del processore alla partenza era peggiorato (1% peggiori 21,1 ms di «vegetazione: aggiorna»):
+era il ricalcolo dell'erba vicina, tutto in un fotogramma. Con #143 (a fasce, tetto di ~1,5 ms condiviso) alla partenza
+nessun fotogramma supera 10,2 ms e «vegetazione: aggiorna» ha massimo 3,1 ms.
+² Bosco fitto: l'1% peggiore a 49,8 FPS (20 ms) è il doppio del periodo dello schermo a ~100 Hz: un fotogramma che
+supera 10 ms aspetta il giro successivo. GPU di picco 14,9 ms.
+Bosco fitto dopo #143: le latifoglie medie a 200 m hanno tolto 187 mila triangoli, ma la vegetazione è scesa solo da 7,2 a
+7,0 ms: «veg. resto» 4,9 → 3,8, «veg. sagome» 1,6 → 2,5 (38 786 istanze). Il costo segue i pixel coperti, non i triangoli
+[Probabile]: le sagome con alphaTest (discard) sovrapposte disegnano più volte gli stessi pixel, e il discard toglie alla
+scheda lo scarto anticipato per profondità. Sforamento 0,5 ms con il totale a 11,1 su 15,5.
 
 Ultima riga (bosco fitto, il caso peggiore): obiettivo raggiunto (83,1 FPS, 1% peggiori 49,8, fotogramma peggiore
 20,2 ms); scatti risolti (CPU massimo 7,2 ms, nessun compito lungo; prima il pannello F3 ricostruito a ogni fotogramma e la
