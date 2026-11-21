@@ -120,6 +120,7 @@ const STRADA = {
   // vale e basta poco.
   sopra: [0.12, 0.12, 0.12, 0.12, 0.12],       // m sopra il terreno disegnato per ciascun vertice della sezione
   scarto: 0.15,                                // m: quanto la quota della strada può staccarsi dal terreno disegnato
+  margine: 0.05,                               // m: luce minima tra la strada e il terreno che le sta sotto (sollevaSuTerreno)
   // Bordo e superficie (shader, docs/GRAFICA_3D.md): il bordo si mangia fino al 22% della semilarghezza con un rumore
   // del mondo e sfuma nell'erba calpestata; chiazze di tono (2–6 m) e ghiaia scura entro 30 m dalla camera.
   erbaPestata: '#80804e', mangiaBordo: 0.22, periodo: 8192,
@@ -191,6 +192,72 @@ float rumoreStrada(vec2 p) {
 }
 
 /**
+ * Il terreno disegnato è a triangoli di 7,8 m, il nastro ha un punto ogni ~2 m: dove il pendio piega tra due punti del
+ * nastro (spigoli dei triangoli, bordo della scarpata) il terreno spuntava sopra la strada a cunei diagonali, che
+ * comparivano e sparivano muovendo la camera (segnalazione dell'utente). Per ogni quadrilatero del nastro si campiona il
+ * terreno su una griglia 4×4 e, dove supera la strada, si alzano i quattro vertici quanto basta (+ STRADA.margine).
+ */
+function sollevaSuTerreno(pos, m, k, altezza) {
+  const alza = new Float32Array(m * k);
+  for (let i = 0; i < m - 1; i++) {
+    for (let j = 0; j < k - 1; j++) {
+      const v = [i * k + j, i * k + j + 1, (i + 1) * k + j, (i + 1) * k + j + 1];
+      let serve = 0;
+      for (let a = 0; a <= 3; a++) {
+        for (let b = 0; b <= 3; b++) {
+          const u = a / 3, w = b / 3, c = [(1 - u) * (1 - w), u * (1 - w), (1 - u) * w, u * w];
+          let x = 0, y = 0, z = 0;
+          for (let q = 0; q < 4; q++) { x += c[q] * pos[v[q] * 3]; y += c[q] * pos[v[q] * 3 + 1]; z += c[q] * pos[v[q] * 3 + 2]; }
+          const d = altezza(x, z) + STRADA.margine - y;
+          if (d > serve) serve = d;
+        }
+      }
+      if (serve > 0) for (const q of v) if (serve > alza[q]) alza[q] = serve;
+    }
+  }
+  for (let n = 0; n < m * k; n++) pos[n * 3 + 1] += alza[n];
+}
+
+/**
+ * Quota della carreggiata disegnata nel punto (null fuori dalle strade), dai triangoli dei nastri del gruppo: serve al
+ * cavaliere per posare i piedi SULLA strada, che sta qualche centimetro sopra il terreno (prima i piedi ci affondavano).
+ * Coordinate locali del blocco. Indice a griglia di 4 m.
+ */
+export function suoloStrade(gruppo) {
+  const CELLA = 4, celle = new Map(), tri = [];
+  gruppo?.traverse((o) => {
+    if (o.name !== 'strada' || !o.geometry?.index) return;
+    const p = o.geometry.attributes.position.array, idx = o.geometry.index.array;
+    for (let n = 0; n < idx.length; n += 3) {
+      const t = [idx[n], idx[n + 1], idx[n + 2]].flatMap((v) => [p[v * 3], p[v * 3 + 1], p[v * 3 + 2]]);
+      const id = tri.push(t) - 1;
+      const x0 = Math.floor(Math.min(t[0], t[3], t[6]) / CELLA), x1 = Math.floor(Math.max(t[0], t[3], t[6]) / CELLA);
+      const z0 = Math.floor(Math.min(t[2], t[5], t[8]) / CELLA), z1 = Math.floor(Math.max(t[2], t[5], t[8]) / CELLA);
+      for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) {
+        const k = cx * 100003 + cz;
+        (celle.get(k) || celle.set(k, []).get(k)).push(id);
+      }
+    }
+  });
+  return {
+    quotaSuolo(x, z) {
+      const lista = celle.get(Math.floor(x / CELLA) * 100003 + Math.floor(z / CELLA));
+      if (!lista) return null;
+      for (const id of lista) {
+        const t = tri[id];
+        const det = (t[5] - t[8]) * (t[0] - t[6]) + (t[6] - t[3]) * (t[2] - t[8]);
+        if (det === 0) continue;
+        const l1 = ((t[5] - t[8]) * (x - t[6]) + (t[6] - t[3]) * (z - t[8])) / det;
+        const l2 = ((t[8] - t[2]) * (x - t[6]) + (t[0] - t[6]) * (z - t[8])) / det;
+        const l3 = 1 - l1 - l2;
+        if (l1 >= -1e-6 && l2 >= -1e-6 && l3 >= -1e-6) return l1 * t[1] + l2 * t[4] + l3 * t[7];
+      }
+      return null;
+    },
+  };
+}
+
+/**
  * Nastro di una strada lungo [x, z, semilarghezza, …] (coordinate locali): 5 vertici per sezione (bordi, solchi delle
  * ruote, centro), ciascuno alla quota del terreno disegnato `altezza(x, z)` (o della strada, `quote[i]`, se data) più
  * STRADA.sopra.
@@ -222,6 +289,7 @@ export function creaNastroStrada(t, mat, altezza, quote = null) {
       col.set([c.r, c.g, c.b], (i * k + j) * 3);
     }
   }
+  sollevaSuTerreno(pos, m, k, altezza);
   // Triangoli sempre rivolti verso l'alto (senso antiorario visto da sopra). Prima si giravano solo le normali, ma
   // il materiale a due facce, vedendo il retro dei triangoli, le rigirava di nuovo verso il basso: la strada era
   // illuminata da sotto e usciva quasi nera, «un nastro di stoffa» (segnalazione dell'utente).
