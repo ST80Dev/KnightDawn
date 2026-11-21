@@ -2356,6 +2356,16 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
     mulattiere, 1,2 per i sentieri). Pendenza di traverso del terreno disegnato sulla carreggiata, mediana: seme 570549
     da 18 % a 0,8 %, 855588 (molti tornanti) da 21 % a 11,5 %, 48213 da 2,1 % a 0,3 %. `generaScena` dà anche
     `acqua.quoteStrade` (quota della strada per punto) per il nastro piano in larghezza.
+  - *Ancora carreggiate inclinate di traverso* (seconda segnalazione dell'utente, vicino a una rocca): misurato che
+    la quota vera aveva già il ripiano, ma i triangoli del blocco (un vertice ogni 7,8 m) sotto la carreggiata
+    andavano da un vertice sul ripiano a uno sulla scarpata (818 punti su 1106 oltre il 10 %, seme 570549). Ora
+    `spianaSottoStrade` (`generaScena`) dà la quota della strada ai vertici delle celle che la carreggiata tocca
+    (strade maestre, carrarecce e mulattiere): un ripiano di una cella sotto la strada, la scarpata accanto. Esclusi il
+    bordo del blocco, l'acqua, i piani dei luoghi, la striscia della rampa fuori dalle porte e i vertici che si
+    sposterebbero più di 3 m (l'altro lato di un tornante). Pendenza di traverso sotto la carreggiata, 90° percentile
+    lontano dai luoghi: seme 570549 da 11 % a 2,2 %, 855588 da 6,6 % a 1,5 %, 48213 da 6,2 % a 1,3 %; vicino ai luoghi
+    (entro 80 m dai piani) da 20 % a 14 %, 32 % a 28 %, 16,5 % a 14 %: lì restano i tornanti sulle scarpate dei
+    terrapieni e i tratti davanti alle porte.
 - **Vegetazione**: `distanzaStrada(carta, x, z)` è pronta; l'esclusione degli alberi dalla carreggiata è della
   sessione della vegetazione (passo 3 di questo piano).
 
