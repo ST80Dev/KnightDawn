@@ -12,13 +12,18 @@
 import * as THREE from 'three';
 
 export const GRUPPI = ['ter. blocco', 'ter. orizzonte', 'veg. sagome lontane', 'veg. sagome', 'veg. erba', 'veg. resto',
-  'edifici', 'personaggi', 'resto'];
-/** Famiglie di gruppi con un budget comune: prefisso → chiave di BUDGET_GPU (la somma si confronta col budget). */
-export const FAMIGLIE = { 'ter.': 'terreno', 'veg.': 'vegetazione' };
+  'edifici', 'personaggi', 'cielo', 'resto'];
+/** Famiglie di gruppi con un budget comune: chiave di BUDGET_GPU → gruppi (la somma si confronta col budget). Il cielo
+ *  (cupola, stelle, precipitazioni: oggetti col nome che comincia per «cielo») sta nel budget di acqua, cielo ed effetti. */
+export const FAMIGLIE = {
+  terreno: GRUPPI.filter((g) => g.startsWith('ter.')),
+  vegetazione: GRUPPI.filter((g) => g.startsWith('veg.')),
+  resto: ['cielo', 'resto'],
+};
 /** Budget in ms di GPU (docs/PRESTAZIONI.md, «Obiettivi e budget», approvati dall'utente); vegetazione complessiva. */
 export const BUDGET_GPU = { terreno: 4.5, vegetazione: 6.5, edifici: 1.5, personaggi: 1.5, resto: 1.5, totale: 15.5 };
 /** Budget di un gruppo (i gruppi «ter. …» e «veg. …» condividono quello della famiglia: null = vedi la somma). */
-export const budgetDi = (g) => (Object.keys(FAMIGLIE).some((f) => g.startsWith(f)) ? null : BUDGET_GPU[g]);
+export const budgetDi = (g) => (Object.values(FAMIGLIE).some((f) => f.includes(g)) ? null : BUDGET_GPU[g]);
 
 const CAMPIONI = 90;                       // media mobile sugli ultimi ~1,5 s a 60 FPS
 
