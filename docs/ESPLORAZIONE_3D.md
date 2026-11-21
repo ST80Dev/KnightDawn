@@ -1806,6 +1806,13 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      niente siepi né muretti. Gli edifici li disegna chi fa le case (M7, passo 5): `pos.case` ha posizione e verso.
      Da fare: i campi negli anelli dell'orizzonte (ora solo nel blocco); il bordo della zona coltivata segue i
      triangoli del terreno (un po' seghettato).
+   - *A pezzi* (passo 9 di M7, blocco che segue il cavaliere): `posizionaVegetazioneAPezzi(o, budget)`,
+     `boscoLontanoAPezzi(…, budget)`, `creaVegetazioneAPezzi(pos, terrain, renderer, budget)` e, sull'oggetto,
+     `aggiungiLontanoAPezzi(…, budget)` e `preparaOmbre(dir, budget)`: generatori che fanno `yield` ogni ~`budget` ms
+     (2,5) e alla fine restituiscono lo stesso risultato delle versioni intere (che ora li eseguono fino in fondo;
+     verificato uguale, oggetto per oggetto). Modelli, atlante delle sagome e volumi della visuale si fanno una volta
+     sola e si condividono tra i blocchi (`userData.condivisa`: chi libera un blocco non ne chiama dispose). In
+     headless: pezzi ≤ ~4–5 ms; costruzione 3D da ~360 a ~95 ms (modelli già fatti).
    - *Scatti*: la ridistribuzione delle istanze (ogni 12 m) si fa a pezzi, al più ~1,5 ms per fotogramma, e mai nel
      fotogramma in cui si rifà l'erba vicina; erba, felci e ciottoli si rifanno uno per fotogramma. In headless nel
      bosco fitto, camminando 200 m: costo peggiore di un fotogramma da ~11 a ~5–6 ms (resta il calcolo dell'erba).

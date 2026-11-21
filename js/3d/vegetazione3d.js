@@ -8,7 +8,7 @@
 // deformate a codice, colori per vertice, un materiale per livello; nessun asset esterno (regola 6).
 
 import * as THREE from 'three';
-import { STRIDE, SAGOME, boscoLontano } from '../mondo/vegetazione.js';
+import { STRIDE, SAGOME, boscoLontanoAPezzi, finisci } from '../mondo/vegetazione.js';
 
 // ─── Costruzione delle geometrie ─────────────────────────────────────────
 
@@ -497,6 +497,30 @@ function felce(rnd, fronde = 7) {
  * Geometrie per tipo: un array di livelli { fino (m), varianti: [geo…], piatto (sfaccettato) }. Le varianti danno
  * forme diverse da vicino (ognuna una chiamata di disegno); in più ogni istanza ha scala e proporzioni sue.
  */
+/**
+ * Modelli condivisi tra i blocchi (passo 9 di M7: ~200 ms a ogni cambio di blocco per rifare geometrie sempre uguali):
+ * si costruiscono una volta. Le geometrie hanno `userData.condivisa`: chi libera un blocco non deve chiamarne
+ * dispose() (se lo fa, Three.js le ricarica sulla scheda al primo uso: funziona, ma costa).
+ */
+let _modelli = null;
+function modelliCondivisi() {
+  if (_modelli) return _modelli;
+  _modelli = creaModelli();
+  for (const [k, v] of Object.entries(_modelli)) {
+    if (k === 'sorgentiSagome') continue;
+    for (const L of v) for (const g of L.varianti || []) g.userData.condivisa = true;
+  }
+  for (const g of _modelli.sorgentiSagome) g.userData.condivisa = true;
+  return _modelli;
+}
+/** Atlante delle sagome per renderer, anch'esso fatto una volta (la texture è condivisa: non va liberata). */
+const _atlanti = new WeakMap();
+function atlanteCondiviso(renderer, sorgenti) {
+  let a = _atlanti.get(renderer);
+  if (!a) { a = creaAtlante(renderer, sorgenti); a.texture.userData.condivisa = true; _atlanti.set(renderer, a); }
+  return a;
+}
+
 function creaModelli() {
   const rnd = casuale(20261119);
   const M = {};
@@ -856,7 +880,7 @@ const COLLISIONI = { cella: 16, sassoMinimo: 1.1,
   raggio: { latifoglia: 0.42, conifera: 0.34, pino: 0.38, riva: 0.4, secco: 0.32, masso: 1.05, affioramento: 2.3,
     sasso: 0.3, tronco: 0.32, muretto: 0.4, siepe: 0.75 } };
 
-function creaCollisioni(pos) {
+function* creaCollisioni(pos, stanco = () => false, pausa = null) {
   const C = COLLISIONI, celle = new Map();
   const aggiungi = (x, z, r) => {
     const i0 = Math.floor((x - r) / C.cella), i1 = Math.floor((x + r) / C.cella);
@@ -884,6 +908,7 @@ function creaCollisioni(pos) {
         for (const d of [0.6, 2.5, 4.4]) aggiungi(x + Math.cos(rot) * d * s, z - Math.sin(rot) * d * s, r0 * s);
       } else aggiungi(x, z, r0 * Math.max(0.6, s));
       n++;
+      if (pausa && (k & 1023) === 1023 && stanco()) yield* pausa();
     }
   }
   /** Punto (x, z) spinto fuori dai tronchi e dalle rocce (raggio del cavaliere), o null se libero. */
@@ -991,6 +1016,7 @@ const ALLUNGATA = 1.4;                           // rapporto dei lati oltre il q
  * metà del raggio orizzontale massimo. Per ogni volume: min e max (scatola) e, in `cil`, centro x, z, raggio e 1 se
  * cilindro / 0 se scatola. min > max = volume vuoto.
  */
+const _volumi = new WeakMap();
 function volumiVisuale(geo) {
   const p = geo.attributes.position;
   let rMax = 0, yTop = -Infinity;
@@ -1030,7 +1056,9 @@ function volumiVisuale(geo) {
  * (erba, felci). `geo`: la geometria della mesh (solo 'pieno', per i volumi).
  */
 function conVisuale(mat, uni, modo, geo = null, livello = null) {
-  const vol = modo === 'pieno' ? volumiVisuale(geo) : null;
+  // Volumi per geometria, calcolati una volta (le geometrie dei modelli sono condivise tra i blocchi).
+  let vol = null;
+  if (modo === 'pieno') { vol = _volumi.get(geo); if (!vol) { vol = volumiVisuale(geo); _volumi.set(geo, vol); } }
   // livello: { ini, fin (Infinity = senza fine), inverti (trama rovesciata), bordo (alberi: regola del bordo del blocco) }
   const liv = livello ? new THREE.Vector4(livello.ini, Number.isFinite(livello.fin) ? livello.fin : -1,
     livello.inverti ? 1 : 0, livello.bordo ? 1 : 0) : null;
@@ -1209,13 +1237,14 @@ function stampa(buf, lato, cx, cz, a, b, ux, uz, forza) {
  * Ombre del blocco. `oggetti`: Float32Array [x, z, s, tipo…] (coordinate locali). Restituisce le due texture e
  * `passo(sole)`: avanza il calcolo delle ombre del sole (a pezzi) e, quando ha finito, aggiorna la texture.
  */
-function creaOmbre(oggetti, forme, half) {
+function* creaOmbre(oggetti, forme, half, stanco = () => false, pausa = null) {
   const n = oggetti.length / 4;
-  // Piede: fisso, calcolato subito.
+  // Piede: fisso, calcolato subito (a pezzi se `pausa`: generatore, si usa con yield*).
   const LP = OMBRE.latoPiede, kp = LP / (2 * half), bp = new Uint8Array(LP * LP);
   for (let i = 0; i < n; i++) {
     const f = forme[oggetti[i * 4 + 3]], r = f.p * oggetti[i * 4 + 2] * kp;
     stampa(bp, LP, (oggetti[i * 4] + half) * kp, (oggetti[i * 4 + 1] + half) * kp, r, r, 1, 0, 0.85);
+    if (pausa && (i & 511) === 511 && stanco()) yield* pausa();
   }
   const piede = texturaCanale(bp, LP);
   // Sole: due array, uno mostrato e uno in lavorazione.
@@ -1223,10 +1252,12 @@ function creaOmbre(oggetti, forme, half) {
   const buf = [new Uint8Array(L * L), new Uint8Array(L * L)];
   const sole = texturaCanale(buf[0], L);
   let mostrato = 0, lavoro = null, disegnato = null;
-  function passo(dir) {
+  // `quanti`: oggetti da stampare in questa chiamata (prepara a pezzi); senza, la prima volta tutto e poi perFotogramma.
+  // Restituisce true se il lavoro è ancora in corso.
+  function passo(dir, quanti = 0) {
     if (!lavoro) {
-      if (dir.y < 0.03) return;
-      if (disegnato && disegnato.angleTo(dir) < OMBRE.rifaiGradi * Math.PI / 180) return;
+      if (dir.y < 0.03) return false;
+      if (disegnato && disegnato.angleTo(dir) < OMBRE.rifaiGradi * Math.PI / 180) return false;
       const b = buf[1 - mostrato];
       b.fill(0);
       const dx = -dir.x, dz = -dir.z, l = Math.hypot(dx, dz) || 1;
@@ -1234,7 +1265,8 @@ function creaOmbre(oggetti, forme, half) {
       lavoro = { b, i: 0, ux: dx / l, uz: dz / l, cot, dir: dir.clone() };
     }
     // La prima volta tutto subito (si è appena caricata la Scena); poi a pezzi, per non dare scatti.
-    const { b, ux, uz, cot } = lavoro, fine = disegnato ? Math.min(n, lavoro.i + OMBRE.perFotogramma) : n;
+    const { b, ux, uz, cot } = lavoro;
+    const fine = quanti ? Math.min(n, lavoro.i + quanti) : disegnato ? Math.min(n, lavoro.i + OMBRE.perFotogramma) : n;
     for (let i = lavoro.i; i < fine; i++) {
       const f = forme[oggetti[i * 4 + 3]], s = oggetti[i * 4 + 2];
       const sposta = f.h * s * cot, a = (f.r * s + f.v * s * cot) * ko, r = f.r * s * ko;
@@ -1249,15 +1281,28 @@ function creaOmbre(oggetti, forme, half) {
       disegnato = lavoro.dir;
       lavoro = null;
     }
+    return !!lavoro;
   }
   return { sole, piede, passo, oggetti: n };
 }
 
 export function creaVegetazione(pos, terrain = null, renderer = null) {
+  return finisci(creaVegetazioneAPezzi(pos, terrain, renderer, Infinity));
+}
+
+/**
+ * creaVegetazione a pezzi (passo 9 di M7): generatore che fa `yield` ogni ~`budget` ms e alla fine restituisce lo
+ * stesso oggetto, pronto ma non ancora in scena. Il caricamento sulla scheda (compileAsync, initTexture) resta a chi
+ * chiama. Nota: assegna subito al terreno gli attributi aSuolo e aCampi (prima del primo yield).
+ */
+export function* creaVegetazioneAPezzi(pos, terrain = null, renderer = null, budget = 2.5) {
   const t0 = performance.now();
+  let tPezzo = t0, attesa = 0;
+  const stanco = () => performance.now() - tPezzo > budget;
+  function* pausa() { const ty = performance.now(); yield; tPezzo = performance.now(); attesa += tPezzo - ty; }
   const oggetto = new THREE.Group();
   oggetto.name = 'vegetazione';
-  const modelli = creaModelli();
+  const modelli = modelliCondivisi();
 
   // Suolo: lettiera sotto il bosco e fango vicino all'acqua (shader del terreno, terrain.js).
   const superficie = terrain?.mesh.getObjectByName('terreno-superficie');
@@ -1282,12 +1327,13 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
   // Sagome: atlante (serve il renderer) e mesh delle sagome del blocco, comune a tutti gli alberi.
   let atlante = null, matSagome = null, sagomeBlocco = null;
   if (renderer) {
-    atlante = creaAtlante(renderer, modelli.sorgentiSagome);
+    atlante = atlanteCondiviso(renderer, modelli.sorgentiSagome);
     matSagome = materialeSagome(atlante.texture, uniDirada);
     const nAlberi = Object.values(pos.tipi).filter((t) => t.gruppo === 'alberi').reduce((s, t) => s + t.n, 0);
     sagomeBlocco = meshSagome(matSagome, nAlberi, 'vegetazione-sagome');
     oggetto.add(sagomeBlocco);
   }
+  if (stanco()) yield* pausa();
   const halfBlocco = terrain ? terrain.half : 1000;
   uniVis.uBordo.value.x = halfBlocco - SAGOMA_BORDO.fascia;
   uniDirada.value.y = Math.log(SAGOME_DIRADA.bordo) / Math.log(SAGOME_DIRADA.da / halfBlocco) / 2;
@@ -1297,6 +1343,7 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
   for (const [nome, t] of Object.entries(pos.tipi)) {
     const livelli = modelli[nome];
     if (!livelli || !t.n) continue;
+    if (stanco()) yield* pausa();
     // Matrici e colori di tutte le istanze, calcolati una volta.
     const matrici = new Float32Array(t.n * 16), colori = new Float32Array(t.n * 3), xz = new Float32Array(t.n * 2);
     const varia = new Float32Array(t.n);
@@ -1330,6 +1377,7 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
         _c.setRGB(b * (1 + 0.12 * w), b * (1 + 0.03 * w), b * (1 - 0.12 * w));
       } else _c.setRGB(b, b, b).lerp(GIALLO, giallo * ((v * 5) % 1));
       colori[k * 3] = _c.r; colori[k * 3 + 1] = _c.g; colori[k * 3 + 2] = _c.b;
+      if ((k & 1023) === 1023 && stanco()) yield* pausa();
     }
     // Sagome per albero (livello lontano): posizione, lato e tessera.
     const lSagoma = livelli.findIndex((L) => L.sagoma);
@@ -1344,23 +1392,34 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
         const o = k * STRIDE, ti = tess[Math.floor(varia[k] * tess.length)];
         const alto = 0.72 + 0.56 * ((t.dati[o + 5] * 17.31) % 1);
         sag.set([t.dati[o], t.dati[o + 1], t.dati[o + 2], atlante.lato[ti] * t.dati[o + 3] * alto, ti], k * 5);
+        if ((k & 1023) === 1023 && stanco()) yield* pausa();
       }
     }
-    const mesh = livelli.map((L, li) => (L.sagoma ? [] : L.varianti).map((geo, vi) => {
-      const livello = { ini: li > 0 ? livelli[li - 1].fino : 0, fin: L.fino, inverti: li % 2 === 1, bordo: !!sag };
-      const m = new THREE.InstancedMesh(geo,
-        conVisuale(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: !!L.piatto }), uniVis, 'pieno', geo, livello), t.n);
-      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(t.n * 3), 3);
-      m.instanceColor.setUsage(THREE.DynamicDrawUsage);
-      m.frustumCulled = false;                 // le istanze coprono tutto il blocco
-      m.count = 0;
-      m.visible = false;
-      m.name = `vegetazione-${nome}-${L.fino}-${vi}`;
-      oggetto.add(m);
-      return m;
-    }));
+    if (stanco()) yield* pausa();
+    const mesh = [];
+    for (let li = 0; li < livelli.length; li++) {
+      const L = livelli[li], ml = [];
+      mesh.push(ml);
+      if (L.sagoma) continue;
+      for (let vi = 0; vi < L.varianti.length; vi++) {
+        const geo = L.varianti[vi];
+        const livello = { ini: li > 0 ? livelli[li - 1].fino : 0, fin: L.fino, inverti: li % 2 === 1, bordo: !!sag };
+        const m = new THREE.InstancedMesh(geo,
+          conVisuale(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: !!L.piatto }), uniVis, 'pieno', geo, livello), t.n);
+        m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(t.n * 3), 3);
+        m.instanceColor.setUsage(THREE.DynamicDrawUsage);
+        m.frustumCulled = false;                 // le istanze coprono tutto il blocco
+        m.count = 0;
+        m.visible = false;
+        m.name = `vegetazione-${nome}-${L.fino}-${vi}`;
+        oggetto.add(m);
+        ml.push(m);
+        if (stanco()) yield* pausa();
+      }
+    }
     tipi.push({ nome, n: t.n, livelli, mesh, matrici, colori, xz, varia, lSagoma, sag, caso });
+    if (stanco()) yield* pausa();
   }
 
   // Ombre finte e piede scuro nello shader del suolo (solo il mondo generato: materialeSuolo).
@@ -1369,12 +1428,16 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
   if (uniSuolo && terrain) {
     const nomi = Object.keys(FORMA_OMBRA), forme = nomi.map((k) => FORMA_OMBRA[k]);
     const lista = [];
-    nomi.forEach((nome, ti) => {
-      const t = pos.tipi[nome];
-      if (!t) return;
-      for (let k = 0; k < t.n; k++) lista.push(t.dati[k * STRIDE], t.dati[k * STRIDE + 2], t.dati[k * STRIDE + 3], ti);
-    });
-    ombre = creaOmbre(Float32Array.from(lista), forme, terrain.half);
+    for (let ti = 0; ti < nomi.length; ti++) {
+      const t = pos.tipi[nomi[ti]];
+      if (!t) continue;
+      for (let k = 0; k < t.n; k++) {
+        lista.push(t.dati[k * STRIDE], t.dati[k * STRIDE + 2], t.dati[k * STRIDE + 3], ti);
+        if ((k & 2047) === 2047 && stanco()) yield* pausa();
+      }
+    }
+    if (stanco()) yield* pausa();
+    ombre = yield* creaOmbre(Float32Array.from(lista), forme, terrain.half, stanco, pausa);
     uniSuolo.uOmbre.value = ombre.sole;
     uniSuolo.uPiede.value = ombre.piede;
     uniSuolo.uOmbreForza.value.set(0, OMBRE.piede);
@@ -1576,21 +1639,26 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
    */
   let lontano = null, msLontano = 0;
   function aggiungiLontano(carta, cx, cz, quota, stagione = 0) {
+    finisci(aggiungiLontanoAPezzi(carta, cx, cz, quota, stagione, Infinity));
+  }
+  /** aggiungiLontano a pezzi: `yield` ogni ~`budget` ms; alla fine le sagome lontane sono nell'oggetto. */
+  function* aggiungiLontanoAPezzi(carta, cx, cz, quota, stagione = 0, budget = 2.5) {
     if (!matSagome || !quota) return;
-    const b = boscoLontano(carta, cx, cz, halfBlocco, quota, stagione);
-    const t2 = performance.now();
+    const b = yield* boscoLontanoAPezzi(carta, cx, cz, halfBlocco, quota, stagione, budget);
+    let t2 = performance.now(), ms = 0;
     lontano = meshSagome(matSagome, b.n, 'vegetazione-sagome-lontane');
     const a = lontano.instanceMatrix.array, ta = lontano.geometry.attributes.aTessera.array;
     for (let k = 0; k < b.n; k++) {
       const o = k * 5, ti = b.dati[o + 4];
       scriviSagoma(a, k, b.dati[o], b.dati[o + 1], b.dati[o + 2], atlante.lato[ti] * b.dati[o + 3]);
       ta[k] = ti;
+      if ((k & 2047) === 2047 && performance.now() - t2 > budget) { ms += performance.now() - t2; yield; t2 = performance.now(); }
     }
     lontano.count = b.n; lontano.visible = b.n > 0;
     lontano.instanceMatrix.needsUpdate = true;
     lontano.geometry.attributes.aTessera.needsUpdate = true;
     oggetto.add(lontano);
-    msLontano = b.ms + performance.now() - t2;
+    msLontano = b.ms + ms + performance.now() - t2;
   }
 
   /** Istanze disegnate, chiamate e triangoli della vegetazione (F3). */
@@ -1605,10 +1673,21 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
       ciottoli: vicini.ciottolo.mesh.count };
   }
 
-  const collisioni = creaCollisioni(pos);
+  if (stanco()) yield* pausa();
+  const collisioni = yield* creaCollisioni(pos, stanco, pausa);
+  if (stanco()) yield* pausa();
   const conteggi = Object.fromEntries(Object.entries(pos.tipi).map(([k, t]) => [k, t.n]));
   return {
-    oggetto, aggiorna, statistiche, conteggi, aggiungiLontano,
+    oggetto, aggiorna, statistiche, conteggi, aggiungiLontano, aggiungiLontanoAPezzi,
+    /**
+     * Prima ombra del sole a pezzi (generatore, `yield` ogni ~`budget` ms), da chiamare prima di mostrare il blocco:
+     * altrimenti il primo aggiorna() la calcola tutta in un fotogramma. `dir`: direzione verso il sole (Vector3).
+     */
+    *preparaOmbre(dir, budget = 2.5) {
+      if (!ombre) return;
+      let t = performance.now();
+      while (ombre.passo(dir, 500)) if (performance.now() - t > budget) { yield; t = performance.now(); }
+    },
     /** Ostacolo per il cavaliere (stessa interfaccia delle mura del castello). */
     spingiFuori: collisioni.spingiFuori, ostacoli: collisioni.n,
     get lontano() { return lontano ? { n: lontano.count, ms: msLontano } : null; },
@@ -1626,6 +1705,6 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
     nascondiOmbre: () => { if (uniSuolo) uniSuolo.uOmbreForza.value.set(0, 0); },
     totale: Object.values(conteggi).reduce((s, v) => s + v, 0),
     msPosiziona: pos.ms, msCampi: pos.msCampi,
-    msCostruzione: performance.now() - t0,
+    msCostruzione: performance.now() - t0 - attesa,
   };
 }
