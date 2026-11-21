@@ -610,11 +610,16 @@ export function scavaFiumi(carta, x, z, h0, esito = _esito) {
       cv.daSorgente = new Float64Array(cv.x.length);
       for (let i = 1; i < cv.x.length; i++) cv.daSorgente[i] = cv.daSorgente[i - 1] + Math.hypot(cv.x[i] - cv.x[i - 1], cv.z[i] - cv.z[i - 1]);
     }
+    const sorgente = pronto.tratti[lista[k]].ka === 0;
     for (const i of segmenti) {
     const ax = cv.x[i], az = cv.z[i], bx = cv.x[i + 1], bz = cv.z[i + 1];
     if ((ax < x - R && bx < x - R) || (ax > x + R && bx > x + R) || (az < z - R && bz < z - R) || (az > z + R && bz > z + R)) continue;
     const vx = bx - ax, vz = bz - az, l2 = vx * vx + vz * vz;
     let t = l2 > 0 ? ((x - ax) * vx + (z - az) * vz) / l2 : 0;
+    // Punto a monte dell'inizio del segmento: lo copre il segmento prima (o il tratto a monte). Contato anche lui
+    // per i versanti, un torrente più ripido dei versanti scavava accanto a sé una fossa alla quota del letto più a
+    // valle, e l'alveo restava in cima a un muro (segnalato dall'utente). Resta solo all'inizio di una sorgente.
+    const aMonte = t < 0 && !(i === 0 && sorgente);
     t = t < 0 ? 0 : t > 1 ? 1 : t;
     const dx = x - ax - vx * t, dz = z - az - vz * t;
     const d = Math.sqrt(dx * dx + dz * dz);
@@ -628,10 +633,12 @@ export function scavaFiumi(carta, x, z, h0, esito = _esito) {
     const fuori = d - w - F.sponda.larghezza;
     if (fuori <= 0) {
       if (d - w < migliore) { migliore = d - w; mL = pelo; mW = w; mB = letto; mProf = prof; mD = d; }
-    } else {
+    } else if (!aMonte) {
       if (Number.isNaN(dettaglio)) dettaglio = h0 - quotaCarta(carta, x, z);
-      let c = pelo + F.sponda.altezza + fuori * (F.versante + F.curva * (fuori / Rv) * (fuori / Rv))
-        + dettaglio * smoothstep(0, 0.6 * Rv, fuori);
+      // Il rilievo fine si somma al versante ma non lo porta sotto la sponda: dove era più basso della Carta
+      // levigata (anche 40 m) scavava accanto all'alveo una fossa e il fiume restava in cima a un muro.
+      let c = Math.max(pelo + F.sponda.altezza, pelo + F.sponda.altezza
+        + fuori * (F.versante + F.curva * (fuori / Rv) * (fuori / Rv)) + dettaglio * smoothstep(0, 0.6 * Rv, fuori));
       if (cv.daSorgente && c < h0) {
         const ds = cv.daSorgente[i] + (cv.daSorgente[i + 1] - cv.daSorgente[i]) * t;
         if (ds < F.sorgente) c = h0 - (h0 - c) * smoothstep(0, F.sorgente, ds);
