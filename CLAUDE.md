@@ -66,6 +66,6 @@ architettura: quelle stanno in `docs/`. Aggiornare la fase corrente a ogni cambi
 
 ## Fase corrente
 
-**Milestone «Prestazioni»** (`docs/PRESTAZIONI.md`, sessione responsabile «M1 - grafica»): misura sulla scheda di
-riferimento (Intel UHD 730), budget, fondamenta del renderer. **M7 (rocca e borgo) in pausa** fino alla sua chiusura.
-M0–M6 completate. La versione 2D resta nella cronologia git (`2c869fa`).
+**M7, rocca e borgo sul mondo generato** (`docs/ESPLORAZIONE_3D.md`), ripresa. Milestone «Prestazioni» chiusa
+(nov. 2026): ogni contenuto disegnato rispetta budget e regole di `docs/PRESTAZIONI.md` e passa dal percorso di prova
+(`?seme=570549&prova`, anche `&centro=99937,43289`). M0–M6 completate. La 2D resta nella cronologia git (`2c869fa`).

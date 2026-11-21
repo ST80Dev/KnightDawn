@@ -75,6 +75,10 @@ Segnalazione dell'utente: «sembra un nastro di stoffa appoggiato sul rilievo»,
 - Bug: triangoli rivolti verso il basso e materiale a due facce → strada illuminata da sotto, quasi nera. Ora ogni
   quad ha il verso giusto (FrontSide).
 - Colore più chiaro (`#a89272`); bordi a +0,08 m e centro a +0,25 m sul terreno disegnato (il bordo tocca terra).
+- Seconda segnalazione: «le strade sembrano arrotondate come tubi lungo il pendio» (sezione bombata +0,08/+0,25 m e
+  normali calcolate da lei). Ora la strada è piatta in larghezza (+0,12 m), con la normale media della sezione (segue
+  solo la pendenza lungo la strada) e polygonOffset più deciso, che con la profondità invertita vale; scarto massimo dal
+  terreno disegnato ±0,15 m.
 - Shader: bordo frastagliato (fino al 22% della semilarghezza, rumore del mondo con periodo 8192 m, quindi uguale tra
   blocchi) che sfuma nell'erba calpestata; chiazze di tono; sassolini tondi entro 30 m. Costo trascurabile (pochi pixel).
 

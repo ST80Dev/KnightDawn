@@ -114,8 +114,12 @@ export function creaAcqueScena(acqua, meta, colore, centro) {
 const STRADA = {
   colore: '#a89272', solchi: 0.85, centro: '#7f8a4c',
   sezione: [-1, -0.45, 0, 0.45, 1],            // vertici attraverso la carreggiata (× semilarghezza)
-  sopra: [0.08, 0.2, 0.25, 0.2, 0.08],         // m sopra il terreno disegnato per ciascun vertice: il bordo tocca terra
-  scarto: 0.3,                                 // m: quanto la quota della strada può staccarsi dal terreno disegnato
+  // Strada piatta in larghezza, appena sopra il terreno disegnato. Prima il centro stava a +0,25 e i bordi a +0,08 (con
+  // la profondità logaritmica il polygonOffset non valeva): la sezione bombata, con le normali calcolate da lei, faceva
+  // sembrare le strade «tubi lungo il pendio» (segnalazione dell'utente). Con la profondità invertita il polygonOffset
+  // vale e basta poco.
+  sopra: [0.12, 0.12, 0.12, 0.12, 0.12],       // m sopra il terreno disegnato per ciascun vertice della sezione
+  scarto: 0.15,                                // m: quanto la quota della strada può staccarsi dal terreno disegnato
   // Bordo e superficie (shader, docs/GRAFICA_3D.md): il bordo si mangia fino al 22% della semilarghezza con un rumore
   // del mondo e sfuma nell'erba calpestata; chiazze di tono (2–6 m) e ghiaia scura entro 30 m dalla camera.
   erbaPestata: '#80804e', mangiaBordo: 0.22, periodo: 8192,
@@ -127,7 +131,7 @@ const STRADA = {
  */
 function materialeStrada(centro = { x: 0, z: 0 }) {
   // polygonOffset: il nastro vince sul terreno senza alzarlo (niente strada sospesa vista di taglio).
-  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -16 });
   const P = STRADA.periodo;
   const uniformi = {
     uOrigineStrada: { value: new THREE.Vector2(((centro.x % P) + P) % P, ((centro.z % P) + P) % P) },
@@ -240,6 +244,15 @@ export function creaNastroStrada(t, mat, altezza, quote = null) {
   geo.setAttribute('aTrasversale', new THREE.BufferAttribute(trasv, 1));
   geo.setIndex(indici);
   geo.computeVertexNormals();
+  // Luce uniforme in larghezza: in ogni sezione la normale è la media della sezione (segue solo la salita o la discesa
+  // lungo la strada), non la curvatura trasversale, che dava la luce di un cilindro.
+  const nor = geo.attributes.normal;
+  for (let i = 0; i < m; i++) {
+    let nx = 0, ny = 0, nz = 0;
+    for (let j = 0; j < k; j++) { const v = i * k + j; nx += nor.getX(v); ny += nor.getY(v); nz += nor.getZ(v); }
+    const l = Math.hypot(nx, ny, nz) || 1;
+    for (let j = 0; j < k; j++) nor.setXYZ(i * k + j, nx / l, ny / l, nz / l);
+  }
   mat.side = THREE.FrontSide;
   const mesh = new THREE.Mesh(geo, mat);
   mesh.name = 'strada';

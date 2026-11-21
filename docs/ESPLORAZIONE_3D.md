@@ -771,10 +771,10 @@ con copertura, fiumi mostrati, clima, luoghi, nomi e fazioni generati dalle stes
 - Copernicus e Terrarium includono edifici e alberi (modelli di superficie): i paesi veri lasciano
   piccoli rilievi dove nel gioco non ci sono.
 
-## M7 — Rocca e borgo — in pausa
+## M7 — Rocca e borgo — fase corrente (ripresa)
 
-> **In pausa** (novembre 2026, decisione dell'utente) durante la milestone «Prestazioni»: `docs/PRESTAZIONI.md`.
-> Si riprende quando quella è chiusa, con le regole per i contenuti nuovi (borgo, cavallo, persone) scritte lì.
+> Ripresa dopo la chiusura della milestone «Prestazioni» (21/11/2026). Prima di costruire borgo, cavallo e persone:
+> budget e regole in `docs/PRESTAZIONI.md` (passo 6); ogni PR passa dal percorso di prova.
 
 > **Riallineato (novembre 2026)** alla regione di 120×90 km, alla gerarchia di densità, al castello di valle,
 > ai valichi tra grandi valli e al tempo ×10 (`docs/GDD.md` §2 «Dimensioni e densità», «Valichi e forcelle»;
