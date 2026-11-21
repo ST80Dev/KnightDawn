@@ -18,7 +18,7 @@
 // forma del mondo (dal passo 2 il terrapieno), e deve essere identico in ogni browser.
 
 import { ACQUA, BIOMA } from './carta.js';
-import { quotaMondo, scavaFiumi, raffinaZona } from './scena.js';
+import { quotaMondo, scavaFiumi, raffinaZona, quotaPiano } from './scena.js';
 import { derivaSeme } from './rumore.js';
 
 export const LUOGHI = {
@@ -48,16 +48,18 @@ export const LUOGHI = {
   // in 15–20 minuti si sale dal castello al crinale per guardare oltre. La partenza è di valle, se c'è.
   crinale: { entro: 5, sopra: 800 },
   // Passo 2: terrapieni. Misure piene (m) del piano della rocca e del borgo secondo la classe (lungo il verso del
-  // borgo × di traverso) e numero di terrazze del borgo; il borgo comincia dove finisce il piano della rocca.
+  // borgo × di traverso); il borgo comincia dove finisce il piano della rocca.
   classi: {
-    minore: { rocca: [40, 36], borgo: [60, 80], terrazze: [1, 2] },
-    casata: { rocca: [52, 46], borgo: [90, 130], terrazze: [2, 3] },
-    maggiore: { rocca: [64, 56], borgo: [130, 200], terrazze: [3, 4] },
+    minore: { rocca: [40, 36], borgo: [60, 80] },
+    casata: { rocca: [52, 46], borgo: [90, 130] },
+    maggiore: { rocca: [64, 56], borgo: [130, 200] },
   },
   piani: {
     passo: 6,                     // m tra i campioni del terreno sotto un piano
-    salto: 6,                     // m di dislivello per terrazza (ne decide il numero, entro i limiti della classe)
-    sopraRocca: 3,                // m: la rocca sta almeno così sopra la prima terrazza
+    // Borgo in pendio (decisione dell'utente: niente terrazze piatte con muri di sostegno né scalinata centrale): il
+    // terreno del borgo è quello naturale lisciato, su una griglia di `griglia` m, `liscia` passate di media 3×3.
+    griglia: 10, liscia: 3,
+    sopraRocca: 3,                // m: la rocca sta almeno così sopra il borgo, lungo il bordo comune
     // Larghezza della scarpata (m): quanto serve per riprendere il salto a 25° (salto / tan 25° ≈ 2,15 m per metro),
     // più un margine; oltre si torna al terreno naturale (TERRAPIENO.ritorno in scena.js).
     scarpa: { perMetro: 2.15, margine: 10, min: 15, max: 120 },
@@ -428,7 +430,8 @@ function saltoBordo(q, p, passo) {
     let t = (k / n) * perimetro, lu, lv;
     if (t < 2 * a) { lu = -a + t; lv = -b; } else if ((t -= 2 * a) < 2 * b) { lu = a; lv = -b + t; }
     else if ((t -= 2 * b) < 2 * a) { lu = a - t; lv = b; } else { t -= 2 * a; lu = -a; lv = b - t; }
-    const d = q(p.cx + p.ux * lu - p.uz * lv, p.cz + p.uz * lu + p.ux * lv) - p.q;
+    const x = p.cx + p.ux * lu - p.uz * lv, z = p.cz + p.uz * lu + p.ux * lv;
+    const d = q(x, z) - quotaPiano(p, x, z);
     const e = d < 0 ? -d : d;
     if (e > mx) mx = e;
   }
@@ -436,7 +439,7 @@ function saltoBordo(q, p, passo) {
 }
 
 /**
- * Piani (rocca + terrazze del borgo) per un sito, nella direzione `dir` del borgo. null se impossibile: il
+ * Piani (rocca in piano + borgo in pendio) per un sito, nella direzione `dir` del borgo. null se impossibile: il
  * terrapieno toccherebbe la fascia di un fiume o di un torrente, o servirebbe alzare troppo per stare sopra
  * l'acqua. Le quote vengono dal terreno senza luoghi (rilievo + fiumi).
  */
@@ -448,24 +451,45 @@ function pianiInDirezione(carta, sito, classe, dir, seed, L) {
   const rocca = { tipo: 'rocca', cx: sito.x, cz: sito.z, ux, uz, a: ra, b: rb, r: Pc.raggioCorner.rocca, q: 0, s: 0 };
   const sr = sottoRettangolo(q, rocca.cx, rocca.cz, ux, uz, ra, rb, Pc.passo);
   rocca.q = (sr.max + sr.media) / 2;                       // un po' di sterro in cima, il resto riporto
-  // Borgo: tutto il rettangolo, poi le terrazze lungo il verso.
+  // Borgo: un solo piano lungo il verso, alla quota del terreno naturale lisciato (griglia). Niente terrazze.
   const la = K.borgo[0] / 2, lb = K.borgo[1] / 2;
   const bcx = sito.x + ux * (ra + la), bcz = sito.z + uz * (ra + la);
-  const sb = sottoRettangolo(q, bcx, bcz, ux, uz, la, lb, Pc.passo);
-  if (sb.media > rocca.q) return null;                     // il borgo deve stare sotto la rocca
-  let n = Math.ceil((sb.max - sb.min) / Pc.salto);
-  n = n < K.terrazze[0] ? K.terrazze[0] : n > K.terrazze[1] ? K.terrazze[1] : n;
-  const terrazze = [];
-  const lt = la / n;                                       // semilunghezza di una terrazza
-  for (let t = 0; t < n; t++) {
-    const off = ra + lt * (2 * t + 1);
-    const p = { tipo: 'borgo', cx: sito.x + ux * off, cz: sito.z + uz * off, ux, uz, a: lt, b: lb, r: Pc.raggioCorner.borgo, q: 0, s: 0 };
-    p.q = sottoRettangolo(q, p.cx, p.cz, ux, uz, lt, lb, Pc.passo).media;
-    if (t > 0 && p.q > terrazze[t - 1].q) p.q = terrazze[t - 1].q;   // le terrazze scendono allontanandosi
-    terrazze.push(p);
+  const borgo = { tipo: 'borgo', cx: bcx, cz: bcz, ux, uz, a: la, b: lb, r: Pc.raggioCorner.borgo, q: 0, s: 0, griglia: null };
+  {
+    const nu = Math.max(3, Math.round(2 * la / Pc.griglia) + 1), nv = Math.max(3, Math.round(2 * lb / Pc.griglia) + 1);
+    let h = new Array(nu * nv);
+    for (let j = 0; j < nv; j++) {
+      for (let i = 0; i < nu; i++) {
+        const lu = -la + 2 * la * i / (nu - 1), lv = -lb + 2 * lb * j / (nv - 1);
+        h[j * nu + i] = q(bcx + ux * lu - uz * lv, bcz + uz * lu + ux * lv);
+      }
+    }
+    for (let it = 0; it < Pc.liscia; it++) {
+      const t = h.slice();
+      for (let j = 0; j < nv; j++) {
+        for (let i = 0; i < nu; i++) {
+          let somma = 0, n = 0;
+          for (let b2 = -1; b2 <= 1; b2++) for (let a2 = -1; a2 <= 1; a2++) {
+            const ii = i + a2, jj = j + b2;
+            if (ii < 0 || jj < 0 || ii >= nu || jj >= nv) continue;
+            somma += t[jj * nu + ii]; n++;
+          }
+          h[j * nu + i] = somma / n;
+        }
+      }
+    }
+    borgo.griglia = { nu, nv, h };
+    borgo.q = h.reduce((s2, v) => s2 + v, 0) / h.length;
   }
-  if (rocca.q < terrazze[0].q + Pc.sopraRocca) rocca.q = terrazze[0].q + Pc.sopraRocca;
-  const piani = [rocca, ...terrazze];
+  if (borgo.q > rocca.q) return null;                      // il borgo deve stare sotto la rocca
+  // La rocca almeno Pc.sopraRocca m sopra il borgo lungo il bordo comune (prima riga della griglia, u = −la).
+  {
+    const G = borgo.griglia;
+    let mx = -Infinity;
+    for (let j = 0; j < G.nv; j++) mx = Math.max(mx, G.h[j * G.nu]);
+    if (rocca.q < mx + Pc.sopraRocca) rocca.q = mx + Pc.sopraRocca;
+  }
+  const piani = [rocca, borgo];
   // Scarpate: larghe in proporzione al salto sul bordo.
   let salto = 0, pendenza = 0;
   for (const p of piani) {
@@ -498,15 +522,26 @@ function pianiInDirezione(carta, sito, classe, dir, seed, L) {
   // Sopra l'acqua: il piano più basso almeno Pc.acqua.sopra m sopra il pelo più alto vicino.
   let alza = 0;
   if (pelo > -Infinity) {
-    const basso = Math.min(...piani.map((p) => p.q));
+    const G = borgo.griglia, basso = Math.min(rocca.q, ...G.h);
     alza = pelo + Pc.acqua.sopra - basso;
     if (alza > Pc.acqua.alzaMax) return null;
-    if (alza > 0) for (const p of piani) if (p.q < pelo + Pc.acqua.sopra) p.q = pelo + Pc.acqua.sopra;
+    if (alza > 0) {
+      for (let k = 0; k < G.h.length; k++) if (G.h[k] < pelo + Pc.acqua.sopra) G.h[k] = pelo + Pc.acqua.sopra;
+      if (rocca.q < pelo + Pc.acqua.sopra) rocca.q = pelo + Pc.acqua.sopra;
+    }
   }
   // Lavoro di terra: scarto medio tra piano e terreno (m), pesato sull'area.
   let lavoro = 0, area = 0;
   for (const p of piani) {
-    lavoro += sottoRettangolo(q, p.cx, p.cz, ux, uz, p.a, p.b, 2 * Pc.passo, p.q).scarto * p.a * p.b;
+    // Scarto medio |terreno − piano| su campioni ogni 2·passo m.
+    const na = Math.max(1, Math.ceil(p.a / Pc.passo)), nb = Math.max(1, Math.ceil(p.b / Pc.passo));
+    let sc = 0, n = 0;
+    for (let i = 0; i <= na; i++) for (let j = 0; j <= nb; j++) {
+      const lu = -p.a + 2 * p.a * i / na, lv = -p.b + 2 * p.b * j / nb;
+      const x = p.cx + p.ux * lu - p.uz * lv, z = p.cz + p.uz * lu + p.ux * lv;
+      sc += Math.abs(q(x, z) - quotaPiano(p, x, z)); n++;
+    }
+    lavoro += sc / n * p.a * p.b;
     area += p.a * p.b;
   }
   return { piani, salto, pendenza, pelo: pelo > -Infinity ? pelo : null, alza: alza > 0 ? alza : 0, lavoro: lavoro / area };

@@ -1141,28 +1141,33 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
    borgo, via in rampa, raccordo con la rocca; ancora senza edifici; partenza fuori dalla porta del borgo.
    *Prova:* da fuori si capisce dove si è (rocca sopra le mura, crinale dietro); si entra, si sale alla
    rocca, nessun punto in cui si cade tra muro e terreno o si resta incastrati.
-   **Stato: fatto, da provare dall'utente.** Nuovo `js/3d/borgo3d.js` (approvato), agganciato in `main.js` accanto a
-   ogni rocca (stessa interfaccia: collisioni, suolo costruito, camera, F3).
-   - *Forma:* il borgo occupa le terrazze del terrapieno (passo 2) lungo il verso: pavimento piano per terrazza; tra una
-     terrazza e la successiva un **muro di contenimento** (dal pavimento basso a 1 m sopra quello alto) con un varco al
-     centro e la **rampa della via** (4 m, al più 25 %, nella terrazza più bassa, con muretti ai lati); **cinta** a
-     gradoni (alta 6/7/8 m sopra il pavimento per rocca minore, casata, sede maggiore; scarpa esterna; base sotto il
-     terreno esterno), retro che si aggancia alle torri anteriori della rocca; **torri quadrate** agli angoli e lungo
-     i lati ogni ~35 m; **torre-porta** con arco e battenti aperti sul lato di fondo, dove arriva la strada (la porta
-     è il nodo della rete delle strade); **rampa fuori dalla porta** fino al terreno (al più 20 %, 3–24 m: senza, un
-     gradino di 40 cm bloccava l'ingresso). Merli rettangolari in istanza.
-   - *Rocca:* la rampa della porta della rocca ora scende al **pavimento della prima terrazza** (`quotaPiede`, nuova
-     opzione di `castle3d.js`) e finisce dentro di essa, anche più ripida (seme 99454: 11 m in 25 m): lunga 40 m,
-     attraversava la terrazza e finiva sopra la rampa della via, e il cavaliere si fermava.
-   - *Prestazioni* (regole di `docs/PRESTAZIONI.md`, passo 6): un borgo = **6 oggetti disegnati** (5 geometrie unite
-     per materiale + merli in un'istanza) e 2.900–7.500 triangoli; 5 materiali. Percorso di prova headless con
-     `&centro=` sul borgo del seme 570549 (59000, 46000): 261 chiamate, 644 mila triangoli in tutta la scena; tempi
-     GPU non misurabili in headless (rendering software): **la misura vera va fatta sulla scheda dell'utente**.
-   - *Misure* (Chromium headless, 5 semi × 3 luoghi = 15 borghi, tutte e tre le classi, 1–4 terrazze): dal fuori
-     della porta del borgo al cortile della rocca lungo la via **in 15 su 15** (27–55 s di cammino), nessuna
-     compenetrazione; 32 assalti alle mura per i borghi di 3 semi: si entra solo dall'assalto allineato alla porta.
-   Limiti: terrazze ancora vuote (case e edifici al passo 5); pavimenti di terra uniforme; contorno rettangolare
-   (una forma più irregolare con le case); salti grandi tra rocca e prima terrazza danno rampe ripide (fino a ~25°).
+   **Stato: rifatto dopo la prova dell'utente, da riprovare.** Nuovo `js/3d/borgo3d.js` (approvato), agganciato in
+   `main.js` accanto a ogni rocca (stessa interfaccia: collisioni, suolo costruito, camera, F3).
+   - *Prima versione (scartata dall'utente):* terrazze piatte con un muro di sostegno a tutta larghezza tra l'una e
+     l'altra e una rampa al centro: «troppo moderno», «dà l'idea dell'interno di un palazzo». Il borgo deve
+     somigliare a un borgo vero: in pendio, con strade interne che girano per tutto il borgo e portano alle case.
+   - *Terreno* (`luoghi.js`, `VERSIONE_GENERATORE` `…m7-borgo-pendio-1…`): il borgo è **un solo piano in pendio**:
+     il terreno naturale campionato su una griglia di 10 m e lisciato (3 passate di media 3×3), in `piani[1].griglia`;
+     `quotaPiano` (`scena.js`) lo interpola e il terrapieno a 25° parte dal suo bordo. La rocca resta in piano, almeno
+     3 m sopra il borgo lungo il bordo comune. 20 semi: verifica dei luoghi superata; pendenza media del borgo 6–28 %,
+     massima locale 10–55 %; dentro il borgo il terreno coincide con la griglia.
+   - *Mura:* cinta **a gradoni lungo il pendio** (tratti di ~6 m, ognuno alto 6/7/8 m sopra il terreno interno secondo
+     la classe; scarpa esterna; base sotto il terreno esterno), torri quadrate agli angoli e lungo i lati, torre-porta
+     con arco e battenti dove arriva la strada (il passaggio segue il terreno), rampa fuori dalla porta fino al terreno.
+     Uno **sperone** chiude l'angolo tra la torre anteriore della rocca e il retro del borgo (lì il cavaliere restava
+     incastrato tra la torre tonda e il muro: 23 cm di compenetrazione).
+   - *Strade interne* (richiesta dell'utente: devono girare per tutto il borgo, verso case ed edifici, non solo
+     portare alla rocca): **via principale** dalla porta al piede della rampa della rocca, a tornanti da un lato
+     all'altro se il pendio supera il 10 %; **via lungo le mura** a 10 m dalla cinta (posto per le case addossate alle
+     mura), lati diritti e angoli smussati; **vicoli** lungo le curve di livello (1/2/3 secondo la classe) da un lato
+     all'altro. Curve morbide e un leggero serpeggiare, bordi irregolari; **ciottolato** in una texture generata una
+     volta al caricamento. Le polilinee restano nel borgo (`strade`) per il passo 5: gli isolati tra le strade.
+   - *Rocca:* la rampa della sua porta scende sul pendio del borgo (fino a 40 m, 25 %); lì finisce la via principale.
+   - *Prestazioni* (`docs/PRESTAZIONI.md`, passo 6): un borgo = **6 oggetti disegnati** (mura e torri, scarpe, pietra,
+     legno, strade, merli in istanza), 5 materiali più quello del ciottolato, ~8.200 triangoli (casata).
+   - *Misure* (Chromium headless): dal fuori della porta del borgo al cortile della rocca in **12 borghi su 12** (4
+     semi, tre classi), 32 assalti alle mura per 3 semi: si entra solo dalla porta, **nessuna compenetrazione**.
+   Limiti: borgo ancora vuoto (case ed edifici al passo 5, negli isolati tra le strade); contorno rettangolare.
 5. **Edifici e case.** Edifici nominati, case per lotto secondo la classe, instancing, geometrie fuse,
    collisioni a griglia, texture da codice. *Prova:* le classi si distinguono a colpo d'occhio; FPS su PC
    medio nel borgo e nella rocca, anche nel borgo più grande; chiamate e triangoli in F3 entro il budget;

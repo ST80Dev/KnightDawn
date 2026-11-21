@@ -491,17 +491,16 @@ function costruisciRocche(cx, cz, ter) {
     const rocca = createCastle(suoloMondo, {
       ...K, x, z, piano: l.piani[0].q,
       rotazione: Math.atan2(-l.verso.x, -l.verso.z),        // la porta (lato −Z locale) verso il borgo
-      // Con il borgo (passo 4) la rampa scende alla prima terrazza e finisce dentro di essa (anche più ripida):
-      // oltre c'è il muro di contenimento con la rampa della via.
-      rampa: { pendenzaMax: 0.25, lunghezzaMin: 3, parapetto: 0.5,
-        lunghezzaMax: l.piani.length > 1 ? Math.max(4, Math.min(40, 2 * l.piani[1].a - (K.latoZ / 2 + 3.5 - l.piani[0].a) - 4)) : 40 },
-      quotaPiede: l.piani.length > 1 ? l.piani[1].q : undefined,
+      rampa: { pendenzaMax: 0.25, lunghezzaMin: 3, lunghezzaMax: 40, parapetto: 0.5 },   // scende sul pendio del borgo
     });
     rocca.luogo = l;
     rocca.tipo = 'rocca';
     out.push(rocca);
     // M7, passo 4: il borgo murato sulle terrazze, addossato alla rocca.
-    if (l.piani.length > 1) out.push(createBorgo(suoloMondo, l, x, z, { HZ: K.latoZ / 2, HX: K.latoX / 2, R: K.raggioTorre }));
+    if (l.piani.length > 1) {
+      out.push(createBorgo(suoloMondo, l, x, z, { HZ: K.latoZ / 2, HX: K.latoX / 2, R: K.raggioTorre,
+        piedeRampa: K.latoZ / 2 + rocca.cfg.porta.torreSporgenza + rocca.lunghezzaRampa }));
+    }
   }
   return out;
 }
@@ -1226,7 +1225,7 @@ function aggiornaPannello(now) {
         if (d > 1500 || !l.terrapieno) continue;
         const t = l.terrapieno;
         testo += `\nrocca ${l.id + 1} (${NOMI_CLASSI[l.classe]}, ${l.carattere}) a ${fmt(d)} m: ${l.piani.length} piani`
-          + ` (rocca ${fmt(l.piani[0].q, 1)} m, terrazze ${l.piani.slice(1).map((p) => fmt(p.q, 1)).join(' / ')} m),`
+          + ` (rocca ${fmt(l.piani[0].q, 1)} m, borgo in pendio, media ${fmt(l.piani[1]?.q ?? NaN, 1)} m),`
           + ` salto massimo ${fmt(t.salto, 1)} m, scarpate ≤ ${fmt(t.pendenza)}°, lavoro medio ${fmt(t.lavoro, 1)} m`
           + (t.pelo !== null ? `, acqua vicina a ${fmt(t.pelo, 1)} m` : '');
       }
@@ -1234,8 +1233,8 @@ function aggiornaPannello(now) {
         if (!r.dentro(k.x, k.z)) continue;
         testo += r.tipo === 'borgo' ? `\nnel borgo ${r.luogo.id + 1}` : `\nnel cortile della rocca ${r.luogo.id + 1}`;
       }
-      for (const r of rocche) if (r.misure) testo += `\nborgo ${r.luogo.id + 1}: ${r.misure.terrazze} terrazze, ${r.misure.rampe} rampe,`
-        + ` ${r.misure.torri} torri, ${r.misure.oggetti} oggetti, ${fmt(r.misure.triangoli)} triangoli`;
+      for (const r of rocche) if (r.misure) testo += `\nborgo ${r.luogo.id + 1}: ${r.misure.strade} strade, ${r.misure.torri} torri,`
+        + ` ${r.misure.oggetti} oggetti, ${fmt(r.misure.triangoli)} triangoli`;
     }
     if (castle) {
       testo += castle.dentro(k.x, k.z) ? '\ncastello: nel cortile'

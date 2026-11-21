@@ -661,6 +661,29 @@ export function scavaFiumi(carta, x, z, h0, esito = _esito) {
 // blocchi vicini, orizzonte e Carta zoomata combaciano. I piani stanno fuori dalla fascia dei fiumi, quindi
 // l'ordine con scavaFiumi non conta. Solo operazioni esatte (decidono la forma del mondo).
 
+/**
+ * Quota di un piano nel punto (x, z): costante (`p.q`, la rocca) oppure, se il piano ha una `griglia` (il borgo,
+ * M7: pendio naturale lisciato, decisione dell'utente), interpolata bilineare sulla griglia nel punto del contorno
+ * più vicino (fuori dal piano vale quella del bordo: la scarpata parte da lì).
+ * griglia = { nu, nv, h }: nu × nv quote lungo u (da −a ad a) e v (da −b a b), h[j·nu + i].
+ */
+export function quotaPiano(p, x, z) {
+  const G = p.griglia;
+  if (!G) return p.q;
+  const dx = x - p.cx, dz = z - p.cz;
+  let lu = dx * p.ux + dz * p.uz, lv = -dx * p.uz + dz * p.ux;
+  lu = lu < -p.a ? -p.a : lu > p.a ? p.a : lu;
+  lv = lv < -p.b ? -p.b : lv > p.b ? p.b : lv;
+  const fu = (lu + p.a) / (2 * p.a) * (G.nu - 1), fv = (lv + p.b) / (2 * p.b) * (G.nv - 1);
+  let i = Math.floor(fu), j = Math.floor(fv);
+  if (i > G.nu - 2) i = G.nu - 2;
+  if (j > G.nv - 2) j = G.nv - 2;
+  const tu = fu - i, tv = fv - j, h = G.h, n = G.nu;
+  const a = h[j * n + i] + (h[j * n + i + 1] - h[j * n + i]) * tu;
+  const b = h[(j + 1) * n + i] + (h[(j + 1) * n + i + 1] - h[(j + 1) * n + i]) * tu;
+  return a + (b - a) * tv;
+}
+
 /** Distanza con segno (m) dal contorno di un piano: negativa dentro. */
 export function distanzaPiano(p, x, z) {
   const dx = x - p.cx, dz = z - p.cz;
@@ -699,7 +722,8 @@ export function spianaLuoghi(carta, x, z, h) {
       if (f > ritorno) ritorno = f;
       if (f <= 0) continue;
       if (d < 0) d = 0;
-      const a = p.q - d * T, b = p.q + d * T;
+      const q = p.griglia ? quotaPiano(p, x, z) : p.q;
+      const a = q - d * T, b = q + d * T;
       if (a > lo) lo = a;
       if (b < hi) hi = b;
     }
