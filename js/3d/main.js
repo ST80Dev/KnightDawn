@@ -20,7 +20,7 @@ import { createRocca } from './rocca3d.js';
 import { createBorgo } from './borgo3d.js';
 import { createCartaVista } from './cartaVista.js';
 import { creaOrizzonte } from './orizzonte.js';
-import { creaAcqueScena } from './acqua.js';
+import { creaAcqueScena, creaPonti } from './acqua.js';
 import { generaCartaAsincrona, verificaSemi } from '../mondo/generatore.js';
 import { generaScena, centroBlocco, quotaFinale } from '../mondo/scena.js';
 import { distanzaStrada } from '../mondo/strade.js';
@@ -289,6 +289,7 @@ let terrain = null;                       // terreno della Scena attuale
 let knight = null;
 let castle = null;                        // solo a Tavullia (fino a «rocca e borgo»)
 let rocche = [];                          // M7, passo 3: rocche del mondo generato nel blocco (o vicine)
+let ponti = [], gruppoPonti = null;       // strade, passo 4: ponti del blocco (suolo e ostacoli, js/3d/acqua.js)
 let acqua = null;                         // superficie del mare a quota 0, se la Scena ne ha
 let orizzonte = null;                     // terreno lontano attorno alla Scena (solo mondo generato)
 let acqueScena = null;                    // fiumi e laghi in quota della Scena (mesh)
@@ -504,10 +505,11 @@ function costruisciRocche(cx, cz, ter) {
  */
 async function caricaScena(desc) {
   for (const o of [terrain?.mesh, acqua, castle?.object, orizzonte?.oggetto, acqueScena, vegetazione?.oggetto,
-    ...rocche.map((r) => r.object)]) {
+    ...rocche.map((r) => r.object), gruppoPonti]) {
     if (o) { scene.remove(o); libera(o); }
   }
   rocche = [];
+  ponti = []; gruppoPonti = null;
   vegetazione = null;
   scostamento = { x: 0, z: 0 };
   if (desc.tipo === 'mondo') {
@@ -537,6 +539,10 @@ async function caricaScena(desc) {
     terrain = createTerrain(meta, heights, false, coloreMondo(carta, Calendar.stagione));
     acqueScena = creaAcqueScena(dati, meta, COLORE_ACQUA, meta.centroMondo);
     if (acqueScena) scene.add(acqueScena);
+    ({ gruppo: gruppoPonti, ponti } = creaPonti(dati.attraversamenti, dati.altezza));
+    scene.add(gruppoPonti);
+    ostacoli.push(...ponti);
+    occlusori.push(...ponti.flatMap((p) => p.solidi));
     livelliAcqua = { fiume: dati.fiume, lago: dati.lago, cols: meta.cols, cell: meta.cellSize, half: meta.sizeMeters / 2 };
     rocche = costruisciRocche(desc.cx, desc.cz, terrain);
     for (const r of rocche) {
@@ -588,7 +594,7 @@ async function caricaScena(desc) {
     acqua.name = 'acqua';
     scene.add(acqua);
   }
-  _suolo = componiSuolo(terrain, castle ? [castle] : rocche);
+  _suolo = componiSuolo(terrain, castle ? [castle] : [...rocche, ...ponti]);
   scenaAttuale = desc;
   statPendenze = misuraPendenze(terrain);
   _oraCielo = -1;                          // ricalcola le luci (anche quelle proprie del castello)

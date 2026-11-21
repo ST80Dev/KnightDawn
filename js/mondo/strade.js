@@ -71,6 +71,10 @@ export const STRADE = {
     ritorno: 10,                // m per tornare al terreno naturale
     cellaIndice: 100,
     zona: 1600,                 // m: tratti raffinati attorno al centro del blocco
+    // Attraversamenti (passo 4, ponti e guadi): oltre `guado` m d'acqua un ponte (la stessa soglia del guado a piedi,
+    // PROFONDITA_GUADO in main.js). Impalcato a pelo + `franco` + `francoLuce`·luce (o alle rive se più alte), rampe
+    // in terra alla pendenza massima della classe. Guado: soglia di ghiaia con `acquaGuado` m d'acqua.
+    attraversa: { guado: 0.9, franco: 1.5, francoLuce: 0.03, acquaGuado: 0.35, pietra: 20 },
   },
 };
 
@@ -698,8 +702,11 @@ function tracciaTratto(carta, tr, W = STRADE.scena.corridoio) {
     fx = liscia(fx, 1, 2); fz = liscia(fz, 1, 2);
   }
   // Quota della strada: il terreno lungo il percorso, saltando l'acqua (lì passerà un ponte o un guado), lisciata.
-  const m = fx.length, h = new Array(m), bagnato = new Uint8Array(m);
-  for (let i = 0; i < m; i++) { h[i] = terreno(carta, fx[i], fz[i], esito); bagnato[i] = Number.isNaN(esito.livello) ? 0 : 1; }
+  const m = fx.length, h = new Array(m), bagnato = new Uint8Array(m), pelo = new Float64Array(m), suolo = new Float64Array(m);
+  for (let i = 0; i < m; i++) {
+    h[i] = suolo[i] = terreno(carta, fx[i], fz[i], esito);
+    bagnato[i] = Number.isNaN(esito.livello) ? 0 : 1; pelo[i] = esito.livello;
+  }
   let prima = -1;
   for (let i = 0; i < m; i++) {
     if (bagnato[i]) continue;
@@ -727,7 +734,34 @@ function tracciaTratto(carta, tr, W = STRADE.scena.corridoio) {
       hh[k] = qs + (hR - qs) * Math.min(1, d / dR);
     }
   }
-  return { x: Float64Array.from(fx), z: Float64Array.from(fz), h: Float64Array.from(hh), semi: K.semi, ok: !!cammino };
+  // Attraversamenti: corse di punti nell'acqua. Ponte (acqua profonda): impalcato piano tra le due rive asciutte e rampe;
+  // guado: soglia di ghiaia poco sotto il pelo e discese nelle rive. tipo per punto: 0 strada, 1 ponte, 2 guado.
+  const AT = S.attraversa, tipo = new Uint8Array(m), attraversamenti = [];
+  const lungo = (a, b) => { let l = 0; for (let k = Math.min(a, b); k < Math.max(a, b); k++) l += Math.hypot(fx[k + 1] - fx[k], fz[k + 1] - fz[k]); return l; };
+  for (let i = 0; i < m;) {
+    if (!bagnato[i]) { i++; continue; }
+    let j = i, prof = 0, peloMax = -Infinity;
+    while (j < m && bagnato[j]) { prof = Math.max(prof, pelo[j] - suolo[j]); peloMax = Math.max(peloMax, pelo[j]); j++; }
+    const a = Math.max(0, i - 1), b = Math.min(m - 1, j), luce = lungo(a, b);
+    const ponte = prof > AT.guado;
+    let quota;
+    if (ponte) {
+      quota = Math.max(peloMax + AT.franco + AT.francoLuce * luce, hh[a], hh[b]);
+      for (let k = a; k <= b; k++) { hh[k] = quota; tipo[k] = 1; }
+      // Rampe: verso l'esterno la strada non scende più ripida della classe (rilevato fino all'impalcato).
+      for (let k = a - 1; k >= 0; k--) { const v = quota - K.pmax * lungo(k, a); if (hh[k] >= v) break; hh[k] = v; }
+      for (let k = b + 1; k < m; k++) { const v = quota - K.pmax * lungo(b, k); if (hh[k] >= v) break; hh[k] = v; }
+    } else {
+      quota = peloMax - AT.acquaGuado;
+      for (let k = i; k < j; k++) { hh[k] = quota; tipo[k] = 2; }
+      // Discese nelle rive alla pendenza della classe.
+      for (let k = i - 1; k >= 0; k--) { const v = quota + K.pmax * lungo(k, i); if (hh[k] <= v) break; hh[k] = v; }
+      for (let k = j; k < m; k++) { const v = quota + K.pmax * lungo(j - 1, k); if (hh[k] <= v) break; hh[k] = v; }
+    }
+    attraversamenti.push({ ponte, a, b, quota, pelo: peloMax, profondita: prof, luce });
+    i = j;
+  }
+  return { x: Float64Array.from(fx), z: Float64Array.from(fz), h: Float64Array.from(hh), tipo, attraversamenti, semi: K.semi, ok: !!cammino };
 }
 
 /** Cerca il tracciato fine dei tratti di strada entro `raggio` m (in quadrato) da (cx, cz). Restituisce i ms. */
@@ -779,6 +813,7 @@ export function distanzaStrada(carta, x, z, out = { d: Infinity, lato: 0, semi: 
     const dx = x - ax - vx * t, dz = z - az - vz * t, d = Math.sqrt(dx * dx + dz * dz);
     if (d < out.d) {
       out.d = d; out.semi = f.semi; out.classe = tr.classe; out.banchina = STRADE.classi[tr.classe].banchina;
+      out.tipo = f.tipo ? f.tipo[t < 0.5 ? i : i + 1] : 0;
       out.h = f.h[i] + (f.h[i + 1] - f.h[i]) * t;
       out.lato = (vx * (z - az) - vz * (x - ax)) >= 0 ? d : -d;
     }
@@ -793,14 +828,17 @@ const _d = { d: Infinity, lato: 0, semi: 0, h: 0, classe: '' };
  * (al più STRADE.scena.scarpata), poi il terreno naturale. Nell'alveo dei fiumi niente (ponti e guadi a parte).
  */
 export function spianaStrade(carta, x, z, h, esito) {
-  if (esito && !Number.isNaN(esito.livello)) return h;
+  const inAcqua = esito && !Number.isNaN(esito.livello);
   distanzaStrada(carta, x, z, _d);
   if (_d.d === Infinity) return h;
+  // Nell'alveo: sotto un ponte il fiume resta; al guado il letto sale alla soglia di ghiaia (mai si abbassa).
+  if (inAcqua && _d.tipo !== 2) return h;
   const S = STRADE.scena, e = Math.max(0, _d.d - _d.semi - _d.banchina);   // carreggiata e banchina piane
   const f = 1 - smoothstep(S.raccordo, S.raccordo + S.ritorno, e);
   if (f <= 0) return h;
   const lo = _d.h - e * S.scarpata, hi = _d.h + e * S.scarpata;
-  const c = h < lo ? lo : h > hi ? hi : h;
+  let c = h < lo ? lo : h > hi ? hi : h;
+  if (inAcqua && c < h) c = h;
   return h + f * (c - h);
 }
 
@@ -818,7 +856,12 @@ export function percorsiStrade(carta, x0, z0, x1, z1) {
   for (const tr of stradeScena(carta).tratti) {
     const [a0, b0, a1, b1] = tr.riquadro;
     if (a1 < x0 || a0 > x1 || b1 < z0 || b0 > z1) continue;
-    out.push(tr.fine ? { x: tr.fine.x, z: tr.fine.z, classe: tr.classe } : { x: tr.px, z: tr.pz, classe: tr.classe });
+    if (!tr.fine) { out.push({ x: tr.px, z: tr.pz, classe: tr.classe }); continue; }
+    const f = tr.fine;
+    // Attraversamenti (ponti e guadi) con il punto di mezzo, per i segni sulla Carta zoomata.
+    const attraversamenti = (f.attraversamenti || []).map((at) => ({ ponte: at.ponte,
+      x: (f.x[at.a] + f.x[at.b]) / 2, z: (f.z[at.a] + f.z[at.b]) / 2, dx: f.x[at.b] - f.x[at.a], dz: f.z[at.b] - f.z[at.a] }));
+    out.push({ x: f.x, z: f.z, classe: tr.classe, attraversamenti });
   }
   return out;
 }
@@ -850,11 +893,40 @@ export function stradeBlocco(carta, cx, cz, half, passo = 2, quote = null) {
         const x = (i === 0 ? f.x[0] : f.x[i - 1] + (f.x[i] - f.x[i - 1]) * t) - cx;
         const z = (i === 0 ? f.z[0] : f.z[i - 1] + (f.z[i] - f.z[i - 1]) * t) - cz;
         if (Math.abs(x) > half - 1 || Math.abs(z) > half - 1) { chiudi(); continue; }
+        // Sul ponte niente nastro: la carreggiata è l'impalcato del ponte (js/3d/acqua.js, creaPonte).
+        if (f.tipo && i > 0 && f.tipo[i - 1] === 1 && f.tipo[i] === 1) { chiudi(); continue; }
         pezzo.push(x, z, f.semi);
         hs.push(i === 0 ? f.h[0] : f.h[i - 1] + (f.h[i] - f.h[i - 1]) * t);
       }
     }
     chiudi();
+  }
+  return out;
+}
+
+/**
+ * Ponti e guadi nel blocco (coordinate locali, centro (cx, cz)): per ogni attraversamento dei tratti raffinati che cade
+ * nel blocco, { ponte, materiale ('pietra'|'legno'), x0, z0, x1, z1 (le due rive asciutte), quota (impalcato o soglia),
+ * pelo, profondita, luce, semi, classe, punti: [x, z, …] (il tracciato tra le rive) }.
+ */
+export function attraversamentiBlocco(carta, cx, cz, half) {
+  if (!carta.strade) return [];
+  const out = [], A = STRADE.scena.attraversa;
+  for (const tr of stradeScena(carta).tratti) {
+    const f = tr.fine;
+    if (!f || !f.attraversamenti) continue;
+    for (const at of f.attraversamenti) {
+      const x0 = f.x[at.a] - cx, z0 = f.z[at.a] - cz, x1 = f.x[at.b] - cx, z1 = f.z[at.b] - cz;
+      const dentro = (x, z) => Math.abs(x) < half - 2 && Math.abs(z) < half - 2;
+      if (!dentro(x0, z0) || !dentro(x1, z1)) continue;           // tagliato dal bordo: nel blocco accanto
+      const punti = [];
+      for (let k = at.a; k <= at.b; k++) punti.push(f.x[k] - cx, f.z[k] - cz);
+      out.push({
+        ponte: at.ponte, materiale: at.ponte && (tr.classe === 'maestra' || at.luce > A.pietra) ? 'pietra' : 'legno',
+        x0, z0, x1, z1, quota: at.quota, pelo: at.pelo, profondita: at.profondita, luce: at.luce,
+        semi: f.semi, classe: tr.classe, punti,
+      });
+    }
   }
   return out;
 }

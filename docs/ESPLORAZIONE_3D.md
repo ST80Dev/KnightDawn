@@ -1857,6 +1857,75 @@ nuovo: serve la conferma (regola 2).
 4. **Ponti e guadi.**
 5. **Viaggio sulla Carta** lungo le strade.
 
+### Passo 4 — Ponti e guadi (approvato dall'utente: pietra per le maestre e luci > 20 m, legno altrimenti; presidi e pedaggi con i luoghi)
+
+Affidato alla sessione M6 su indicazione dell'utente (novembre 2026). Oggi nell'alveo la strada si interrompe: il
+fiume la taglia e il nastro resta a ±0,3 m dal terreno. Comandi e tasti restano per dopo (decisione dell'utente).
+
+**Cosa c'è da collegare** [Certo, misurato sui tracciati delle Scene di tutta la regione]:
+
+| Seme | Attraversamenti | Ponti (acqua > 0,9 m) | Luce dei ponti | Guadi (luce) |
+|---|---|---|---|---|
+| 570549 | 51 | 8 | 15–56 m | 5–20 m |
+| 48213 | 61 | 14 | 15–88 m | 5–15 m |
+| 855588 | 42 | 11 | 14–59 m | 5–15 m |
+
+Quello che decide è la Scena (profondità vera nell'alveo), non la Carta: la soglia è la stessa del guado a piedi
+(`PROFONDITA_GUADO` 0,9 m). Un blocco di 2×2 km ha di solito 0–2 ponti e 0–5 guadi.
+
+**1. Dove e a che quota** (`js/mondo/strade.js`, senza grafica). Nel tracciato fine di ogni tratto si trovano le
+corse di punti nell'alveo: profondità massima > 0,9 m → **ponte**, altrimenti **guado**. Per il ponte la carreggiata
+passa alla quota dell'impalcato: pelo dell'acqua + luce libera (1,5 m + 3 % della luce) o la quota delle rive se più
+alta, con **rampe in terra** alle testate entro la pendenza massima della classe (le fa `spianaStrade`, come la
+banchina). Per il guado la strada scende nel letto con la pendenza della classe e il letto si alza a una **soglia di
+ghiaia** dove l'acqua resta ≤ 0,4 m, larga quanto carreggiata e banchina (il nastro d'acqua del fiume resta sopra:
+acqua bassa e chiara sopra il guado). Tutto funzione del punto del mondo: blocchi e orizzonte combaciano.
+
+**2. Ponti** (stile di `docs/GRAFICA_3D.md`, mesh da codice, niente modelli):
+- *Pietra* per le strade maestre e per luci oltre ~20 m: archi a sesto ribassato (uno ogni 10–18 m: 1 arco a 15 m,
+  5 a 88 m), pile con rostri a monte, leggera schiena d'asino, parapetti bassi; `ExtrudeGeometry` sul profilo degli archi
+  più blocchi, `MeshStandardMaterial` opaco (pietra) con colori per vertice dalla palette, filari di conci nello
+  shader solo come luce (convenzione del terreno). ~1 500–3 000 triangoli.
+- *Legno* per carrarecce, mulattiere e sentieri su luci fino a ~20 m: travi, tavolato, parapetti a croce di
+  Sant'Andrea, cavalletti nel letto ogni 6–8 m. Lambert. ~600–1 200 triangoli.
+- Una mesh per ponte (geometrie unite), una o due chiamate; nessuna `InstancedMesh` necessaria (ponti diversi tra loro).
+- **Camminarci**: ogni ponte è un oggetto con `quotaSuolo` (impalcato) e `spingiFuori` (parapetti), come il castello;
+  entra in `componiSuolo` e negli ostacoli (una riga in `main.js`, dove si raccolgono le rocche). Sotto l'impalcato si
+  passa solo dove l'acqua si guada.
+
+**3. Guadi**: soglia di ghiaia chiara (colore nel nastro della strada sotto l'acqua) e 10–30 **pietre** di guado
+grosse e piatte in una sola `InstancedMesh` per blocco (una chiamata per tutti i guadi), vegetazione esclusa come sulla
+strada (già lo fa `distanzaStrada`).
+
+**4. Carta**: un segno per i ponti (arco) e per i guadi (puntini) sui rami; nella Carta zoomata quelli veri delle Scene.
+
+**Prestazioni** (`docs/PRESTAZIONI.md`, gruppo «resto», 1,5 ms): per blocco ≤ 2 ponti (≤ 6 000 triangoli, ≤ 4 chiamate)
+e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche con
+`?seme=570549&prova&centro=39277,18877` (ponte di una strada maestra, luce ~25 m). Materiali creati al caricamento.
+
+**Passi** (ciascuno provato nel browser):
+1. Attraversamenti, quote, rampe e soglia del guado (`strade.js`); verifiche in Node su 30 semi: nessuna rampa oltre la
+   pendenza della classe, giuntura tra blocchi 0, guadi ≤ 0,4 m.
+2. Ponti di pietra e di legno, camminabili; percorso di prova sul ponte.
+3. Guadi: pietre e ghiaia.
+4. Segni sulla Carta.
+
+**Fatto (da provare dall'utente):**
+- `strade.js`: nel tracciato fine le corse nell'acqua diventano `attraversamenti` (ponte se > 0,9 m d'acqua); profilo:
+  impalcato piano con rampe alla pendenza della classe, guado con soglia a 0,35 m d'acqua e discese nelle rive;
+  `tipo` per punto (0 strada, 1 ponte, 2 guado) letto da `distanzaStrada`; `spianaStrade` nel letto alza la soglia del
+  guado e sotto i ponti lascia il fiume. `attraversamentiBlocco` per la Scena; il nastro della strada salta i ponti.
+  Misure (seme 570549 / 48213): 8 / 14 ponti (luce fino a 61 / 97 m), 43 / 47 guadi, acqua sui guadi ≤ 0,35 m,
+  giuntura tra blocchi 0; vicino agli attraversamenti il 99 % del profilo entro la pendenza della classe.
+- `acqua.js`, `creaPonti`: pietra (fianco con archi estruso, uno ogni ~14 m, pile 1,8 m, schiena d'asino ≤ 1,2 m,
+  parapetti) o legno (tavolato, travi, cavalletti ogni ~6,5 m, parapetti a montanti); una mesh per ponte; ogni ponte è
+  suolo (`quotaSuolo`) e ostacolo (`spingiFuori`, parapetti). Guadi: pietre piatte accanto alla carreggiata, una
+  `InstancedMesh` per blocco. `main.js`: ponti in `componiSuolo`, negli ostacoli e negli occlusori.
+- Carta: segno «)(» per i ponti della rete; nella Carta zoomata ponti e guadi (puntini blu) delle Scene.
+- Prova in headless: sul ponte (`?seme=570549&prova&centro=39277,18877`) il cavaliere sta a 76,2 m sopra l'acqua a 72,8;
+  al guado (`&centro=91485,11432`) è nell'acqua a 0,3 m. FPS e ms da misurare sulla scheda vera (gruppo «resto»).
+- Non fatto: rostri delle pile, filari di conci nello shader, ghiaia colorata sotto l'acqua del guado.
+
 ### Fatto (passi 1–2)
 
 - **Rete** (`aggiungiStrade`, nel Worker con i luoghi; `VERSIONE_GENERATORE` `…+strade-1`): nodi = porte dei borghi,

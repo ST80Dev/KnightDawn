@@ -13,7 +13,7 @@
 import { gradienteD, derivaSeme, smoothstep, ridged } from './rumore.js';
 import { ACQUA, profiloMassicci } from './carta.js';
 import { tracciaPercorso, lettoMonotono, PERCORSO } from './fiumi.js';
-import { spianaStrade, raffinaStrade, stradeBlocco } from './strade.js';   // import circolare: usate solo dentro le funzioni
+import { spianaStrade, raffinaStrade, stradeBlocco, attraversamentiBlocco } from './strade.js';   // import circolare: usate solo dentro le funzioni
 
 export const SCENA = { lato: 2000, celle: 256 };   // 2×2 km, 257×257 vertici (come Tavullia)
 
@@ -905,5 +905,6 @@ export function generaScena(carta, cx, cz) {
     const a = heights[r * n + c], b = heights[r * n + c + 1], d = heights[(r + 1) * n + c], e = heights[(r + 1) * n + c + 1];
     return u + v <= 1 ? a + (b - a) * u + (d - a) * v : e + (d - e) * (1 - u) + (b - e) * (1 - v);
   };
-  return { meta, heights, acqua: { fiume, lago, tracciati, strade, quoteStrade, altezza } };
+  const attraversamenti = attraversamentiBlocco(carta, cx, cz, half);
+  return { meta, heights, acqua: { fiume, lago, tracciati, strade, quoteStrade, altezza, attraversamenti } };
 }
