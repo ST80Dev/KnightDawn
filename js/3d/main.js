@@ -28,6 +28,7 @@ import { generaScena, centroBlocco, quotaFinale } from '../mondo/scena.js';
 import { distanzaStrada } from '../mondo/strade.js';
 import { posizionaVegetazione, coperturaMondo, coperturaTavullia } from '../mondo/vegetazione.js';
 import { creaVegetazione } from './vegetazione3d.js';
+import { creaAbitanti } from './abitanti3d.js';
 import { semeDaTesto } from '../mondo/rumore.js';
 import { creaProfilatore, creaPercorso, GRUPPI, FAMIGLIE, BUDGET_GPU, budgetDi, creaQualita } from './prestazioni.js';
 
@@ -303,6 +304,7 @@ let scenaAttuale = null;                  // { tipo: 'tavullia' } | { tipo: 'mon
 let statPendenze = '';                    // percentili della pendenza della Scena (F3)
 let vegetazione = null;                   // alberi, arbusti, rocce della Scena (vegetazione3d.js)
 let campagna = null;                      // M7, passo 5: case di campagna del blocco (edifici3d.js)
+let abitanti = null;                      // M7, passo 7: persone di rocche e borghi (abitanti3d.js)
 let vegetazioneVisibile = true;           // tasto V
 // Il blocco del mondo si centra sulla griglia fissa del mondo (centroBlocco): le coordinate locali chieste per la
 // Scena (rispetto al centro richiesto) si spostano di tanto in posizionaCavaliere.
@@ -468,18 +470,23 @@ const RIGHE_CRONISTA = {
   pozzo: "L'acqua è fredda e profonda; la corda è consumata dalle mani.",
 };
 let cronista = null;                       // la Carta del cronista aperta (elemento), o null
+let personaVicina = null;                  // abitante a portata di «E: parla» (abitanti3d.js)
 
 // Un solo gestore del tasto d'azione (E): la prima voce disponibile, in ordine di priorità, agisce. Le altre
 // sessioni aggiungono qui la loro voce invece di un proprio keydown (persona vicina in testa, cavallo in fondo).
 const AZIONI_TASTO = [
+  { nome: 'parla', pronta: () => personaVicina,
+    esegui: () => apriCronista({ nome: personaVicina.nome, riga: abitanti.riga(personaVicina), nota: 'Dialogo segnaposto: le conversazioni arriveranno con la Veglia.' }) },
   { nome: 'porta', pronta: () => portaVicina, esegui: () => apriCronista(portaVicina) },
 ];
 let portaVicina = null;                    // { nome, tipo, porta } dell'edificio vicino, o null
 let _invitoPorta = null;
 function cercaPortaVicina() {
   portaVicina = null;
-  if (!knight || cronista || percorso) return;
+  personaVicina = null;
+  if (!knight || cronista || percorso) { if (_invitoPorta) _invitoPorta.hidden = true; return; }
   const st = knight.stato, dx0 = Math.sin(st.direzione), dz0 = Math.cos(st.direzione);
+  personaVicina = abitanti?.personaVicina(st.x, st.z, st.direzione) ?? null;
   let migliore = PORTA.distanza;
   for (const r of rocche) {
     for (const e of r.edifici ?? []) {
@@ -494,8 +501,9 @@ function cercaPortaVicina() {
     }
   }
   if (!_invitoPorta) _invitoPorta = avvisoHud('', 'messaggio');
-  _invitoPorta.hidden = !portaVicina;
-  if (portaVicina) _invitoPorta.textContent = `${PORTA.nomeTasto}: entra — ${portaVicina.nome}`;
+  _invitoPorta.hidden = !portaVicina && !personaVicina;
+  if (personaVicina) _invitoPorta.textContent = `${PORTA.nomeTasto}: parla — ${personaVicina.nome}`;
+  else if (portaVicina) _invitoPorta.textContent = `${PORTA.nomeTasto}: entra — ${portaVicina.nome}`;
 }
 function apriCronista(e) {
   chiudiCronista();
@@ -511,10 +519,10 @@ function apriCronista(e) {
   miniatura.textContent = '✦ ✦ ✦';
   miniatura.style.cssText = 'color:#a07a3c;margin:6px 0 12px';
   const riga = document.createElement('div');
-  riga.textContent = RIGHE_CRONISTA[e.tipo] ?? 'Qui finisce la strada e comincia il racconto.';
+  riga.textContent = e.riga ?? RIGHE_CRONISTA[e.tipo] ?? 'Qui finisce la strada e comincia il racconto.';
   riga.style.cssText = 'font-style:italic;line-height:1.5;margin-bottom:10px';
   const nota = document.createElement('div');
-  nota.textContent = 'Carta del cronista (segnaposto): le azioni arriveranno con la Veglia.';
+  nota.textContent = e.nota ?? 'Carta del cronista (segnaposto): le azioni arriveranno con la Veglia.';
   nota.style.cssText = 'font-size:12px;color:#7a6040;margin-bottom:14px';
   const esci = document.createElement('button');
   esci.textContent = 'Esci';
@@ -632,11 +640,12 @@ function costruisciRocche(cx, cz, ter) {
 async function caricaScena(desc) {
   chiudiCronista();
   for (const o of [terrain?.mesh, acqua, castle?.object, orizzonte?.oggetto, acqueScena, vegetazione?.oggetto,
-    ...rocche.map((r) => r.object), gruppoPonti, campagna?.object]) {
+    ...rocche.map((r) => r.object), gruppoPonti, campagna?.object, abitanti?.object]) {
     if (o) { scene.remove(o); libera(o); }
   }
   rocche = [];
   campagna = null;
+  abitanti = null;
   ponti = []; gruppoPonti = null;
   vegetazione = null;
   scostamento = { x: 0, z: 0 };
@@ -734,6 +743,11 @@ async function caricaScena(desc) {
     scene.add(acqua);
   }
   _suolo = componiSuolo(terrain, castle ? [castle] : [...rocche, ...ponti]);
+  if (rocche.length) {                     // persone ai loro posti e per le strade (passo 7), sul suolo composto
+    abitanti = creaAbitanti({ rocche, quota: (x, z) => suolo.getHeight(x, z), seme: carta.seme });
+    scene.add(abitanti.object);
+    ostacoli.push(abitanti);
+  }
   scenaAttuale = desc;
   statPendenze = misuraPendenze(terrain);
   _oraCielo = -1;                          // ricalcola le luci (anche quelle proprie del castello)
@@ -938,7 +952,7 @@ async function init() {
     scene, camera, cam, controls, suolo, Knight, Calendar, Save, renderer, qualita,
     get terrain() { return terrain; }, get knight() { return knight; }, get castle() { return castle; },
     get carta() { return carta; }, get scena() { return scenaAttuale; }, get orizzonte() { return orizzonte; },
-    get rocche() { return rocche; }, get campagna() { return campagna; },
+    get rocche() { return rocche; }, get campagna() { return campagna; }, get abitanti() { return abitanti; },
     get vegetazione() { return vegetazione; }, get cavallo() { return cavallo; },
     caricaScena, posizionaCavaliere,
   };
@@ -1186,7 +1200,7 @@ function gruppoDi(o) {
   if (orizzonte && top === orizzonte.oggetto) return 'ter. orizzonte';
   if (vegetazione && top === vegetazione.oggetto) return 'veg. resto';
   if ((castle && top === castle.object) || rocche.some((r) => r.object === top) || (campagna && top === campagna.object)) return 'edifici';
-  if ((knight && top === knight.object) || (cavallo && top === cavallo.object)) return 'personaggi';
+  if ((knight && top === knight.object) || (cavallo && top === cavallo.object) || (abitanti && top === abitanti.object)) return 'personaggi';
   return null;
 }
 
@@ -1465,6 +1479,7 @@ function frame(now) {
       cam.prendiGiroMouse();               // in pausa il mouse non gira il cavaliere
     }
     if (cavallo && !inPausa && !cronista) cavallo.update(dt);
+    if (abitanti && !inPausa && !cronista && !percorso) abitanti.update(dt, knight.stato, 1 - _luceGiorno);
     cercaPortaVicina();
     tt = segna('cavaliere e tempo', tt);
     aggiornaCielo();

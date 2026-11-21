@@ -772,6 +772,7 @@ export function* createBorgoAPezzi(suolo, luogo, ox, oz, rocca) {
 
   return {
     tipo: 'borgo', luogo, object, solidi, scatole, spingiFuori, quotaSuolo, dentro, inLocale,
+    inBlocco: (u, v) => [X(u, v), Z(u, v)],      // locale → blocco (abitanti3d.js)
     strade,                                       // polilinee locali (u, v): per gli edifici del passo 5
     poligono: BL,
     porta: { u: gm[0], v: gm[1], nu: gn[0], nv: gn[1], rampa: rampaVera ? lungaPorta : 0 },

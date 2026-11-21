@@ -1072,6 +1072,7 @@ export function* createRoccaAPezzi(suolo, luogo, ox, oz) {
   const piede = [rFine[0] + rampa.dir[0] * 2, rFine[1] + rampa.dir[1] * 2];
   return {
     tipo: 'rocca', luogo, object, solidi, spingiFuori, quotaSuolo, dentro, aggiornaLuci, inLocale,
+    inBlocco: (u, v) => [X(u, v), Z(u, v)],      // locale → blocco (abitanti3d.js)
     piano, poligono: P, piede, torre: RT, tonde, terrazzi,
     rampa: { lato: rampa.lato, lunghezza: rampa.l, pendenza: rampa.g, inizio: rampa.start, fine: rFine, dir: rampa.dir },
     porta: { u: gm[0], v: gm[1], nu: gn[0], nv: gn[1], sporgenza: SPOR, profondita: PORTA.profondita },
