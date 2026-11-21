@@ -16,7 +16,7 @@
 
 import { BIOMA, ACQUA } from './carta.js';
 import { quotaMondo, scavaFiumi, livelloLago, distanzaPiano, raffinaZona, quotaPiano } from './scena.js';
-import { smoothstep } from './rumore.js';
+import { smoothstep, completa } from './rumore.js';
 
 export const STRADE = {
   // Classi [Ipotesi del piano, da tarare guardando]: pendenza comoda p0, massima pmax, semilarghezza (m).
@@ -79,6 +79,7 @@ export const STRADE = {
   },
 };
 
+const PEZZO = 256;                 // a pezzi: celle o passi tra un yield e l'altro
 const DX = [1, -1, 0, 0, 1, 1, -1, -1, 2, 2, -2, -2, 1, 1, -1, -1];
 const DY = [0, 0, 1, -1, 1, -1, 1, -1, 1, -1, 1, -1, 2, -2, 2, -2];
 const LUNGO = DX.map((c, v) => Math.hypot(c, DY[v]));
@@ -581,7 +582,10 @@ function terreno(carta, x, z, esito) {
 }
 
 /** Tracciato fine di un tratto: griglia di 20 m nel corridoio, costo per passo con la pendenza della classe. */
-function tracciaTratto(carta, tr, W = STRADE.scena.corridoio) {
+function tracciaTratto(carta, tr, W) { return completa(tracciaTrattoAPezzi(carta, tr, W)); }
+
+/** tracciaTratto a pezzi: yield ogni PEZZO celle della griglia e ogni PEZZO passi della ricerca. */
+function* tracciaTrattoAPezzi(carta, tr, W = STRADE.scena.corridoio) {
   const S = STRADE.scena, K = STRADE.classi[tr.classe], g = S.cella;
   const { px, pz } = tr, np = px.length;
   // I fiumi attorno devono essere già cercati: la strada si appoggia sul terreno con i fiumi definitivi.
@@ -614,6 +618,7 @@ function tracciaTratto(carta, tr, W = STRADE.scena.corridoio) {
   for (const l of carta.luoghi ?? []) for (const p of l.piani ?? []) piani.push(p);
   for (let k = 0; k < N; k++) {
     if (d2[k] > W * W) continue;
+    if (k % PEZZO === 0) yield;
     const x = x0 + (k % nx) * g, z = z0 + ((k / nx) | 0) * g;
     const h = terreno(carta, x, z, esito);
     const lago = livelloLago(carta, x, z);
@@ -653,7 +658,9 @@ function tracciaTratto(carta, tr, W = STRADE.scena.corridoio) {
   const dist = new Float64Array(N).fill(Infinity), da = new Int32Array(N).fill(-1);
   const coda = nuovaCoda(8192);
   dist[sA] = 0; coda.spingi(sA, 0);
+  let passi = 0;
   while (!coda.vuota) {
+    if (++passi % (PEZZO * 4) === 0) yield;
     const d = coda.testa, k = coda.togli();
     if (d > dist[k]) continue;
     if (k === sB) break;
@@ -807,17 +814,23 @@ function tracciaTratto(carta, tr, W = STRADE.scena.corridoio) {
 }
 
 /** Cerca il tracciato fine dei tratti di strada entro `raggio` m (in quadrato) da (cx, cz). Restituisce i ms. */
-export function raffinaStrade(carta, cx, cz, raggio = STRADE.scena.zona) {
+export function raffinaStrade(carta, cx, cz, raggio) { return completa(raffinaStradeAPezzi(carta, cx, cz, raggio)); }
+
+/** raffinaStrade a pezzi (blocco che segue il cavaliere): yield dentro la ricerca di ogni tratto. */
+export function* raffinaStradeAPezzi(carta, cx, cz, raggio = STRADE.scena.zona) {
   if (!carta.strade) return 0;
   const t0 = performance.now();
   const s = stradeScena(carta), Ci = STRADE.scena.cellaIndice, R = s.raggio;
-  s.tratti.forEach((tr, id) => {
-    if (tr.fine) return;
+  for (let id = 0; id < s.tratti.length; id++) {
+    const tr = s.tratti[id];
+    if (tr.fine) continue;
     const [x0, z0, x1, z1] = tr.riquadro;
-    if (x1 < cx - raggio || x0 > cx + raggio || z1 < cz - raggio || z0 > cz + raggio) return;
-    tr.fine = tracciaTratto(carta, tr);
+    if (x1 < cx - raggio || x0 > cx + raggio || z1 < cz - raggio || z0 > cz + raggio) continue;
+    const fine = yield* tracciaTrattoAPezzi(carta, tr);
+    if (tr.fine) continue;                            // cercato nel frattempo da una versione tutta in una volta
+    tr.fine = fine;
     if (!tr.fine.ok) {                                // corridoio chiuso (acqua, terrapieni): più largo
-      const largo = tracciaTratto(carta, tr, 2.5 * STRADE.scena.corridoio);
+      const largo = yield* tracciaTrattoAPezzi(carta, tr, 2.5 * STRADE.scena.corridoio);
       if (largo.ok) tr.fine = largo;
     }
     const f = tr.fine;
@@ -831,7 +844,8 @@ export function raffinaStrade(carta, cx, cz, raggio = STRADE.scena.zona) {
         l.push(id, i);
       }
     }
-  });
+    yield;
+  }
   return performance.now() - t0;
 }
 

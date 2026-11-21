@@ -454,7 +454,7 @@ function geoMerlo() {
 }
 
 let _alone = null;
-function texturaAlone() {
+export function texturaAlone() {
   if (_alone) return _alone;
   const c = document.createElement('canvas');
   c.width = c.height = 64;
@@ -1035,7 +1035,8 @@ export function createRocca(suolo, luogo, ox, oz) {
     const [u, v] = inLocale(x, z);
     return dentroPoligono(P, u, v) && distanzaContorno(P, u, v) > SP;
   }
-  function aggiornaLuci(t, buio) {
+  function aggiornaLuci(t, buio, quota) {
+    edificiRocca.aggiornaLuci(t, buio, quota);
     const accese = buio > 0.15;
     const f = clamp((buio - 0.15) / 0.5, 0, 1);
     const tremolio = 0.82 + 0.1 * Math.sin(t * 13.1) + 0.06 * Math.sin(t * 23.7 + 1.3) + 0.04 * Math.sin(t * 7.3);
@@ -1057,6 +1058,7 @@ export function createRocca(suolo, luogo, ox, oz) {
     rampa: { lato: rampa.lato, lunghezza: rampa.l, pendenza: rampa.g, inizio: rampa.start, fine: rFine, dir: rampa.dir },
     porta: { u: gm[0], v: gm[1], nu: gn[0], nv: gn[1], sporgenza: SPOR, profondita: PORTA.profondita },
     edifici: edificiRocca.edifici,                // nominati: { tipo, nome, porta } (passo 6)
+    sorgenti: edificiRocca.sorgenti,
     misure: {
       oggetti: oggettiMura + edificiRocca.misure.chiamate, merli: merli.length, edifici: edificiRocca.edifici.length,
       triangoli: triMura + edificiRocca.misure.triangoli,

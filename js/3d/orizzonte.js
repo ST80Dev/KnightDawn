@@ -20,9 +20,11 @@
 import * as THREE from 'three';
 import { quotaMondo, quotaCarta, scavaFiumi, spianaLuoghi, livelloLago, tracciatiFiumi, SCENA, OTTAVE_DETTAGLIO } from '../mondo/scena.js';
 import { creaNastro, materialeAcqua, SOPRA_PELO } from './acqua.js';
-import { derivaSeme } from '../mondo/rumore.js';
+import { derivaSeme, completa } from '../mondo/rumore.js';
 import { ACQUA } from '../mondo/carta.js';
 import { coloreMondo, materialeSuolo, nuoviStrati } from './terrain.js';
+import { MISURE_ROCCA } from './rocca3d.js';
+import { CLASSI_BORGO } from './borgo3d.js';
 
 export const ORIZZONTE = {
   anelli: [                                // passo e bordo esterno (m); il bordo interno è il precedente
@@ -109,7 +111,7 @@ function celleAnello(buco, passo, raggio, fini, P) {
  * funzione del mondo generato (coloreMondo in terrain.js), come il blocco della Scena: niente chiazze a triangoli.
  * `colore(out, x, z, h, pendenza)` in coordinate del mondo; h è la quota vera (senza la curvatura).
  */
-function anello(celle, colore, cx, cz) {
+function* anello(celle, colore, cx, cz) {   // a pezzi: yield a ogni riga di celle e ogni 1000 vertici
   const indice = new Map();
   const px = [], py = [], pz = [], nx = [], ny = [], nz = [], tri = [];
   const vertice = (p) => {
@@ -130,12 +132,16 @@ function anello(celle, colore, cx, cz) {
     for (const i of [ia, ib, ic]) { nx[i] += fx; ny[i] += fy; nz[i] += fz; }   // pesate per area
     tri.push(ia, ib, ic);
   }
-  for (let r = 0; r < celle.n; r++) for (let c = 0; c < celle.n; c++) celle.cella(r, c, faccia);
+  for (let r = 0; r < celle.n; r++) {
+    for (let c = 0; c < celle.n; c++) celle.cella(r, c, faccia);
+    yield;
+  }
   const m = px.length;
   const pos = new Float32Array(m * 3), nor = new Float32Array(m * 3), col = new Float32Array(m * 3);
   const bas = new Float32Array(m * 3), str = new Float32Array(m * 4), S = nuoviStrati();
   const tmp = new THREE.Color();
   for (let i = 0; i < m; i++) {
+    if (i % 1000 === 0) yield;
     const l = Math.hypot(nx[i], ny[i], nz[i]) || 1;
     const a = nx[i] / l, b = ny[i] / l, c = nz[i] / l;
     pos[i * 3] = px[i]; pos[i * 3 + 1] = py[i]; pos[i * 3 + 2] = pz[i];
@@ -178,7 +184,7 @@ function superficie(anelli, x, z) {
 }
 
 /** Fiumi (nastri posati sulla superficie degli anelli) e laghi in quota (celle degli anelli) oltre il blocco. */
-function acqueOrizzonte(carta, cx, cz, anelli, colore) {
+function* acqueOrizzonte(carta, cx, cz, anelli, colore) {
   const F = ORIZZONTE.fiumi, half = SCENA.lato / 2;
   const gruppo = new THREE.Group();
   gruppo.name = 'acque-orizzonte';
@@ -198,7 +204,9 @@ function acqueOrizzonte(carta, cx, cz, anelli, colore) {
     const d0 = Math.max(Math.abs(t[0]), Math.abs(t[1]));
     const A = anelli.find((a) => d0 <= a.raggio) || anelli[anelli.length - 1];
     gruppo.add(creaNastro(t, mat, A.passo / 2, quota));
+    if (gruppo.children.length % 8 === 0) yield;
   }
+  yield;
   // Laghi: una cella degli anelli è lago se l'indicatore lo è in un angolo o al centro (come nel blocco).
   const pos = [];
   // Un vertice è dentro il lago solo se la sua cella della Carta è lago (l'indicatore sfumato sborda oltre la riva).
@@ -232,6 +240,7 @@ function acqueOrizzonte(carta, cx, cz, anelli, colore) {
         };
         pos.push(...v(x0, z0), ...v(x0, z1), ...v(x1, z0), ...v(x1, z0), ...v(x0, z1), ...v(x1, z1));
       }
+      if (r % 16 === 15) yield;
     }
   }
   if (pos.length) {
@@ -245,6 +254,111 @@ function acqueOrizzonte(carta, cx, cz, anelli, colore) {
   return gruppo.children.length ? gruppo : null;
 }
 
+// ─── Rocche e borghi da lontano (M7, passo 8) ──────────────────────────────
+// Oltre il blocco la rocca e il borgo non sono modellati: una sagoma semplificata sugli anelli (cinte di rocca e borgo,
+// torri agli spigoli della rocca, mastio, una massa di tetti nel borgo) fino a `pieno` m; fino a `mastio` m solo il
+// mastio (a 18 km un mastio di 22 m è sotto il pixel). Esclusi i luoghi che la Scena costruisce già per intero (stessa
+// regola di costruisciRocche in main.js): niente rocca doppia. Di notte qualche luce per borgo, punti che ignorano la
+// nebbia, fino a `luci` m. Tutte le sagome in una sola mesh (una chiamata), le luci in un solo Points.
+const LONTANO = {
+  pieno: 6000, mastio: 18000, luci: 10000, margine: 50,
+  colore: { muro: '#a39883', mastio: '#968b77', tetti: '#8a5a44' }, tetti: 5, torre: 1.25,
+  luce: { colore: '#ffb46a', dimensione: 3, perBorgo: [4, 7, 11] },
+};
+
+function sagomeLuoghi(carta, cx, cz, half, anelli) {
+  const L = LONTANO, pos = [], col = [], luci = [];
+  const cM = new THREE.Color(L.colore.muro), cK = new THREE.Color(L.colore.mastio), cT = new THREE.Color(L.colore.tetti);
+  const y = (h, x, z) => { const r = Math.hypot(x, z); return esagerata(h, r) - abbassamento(r); };
+  const suolo = (x, z, h) => { const t = superficie(anelli, x, z); return Number.isNaN(t) ? y(h, x, z) : t; };
+  const quad = (a, b, c, d, colore) => {        // due triangoli, entrambe le facce (le sagome si vedono da ogni lato)
+    for (const v of [a, b, c, a, c, d, a, c, b, a, d, c]) { pos.push(...v); col.push(colore.r, colore.g, colore.b); }
+  };
+  // Muro lungo un contorno chiuso: da sotto il terreno a `alto` sopra la quota del piano.
+  const cinta = (pol, q, alto, colore) => {
+    for (let k = 0; k < pol.length; k++) {
+      const [ax, az] = pol[k], [bx, bz] = pol[(k + 1) % pol.length];
+      const ta = y(q + alto, ax, az), tb = y(q + alto, bx, bz);
+      const ba = Math.min(suolo(ax, az, q), ta - alto) - 2, bb = Math.min(suolo(bx, bz, q), tb - alto) - 2;
+      quad([ax, ba, az], [bx, bb, bz], [bx, tb, bz], [ax, ta, az], colore);
+    }
+  };
+  // Prisma a base quadrata (torri, mastio): quattro facce e il tetto.
+  const prisma = (x, z, lato, q, alto, colore) => {
+    const h = lato / 2, t = y(q + alto, x, z), b = Math.min(suolo(x, z, q), t - alto) - 2;
+    const P = [[x - h, z - h], [x + h, z - h], [x + h, z + h], [x - h, z + h]];
+    for (let k = 0; k < 4; k++) {
+      const [ax, az] = P[k], [bx, bz] = P[(k + 1) % 4];
+      quad([ax, b, az], [bx, b, bz], [bx, t, bz], [ax, t, az], colore);
+    }
+    quad([P[0][0], t, P[0][1]], [P[1][0], t, P[1][1]], [P[2][0], t, P[2][1]], [P[3][0], t, P[3][1]], colore);
+  };
+  let n = 0;
+  for (const l of carta.luoghi ?? []) {
+    if (!l.piani || !l.piani[0].poligono) continue;
+    const lx = l.x - cx, lz = l.z - cz, m = (l.raggioPiani ?? 300) + L.margine;
+    if (Math.abs(lx) <= half + m && Math.abs(lz) <= half + m) continue;      // la costruisce la Scena
+    const d = Math.max(Math.abs(lx), Math.abs(lz));
+    if (d > L.mastio) continue;
+    const R = MISURE_ROCCA[l.classe] ?? MISURE_ROCCA.casata, B = CLASSI_BORGO[l.classe] ?? CLASSI_BORGO.casata;
+    const locale = (pol) => pol.map(([x, z]) => [x - cx, z - cz]);
+    const rocca = l.piani[0], polR = locale(rocca.poligono);
+    let mx = 0, mz = 0;
+    for (const [x, z] of polR) { mx += x; mz += z; }
+    mx /= polR.length; mz /= polR.length;
+    prisma(mx, mz, R.mastio.lato, rocca.q, R.mastio.altezza, cK);
+    n++;
+    if (d > L.pieno) continue;
+    cinta(polR, rocca.q, R.altezza, cM);
+    for (const [x, z] of polR) prisma(x, z, R.torre * 2 * L.torre, rocca.q, R.altezza + 3, cM);
+    for (const p of l.piani.slice(1)) {
+      if (!p.poligono || p.tipo !== 'borgo') continue;
+      const pol = locale(p.poligono);
+      cinta(pol, p.q, B.altezza, cM);
+      // Tetti: il contorno del borgo rientrato verso il centro, poco sopra le mura (una falda piatta per lato).
+      let bx = 0, bz = 0;
+      for (const [x, z] of pol) { bx += x; bz += z; }
+      bx /= pol.length; bz /= pol.length;
+      const dentro = pol.map(([x, z]) => [bx + (x - bx) * 0.8, bz + (z - bz) * 0.8]);
+      const tc = y(p.q + B.altezza + L.tetti, bx, bz);
+      for (let k = 0; k < dentro.length; k++) {
+        const [ax, az] = dentro[k], [cx2, cz2] = dentro[(k + 1) % dentro.length];
+        const ta = y(p.q + B.altezza - 1, ax, az), tb = y(p.q + B.altezza - 1, cx2, cz2);
+        quad([ax, ta, az], [cx2, tb, cz2], [bx, tc, bz], [bx, tc, bz], cT);
+      }
+      if (d <= L.luci) {
+        const quante = L.luce.perBorgo[{ minore: 0, casata: 1, maggiore: 2 }[l.classe] ?? 1];
+        for (let k = 0; k < quante; k++) {
+          const a = (k * 2.399963) % (2 * Math.PI), f = 0.25 + 0.6 * ((k * 0.618034) % 1);
+          const v = dentro[k % dentro.length], x = bx + (v[0] - bx) * f, z = bz + (v[1] - bz) * f;
+          luci.push(x + Math.cos(a), y(p.q + B.altezza + L.tetti + 2, x, z), z + Math.sin(a));   // sopra i tetti
+        }
+      }
+    }
+  }
+  const oggetto = new THREE.Group();
+  oggetto.name = 'luoghi-lontani';
+  if (pos.length) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    geo.computeVertexNormals();
+    oggetto.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true })));
+  }
+  let accendi = () => {};
+  if (luci.length) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(luci, 3));
+    const mat = new THREE.PointsMaterial({ color: L.luce.colore, size: L.luce.dimensione, sizeAttenuation: false,
+      fog: false, transparent: true, opacity: 0, depthWrite: false });
+    const punti = new THREE.Points(geo, mat);
+    punti.visible = false;
+    oggetto.add(punti);
+    accendi = (notte) => { mat.opacity = Math.max(0, Math.min(1, (notte - 0.4) / 0.4)); punti.visible = mat.opacity > 0.01; };
+  }
+  return { oggetto: oggetto.children.length ? oggetto : null, triangoli: pos.length / 9, luci: accendi, luoghi: n };
+}
+
 /**
  * Orizzonte per la Scena centrata in (cx, cz) del mondo.
  * @param {object} carta  dalla generaCarta
@@ -253,7 +367,12 @@ function acqueOrizzonte(carta, cx, cz, anelli, colore) {
  * @param {number} stagione  indice del calendario (colori e limite delle nevi)
  * @returns {{ oggetto: THREE.Group, acqua: THREE.Mesh|null, triangoli: number, ms: number, quota: Function }}
  */
-export function creaOrizzonte(carta, cx, cz, terrain, coloreAcqua, stagione = 0) {
+export function creaOrizzonte(carta, cx, cz, terrain, coloreAcqua, stagione) {
+  return completa(creaOrizzonteAPezzi(carta, cx, cz, terrain, coloreAcqua, stagione));
+}
+
+/** creaOrizzonte a pezzi (blocco che segue il cavaliere, js/3d/blocchi.js). */
+export function* creaOrizzonteAPezzi(carta, cx, cz, terrain, coloreAcqua, stagione = 0) {
   const t0 = performance.now();
   const O = ORIZZONTE, half = SCENA.lato / 2;
   const seme = derivaSeme(carta.seme, 101);                // lo stesso del blocco (generaScena)
@@ -297,7 +416,9 @@ export function creaOrizzonte(carta, cx, cz, terrain, coloreAcqua, stagione = 0)
     interno = raggio;
     passoDentro = passo;
   }
-  const geometrie = anelli.map((a) => anello(a, colore, cx, cz));
+  const geometrie = [];
+  for (const a of anelli) geometrie.push(yield* anello(a, colore, cx, cz));
+  yield 'orizzonte: anelli';
 
   const mat = materialeSuolo(cx, cz);   // colore per pixel come il blocco (terrain.js)
   const oggetto = new THREE.Group();
@@ -316,9 +437,16 @@ export function creaOrizzonte(carta, cx, cz, terrain, coloreAcqua, stagione = 0)
     acqua.name = 'acqua';
   }
   // Fiumi e laghi in quota oltre il blocco (passo 6): continuano quelli della Scena.
-  const acque = acqueOrizzonte(carta, cx, cz, anelli, coloreAcqua);
+  yield 'orizzonte: mare';
+  const acque = yield* acqueOrizzonte(carta, cx, cz, anelli, coloreAcqua);
   if (acque) oggetto.add(acque);
-  const triangoli = geometrie.reduce((t, g) => t + g.index.count / 3, 0);
+  yield 'orizzonte: acque';
+  // Rocche e borghi lontani (M7, passo 8): sagome sugli anelli e luci di notte.
+  const lontani = sagomeLuoghi(carta, cx, cz, half, anelli);
+  if (lontani.oggetto) oggetto.add(lontani.oggetto);
+  const triangoli = geometrie.reduce((t, g) => t + g.index.count / 3, 0) + lontani.triangoli;
   // quota(x, z): superficie disegnata degli anelli in coordinate locali (la usa la vegetazione per il bosco lontano).
-  return { oggetto, acqua, triangoli, ms: performance.now() - t0, quota: (x, z) => superficie(anelli, x, z) };
+  // luciLontane(notte 0–1): accende le luci dei borghi lontani (la chiama main.js con le luci del cielo).
+  return { oggetto, acqua, triangoli, ms: performance.now() - t0, quota: (x, z) => superficie(anelli, x, z),
+    luciLontane: lontani.luci };
 }

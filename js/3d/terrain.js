@@ -16,7 +16,7 @@
 
 import * as THREE from 'three';
 import { BIOMA, CLIMA } from '../mondo/carta.js';
-import { smoothstep } from '../mondo/rumore.js';
+import { smoothstep, completa } from '../mondo/rumore.js';
 import { COPERTURA, coperturaMondo, nuovaCopertura, campagnaMondo, PARCELLE, PERM_CAMPI } from '../mondo/vegetazione.js';
 
 const PAL = (typeof PALETTE !== 'undefined') ? PALETTE : {};
@@ -35,6 +35,7 @@ const COL = {
 const PENDENZA_BOSCO = [13, 24];
 const PENDENZA_ROCCIA = [30, 40];
 const VARIAZIONE_FACCIA = 0.05;   // ± luminosità casuale per faccia (look low-poly)
+const RIGHE_PEZZO = 8;            // righe di vertici per pezzo di createTerrainAPezzi (M7, passo 9)
 const PROFONDITA_BORDO = 25;      // m sotto la quota minima a cui scendono i lati del blocco
 
 // Griglia del fallback (uguale a quella prevista per i dati reali)
@@ -87,6 +88,11 @@ export async function loadTerrain(name = 'tavullia', basePath = 'assets/terrain/
  * }}
  */
 export function createTerrain(meta, heights, isFallback = false, colore = null) {
+  return completa(createTerrainAPezzi(meta, heights, isFallback, colore));
+}
+
+/** Come createTerrain, a pezzi (M7, passo 9): generatore con yield ogni poche righe di vertici; stesso risultato. */
+export function* createTerrainAPezzi(meta, heights, isFallback = false, colore = null) {
   const { cols, rows } = meta;
   const cell = meta.cellSize;
   const size = cell * (cols - 1);
@@ -134,7 +140,7 @@ export function createTerrain(meta, heights, isFallback = false, colore = null) 
   const mesh = new THREE.Group();
   mesh.name = 'terreno';
   mesh.add(colore
-    ? buildSurfaceMondo(heights, cols, rows, cell, half, colore, meta.centroMondo)
+    ? yield* buildSurfaceMondo(heights, cols, rows, cell, half, colore, meta.centroMondo)
     : buildSurface(heights, cols, rows, cell, half, minElev, maxElev));
   mesh.add(buildSkirt(heights, cols, rows, cell, half, minElev - PROFONDITA_BORDO));
 
@@ -650,7 +656,6 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
 // momento le ombre finte della vegetazione (si spostano col sole) e il micro-rilievo della normale vicino alla camera.
 // Da lontano le mipmap fanno il lavoro che faceva lo spegnimento delle ottave.
 const LATO_COTTO = 2048;
-let _cotto = null;                         // texture del blocco attuale: si libera quando si cuoce il successivo
 
 /**
  * Cuoce il colore del blocco e passa il suo materiale alla modalità cotta. Da chiamare dopo createTerrain del mondo
@@ -694,8 +699,12 @@ export function cuociSuolo(renderer, terrain) {
   renderer.setRenderTarget(prima);
   renderer.autoClear = autoClear;
   cuoci.dispose();
-  if (_cotto) _cotto.dispose();
-  _cotto = rt;
+  // La texture appartiene al materiale del suo blocco: si libera con lui (dispose del materiale) o se lo stesso blocco
+  // si ricuoce. Non al blocco successivo: con il blocco che segue il cavaliere (M7 passo 9) il nuovo si cuoce mentre
+  // il vecchio è ancora in vista.
+  if (mat.userData.rtCotto) mat.userData.rtCotto.dispose();
+  else mat.addEventListener('dispose', () => mat.userData.rtCotto?.dispose());
+  mat.userData.rtCotto = rt;
   mat.userData.uniformi.uCotto.value = rt.texture;
   mat.defines = { ...(mat.defines || {}), SUOLO_COTTO: '' };
   mat.needsUpdate = true;
@@ -711,7 +720,7 @@ export function nuoviStrati() {
  * Superficie del mondo generato: colori e normali per vertice (lisce), triangoli come buildSurface (diagonale
  * NE–SO), quindi getHeight combacia. `colore` lavora in coordinate del mondo: centro del blocco + locali.
  */
-function buildSurfaceMondo(heights, cols, rows, cell, half, colore, centro) {
+function* buildSurfaceMondo(heights, cols, rows, cell, half, colore, centro) {
   const n = cols * rows;
   const H = (c, r) => heights[Math.min(Math.max(r, 0), rows - 1) * cols + Math.min(Math.max(c, 0), cols - 1)];
   const nor = new Float32Array(n * 3), col = new Float32Array(n * 3);
@@ -737,6 +746,7 @@ function buildSurfaceMondo(heights, cols, rows, cell, half, colore, centro) {
       bas[i * 3] = S.base.r; bas[i * 3 + 1] = S.base.g; bas[i * 3 + 2] = S.base.b;
       str[i * 4] = S.roccia; str[i * 4 + 1] = S.neve; str[i * 4 + 2] = S.variazione; str[i * 4 + 3] = S.tono;
     }
+    if (r % RIGHE_PEZZO === RIGHE_PEZZO - 1) yield;
   }
   const pos = new Float32Array(n * 3);
   for (let r = 0; r < rows; r++) {
