@@ -2207,6 +2207,14 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
    cresta più alta della gola); **testa a ~60°** con ganasce, fronte piatta e muso; gambe con avambraccio e gamba
    muscolosi e tendini dietro lo stinco, pastorale inclinato; coda che esce indietro e poi scende. Ombreggiatura finta
    nei colori dei vertici (facce rivolte in basso più scure). 5.5 mila triangoli, stessi 12 snodi e 15 chiamate.
+   *Naturalezza invece di simmetria* (richiesta dell'utente): rilievi anatomici spostando i vertici lungo la normale
+   (spalla, scapola, punta della spalla, pettorali, tricipite, incavo dietro il gomito, fianco, punta dell'anca, groppa,
+   natiche, costole appena accennate), con ampiezze diverse a sinistra e a destra; rumore liscio sulla superficie e
+   sul colore del pelo; da fermo **posteriore destro in riposo** sulla punta dello zoccolo con l'anca che cede da quel
+   lato, anteriore sinistro un poco avanti, collo più basso e testa girata e inclinata verso il cavaliere; orecchie
+   diverse (una avanti, una di lato); criniera a ciocche che ricade a destra; coda che piega di lato. 5.536 triangoli.
+   Limite che resta [Certo]: ogni snodo è un pezzo rigido, quindi dove la gamba entra nel corpo si vede l'attacco.
+   Una pelle continua chiede una `SkinnedMesh` (ossa che deformano un'unica superficie): da valutare con l'utente.
 2. **Segue a piedi.** Tracce, distanza, andature animate (passo, trotto, galoppo), sosta e brucare, attesa se bloccato
    (bosco fitto, acqua, pendii), avviso «rimasto indietro», fischio con F, ostacolo per il cavaliere. *Prova:* correre e
    scattare nel bosco, guadare, salire un pendio ripido, fischiare da lontano.

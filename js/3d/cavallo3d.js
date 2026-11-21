@@ -68,9 +68,9 @@ const TESTA = [
   [0.38, 0.065, 0.055, 0.065], [0.5, 0.06, 0.05, 0.06], [0.57, 0.066, 0.046, 0.062], [0.615, 0.03, 0.02, 0.03],
 ];
 // Gambe: [dy dal perno, dz, w, hs (davanti), hi (dietro)]
-const ALTA_ANT = [[0.16, 0, 0.04, 0.05, 0.05], [0.1, 0, 0.07, 0.1, 0.09], [0.0, 0, 0.075, 0.09, 0.075],
+const ALTA_ANT = [[0.15, 0, 0.05, 0.07, 0.07], [0.08, 0, 0.075, 0.105, 0.095], [0.0, 0, 0.075, 0.09, 0.075],
   [-0.15, 0, 0.06, 0.06, 0.055], [-0.32, 0, 0.045, 0.045, 0.04], [-0.42, 0, 0.05, 0.05, 0.045], [-0.465, 0, 0.03, 0.03, 0.03]];
-const ALTA_POST = [[0.22, 0, 0.06, 0.09, 0.09], [0.12, 0, 0.1, 0.11, 0.15], [-0.05, 0, 0.085, 0.07, 0.11],
+const ALTA_POST = [[0.2, 0, 0.085, 0.12, 0.12], [0.1, 0, 0.105, 0.12, 0.16], [-0.05, 0, 0.085, 0.07, 0.11],
   [-0.25, 0, 0.06, 0.045, 0.07], [-0.4, 0, 0.05, 0.045, 0.06], [-0.465, 0, 0.05, 0.045, 0.055], [-0.5, 0, 0.03, 0.03, 0.03]];
 const STINCO = [[-0.06, 0, 0.04, 0.035, 0.045], [-0.14, 0, 0.031, 0.028, 0.048], [-0.27, 0, 0.032, 0.03, 0.05],
   [-0.325, 0.005, 0.044, 0.043, 0.055], [-0.37, 0.018, 0.036, 0.036, 0.036], [-0.415, 0.03, 0.042, 0.04, 0.04],
@@ -160,6 +160,56 @@ function tubo(chiavi, { n = 16, seg = 14, arco = null, tappi = true, gonfia = 0 
   return { geo, sezioni };
 }
 
+// ─── Naturalezza: rumore liscio, rilievi anatomici, piccole asimmetrie ───────────────────────────────
+/** Rumore liscio deterministico in [-1, 1] (somma di onde sfasate: niente tabelle, stesso risultato a ogni avvio). */
+function rumore(x, y, z) {
+  return (Math.sin(x * 7.3 + y * 2.1 + 1.7) * Math.sin(y * 6.1 - z * 3.3 + 0.4) * Math.sin(z * 5.7 + x * 1.9 + 2.3)
+    + 0.5 * Math.sin(x * 15.1 - z * 11.3 + 0.9) * Math.sin(y * 13.7 + x * 4.1 + 1.1)) / 1.5;
+}
+
+// Rilievi del tronco: [x, y, z, raggio, ampiezza]; x > 0 = lato sinistro, ripetuti a destra un poco diversi
+// (un cavallo vero non è speculare). Ampiezza positiva = muscolo o osso che affiora, negativa = incavo.
+const RILIEVI_TRONCO = [
+  [0.17, 1.17, 0.5, 0.12, 0.02],     // massa della spalla
+  [0.13, 1.3, 0.44, 0.07, 0.012],    // margine della scapola
+  [0.17, 1.0, 0.65, 0.06, 0.022],    // punta della spalla
+  [0.07, 0.93, 0.7, 0.07, 0.016],    // pettorale
+  [0.19, 0.95, 0.45, 0.08, 0.02],    // tricipite sopra il gomito
+  [0.2, 0.9, 0.32, 0.07, -0.012],    // incavo dietro il gomito
+  [0.2, 1.06, -0.25, 0.1, -0.014],   // fianco
+  [0.17, 1.31, -0.38, 0.06, 0.02],   // punta dell'anca
+  [0.14, 1.25, -0.62, 0.14, 0.02],   // groppa
+  [0.15, 1.05, -0.78, 0.1, 0.014],   // natica
+  [0.05, 1.37, -0.05, 0.1, -0.008],  // lieve sella della schiena
+];
+
+/**
+ * Sposta i vertici lungo la normale: rilievi (gaussiane, a sinistra e a destra con ampiezze diverse) e rumore liscio,
+ * poi ricalcola le normali. lati: [sinistra, destra] = moltiplicatori dell'ampiezza.
+ */
+function modella(geo, rilievi = [], { rumoreAmp = 0.004, lati = [1, 0.85], seme = 0, forza = 1 } = {}) {
+  geo.computeVertexNormals();
+  const p = geo.attributes.position, nr = geo.attributes.normal;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    let d = rumoreAmp * rumore(x * 3 + seme, y * 3, z * 3);
+    for (const [rx, ry, rz, r, a] of rilievi) {
+      for (const [sx, k] of [[1, lati[0]], [-1, lati[1]]]) {
+        if (rx === 0 && sx < 0) continue;
+        const q = ((x - rx * sx) ** 2 + (y - ry) ** 2 + (z - rz) ** 2) / (r * r);
+        if (q < 9) d += a * k * forza * Math.exp(-q);
+      }
+    }
+    // costole appena accennate sul costato
+    if (z > -0.15 && z < 0.3 && y > 0.85 && y < 1.15 && Math.abs(x) > 0.15) {
+      d += 0.0025 * Math.sin(z * 42) * Math.min(1, (0.3 - z) * 6, (z + 0.15) * 6);
+    }
+    p.setXYZ(i, x + nr.getX(i) * d, y + nr.getY(i) * d, z + nr.getZ(i) * d);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
 const chiaviZY = (lista, x = 0) => lista.map(([z, y, w, hs, hi]) => ({ x, y, z, w, hs, hi }));
 const chiaviGamba = (lista, G, lato) => lista.map(([dy, dz, w, hs, hi]) =>
   ({ x: G.x * lato, y: G.y + dy, z: G.z + dz, w, hs, hi }));
@@ -195,7 +245,10 @@ function unisci(p, perno) {
     pos.set(g.attributes.position.array, o * 3);
     nor.set(na.array, o * 3);
     for (let i = 0; i < k; i++) {
-      const f = ombra ? 0.66 + 0.34 * (0.5 + 0.5 * na.getY(i)) : 1;
+      const pa = g.attributes.position;
+      // facce in basso più scure + variazione irregolare del pelo (schiena più scura, macchie appena accennate)
+      const f = ombra ? (0.66 + 0.34 * (0.5 + 0.5 * na.getY(i)))
+        * (1 + 0.07 * rumore(pa.getX(i) * 2.2 + 3, pa.getY(i) * 2.2, pa.getZ(i) * 2.2)) : 1;
       col.set([c.r * f, c.g * f, c.b * f], (o + i) * 3);
     }
     o += k;
@@ -222,7 +275,7 @@ function sezioneTronco(z) {
 // Tronco, sella, gualdrappa, sottopancia, staffili e staffe.
 function pezziCorpo() {
   const p = pezzi();
-  p.add(tubo(chiaviZY(TRONCO), { n: 21, seg: 18 }).geo, COL.mantello);
+  p.add(modella(tubo(chiaviZY(TRONCO), { n: 21, seg: 18 }).geo, RILIEVI_TRONCO, { forza: 1.7, rumoreAmp: 0.006 }), COL.mantello);
   // Gualdrappa: lembo di stoffa sulla schiena, appena sopra il tronco (superficie aperta)
   const zPanno = [-0.28, -0.12, 0.05, 0.22, 0.34];
   const panno = zPanno.map((z) => { const s = sezioneTronco(z); return { x: 0, y: s.c.y, z, w: s.w, hs: s.hs, hi: s.hi }; });
@@ -253,12 +306,13 @@ function pezziCorpo() {
 function pezziCollo() {
   const p = pezzi();
   const { geo, sezioni } = tubo(chiaviZY(COLLO), { n: 14, seg: 14 });
-  p.add(geo, COL.mantello);
+  p.add(modella(geo, [[0.1, 1.38, 0.66, 0.08, 0.01], [0.06, 1.5, 0.84, 0.05, -0.006]], { seme: 1 }), COL.mantello);
   // Criniera: lama di crini sulla cresta, ricadente da un lato
   const crini = sezioni.filter((_, i) => i % 2 === 0 || i === sezioni.length - 1).map((s, i, a) => {
     const k = i / (a.length - 1);
     const q = s.c.clone().addScaledVector(s.alto, s.hs * 0.92);
-    return { x: 0.012, y: q.y, z: q.z, w: 0.022 - 0.008 * k, hs: 0.04 - 0.012 * k, hi: 0.012 };
+    const ciocca = 1 + 0.35 * Math.sin(i * 2.7 + 0.5) * Math.sin(i * 1.3);     // ciocche di altezza diversa
+    return { x: -0.02 - 0.012 * Math.sin(k * 3), y: q.y, z: q.z, w: 0.024 - 0.008 * k, hs: (0.042 - 0.012 * k) * ciocca, hi: 0.012 };
   });
   p.add(tubo(crini, { n: 12, seg: 8 }).geo, COL.nero, false, false);
   return p;
@@ -268,7 +322,12 @@ function pezziCollo() {
 function pezziTesta() {
   const p = pezzi();
   const chiavi = TESTA.map(([t, w, hs, hi]) => { const c = puntoTesta(t); return { x: 0, y: c.y, z: c.z, w, hs, hi }; });
-  p.add(tubo(chiavi, { n: 16, seg: 16 }).geo, COL.mantello);
+  const sopraOcchio = puntoTesta(0.15), ganascia = puntoTesta(0.13), narice = puntoTesta(0.56);
+  p.add(modella(tubo(chiavi, { n: 16, seg: 16 }).geo, [
+    [0.08, sopraOcchio.y + 0.03, sopraOcchio.z + 0.02, 0.035, 0.008],
+    [0.085, ganascia.y - 0.05, ganascia.z - 0.03, 0.06, 0.01],
+    [0.045, narice.y, narice.z, 0.025, 0.006],
+  ], { rumoreAmp: 0.0025, seme: 2 }), COL.mantello);
   // Muso più scuro: ultimo tratto un poco più largo
   const muso = TESTA.slice(5).map(([t, w, hs, hi]) => { const c = puntoTesta(t); return { x: 0, y: c.y, z: c.z, w, hs, hi }; });
   p.add(tubo(muso, { n: 5, seg: 14, gonfia: 0.004 }).geo, COL.muso);
@@ -296,7 +355,8 @@ function pezziTesta() {
     const o = new THREE.ConeGeometry(0.028, 0.11, 7, 1);
     o.scale(1, 1, 0.55);
     o.translate(0, 0.055, 0);
-    o.rotateX(0.2).rotateZ(-0.22 * sx);
+    if (sx > 0) o.rotateX(0.25).rotateZ(-0.2);          // sinistra: in avanti
+    else o.rotateY(0.9).rotateX(-0.25).rotateZ(0.45);   // destra: girata di lato, un poco indietro
     o.translate(PERNO_TESTA.x + 0.045 * sx, PERNO_TESTA.y + 0.04, PERNO_TESTA.z + 0.03);
     p.add(o, COL.mantello);
   }
@@ -306,14 +366,16 @@ function pezziTesta() {
 // Coda: crini che scendono dall'attaccatura, prima indietro poi giù.
 function pezziCoda() {
   const p = pezzi();
-  p.add(tubo(chiaviZY(CODA), { n: 12, seg: 10 }).geo, COL.nero, false, false);
+  const chiavi = chiaviZY(CODA).map((k, i) => ({ ...k, x: 0.025 * Math.sin(i * 0.9) + 0.01 * i }));
+  p.add(modella(tubo(chiavi, { n: 12, seg: 10 }).geo, [], { rumoreAmp: 0.008, seme: 3 }), COL.nero, false, false);
   return p;
 }
 
 // Gamba: parte alta dal perno al ginocchio/garretto e parte bassa fino allo zoccolo (a riposo verticali).
 function pezziGambaAlta(G, lato, posteriore) {
   const p = pezzi();
-  p.add(tubo(chiaviGamba(posteriore ? ALTA_POST : ALTA_ANT, G, lato), { n: 8, seg: 12 }).geo, COL.mantello);
+  p.add(modella(tubo(chiaviGamba(posteriore ? ALTA_POST : ALTA_ANT, G, lato), { n: 8, seg: 12 }).geo, [],
+    { rumoreAmp: 0.004, seme: lato * 5 + (posteriore ? 2 : 0) }), COL.mantello);
   return p;
 }
 
@@ -417,7 +479,7 @@ export function createCavallo(terrain, ostacoli = []) {
   object.name = 'cavallo';
   object.add(mod.root, ombra);
 
-  const stato = { x: 0, z: 0, y: 0, direzione: 0, beccheggio: 0, tempo: 0 };
+  const stato = { x: 0, z: 0, y: 0, direzione: 0, beccheggio: 0, tempo: 0, riposo: 1 };   // riposo: 1 = fermo
   let self = null;
 
   // Punto del terreno a (lx a sinistra, lz in avanti) dal centro, in coordinate del mondo
@@ -482,8 +544,10 @@ export function createCavallo(terrain, ostacoli = []) {
       const ry = G.y - CENTRO_Y, rz = G.z;
       // perno rispetto alla radice (corpo ruotato di -p attorno al suo centro)
       const py = CENTRO_Y + ry * cp + rz * sp, pz = -ry * sp + rz * cp;
-      const zT = G.z + G.piede;
-      const suolo = suoloA(G.x * g.lato, zT) - y;
+      // Da fermo: posteriore destro in riposo sulla punta dello zoccolo, anteriore sinistro un poco avanti
+      const riposa = g.posteriore && g.lato < 0, avanza = !g.posteriore && g.lato > 0;
+      const zT = G.z + G.piede + (riposa ? 0.1 * stato.riposo : 0) + (avanza ? 0.05 * stato.riposo : 0);
+      const suolo = suoloA(G.x * g.lato, zT) - y + (riposa ? 0.05 * stato.riposo : 0);
       return { g, py, pz, zT, suolo };
     });
     for (const c of calcoli) {
@@ -518,6 +582,7 @@ export function createCavallo(terrain, ostacoli = []) {
     mod.root.position.set(stato.x, stato.y, stato.z);
     mod.root.rotation.y = stato.direzione;
     mod.corpo.rotation.x = -stato.beccheggio;
+    mod.corpo.rotation.z = 0.025 * stato.riposo;     // l'anca cede dal lato della gamba in riposo
     // Il collo compensa metà del beccheggio: in salita e in discesa la testa resta più naturale
     mod.collo.rotation.x = stato.beccheggio * 0.5;
     aggiornaOmbra();
@@ -533,9 +598,10 @@ export function createCavallo(terrain, ostacoli = []) {
     mod.coda.rotation.x = -0.05 + Math.sin(t * 0.5) * 0.03;
     // Testa e collo: piccoli movimenti lenti, sguardo che si sposta
     mod.testa.rotation.x = Math.sin(t * 0.43) * 0.05;
-    mod.testa.rotation.y = Math.sin(t * 0.21) * 0.15;
-    mod.collo.rotation.x += Math.sin(t * 0.31 + 1) * 0.03;
-    mod.collo.rotation.y = Math.sin(t * 0.17) * 0.06;
+    mod.testa.rotation.y = -0.18 * stato.riposo + Math.sin(t * 0.21) * 0.12;
+    mod.testa.rotation.z = 0.06 * stato.riposo;      // testa appena inclinata
+    mod.collo.rotation.x += Math.sin(t * 0.31 + 1) * 0.03 + 0.06 * stato.riposo;   // da fermo il collo scende un poco
+    mod.collo.rotation.y = -0.1 * stato.riposo + Math.sin(t * 0.17) * 0.05;
     // Respiro: il tronco si alza appena
     mod.corpo.position.y = CENTRO_Y + Math.sin(t * 1.2) * 0.004;
   }
