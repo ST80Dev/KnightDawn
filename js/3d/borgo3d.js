@@ -513,6 +513,14 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
   // le case finché c'è posto. Un lotto è libero se sta nel borgo, fuori dalle strade, dalle torri, dalla porta, dalla
   // rampa della rocca, dalla piazza e dagli altri lotti.
   const kit = creaKit({ X, Z, ux, uz, terreno, luogo, seme: (Math.floor(luogo.x) * 73856093) ^ (Math.floor(luogo.z) * 19349663), nome: 'borgo-edifici' });
+  // Torce ai lati della porta del borgo (passo 7), sulla faccia esterna; una sola sorgente di luce tra le due.
+  {
+    const yT = terreno(...loc(0, SPOR)) + 2.7;
+    for (const lato of [-1, 1]) {
+      const [tu, tv] = loc(lato * (pw / 2 + 1.15), SPOR);
+      kit.torcia(tu, tv, yT, gn[0], gn[1], lato < 0 ? undefined : null);
+    }
+  }
   const lotti = [];
   const segmenti = [], CS = 8, gSeg = new Map();
   for (const st of strade) {
@@ -747,7 +755,8 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
     strade,                                       // polilinee locali (u, v): per gli edifici del passo 5
     poligono: BL,
     porta: { u: gm[0], v: gm[1], nu: gn[0], nv: gn[1], rampa: rampaVera ? lungaPorta : 0 },
-    aggiornaLuci() {},                            // luci del borgo: passo 7
+    aggiornaLuci: edificiBorgo.aggiornaLuci,     // finestre e torce (t, buio, quota di finestre accese)
+    sorgenti: edificiBorgo.sorgenti,              // per le PointLight più vicine (main.js)
     edifici: edificiBorgo.edifici,                // nominati: { tipo, nome, porta } (passo 6)
     misure: {
       strade: strade.length, torri, merli: merli.length, oggetti: oggettiMura + edificiBorgo.misure.chiamate,

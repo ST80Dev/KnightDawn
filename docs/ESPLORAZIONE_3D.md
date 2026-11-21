@@ -1301,9 +1301,31 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
      passo 6 (Carta del cronista).
 6. **Porte → Carta del cronista.** Soglie, «E: entra», overlay segnaposto, tempo fermo. *Prova:* ogni
    edificio nominato si apre e si chiude; il tempo non scorre.
+   **Stato: fatto, da provare dall'utente.** Ogni edificio nominato di rocca e borgo (e il pozzo) ha la sua porta
+   nel blocco (`edifici3d.js`, `edifici[].porta`: x, z e normale). Entro 2,4 m, dalla parte giusta e rivolto verso la
+   porta compare «E: entra — Taverna»; E apre la **Carta del cronista segnaposto** (nome, una riga per tipo
+   d'edificio, «Esci»; Esc o E per uscire): tempo fermo e cavaliere fermo finché è aperta; entrare per ora non costa
+   tempo. Il tasto è **provvisorio** (la scelta dei tasti è rinviata dall'utente). Un solo gestore di E in
+   `main.js` (`AZIONI_TASTO`): agisce la prima voce pronta, in ordine persona vicina → porta → cavallo (accordo con
+   la sessione Cavallo, che aggiunge la sua voce in fondo; in sella la porta non vale). Prova (headless, seme 12345): 8 porte su 8
+   raggiunte a piedi, invito e apertura giusti, ora ferma con la Carta aperta.
+   *Ripartizione dei passi rimasti* (utente: farli in questa sessione, o in quelle già aperte se toccano i loro file):
+   passi 6 e 7 qui; le persone segnaposto proposte alla sessione M1 (modelli insieme al cavaliere unito per snodo);
+   passi 8 (sagome da lontano, orizzonte) e 9 (blocco che segue il cavaliere) proposti alla sessione M6.
 7. **Luci notturne e persone.** Torce, finestre, forgia, gruppo di luci vicine; figure ai loro posti e
    popolani che camminano, simbolo e «E: parla». *Prova:* di notte il borgo si vede acceso da qualche
    centinaio di metri; FPS di notte nel borgo; le persone non si attraversano.
+   **Stato delle luci: fatto, da provare dall'utente.** Finestre accese di notte (`edifici3d.js`): ogni finestra ha
+   una soglia per istanza e si accende se la soglia è sotto la quota dell'ora (`quotaFinestre`: 50% a sera, 30% dopo
+   le 21, 8% a notte fonda; le celle campanarie mai), luce calda nello shader, nessun oggetto in più. Torce (fiamma
+   a istanze e alone) ai lati della porta del borgo e alle porte di taverna, stalla, cappella e sala d'armi; forgia
+   del fabbro come sorgente. Luci vere: **4 PointLight fisse** (`main.js`, `LUCI_VICINE`) assegnate alle sorgenti
+   più vicine al cavaliere entro 70 m, con tremolio; numero fisso, quindi nessuna ricompilazione degli shader.
+   Il buio viene da `aggiornaLuci(t, buio, quota)` di rocca, borgo e campagna (col meteo il buio lo darà il cielo).
+   Prova (headless, seme 12345, ore 21): finestre e torce accese, porta del borgo illuminata; cammino 34/34.
+   Da misurare sulla scheda dell'utente: FPS di notte nel borgo. *Persone:* modelli della sessione M1
+   (`js/3d/persone3d.js`, `creaPersona({ ruolo, colori, seme }) → { object, update(dt, stato) }`); qui posti,
+   percorsi e un segnaposto con la stessa interfaccia.
 8. **Da lontano.** Sagoma negli anelli, luci lontane. *Prova:* dal fondovalle a 2–5 km la rocca si
    riconosce di giorno e di notte; nessuna rocca «doppia» tra modello e sagoma; FPS invariati fuori dal sito.
    **Fatto (sessione M6, da provare dall'utente):** `sagomeLuoghi` in `orizzonte.js`. Per i luoghi che la Scena non
