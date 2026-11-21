@@ -9,7 +9,6 @@
 
 import * as THREE from 'three';
 import { STRIDE, SAGOME, boscoLontano } from '../mondo/vegetazione.js';
-import { SUOLO } from './terrain.js';
 
 // ─── Costruzione delle geometrie ─────────────────────────────────────────
 
@@ -844,13 +843,8 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
   let coloriTerreno = null;
   if (superficie && pos.suolo && superficie.geometry.attributes.position.count === nVertici) {
     superficie.geometry.setAttribute('aSuolo', new THREE.BufferAttribute(pos.suolo, 3));
-    // Campi coltivati: origine (avvolta sul periodo del suolo, come vMondo), verso dei solchi e raggio degli orti.
-    const uC = superficie.material?.userData?.uniformi?.uCampi;
-    if (uC && pos.campi) {
-      const P = SUOLO.periodo, c = pos.campi;
-      uC.value.set(((c.x % P) + P) % P, ((c.z % P) + P) % P, c.ux, c.uz);
-      superficie.material.userData.uniformi.uOrti.value = c.orti;
-    }
+    // Campi coltivati: coordinate degli appezzamenti per vertice (PARCELLE, vegetazione.js).
+    if (pos.aCampi) superficie.geometry.setAttribute('aCampi', new THREE.BufferAttribute(pos.aCampi, 4));
     coloriTerreno = superficie.geometry.attributes.color?.array || null;
   }
 
