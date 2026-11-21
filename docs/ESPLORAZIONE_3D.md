@@ -1611,6 +1611,18 @@ Carta e `VERSIONE_GENERATORE` invariate.
 9. **Bordo del blocco** (stacco tra gli ultimi alberi e il colore piatto dell'orizzonte): **non affrontato**, si
    vedrà più avanti.
 
+## Meno mare (novembre 2026)
+
+Richiesto dall'utente: nel mondo di 120×90 km non c'è un «di là dal mare», il mare aperto ai bordi era spazio sprecato;
+i bracci di mare interni invece danno varietà e restano. Misurato su 20 semi: mare 16 % in mediana (max 22 %), di cui
+7 % oltre 5 km dalla costa. Provati due modi di tagliare solo il mare aperto (alzando le celle lontane dalla terra:
+anelli e canali attorno alla terra nuova; tenendo solo una fascia lungo il bordo: strisce dritte e golfi persi):
+scartati. Fatto: la parte a mare del carattere del seme scende da 10–22 % a **5–11 %** (`FORMA.mare`), niente più
+spinta verso il mare ai bordi (`FORMA.bordo.profondita` 0). Il livello per quantile tiene le coste naturali e il mare
+si ritira nelle parti più basse, bracci e mari interni compresi. Risultato su 20 semi: mare 8 % in mediana (5–11 %),
+oltre 5 km dalla costa 2 %; verifiche su 8 semi come prima (79190 senza castello di valle, già noto).
+`VERSIONE_GENERATORE` `…+mare-1`.
+
 ## Strade e sentieri (proposta, da approvare)
 
 > Chiesto dall'utente (novembre 2026): «strade di terra battuta che colleghino gli elementi di colline e pianure,
