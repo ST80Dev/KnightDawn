@@ -68,7 +68,10 @@ export const LUOGHI = {
   // Arrivo alla porta del borgo: profilo del terreno fuori dalla porta (m), tratto più ripido su `finestra` m e pendenza
   // media; oltre `ripido` / `media` (tangenti, ~13% e 10%) il lato costa `peso` / `pesoMedia` m di salto per unità.
   // `pesoDirezione`: la stessa ripidezza conta anche nella scelta dell'orientamento del borgo (accanto al lavoro di terra).
-  portaArrivo: { da: 10, fino: 250, passo: 10, finestra: 40, ripido: 0.13, media: 0.1, peso: 60, pesoMedia: 30, pesoDirezione: 1 },
+  // `scesa`: pendenza della discesa dalla soglia al terreno fuori a `distanze` m; oltre `massima` (quella della rampa
+  // della porta, RAMPA_PORTA.pendenza in borgo3d.js e strade.js) il lato costa `peso` per unità.
+  portaArrivo: { da: 10, fino: 250, passo: 10, finestra: 40, ripido: 0.13, media: 0.1, peso: 60, pesoMedia: 30, pesoDirezione: 1,
+    scesa: { distanze: [15, 24, 35, 45], massima: 0.2, peso: 80 } },
   // Spalto davanti alla porta della rocca: il borgo scende dalla rocca, e una rampa in muratura dal cortile al pendio
   // verrebbe lunga 30–40 m. Il terreno del borgo si rialza in un dosso di terra fino a `sotto` m sotto il cortile, piatto
   // per `piano` m attorno al punto davanti alla porta e poi in discesa a `pendenza`: la rampa resta di pochi metri.
@@ -718,7 +721,12 @@ function pianiInDirezione(carta, sito, classe, dir, seed, L) {
     const fuoriQ = hq(m[0] + nu * 10, m[1] + nv * 10);
     const vicinoRocca = Math.sqrt(m[0] * m[0] + m[1] * m[1]) < hU + la * 0.6 ? 6 : 0;
     const ar = arrivo(m, nu, nv);
-    const ripidezza = P.peso * Math.max(0, ar.ripido - P.ripido) + P.pesoMedia * Math.max(0, ar.media - P.media);
+    // Discesa dalla soglia (piano del borgo, spesso rialzato dal terrapieno) al terreno fuori: la pendenza che servirebbe
+    // a una rampa per arrivarci entro `scesa.fino` m (sessione M6: soglie 8–12 m sopra il terreno a 24 m, rampe al 40–54%).
+    let scesa = 0;
+    for (const d of P.scesa.distanze) scesa = Math.max(scesa, (dentroQ - hq(m[0] + nu * d, m[1] + nv * d)) / d);
+    const ripidezza = P.peso * Math.max(0, ar.ripido - P.ripido) + P.pesoMedia * Math.max(0, ar.media - P.media)
+      + P.scesa.peso * Math.max(0, scesa - P.scesa.massima);
     const costo = Math.abs(dentroQ - fuoriQ) + vicinoRocca + ripidezza;
     if (!porta || costo < porta.costo) porta = { costo, ripidezza, m, n: [nu, nv], salto: Math.abs(dentroQ - fuoriQ), arrivo: ar };
   }
