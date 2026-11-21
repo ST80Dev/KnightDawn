@@ -506,11 +506,25 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
           cC *= 0.86 + 0.28 * r2;
           cC = mix(cC, cPrato * 0.85, 1.0 - smoothstep(0.8, 1.8, bordoC));                             // capezzagna
           if (orto < 0.5) {
-            // Siepi (non i filari d'alberi: quelli hanno le loro ombre finte), come in posizionaVegetazione.
-            float sL = hashC(i, j + 59.0) < ${(PARCELLE.siepi.lungo * 256).toFixed(1)} && hashC(i, j + 97.0) >= ${(PARCELLE.siepi.filari * 256).toFixed(1)} ? fv : 1e4;
-            float sC = hashC(i, j + 83.0) < ${(PARCELLE.siepi.traverso * 256).toFixed(1)} && hashC(i, j + 98.0) >= ${(PARCELLE.siepi.filari * 256).toFixed(1)} && fv > 2.0 ? fu : 1e4;
+            // Siepi (non i filari d'alberi: quelli hanno le loro ombre finte) e, vicino al luogo, muretti a secco con
+            // un varco per lato: come in posizionaVegetazione.
+            float zonaMuri = vCampi.z < ${PARCELLE.muretti.oltreOrti.toFixed(1)} ? 1.0 : 0.0;
+            float noFilL = hashC(i, j + 97.0) >= ${(PARCELLE.siepi.filari * 256).toFixed(1)} ? 1.0 : 0.0;
+            float noFilC = hashC(i, j + 98.0) >= ${(PARCELLE.siepi.filari * 256).toFixed(1)} ? 1.0 : 0.0;
+            float hasL = hashC(i, j + 59.0) < ${(PARCELLE.siepi.lungo * 256).toFixed(1)} ? noFilL : 0.0;
+            float hasC = hashC(i, j + 83.0) < ${(PARCELLE.siepi.traverso * 256).toFixed(1)} && fv > 2.0 ? noFilC : 0.0;
+            float muroL = hasL * zonaMuri * (hashC(i, j + 113.0) < ${(PARCELLE.muretti.quota * 256).toFixed(1)} ? 1.0 : 0.0);
+            float muroC = hasC * zonaMuri * (hashC(i, j + 114.0) < ${(PARCELLE.muretti.quota * 256).toFixed(1)} ? 1.0 : 0.0);
+            float vL = L * (0.15 + 0.7 * hashC(i, j + 127.0) / 255.0), vC = W * (0.15 + 0.7 * hashC(i, j + 131.0) / 255.0);
+            muroL *= step(${PARCELLE.muretti.varco.toFixed(1)}, abs(fu - vL));
+            muroC *= step(${PARCELLE.muretti.varco.toFixed(1)}, abs(fv - vC));
+            float sL = hasL > 0.5 && muroL < 0.5 && !(zonaMuri > 0.5 && hashC(i, j + 113.0) < ${(PARCELLE.muretti.quota * 256).toFixed(1)}) ? fv : 1e4;
+            float sC = hasC > 0.5 && muroC < 0.5 && !(zonaMuri > 0.5 && hashC(i, j + 114.0) < ${(PARCELLE.muretti.quota * 256).toFixed(1)}) ? fu : 1e4;
             float siepe = 1.0 - smoothstep(${PARCELLE.siepi.striscia[0].toFixed(1)}, ${PARCELLE.siepi.striscia[1].toFixed(1)}, min(sL, sC));
             cC = mix(cC, vec3(0.035, 0.055, 0.02) * (0.7 + 0.6 * r2), siepe);
+            float dM = min(muroL > 0.5 ? abs(fv - ${PARCELLE.muretti.dentro.toFixed(1)}) : 1e4, muroC > 0.5 ? abs(fu - ${PARCELLE.muretti.dentro.toFixed(1)}) : 1e4);
+            float pietra = 1.0 - smoothstep(${PARCELLE.muretti.striscia[0].toFixed(1)}, ${PARCELLE.muretti.striscia[1].toFixed(1)}, dM);
+            cC = mix(cC, vec3(0.13, 0.125, 0.115) * (0.75 + 0.5 * r3), pietra);
           }
           float dentro = smoothstep(0.0, 0.06, vSuolo.z - (0.12 + 0.6 * h2)) * step(0.3, margineS);
           cPrato = mix(cPrato, cC, dentro * blocco);

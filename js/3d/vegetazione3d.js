@@ -452,6 +452,26 @@ function creaModelli() {
   const moncone = fusto(0.09, 0.05, 0.8, 4, COL.corteccia, { x: -1.2, y: 0.4, inclinaZ: 0.7, sotto: 0 });
   M.tronco = [{ fino: 250, varianti: [unisci([tronco, moncone])] }];
 
+  // Muretti a secco: tratti di 2,2 m lungo x (si sovrappongono a passo 1,7 m), alti ~0,95 m: due corsi di pietre
+  // spaccate e una fila di copertina; da lontano un blocco semplice.
+  const tratto = () => {
+    const pietre = [];
+    for (const [y, n, r, sy] of [[0.2, 4, 0.3, 0.62], [0.52, 4, 0.27, 0.6], [0.8, 3, 0.26, 0.5]]) {
+      for (let k = 0; k < n; k++) {
+        const x = -1.1 + (k + 0.5) * (2.2 / n) + (rnd() - 0.5) * 0.15;
+        pietre.push(R1(r * (0.9 + 0.25 * rnd()), { dettaglio: 0, tagli: 5, x, y, z: (rnd() - 0.5) * 0.08,
+          sx: 1.25 + 0.3 * rnd(), sy, sz: y < 0.4 ? 1.0 : 0.85 }));
+      }
+    }
+    return unisci(pietre);
+  };
+  const blocco = new THREE.BoxGeometry(2.2, 0.9, 0.5).toNonIndexed();
+  blocco.translate(0, 0.42, 0);
+  M.muretto = [
+    { fino: 50, piatto: true, varianti: [tratto(), tratto()] },
+    { fino: 220, piatto: true, varianti: [colora(blocco, (c) => c.set(COL.roccia[0]).lerp(new THREE.Color(COL.roccia[1]), 0.35))] },
+  ];
+
   // Sorgenti dell'atlante delle sagome (nell'ordine di SAGOME): i modelli vicini.
   M.sorgentiSagome = [M.latifoglia[0].varianti[0], M.latifoglia[0].varianti[1], M.conifera[0].varianti[0],
     M.pino[0].varianti[0], M.riva[0].varianti[0], M.secco[0].varianti[0]];
@@ -579,7 +599,7 @@ const SAGOME_DIRADA = { da: 300, bordo: 0.36 };
 // modello di scala 1 (m), moltiplicato per la scala dell'istanza; il tronco caduto è una fila di tre cerchi.
 const COLLISIONI = { cella: 16, sassoMinimo: 1.1,
   raggio: { latifoglia: 0.42, conifera: 0.34, pino: 0.38, riva: 0.4, secco: 0.32, masso: 1.05, affioramento: 2.3,
-    sasso: 0.3, tronco: 0.32 } };
+    sasso: 0.3, tronco: 0.32, muretto: 0.4 } };
 
 function creaCollisioni(pos) {
   const C = COLLISIONI, celle = new Map();
@@ -603,6 +623,8 @@ function creaCollisioni(pos) {
       if (t.gruppo === 'rocce') {
         const largo = 0.7 + 0.8 * ((v * 3.71) % 1), lungo = 0.7 + 0.7 * ((v * 7.13) % 1);   // come le istanze
         aggiungi(x, z, r0 * s * (largo + lungo) / 2);
+      } else if (nome === 'muretto') {
+        for (const d of [-0.75, 0, 0.75]) aggiungi(x + Math.cos(rot) * d * s, z - Math.sin(rot) * d * s, r0 * s);
       } else if (nome === 'tronco') {
         for (const d of [0.6, 2.5, 4.4]) aggiungi(x + Math.cos(rot) * d * s, z - Math.sin(rot) * d * s, r0 * s);
       } else aggiungi(x, z, r0 * Math.max(0.6, s));
@@ -635,7 +657,7 @@ function creaCollisioni(pos) {
 /** Variazione per istanza: tono (chiaro/scuro e più giallo o più verde) e proporzioni. */
 const TONO = {
   alberi: [0.8, 1.15, 0.14], arbusti: [0.8, 1.12, 0.12], acqua: [0.85, 1.1, 0.1],
-  rocce: [0.62, 1.2, 0], bosco: [0.8, 1.05, 0],
+  rocce: [0.62, 1.2, 0], bosco: [0.8, 1.05, 0], muri: [1.1, 1.4, 0],
 };
 const GIALLO = new THREE.Color('#d9c85a');
 const RIDISTRIBUISCI = { ms: 1.5, pezzo: 2000 };   // tempo per fotogramma e alberi tra un controllo e l'altro
@@ -751,7 +773,7 @@ const FORMA_OMBRA = {
   'arbusto alto': { h: 0.35, r: 1.3, v: 0.4, a: 0.6, p: 1.4 }, sterpo: { h: 0.5, r: 0.6, v: 0.5, a: 0.3, p: 0.6 },
   canne: { h: 1.0, r: 0.45, v: 1.0, a: 0.4, p: 0.6 }, sasso: { h: 0.1, r: 0.35, v: 0.15, a: 0.6, p: 0.45 },
   masso: { h: 0.4, r: 1.3, v: 0.8, a: 0.7, p: 1.6 }, affioramento: { h: 0.2, r: 3.0, v: 0.6, a: 0.6, p: 3.2 },
-  tronco: { h: 0.25, r: 1.6, v: 0.3, a: 0.5, p: 1.8 },
+  tronco: { h: 0.25, r: 1.6, v: 0.3, a: 0.5, p: 1.8 }, muretto: { h: 0.45, r: 1.2, v: 0.5, a: 0.55, p: 1.3 },
 };
 const OMBRE = { lato: 1024, latoPiede: 2048, rifaiGradi: 5, perFotogramma: 8000, forza: 0.5, piede: 0.42 };
 
@@ -880,7 +902,7 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
     const matrici = new Float32Array(t.n * 16), colori = new Float32Array(t.n * 3), xz = new Float32Array(t.n * 2);
     const varia = new Float32Array(t.n);
     const [lo, hi, giallo] = TONO[t.gruppo] || [0.9, 1.1, 0];
-    const roccia = t.gruppo === 'rocce', albero = t.gruppo === 'alberi';
+    const roccia = t.gruppo === 'rocce', albero = t.gruppo === 'alberi', muro = t.gruppo === 'muri';
     for (let k = 0; k < t.n; k++) {
       const d = t.dati, o = k * STRIDE;
       const s = d[o + 3], rot = d[o + 4], v = d[o + 5];
@@ -893,6 +915,11 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
       const v4 = (v * 17.31) % 1;              // altezza indipendente dalla larghezza (richiesta dell'utente)
       const alto = roccia ? 0.55 + 0.7 * v : (albero ? 0.72 + 0.56 * v4 : 0.85 + 0.3 * v4);
       sc.set(s * largo, s * alto, s * (roccia ? 0.7 + 0.7 * v2 : largo * (0.9 + 0.2 * v2)));
+      if (muro) {                              // muretti: diritti, lungo il confine, solo un po' più alti o bassi
+        e.set(0, rot, 0); q.setFromEuler(e);
+        p.y = d[o + 1] - 0.08;
+        sc.set(s, s * (0.88 + 0.24 * v4), s);
+      }
       m4.compose(p, q, sc).toArray(matrici, k * 16);
       xz[k * 2] = d[o]; xz[k * 2 + 1] = d[o + 2];
       varia[k] = (v * 11.37) % 1;

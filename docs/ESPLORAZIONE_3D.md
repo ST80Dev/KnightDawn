@@ -1591,8 +1591,17 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      con erba; da un lato una fascia di campi propria larga 20 m, poi riprende il disegno normale (regola che dipende
      solo dal punto: blocchi vicini uguali, verificato). Percorso di prova in headless alla partenza (una rocca):
      triangoli da 583 000 a 596–640 000, CPU della vegetazione come prima (picchi già presenti senza le siepi).
-     Da fare: muretti a secco; i campi negli anelli dell'orizzonte (ora solo nel blocco); il bordo della zona
-     coltivata segue i triangoli del terreno (un po' seghettato).
+     *Muretti a secco* (`PARCELLE.muretti`): fino a 150 m oltre il limite degli orti il 60 % dei confini con la
+     siepe è un muretto (tratti di 2,2 m di pietre spaccate a passo 1,7 m, alti ~1 m, diritti lungo il confine; da
+     50 a 220 m un blocco semplice; oltre, una striscia di pietra nel suolo cotto), con un varco di 5 m per lato per
+     passare; collisione come i tronchi caduti (tre cerchi). 300–1300 tratti in un blocco attorno a una rocca.
+     *Case fuori dal borgo* (richiesta dell'utente: case isolate o a gruppetti di 2–3 in mezzo o a lato dei campi):
+     `CASE_CAMPAGNA` / `caseCampagna(carta)`, siti deterministici per Carta (4–9 gruppi per rocca secondo la classe,
+     tra gli orti e il limite dei campi pieni, in piano, all'asciutto, lontano dai terrapieni e tra loro, orientati
+     come i campi); nel blocco si scartano quelli che la strada fine tocca. Attorno: aia libera (12–20 m), poi orto;
+     niente siepi né muretti. Gli edifici li disegna chi fa le case (M7, passo 5): `pos.case` ha posizione e verso.
+     Da fare: i campi negli anelli dell'orizzonte (ora solo nel blocco); il bordo della zona coltivata segue i
+     triangoli del terreno (un po' seghettato).
    - *Scatti*: la ridistribuzione delle istanze (ogni 12 m) si fa a pezzi, al più ~1,5 ms per fotogramma, e mai nel
      fotogramma in cui si rifà l'erba vicina; erba, felci e ciottoli si rifanno uno per fotogramma. In headless nel
      bosco fitto, camminando 200 m: costo peggiore di un fotogramma da ~11 a ~5–6 ms (resta il calcolo dell'erba).
