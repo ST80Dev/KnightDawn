@@ -1424,6 +1424,35 @@ di luoghi generici.
 Le porte degli edifici nominati (locanda, pieve, chiostro…) avranno il punto «porta» come nel borgo, per il passo 6
 di M7 (Carta del cronista).
 
+### Passo 1 — siti sulla Carta (fatto, da provare)
+
+Codice: `js/mondo/siti.js` (nuovo), agganci in `lavoratore.js` e `generatore.js`, villaggi nella rete in `strade.js`,
+segni e «Vai a…» in `cartaVista.js`; `VERSIONE_GENERATORE` + `siti-1`.
+- **Ordine nel Worker:** rocche (`aggiungiLuoghi`) → `aggiungiSiti` (monasteri e città dalle rocche, ovili vicino ai
+  castelli, villaggi, sentinelle e ospizi dei valichi, rovine, grotte, eremi, luoghi del fantastico, abbandonati,
+  ovili sparsi, riempimento dei vuoti) → strade → `completaSiti` (accampamenti: briganti nei boschi lontani dalle
+  strade, mercanti e soldati sulle strade). Tutto in `carta.siti` = `[{ id, tipo, x, z (m), quota, pendenza,
+  variante?, dimensione? }]`; monasteri e città restano in `carta.luoghi` con `tipo: 'monastero' | 'citta'` (mai
+  la partenza: il percorso di prova resta sul borgo della rocca 1).
+- **Scelta:** punteggio per cella secondo il tipo (tabella sopra) + un poco di caso + **copertura** (più punti alle
+  celle lontane dai luoghi già scelti), distanze minime dal proprio tipo, da tutti i siti e dalle rocche; il punto
+  si affina nella cella sul rilievo delle Scene (il più piano per villaggi, eremi, ovili; il più alto per rovine e
+  luoghi del fantastico; il più ripido non parete per le grotte). Dove resta un vuoto, i luoghi speciali salgono
+  fino al massimo della loro quantità.
+- **Strade:** i villaggi prendono il posto degli «abitati provvisori» (fino a 20 come nodi della rete, i grandi per
+  primi); gli altri si collegano con una carrareccia dal villaggio alla strada più vicina (Dijkstra fermato alla
+  prima cella di strada; un ponte nuovo costa molto di più, così si resta dalla propria parte del fiume). Tutti i
+  villaggi sono sulla rete. Seme 570549: carrarecce da 182 a 715 km, ponti da 10 a 13, rami da 68 a 204.
+- **Misure** [Certo, Node, 30 semi]: 170–200 siti per mondo (villaggi 62–78, monasteri 4–6, città 2–4, rovine e
+  speciali ~85, ovili ~30–40); siti ~30–130 ms, strade +0,3–0,5 s; in tutto la generazione cresce di ~0,4 s (tetto
+  +1,5 s). **Vuoti:** il vuoto più largo è di 13–16 km (mediana 14), con ≤ 1 % delle celle di terra percorribile a più
+  di 6 km da un luogo. L'obiettivo «nessun vuoto oltre ~10 km» **non si raggiunge** con queste quantità (un luogo ogni
+  ~6,5 km in media lascia sempre qualche buco): la verifica chiede vuoto ≤ 18 km e ≤ 1 % delle celle oltre 6 km;
+  29 semi su 30 la superano (55446: 1,1 %).
+- **Da provare** (vista della Carta, tasto M): distribuzione credibile dei segni; «Vai a…» porta a ogni tipo (le
+  Scene dei siti sono ancora vuote: il 3D arriva dal passo 2; monasteri e città mostrano ancora rocca e borgo fino
+  ai passi 3 e 8); tempo di generazione nel browser.
+
 ### Decisioni tecniche
 
 - **File nuovi** (approvati, regola 2): `js/mondo/siti.js` (scelta dei siti di villaggi e luoghi speciali, senza

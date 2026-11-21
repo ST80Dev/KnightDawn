@@ -6,6 +6,7 @@ import { generaCarta } from './carta.js';
 import { verificaFiumi, verificaPanorami, verificaVarieta, verificaLuoghi } from './verifica.js';
 import { aggiungiLuoghi } from './luoghi.js';
 import { aggiungiStrade } from './strade.js';
+import { aggiungiSiti, completaSiti, verificaSiti } from './siti.js';
 
 let lavoratore = null;
 let senzaWorker = false;
@@ -42,9 +43,9 @@ function avviaLavoratore() {
 async function generaQui(seme, avanzamento) {
   avanzamento?.('Generazione del mondo', 0);
   await new Promise((r) => setTimeout(r, 30));      // lascia disegnare la schermata
-  const carta = aggiungiStrade(aggiungiLuoghi(generaCarta(seme, { avanzamento })));
+  const carta = completaSiti(aggiungiStrade(aggiungiSiti(aggiungiLuoghi(generaCarta(seme, { avanzamento })))));
   carta.verifiche = { fiumi: verificaFiumi(carta), panorami: verificaPanorami(carta), varieta: verificaVarieta(carta),
-    luoghi: verificaLuoghi(carta) };
+    luoghi: verificaLuoghi(carta), siti: verificaSiti(carta) };
   carta.daCache = false;
   return carta;
 }
