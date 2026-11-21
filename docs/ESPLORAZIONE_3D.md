@@ -1348,6 +1348,16 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
      Prova in headless (seme 570549): dopo il cambio il cavaliere è nello stesso punto del mondo e alla stessa quota
      (1224,29 m), nessun errore; **pausa 2,8 s** (headless). Attiva solo con `?blocchi` nell'indirizzo finché c'è la
      pausa: senza, il cavaliere si ferma al bordo come prima.
+   - **Tappa 2, prima parte fatta**: `caricaScena` del mondo è diviso in `preparaMondo` (generatore: `generaScenaAPezzi`,
+     `createTerrainAPezzi`, `creaOrizzonteAPezzi` con le acque lontane a pezzi, e un `yield` tra un lavoro e l'altro) e
+     `applicaMondo`; il caricamento normale li usa di seguito e fa quello che faceva. Con `?blocchi`, vicino al bordo la
+     preparazione avanza ~4 ms per fotogramma (`avanzaBlocco` in `main.js`, perché tocca le sue variabili); pronta, lo
+     scambio dura ~10 ms (headless) e il blocco vecchio si libera un oggetto per fotogramma. Il cavaliere resta nello stesso
+     punto del mondo. `kd.cambiBlocco.ultimo.lunghi` elenca i pezzi oltre 8 ms. In headless (CPU più lenta di un PC
+     medio) restano lunghi, tutti atomici: posizionamento della vegetazione ~850 ms, `creaVegetazione` ~250, bosco
+     lontano ~120, rocche e borghi ~90; le parti della scena, del terreno e dell'orizzonte stanno sotto ~26 ms. Mancano
+     le versioni a pezzi di Vegetazione e M7 (chieste) e il caricamento sulla scheda e la compilazione degli shader
+     prima dello scambio (note di M1); intanto resta con `?blocchi`.
    - *Note della sessione M1 (prestazioni)*, da rispettare alla tappa 2: nel fotogramma del cambio non devono cadere
      la cottura del suolo (`cuociSuolo`, render 2048²), il caricamento sulla scheda di terreno, istanze della vegetazione
      e texture (ombre, piede, cotto) né compilazioni di shader: tutto nella preparazione, uno per fotogramma

@@ -20,7 +20,7 @@
 import * as THREE from 'three';
 import { quotaMondo, quotaCarta, scavaFiumi, spianaLuoghi, livelloLago, tracciatiFiumi, SCENA, OTTAVE_DETTAGLIO } from '../mondo/scena.js';
 import { creaNastro, materialeAcqua, SOPRA_PELO } from './acqua.js';
-import { derivaSeme } from '../mondo/rumore.js';
+import { derivaSeme, completa } from '../mondo/rumore.js';
 import { ACQUA } from '../mondo/carta.js';
 import { coloreMondo, materialeSuolo, nuoviStrati } from './terrain.js';
 import { MISURE_ROCCA } from './rocca3d.js';
@@ -111,7 +111,7 @@ function celleAnello(buco, passo, raggio, fini, P) {
  * funzione del mondo generato (coloreMondo in terrain.js), come il blocco della Scena: niente chiazze a triangoli.
  * `colore(out, x, z, h, pendenza)` in coordinate del mondo; h è la quota vera (senza la curvatura).
  */
-function anello(celle, colore, cx, cz) {
+function* anello(celle, colore, cx, cz) {   // a pezzi: yield a ogni riga di celle e ogni 1000 vertici
   const indice = new Map();
   const px = [], py = [], pz = [], nx = [], ny = [], nz = [], tri = [];
   const vertice = (p) => {
@@ -132,12 +132,16 @@ function anello(celle, colore, cx, cz) {
     for (const i of [ia, ib, ic]) { nx[i] += fx; ny[i] += fy; nz[i] += fz; }   // pesate per area
     tri.push(ia, ib, ic);
   }
-  for (let r = 0; r < celle.n; r++) for (let c = 0; c < celle.n; c++) celle.cella(r, c, faccia);
+  for (let r = 0; r < celle.n; r++) {
+    for (let c = 0; c < celle.n; c++) celle.cella(r, c, faccia);
+    yield;
+  }
   const m = px.length;
   const pos = new Float32Array(m * 3), nor = new Float32Array(m * 3), col = new Float32Array(m * 3);
   const bas = new Float32Array(m * 3), str = new Float32Array(m * 4), S = nuoviStrati();
   const tmp = new THREE.Color();
   for (let i = 0; i < m; i++) {
+    if (i % 1000 === 0) yield;
     const l = Math.hypot(nx[i], ny[i], nz[i]) || 1;
     const a = nx[i] / l, b = ny[i] / l, c = nz[i] / l;
     pos[i * 3] = px[i]; pos[i * 3 + 1] = py[i]; pos[i * 3 + 2] = pz[i];
@@ -180,7 +184,7 @@ function superficie(anelli, x, z) {
 }
 
 /** Fiumi (nastri posati sulla superficie degli anelli) e laghi in quota (celle degli anelli) oltre il blocco. */
-function acqueOrizzonte(carta, cx, cz, anelli, colore) {
+function* acqueOrizzonte(carta, cx, cz, anelli, colore) {
   const F = ORIZZONTE.fiumi, half = SCENA.lato / 2;
   const gruppo = new THREE.Group();
   gruppo.name = 'acque-orizzonte';
@@ -200,7 +204,9 @@ function acqueOrizzonte(carta, cx, cz, anelli, colore) {
     const d0 = Math.max(Math.abs(t[0]), Math.abs(t[1]));
     const A = anelli.find((a) => d0 <= a.raggio) || anelli[anelli.length - 1];
     gruppo.add(creaNastro(t, mat, A.passo / 2, quota));
+    if (gruppo.children.length % 8 === 0) yield;
   }
+  yield;
   // Laghi: una cella degli anelli è lago se l'indicatore lo è in un angolo o al centro (come nel blocco).
   const pos = [];
   // Un vertice è dentro il lago solo se la sua cella della Carta è lago (l'indicatore sfumato sborda oltre la riva).
@@ -234,6 +240,7 @@ function acqueOrizzonte(carta, cx, cz, anelli, colore) {
         };
         pos.push(...v(x0, z0), ...v(x0, z1), ...v(x1, z0), ...v(x1, z0), ...v(x0, z1), ...v(x1, z1));
       }
+      if (r % 16 === 15) yield;
     }
   }
   if (pos.length) {
@@ -360,7 +367,12 @@ function sagomeLuoghi(carta, cx, cz, half, anelli) {
  * @param {number} stagione  indice del calendario (colori e limite delle nevi)
  * @returns {{ oggetto: THREE.Group, acqua: THREE.Mesh|null, triangoli: number, ms: number, quota: Function }}
  */
-export function creaOrizzonte(carta, cx, cz, terrain, coloreAcqua, stagione = 0) {
+export function creaOrizzonte(carta, cx, cz, terrain, coloreAcqua, stagione) {
+  return completa(creaOrizzonteAPezzi(carta, cx, cz, terrain, coloreAcqua, stagione));
+}
+
+/** creaOrizzonte a pezzi (blocco che segue il cavaliere, js/3d/blocchi.js). */
+export function* creaOrizzonteAPezzi(carta, cx, cz, terrain, coloreAcqua, stagione = 0) {
   const t0 = performance.now();
   const O = ORIZZONTE, half = SCENA.lato / 2;
   const seme = derivaSeme(carta.seme, 101);                // lo stesso del blocco (generaScena)
@@ -404,7 +416,9 @@ export function creaOrizzonte(carta, cx, cz, terrain, coloreAcqua, stagione = 0)
     interno = raggio;
     passoDentro = passo;
   }
-  const geometrie = anelli.map((a) => anello(a, colore, cx, cz));
+  const geometrie = [];
+  for (const a of anelli) geometrie.push(yield* anello(a, colore, cx, cz));
+  yield 'orizzonte: anelli';
 
   const mat = materialeSuolo(cx, cz);   // colore per pixel come il blocco (terrain.js)
   const oggetto = new THREE.Group();
@@ -423,8 +437,10 @@ export function creaOrizzonte(carta, cx, cz, terrain, coloreAcqua, stagione = 0)
     acqua.name = 'acqua';
   }
   // Fiumi e laghi in quota oltre il blocco (passo 6): continuano quelli della Scena.
-  const acque = acqueOrizzonte(carta, cx, cz, anelli, coloreAcqua);
+  yield 'orizzonte: mare';
+  const acque = yield* acqueOrizzonte(carta, cx, cz, anelli, coloreAcqua);
   if (acque) oggetto.add(acque);
+  yield 'orizzonte: acque';
   // Rocche e borghi lontani (M7, passo 8): sagome sugli anelli e luci di notte.
   const lontani = sagomeLuoghi(carta, cx, cz, half, anelli);
   if (lontani.oggetto) oggetto.add(lontani.oggetto);
