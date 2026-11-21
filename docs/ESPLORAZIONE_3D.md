@@ -1913,6 +1913,16 @@ nuovo: serve la conferma (regola 2).
    accanto, Carta con `METRI_PER_PASSO_CAVALLO` se si parte in sella; note in `EARLY_GAME.md` e `GDD.md`. *Prova:*
    ricaricare la pagina in sella e a piedi; viaggio sulla Carta e ritorno in Scena.
 
+### Accordi con le altre sessioni (novembre 2026)
+
+- **M1 - Grafica**: la posa in sella in `knight3d.js` la fa questa sessione, con gli stessi snodi e le stesse misure,
+  nessun materiale nuovo, nessun oggetto o triangolo in più e il mantello piegato o accorciato in posa per non
+  compenetrare la groppa. Il diff va a M1 prima del merge. `&sella` in `prestazioni.js`: il percorso senza `&sella`
+  resta identico; in sella si usano perno e distanza della camera in sella. Nel riquadro va una riga
+  «scena: … · cavallo: a piedi/in sella». Base sulla UHD 730: personaggi 0,1 ms, edifici 0,3 ms alla partenza.
+- **M6**: `suolo.suStrada` si riusa com'è. Il viaggio sulla Carta lungo le strade è rinviato alla milestone dei
+  villaggi: se il viaggio in sella sulla Carta terrà conto delle strade, ci si coordina allora.
+
 ### Rischi
 
 - [Probabile] il galoppo a 13 m/s fa emergere scatti nello streaming della vegetazione: se succede, si coordina con la
