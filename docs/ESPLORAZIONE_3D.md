@@ -1365,7 +1365,16 @@ siti validi su 30 semi su 30 (verifica automatica). Con il passo 9: dal borgo si
 
 - **Torri di sentinella dei valichi**: in M7 o con la milestone dei luoghi (oggi fuori da M7)?
 
-## M8 — Luoghi del mondo (proposta, da approvare)
+## M8 — Luoghi del mondo
+
+> **Stato: piano approvato dall'utente (21 novembre 2026)** con le decisioni seguenti:
+> 1. file nuovi approvati: `js/mondo/siti.js`, `js/3d/villaggio3d.js`, `js/3d/rovine3d.js`;
+> 2. monasteri (4–6) e città (2–4) **ricavati da una parte delle rocche** attuali: i luoghi maggiori restano 30–40;
+>    il percorso di prova va ricontrollato (la rocca del borgo di prova non deve cambiare tipo);
+> 3. quantità della tabella, con un tetto rigido di **+1,5 s** sul tempo di generazione: se si sfora si riducono prima
+>    i villaggi (verso 60) e le strade vanno solo ai villaggi;
+> 4. ordine: M8 passo 1 subito; poi M7 passo 9 (blocco che segue il cavaliere); poi M8 passi 2 e seguenti. I passi
+>    6–8 di M7 procedono in parallelo.
 
 Decisione dell'utente (novembre 2026): M8 comincia **prima di chiudere M7** (deroga alla regola 4; M7 resta ai passi
 6–9: porte e Carta del cronista, luci e persone, da lontano, blocco che segue il cavaliere). Oggi nel mondo ci sono
@@ -1415,9 +1424,9 @@ di luoghi generici.
 Le porte degli edifici nominati (locanda, pieve, chiostro…) avranno il punto «porta» come nel borgo, per il passo 6
 di M7 (Carta del cronista).
 
-### Decisioni tecniche (proposte)
+### Decisioni tecniche
 
-- **File nuovi** (da approvare, regola 2): `js/mondo/siti.js` (scelta dei siti di villaggi e luoghi speciali, senza
+- **File nuovi** (approvati, regola 2): `js/mondo/siti.js` (scelta dei siti di villaggi e luoghi speciali, senza
   grafica, nel Worker come `luoghi.js`); `js/3d/villaggio3d.js` (villaggi, ovili, monasteri, eremi);
   `js/3d/rovine3d.js` (rovine, abbandonati, grotte, luoghi del fantastico, accampamenti, sentinelle). Le città
   riusano `borgo3d.js` e `rocca3d.js`.
