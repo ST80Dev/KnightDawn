@@ -768,6 +768,14 @@ export function* createBorgoAPezzi(suolo, luogo, ox, oz, rocca) {
     const du = u - gm[0], dv = v - gm[1], e = du * ge[0] + dv * ge[1], d = du * gn[0] + dv * gn[1];
     // Mai sotto il terreno (dove la rampa vi resta vicina il terreno può sporgere di poco).
     if (rampaVera && d > SPOR && d <= SPOR + lungaPorta && Math.abs(e) <= RAMPA_PORTA.larghezza / 2) return Math.max(quotaRampaPorta(d, 0), terreno(u, v));
+    // Passaggio sotto la torre-porta: pavimento in pendenza uniforme dalla soglia esterna alla faccia interna (il
+    // terreno lì è il bordo del terrapieno e saliva di colpo di qualche decimetro: il cavaliere si fermava sulla soglia).
+    // Raccordo sul terreno, punto per punto, fino a 2,5 m oltre la faccia interna (niente gradini ai lati).
+    const dFine = SPOR - prof - 2.5;
+    if (d > dFine && d <= SPOR && Math.abs(e) <= pw / 2 + 0.3) {
+      const qa = terreno(...loc(e, SPOR)), qb = terreno(...loc(e, dFine));
+      return qa + (qb - qa) * clamp((SPOR - d) / (SPOR - dFine), 0, 1);
+    }
     return null;
   }
 

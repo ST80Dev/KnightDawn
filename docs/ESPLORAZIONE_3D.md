@@ -1450,7 +1450,18 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
       verde del giardino); giardino a istanze (aiuole, siepi, alberi). Budget della rocca invariato: ≤ 20 chiamate di
       disegno con le pertinenze, da misurare sul percorso di prova.
     - *Passi*: (a) piani più grandi e muro interno con la porta, verifica dei siti; (b) palazzo; (c) giardino e
-      pertinenze. Una PR per passo. *Prova:* cammino porta del borgo →
+      pertinenze. Una PR per passo.
+    - **Stato del passo (a): fatto, da provare dall'utente.** Raggi della rocca nel generatore (`luoghi.js`, `classi`):
+      minore 18–27 m, casata 23–34, maggiore 28–41 (prima 13–21, 17–27, 21–33); `VERSIONE_GENERATORE` `+corte-1`.
+      Muro interno (`rocca3d.js`, `CORTI`): di traverso al 46% della profondità dal retro, 5,5 m con cornice e merli
+      verso le due corti, porta ad arco in linea con la porta della rocca (passaggio dritto tra le corti); mastio a metà
+      del tratto più lungo del muro. Corte d'armi: sala d'armi e armeria (anche addossate al muro interno); corte del
+      signore: cappella (o nella corte d'armi se non c'è posto) e pozzo. Corridoi larghi 5 m lasciati liberi
+      dall'ingresso alla porta interna e oltre. `rocca.corti = { uC, v0, v1, vm, vg }`. Corretti anche, nel borgo, il
+      passaggio sotto la torre-porta (pavimento in pendenza dalla soglia al terreno interno: c'era un gradino) e il
+      lotto degli edifici con tettoia o recinto. Prove: siti validi su 30 semi; cammino porta del borgo → corte d'armi →
+      porta interna → corte del signore 35/35 (seme 12345) e 34/34 (570549), con percorso cercato su griglia; porte 9/9.
+      [Certo] La sala d'armi (16×9 m) non trova posto in ~5 rocche su 18 di casata e maggiori (corte d'armi stretta). *Prova:* cammino porta del borgo →
       corte d'armi → corte del signore su tutte le rocche di due semi; porte e udienza raggiungibili; FPS sul percorso
       di prova.
 
