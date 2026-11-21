@@ -10,7 +10,7 @@
 // Da qui vengono anche le geometrie e le collisioni che il borgo (borgo3d.js) usa per la sua cinta.
 
 import * as THREE from 'three';
-import { creaKit, siToccano, EDIFICI } from './edifici3d.js';
+import { creaKit, siToccano, EDIFICI, completaPezzi } from './edifici3d.js';
 
 /** Misure secondo la classe del luogo. torre: raggio (tonde) o mezzo lato (quadrate). */
 export const MISURE_ROCCA = {
@@ -508,6 +508,11 @@ function casoLuogo(luogo, k) {
 
 // ─── Rocca ───────────────────────────────────────────────────────────────
 
+/** Versione sincrona: costruisce la rocca in un colpo (stesso risultato di createRoccaAPezzi). */
+export function createRocca(suolo, luogo, ox, oz) {
+  return completaPezzi(createRoccaAPezzi(suolo, luogo, ox, oz));
+}
+
 /**
  * Costruisce la rocca di un luogo generato.
  * @param {{getHeight:(x:number, z:number) => number}} suolo  quota del terreno in coordinate del blocco
@@ -515,7 +520,7 @@ function casoLuogo(luogo, k) {
  * @param {number} ox  centro del sito nel blocco
  * @param {number} oz
  */
-export function createRocca(suolo, luogo, ox, oz) {
+export function* createRoccaAPezzi(suolo, luogo, ox, oz) {
   const K = MISURE_ROCCA[luogo.classe] ?? MISURE_ROCCA.casata;
   const ux = luogo.verso.x, uz = luogo.verso.z;
   const R0 = luogo.piani[0], B = luogo.piani[1];
@@ -567,6 +572,7 @@ export function createRocca(suolo, luogo, ox, oz) {
   const merli = [], beccatelli = [];                     // { u, v, y, nu, nv }
   const quad = (pp) => pp.map(([u, v]) => xz(u, v));
 
+  yield;
   // ─── Porta: sul lato più vicino al punto scelto dal generatore ───
   const pr = luogo.portaRocca;
   const [pu, pv] = pr ? localeDelLuogo(luogo, [[pr.x, pr.z]])[0] : [P[0][0], P[0][1]];
@@ -582,6 +588,7 @@ export function createRocca(suolo, luogo, ox, oz) {
   const gm = [(gA[0] + gB[0]) / 2, (gA[1] + gB[1]) / 2];
   const GW = PORTA.torreLarghezza, PW = PORTA.larghezza, SPOR = PORTA.sporgenza;
 
+  yield;
   // ─── Mura: un prisma per lato (o due ai lati della torre-porta), scarpa all'esterno ───
   const cima = piano + H;
   for (let i = 0; i < N; i++) {
@@ -619,6 +626,7 @@ export function createRocca(suolo, luogo, ox, oz) {
     }
   }
 
+  yield;
   // ─── Torri sui vertici ───
   for (let i = 0; i < N; i++) {
     const [cu, cv] = P[i];
@@ -669,6 +677,7 @@ export function createRocca(suolo, luogo, ox, oz) {
     }
   }
 
+  yield;
   // ─── Terrazzi: cinta bassa sui lati che non toccano la rocca, torricelle sugli spigoli esterni ───
   let terrazzi = 0;
   for (const T of luogo.piani.slice(2)) {
@@ -727,6 +736,7 @@ export function createRocca(suolo, luogo, ox, oz) {
     }
   }
 
+  yield;
   // ─── Mastio: verso il retro (lontano dal borgo), dentro la cinta ───
   let mastioL = null;
   {
@@ -757,6 +767,7 @@ export function createRocca(suolo, luogo, ox, oz) {
     scatole.push({ cu: cm[0], cv: cm[1], au: 1, av: 0, hl: h + off * 0.6, hw: h + off * 0.6 });
   }
 
+  yield;
   // ─── Torre-porta ───
   const torce = [];
   let luceTorce = null;
@@ -803,6 +814,7 @@ export function createRocca(suolo, luogo, ox, oz) {
       Z(gm[0] + gn[0] * (SPOR + 1.2), gm[1] + gn[1] * (SPOR + 1.2)));
   }
 
+  yield;
   // ─── Pianerottolo e rampa: lungo il muro o dritta, la più corta che arriva a terra ───
   // Il borgo scende dalla rocca: una rampa dritta giù per il pendio insegue il terreno e si allunga; lungo il muro
   // (di traverso al pendio) arriva prima. Pianerottolo davanti alla porta: e ∈ [−PLm, PLm], n ∈ [SPOR, SPOR + DL].
@@ -901,6 +913,7 @@ export function createRocca(suolo, luogo, ox, oz) {
     });
   }
 
+  yield;
   // ─── Cortile: piano di terra battuta dentro la cinta, lastrico nel passaggio ───
   {
     const s = new THREE.Shape(P.map(([u, v]) => new THREE.Vector2(u, v)));
@@ -916,6 +929,7 @@ export function createRocca(suolo, luogo, ox, oz) {
     parti.pietra.push(prisma(quad(lp), quad(lp), piano - 0.3, piano + 0.01));
   }
 
+  yield;
   // ─── Oggetti: uno per materiale, merli e beccatelli a istanze ───
   const object = new THREE.Group();
   object.name = 'rocca';
@@ -941,6 +955,7 @@ export function createRocca(suolo, luogo, ox, oz) {
     im.name = nome;
     object.add(im);
   };
+  yield;
   // ─── Edifici del cortile (passo 5): cappella e pozzo; sala d'armi e armeria nel castello di casata e nella sede
   // maggiore. Addossati alle mura (facciata verso il cortile), o liberi nel cortile se lungo le mura non c'è posto.
   const kit = creaKit({ X, Z, ux, uz, terreno, luogo, seme: (Math.floor(luogo.x) * 19349663) ^ (Math.floor(luogo.z) * 83492791), nome: 'rocca-edifici', contesto: 'rocca' });
@@ -991,7 +1006,9 @@ export function createRocca(suolo, luogo, ox, oz) {
     }
     if (migliore) kit.pozzo(migliore.u, migliore.v, piano - 0.15);
   }
-  const edificiRocca = kit.chiudi();
+  yield;
+  const edificiRocca = yield* kit.chiudiAPezzi();
+  yield;
   scatole.push(...edificiRocca.scatole);
 
   istanze(rifinisci(geoMerlo(), false), mat.merlo, merli, 'rocca-merli');
@@ -1005,6 +1022,7 @@ export function createRocca(suolo, luogo, ox, oz) {
   solidi.push(...edificiRocca.solidi);
   object.updateMatrixWorld(true);
 
+  yield;
   // ─── Collisioni, suolo, luci ───
   let raggio = 0;
   for (const p of luogo.piani) {
@@ -1054,6 +1072,7 @@ export function createRocca(suolo, luogo, ox, oz) {
   const piede = [rFine[0] + rampa.dir[0] * 2, rFine[1] + rampa.dir[1] * 2];
   return {
     tipo: 'rocca', luogo, object, solidi, spingiFuori, quotaSuolo, dentro, aggiornaLuci, inLocale,
+    inBlocco: (u, v) => [X(u, v), Z(u, v)],      // locale → blocco (abitanti3d.js)
     piano, poligono: P, piede, torre: RT, tonde, terrazzi,
     rampa: { lato: rampa.lato, lunghezza: rampa.l, pendenza: rampa.g, inizio: rampa.start, fine: rFine, dir: rampa.dir },
     porta: { u: gm[0], v: gm[1], nu: gn[0], nv: gn[1], sporgenza: SPOR, profondita: PORTA.profondita },

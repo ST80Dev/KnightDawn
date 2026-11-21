@@ -30,7 +30,7 @@ export const CARTA_PREDEFINITA = { cols: 120, rows: 90, cella: 1000 };
 // regione-2: punti panoramici solo alture (verifiche in cache); m7-terrapieno: terrapieni di rocca e borgo;
 // siti-1: villaggi e luoghi speciali, monasteri e città dalle rocche (M8, js/mondo/siti.js), villaggi nella rete.
 // strade: rete delle strade e dei sentieri (js/mondo/strade.js); strade-2: costo del rilievo dentro la cella.
-export const VERSIONE_GENERATORE = 'regione-2+m7-forme-5+luoghi-36+strade-3+mare-1+valli-1+siti-1';
+export const VERSIONE_GENERATORE = 'regione-2+m7-forme-5+luoghi-36+strade-3+mare-1+valli-1+valichi-2+siti-1';
 
 // Parametri della forma (km dove non indicato). Valori di partenza, da tarare guardando le Carte.
 const FORMA = {
@@ -495,23 +495,31 @@ function climaEBiomi(seme, cols, rows, quota, mare, acque) {
 // ─── Valichi tra grandi valli contrapposte ───────────────────────────────
 
 /**
- * Valichi (deciso con l'utente): dove due grandi valli di sistemi diversi salgono da lati opposti fin sotto una
- * catena, tra le loro testate c'è un passo: il punto più basso del crinale tra le due (percorso «minimax» in un
- * corridoio). Se il passo è troppo alto lo si scava (al più `scavo` m), prima del drenaggio: fiumi e laghi si
- * ricalcolano sul rilievo finale. Al più un valico ogni `distanza` km. Lunghezze in km, quote in m.
+ * Valichi (decisi con l'utente, sul modello dei passi dolomitici): il passaggio più basso e più abbordabile tra due
+ * valli medio-grandi confinanti. Ogni cella appartiene alla valle in cui scende la sua acqua (il ramo di fiume, tra
+ * due confluenze, in cui entra); il valico tra due valli è il punto più basso del loro spartiacque, quindi una sella
+ * vera: scende verso le due valli e sale lungo la cresta (prima era il punto più alto di un percorso in un corridoio
+ * tra due testate, e cadeva anche su cucuzzoli isolati; segnalato dall'utente). Servono valli che senza il valico
+ * sarebbero lontane (sistemi diversi, o un lungo giro lungo i fiumi). Se il passo è troppo alto lo si scava (al
+ * più `scavo` m), prima del drenaggio: fiumi e laghi si ricalcolano sul rilievo finale. Al più un valico ogni
+ * `distanza` km. Lunghezze in km, quote in m.
  */
 export const VALICHI_CARTA = {
-  // bacino: km² della valle alla testata (nella regione di 120×90 km i corsi da 150 km² nascono lontano dai monti)
-  testata: { quota: [250, 2100], vicinoMonti: 10, monti: 1700, bacino: 40 },   // testata di una grande valle, vicino ai monti
-  coppia: { distanza: [5, 25], giro: 20, corridoio: 3 },           // testate opposte; sistemi diversi
-  sella: { sopra: 250, massima: 3000 },        // il passo sta almeno così sopra entrambe le testate
+  valle: { bacino: 40, accesso: 10 },          // km² perché un fiume faccia valle; km al più dal passo al fiume
+  coppia: { giro: 20 },                        // km lungo i fiumi sotto cui le due valli non hanno bisogno del passo
+  // Il passo sta almeno `sopra` m sopra entrambe le valli (dove le raggiunge) e la cresta ai suoi lati, entro
+  // `raggio` km lungo lo spartiacque, sale almeno di `cresta` m sopra il passo (scavato): un varco in una barriera,
+  // non tra colline dolci.
+  sella: { sopra: 250, minima: 900, massima: 3000, cresta: 250, raggio: 4 },
+  // Tra i monti (GDD: una sella in collina non è un valico): terra oltre `quota` m entro `entro` km dal passo.
+  monti: { quota: 1700, entro: 8 },
   bersaglio: 2000, scavo: 500,                 // si scava fino a bersaglio, al più di scavo m (valichi alti fino a ~2500)
   intaglio: { lungo: 45, largo: 220, raggio: 5 },   // m per km lungo il passo, m per km² ai lati; km
   distanza: 15,
-  // Punteggio (più basso = meglio): quota del passo, salita dalla testata più bassa (le valli che salgono piano
-  // fin sotto il passo sono le migliori), distanza tra le testate, grandezza delle due valli (bacino a `valle` km
-  // sotto la testata: le valli grandi che si addentrano nella catena).
-  peso: { quota: 0.5, salita: 1, distanza: 12, grandezza: 160 }, valle: 10,
+  // Punteggio (più basso = meglio): salita dalla valle più alta (non la quota sul mare: tra due valli alte il passo
+  // alto va bene), pendenza media della salita più ripida (abbordabile), grandezza delle due valli (bacino dove la
+  // discesa le raggiunge) e strada risparmiata rispetto al giro lungo i fiumi.
+  peso: { salita: 0.5, pendenza: 4000, grandezza: 160, risparmio: 120 },
 };
 
 function valichiTraValli(seme, cols, rows, quota, mare) {
@@ -519,27 +527,35 @@ function valichiTraValli(seme, cols, rows, quota, mare) {
   const acque = classificaAcque(cols, rows, mare);
   const foce = foci(cols, rows, acque);
   const { ricevente, bacino, ordine } = flusso(cols, rows, riempi(cols, rows, quota, foce), foce, acque, derivaSeme(seme, 42));
-  const soglia = V.testata.bacino;
+  const soglia = V.valle.bacino;
   const terra = (i) => !mare[i] && acque[i] === ACQUA.TERRA;
-  const vicinoMonti = distanzaDa(cols, rows, (i) => terra(i) && quota[i] >= V.testata.monti);
+  const fiume = (i) => terra(i) && bacino[i] >= soglia;
+  const vicinoMonti = distanzaDa(cols, rows, (i) => terra(i) && quota[i] >= V.monti.quota);
+  const passo = (i, j) => ((i % cols) !== (j % cols) && ((i / cols) | 0) !== ((j / cols) | 0) ? Math.SQRT2 : 1);
   // Foce di ogni cella (sistema del fiume).
   const fociDi = new Int32Array(n).fill(-1);
   for (let t = ordine.length - 1; t >= 0; t--) {
     const i = ordine[t], r = ricevente[i];
     fociDi[i] = r < 0 ? i : fociDi[r] >= 0 ? fociDi[r] : r;
   }
-  // Testate: celle di fiume senza affluenti di fiume a monte, vicino ai monti, ben sotto la catena.
-  const affluente = new Uint8Array(n);
-  for (let i = 0; i < n; i++) if (bacino[i] >= soglia && ricevente[i] >= 0) affluente[ricevente[i]] = 1;
-  const testate = [];
-  for (let i = 0; i < n; i++) {
-    if (!terra(i) || bacino[i] < soglia || affluente[i]) continue;
-    if (quota[i] < V.testata.quota[0] || quota[i] > V.testata.quota[1] || vicinoMonti[i] > V.testata.vicinoMonti) continue;
-    testate.push(i);
+  // Rami: tratti di fiume tra una testata o una confluenza e la confluenza dopo (dalla sorgente verso valle).
+  const affluenti = new Uint8Array(n), monte = new Int32Array(n).fill(-1);
+  for (let i = 0; i < n; i++) if (fiume(i) && ricevente[i] >= 0 && fiume(ricevente[i])) { affluenti[ricevente[i]]++; monte[ricevente[i]] = i; }
+  const ramo = new Int32Array(n).fill(-1);
+  let rami = 0;
+  for (let t = 0; t < ordine.length; t++) {
+    const i = ordine[t];
+    if (fiume(i)) ramo[i] = affluenti[i] === 1 ? ramo[monte[i]] : rami++;
   }
-  const passo = (i, j) => ((i % cols) !== (j % cols) && ((i / cols) | 0) !== ((j / cols) | 0) ? Math.SQRT2 : 1);
-  /** Grandezza della valle: bacino (km²) V.valle km a valle della testata. */
-  const grande = (i) => { for (let k = 0; k < V.valle && ricevente[i] >= 0; k++) i = ricevente[i]; return bacino[i]; };
+  // Ogni cella: dove la sua discesa entra in un fiume, e quanti km di discesa.
+  const entrata = new Int32Array(n).fill(-1), discesa = new Float32Array(n);
+  for (let t = ordine.length - 1; t >= 0; t--) {
+    const i = ordine[t];
+    if (!terra(i)) continue;
+    if (fiume(i)) { entrata[i] = i; continue; }
+    const r = ricevente[i];
+    if (r >= 0 && entrata[r] >= 0) { entrata[i] = entrata[r]; discesa[i] = discesa[r] + passo(i, r); }
+  }
   const lungoFiume = new Map();
   /** Giro lungo i fiumi tra due celle dello stesso sistema (km). */
   function giro(a, b) {
@@ -553,59 +569,53 @@ function valichiTraValli(seme, cols, rows, quota, mare) {
     }
     return Infinity;
   }
-  /** Passo tra due testate: percorso che minimizza la quota massima, nel corridoio attorno al segmento. */
-  function sella(a, b) {
-    const ax = a % cols, ay = (a / cols) | 0, bx = b % cols, by = (b / cols) | 0;
-    const vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy, C = V.coppia.corridoio;
-    const nel = (x, y) => {
-      let t = ((x - ax) * vx + (y - ay) * vy) / l2; t = t < 0 ? 0 : t > 1 ? 1 : t;
-      const dx = x - ax - vx * t, dy = y - ay - vy * t;
-      return dx * dx + dy * dy <= C * C;
-    };
-    const costo = new Map([[a, quota[a]]]), da = new Map(), coda = [[quota[a], a]];
-    const fatto = new Set();
-    while (coda.length) {
-      let m = 0;
-      for (let k = 1; k < coda.length; k++) if (coda[k][0] < coda[m][0]) m = k;
-      const [c, i] = coda[m]; coda[m] = coda[coda.length - 1]; coda.pop();
-      if (fatto.has(i)) continue;
-      fatto.add(i);
-      if (i === b) break;
-      const x = i % cols, y = (i / cols) | 0;
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+  // Spartiacque tra due rami: per ogni coppia di celle vicine di valli diverse il passaggio costa la più alta delle
+  // due; il valico tra le due valli è il passaggio più basso (a parità, quello con la discesa più corta).
+  const selle = new Map(), bordi = new Map();
+  const vicini = [[1, 0], [0, 1], [1, 1], [-1, 1]];
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const i = y * cols + x;
+      if (entrata[i] < 0 || discesa[i] > V.valle.accesso) continue;
+      for (const [dx, dy] of vicini) {
         const xx = x + dx, yy = y + dy;
-        if ((!dx && !dy) || xx < 0 || yy < 0 || xx >= cols || yy >= rows || !nel(xx, yy)) continue;
+        if (xx < 0 || yy >= rows || xx >= cols) continue;
         const j = yy * cols + xx;
-        if (!terra(j) || fatto.has(j)) continue;
-        const nc = Math.max(c, quota[j]);
-        if (nc < (costo.get(j) ?? Infinity)) { costo.set(j, nc); da.set(j, i); coda.push([nc, j]); }
+        if (entrata[j] < 0 || discesa[j] > V.valle.accesso) continue;
+        const ra = ramo[entrata[i]], rb = ramo[entrata[j]];
+        if (ra === rb) continue;
+        const h = Math.max(quota[i], quota[j]), k = ra < rb ? ra * rami + rb : rb * rami + ra;
+        const lungo = discesa[i] + discesa[j], s = selle.get(k);
+        (bordi.get(k) ?? bordi.set(k, []).get(k)).push(quota[i] >= quota[j] ? i : j);
+        if (!s || h < s.h || (h === s.h && lungo < s.lungo)) {
+          const [p, q] = ra < rb ? [i, j] : [j, i];
+          selle.set(k, { h, lungo, cella: quota[i] >= quota[j] ? i : j, p, q });
+        }
       }
     }
-    if (!fatto.has(b)) return null;
-    let alto = b;
-    for (let i = b; i !== a; i = da.get(i)) if (quota[i] > quota[alto]) alto = i;
-    return { cella: alto, quota: quota[alto] };
   }
-  // Coppie di testate opposte e il loro passo.
   const candidati = [];
-  const D = V.coppia.distanza;
-  for (let p = 0; p < testate.length; p++) {
-    const a = testate[p], ax = a % cols, ay = (a / cols) | 0;
-    for (let q = p + 1; q < testate.length; q++) {
-      const b = testate[q], dx = (b % cols) - ax, dy = ((b / cols) | 0) - ay, d = Math.sqrt(dx * dx + dy * dy);
-      if (d < D[0] || d > D[1]) continue;
-      if (fociDi[a] === fociDi[b] && giro(a, b) < V.coppia.giro) continue;
-      const s = sella(a, b);
-      if (!s) continue;
-      const sopra = s.quota - Math.max(quota[a], quota[b]);
-      if (sopra < V.sella.sopra || s.quota > V.sella.massima) continue;
-      const finale = s.quota <= V.bersaglio ? s.quota : Math.max(V.bersaglio, s.quota - V.scavo);
-      const P = V.peso, salita = finale - Math.min(quota[a], quota[b]);
-      const grandezza = Math.log2(Math.min(grande(a), grande(b)) / soglia);
-      const deviazione = fociDi[a] === fociDi[b] ? giro(a, b) : Infinity;
-      candidati.push({ a, b, sella: s.cella, quotaSella: s.quota, finale, d, deviazione,
-        punteggio: P.quota * finale + P.salita * salita + P.distanza * d - P.grandezza * grandezza });
+  for (const [k, s] of selle) {
+    const a = entrata[s.p], b = entrata[s.q];
+    const dritto = discesa[s.p] + discesa[s.q] + 1;               // km per il valico
+    const deviazione = fociDi[a] === fociDi[b] ? giro(a, b) : Infinity;
+    if (deviazione < V.coppia.giro) continue;                  // lungo i fiumi si fa prima
+    const sopra = s.h - Math.max(quota[a], quota[b]);
+    if (sopra < V.sella.sopra || s.h < V.sella.minima || s.h > V.sella.massima || vicinoMonti[s.cella] > V.monti.entro) continue;
+    let cresta = -Infinity;
+    const sx = s.cella % cols, sy = (s.cella / cols) | 0, R = V.sella.raggio;
+    for (const j of bordi.get(k)) {
+      if (Math.hypot((j % cols) - sx, ((j / cols) | 0) - sy) <= R && quota[j] > cresta) cresta = quota[j];
     }
+    const finale = s.h <= V.bersaglio ? s.h : Math.max(V.bersaglio, s.h - V.scavo);
+    if (cresta - finale < V.sella.cresta) continue;           // dopo lo scavo: un passo alto diventa un intaglio
+    const pendenza = Math.max((finale - quota[a]) / (1000 * Math.max(1, discesa[s.p])),
+      (finale - quota[b]) / (1000 * Math.max(1, discesa[s.q])));
+    const grandezza = Math.log2(Math.min(bacino[a], bacino[b]) / soglia);
+    const risparmio = Math.log2(Math.min(deviazione, 200) / dritto);
+    const P = V.peso;
+    candidati.push({ a, b, p: s.p, q: s.q, sella: s.cella, quotaSella: s.h, finale, d: dritto, deviazione,
+      punteggio: P.salita * (finale - Math.max(quota[a], quota[b])) + P.pendenza * pendenza - P.grandezza * grandezza - P.risparmio * risparmio });
   }
   candidati.sort((u, v) => u.punteggio - v.punteggio || u.sella - v.sella);
   const scelti = [];
@@ -614,11 +624,13 @@ function valichiTraValli(seme, cols, rows, quota, mare) {
     if (scelti.some((v) => Math.hypot(v.x - x, v.y - y) < V.distanza)) continue;
     scelti.push({ x, y, c });
   }
-  // Scavo: un intaglio morbido attorno al passo, dolce lungo la direzione tra le testate, che sale ai lati.
+  // Scavo: un intaglio morbido attorno al passo, dolce lungo la direzione delle due discese, che sale ai lati.
   const I = V.intaglio;
+  const giu = (i, k) => { for (; k > 0 && ricevente[i] >= 0 && terra(ricevente[i]); k--) i = ricevente[i]; return i; };
   const valichi = scelti.map(({ x, y, c }, id) => {
     if (c.finale < c.quotaSella) {
-      const ax = c.a % cols, ay = (c.a / cols) | 0, bx = c.b % cols, by = (c.b / cols) | 0;
+      const A = giu(c.p, 3), B = giu(c.q, 3);
+      const ax = A % cols, ay = (A / cols) | 0, bx = B % cols, by = (B / cols) | 0;
       const l = Math.hypot(bx - ax, by - ay) || 1, ux = (bx - ax) / l, uy = (by - ay) / l;
       const sx = Math.floor(x), sy = Math.floor(y);
       for (let yy = Math.max(0, sy - I.raggio); yy <= Math.min(rows - 1, sy + I.raggio); yy++) {
@@ -631,7 +643,9 @@ function valichiTraValli(seme, cols, rows, quota, mare) {
         }
       }
     }
-    return { id, x, y, quota: c.finale, scavo: c.quotaSella - c.finale, distanza: c.d, deviazione: c.deviazione,
+    // lati: due punti ~2 km giù per le due discese (js/mondo/luoghi.js vi cerca la sella sul rilievo fine).
+    const lati = [giu(c.p, 2), giu(c.q, 2)].map((t) => ({ x: (t % cols) + 0.5, y: ((t / cols) | 0) + 0.5 }));
+    return { id, x, y, quota: c.finale, scavo: c.quotaSella - c.finale, distanza: c.d, deviazione: c.deviazione, lati,
       valli: [c.a, c.b].map((t) => ({ x: (t % cols) + 0.5, y: ((t / cols) | 0) + 0.5, quota: quota[t] })) };
   });
   return valichi;

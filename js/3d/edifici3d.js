@@ -276,6 +276,13 @@ function esaedro(sopra, sotto) {
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
+/** Costruzione a pezzi (M7 passo 9): un pezzo dura al più ~PEZZO_MS ms prima di cedere il passo (yield). */
+export const PEZZO_MS = 3;
+/** Porta a termine un generatore «a pezzi» in un colpo e ne restituisce il risultato. */
+export function completaPezzi(gen) {
+  for (;;) { const r = gen.next(); if (r.done) return r.value; }
+}
+
 /**
  * Crea un kit di edifici.
  * @param {object} o
@@ -765,7 +772,8 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
   }
 
   /** Chiude il kit: oggetti da disegnare, collisioni, sagome per la camera, misure. */
-  function chiudi() {
+  /** Chiude il kit: unisce i volumi, crea dettagli, torce e sagome. Generatore: cede il passo tra un pezzo e l'altro. */
+  function* chiudiAPezzi() {
     const object = new THREE.Group();
     object.name = nome;
     const solidi = [];
@@ -778,6 +786,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
       const m = new THREE.Mesh(geo, mat[k]);
       m.name = `${nome}-${k}`;
       object.add(m);
+      yield;
     }
     if (piedi.length) {                                  // fasce di terra al piede degli edifici
       const pos = [], uv = [], idx = [];
@@ -814,6 +823,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
       m.name = `${nome}-piede`;
       object.add(m);
     }
+    yield;
     {
       const geo = unisci(sagome);                         // invisibile: solo per il raycast della camera
       if (geo) {
@@ -880,6 +890,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
       lod.addLevel(g, 0);
       lod.addLevel(new THREE.Object3D(), DETTAGLIO.lontano);
       object.add(lod);
+      yield;
     }
     // Fiamme (coni a istanze) e aloni (punti) delle torce: due oggetti per tutto il kit.
     let fiamme = null, aloni = null;
@@ -935,7 +946,8 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     return { object, solidi, scatole, edifici, sorgenti, aggiornaLuci, misure: { case: case_, edifici: edifici.length, istanze, zone: zone.size, chiamate, triangoli } };
   }
 
-  return { casa, edificio, pozzo, banco, loggia, corpo, chiudi, rnd, rett, pagliaio, catasta, botte, torcia };
+  const chiudi = () => completaPezzi(chiudiAPezzi());
+  return { casa, edificio, pozzo, banco, loggia, corpo, chiudi, chiudiAPezzi, rnd, rett, pagliaio, catasta, botte, torcia };
 }
 
 // ─── Lotti ────────────────────────────────────────────────────────────────

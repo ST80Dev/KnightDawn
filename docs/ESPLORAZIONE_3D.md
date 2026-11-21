@@ -979,6 +979,21 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
         1799 m verso (362, 104), vicino alla seconda. Con lo zoccolo il rilievo cambia, quindi le sorgenti
         indicate sullo screenshot non sono più le stesse. Limite: le testate di questi due valichi restano
         basse (265–404 m e 219–869 m), quindi la salita all'ultimo tratto è ancora ripida.
+   - *Valichi come i passi dolomitici* (segnalato dall'utente: valichi in cima a cucuzzoli isolati, con la strada
+     che ci sale per niente). Misurato sul rilievo delle Scene (seme 395728): due valichi su quattro erano cime
+     (il terreno scendeva di oltre 150 m in 10–12 direzioni su 16). Causa: il passo era il punto più alto di un
+     percorso «minimax» in un corridoio di 3 km tra due testate; se la via bassa passava fuori dal corridoio,
+     il punto cadeva su un rilievo. Nuovo calcolo (`valichiTraValli`, `VERSIONE_GENERATORE` + `valichi-2`):
+     ogni cella appartiene alla valle in cui scende (il ramo di fiume tra due confluenze, bacino ≥ 40 km², entro
+     10 km di discesa); tra due valli confinanti il valico è il punto più basso del loro spartiacque. Condizioni:
+     giro lungo i fiumi ≥ 20 km (o sistemi diversi), passo 250 m sopra le due valli, tra 900 e 3000 m, entro
+     8 km da terra oltre 1700 m (una sella in collina non è un valico), cresta ai lati almeno 250 m sopra il passo
+     scavato entro 4 km. Punteggio: salita dalla valle più alta, pendenza della salita più ripida, grandezza
+     delle valli, strada risparmiata. Poi `luoghi.js` (`sellaFine`) cerca la sella sul rilievo delle Scene, su
+     una griglia di 125 m tra due punti giù per le due discese. 10 semi: 1–5 valichi (881–2526 m), nessun
+     cucuzzolo, 14 su 24 selle simmetriche (scende da due lati opposti e sale dagli altri due); gli altri sono
+     colli asimmetrici sul fianco di un massiccio o varchi dove si toccano tre valli. Strade: ogni valico è
+     collegato alle sue valli; regole del generatore tutte superate, tempi invariati.
    - *Valli più alte e torrenti* (richiesta dell'utente: fondovalle a 400 m sotto montagne di 2000 m sono rari;
      le sorgenti partono quasi dalle cime). Misurato: le «sorgenti» visibili erano solo i punti dove il bacino
      arriva a 150 km² (già un fiume); i torrenti esistevano nel drenaggio ma non si disegnavano. Due cambi
@@ -1323,9 +1338,21 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
    più vicine al cavaliere entro 70 m, con tremolio; numero fisso, quindi nessuna ricompilazione degli shader.
    Il buio viene da `aggiornaLuci(t, buio, quota)` di rocca, borgo e campagna (col meteo il buio lo darà il cielo).
    Prova (headless, seme 12345, ore 21): finestre e torce accese, porta del borgo illuminata; cammino 34/34.
-   Da misurare sulla scheda dell'utente: FPS di notte nel borgo. *Persone:* modelli della sessione M1
-   (`js/3d/persone3d.js`, `creaPersona({ ruolo, colori, seme }) → { object, update(dt, stato) }`); qui posti,
-   percorsi e un segnaposto con la stessa interfaccia.
+   Da misurare sulla scheda dell'utente: FPS di notte nel borgo.
+   **Stato delle persone: fatto con segnaposto, da provare dall'utente.** File nuovi approvati dall'utente:
+   `js/3d/abitanti3d.js` (questa sessione: posti, percorsi, collisioni, «E: parla») e `js/3d/persone3d.js` (sessione
+   M1: i modelli, `creaPersona({ ruolo, colori, seme }) → { object, update(dt, { modo, velocita }) }`); finché non
+   c'è, un segnaposto a capsula con la stessa interfaccia. *Posti:* accanto alla porta (non davanti) di taverna
+   (oste), fabbro, stalla (stalliere), guaritore, cappella e chiesa (chierico), sala d'armi (maestro d'armi), armeria
+   (armaiolo), loggia (mercante); due guardie fuori dalla porta del borgo, una fuori da quella della rocca.
+   *Popolani* (3 / 6 / 10 per borgo minore / casata / maggiore; popolani, popolane, bambini) camminano a tratti lungo
+   le strade del borgo, un po' fuori mezzeria, con soste; si fermano se davanti c'è qualcuno o il cavaliere. Chi sta
+   fermo si volta verso il cavaliere che arriva. Di notte restano fuori solo guardie e oste. Oltre 110 m non si
+   disegnano né si muovono. Il cavaliere non le attraversa (ostacolo come mura e ponti). *«E: parla»*: entro 2,6 m e
+   rivolti verso la persona (~45°) compare «E: parla — L'oste» e si apre una carta con una riga segnaposto; la
+   persona ha la precedenza sulla porta. Prova (headless, seme 12345): 16 persone, i 6 popolani camminano 60 s
+   senza mai scendere sotto 0,84 m tra loro; «parla» con l'oste; cammino 34/34 e porte 8/8 con le persone in scena.
+   Da fare dopo: campagna (contadini), il simbolo sopra chi ha qualcosa da dire, i modelli di M1.
 8. **Da lontano.** Sagoma negli anelli, luci lontane. *Prova:* dal fondovalle a 2–5 km la rocca si
    riconosce di giorno e di notte; nessuna rocca «doppia» tra modello e sagoma; FPS invariati fuori dal sito.
    **Fatto (sessione M6, da provare dall'utente):** `sagomeLuoghi` in `orizzonte.js`. Per i luoghi che la Scena non
@@ -1688,31 +1715,27 @@ Deserto e steppa: arbusti secchi radi, sassi; niente piante esotiche (stile medi
   attraversano (domanda 5).
 - Camera: non urta la vegetazione (nel bosco salterebbe di continuo) [Probabile]; se una chioma si mette tra camera e
   cavaliere si accetta, o si rimpicciolisce l'albero più vicino alla camera (si decide guardando, passo 3).
-  **Deciso con l'utente (visuale pulita):** nel bosco tronchi e chiome coprivano quasi sempre il cavaliere; ora si
-  dirada «a retino» solo ciò che lo copre davvero (`conVisuale` in `vegetazione3d.js`). Prima versione: spariva tutto
-  ciò che era più vicino alla camera del cavaliere; l'utente ha chiesto di lasciare ciò che non copre (siepi, alberi e
-  muretti di lato a 3–4 m sparivano senza motivo). Ora ogni oggetto è approssimato da volumi nel suo sistema (tronco +
-  4 fasce di chioma: cilindri verticali, scatole per le fasce allungate come i muretti) e lo shader controlla se i
-  segmenti camera → piedi, busto e testa del cavaliere li attraversano, con tre margini (0,1–0,6 m) per un passaggio
-  graduale; i segmenti si fermano 0,4 m prima del cavaliere (il tronco contro cui cammina resta). Calcolo solo per gli
-  oggetti vicini alla linea di vista. Erba e felci solo a ridosso della camera (1,6 m). Trama 4×4 fissa sullo schermo
-  con `discard`, niente trasparenze ordinate; gli oggetti del tutto diradati non si disegnano. Spento con la camera
-  libera (C). Le ombre finte a terra restano. Valori provabili da console: `kd.vegetazione.cfgVisuale`. [Probabile] il
-  `discard` toglie al GPU il test di profondità anticipato sulla vegetazione: costo da verificare con F3 nel bosco
-  fitto.
-  **Passaggi graduali tra i livelli (richiesta dell'utente, nov. 2026):** camminando alberi, massi e altri oggetti
-  «apparivano dal nulla»: oltre l'ultima distanza del tipo sparivano di colpo, tra un livello e l'altro il modello
-  cambiava di colpo, le sagome diradate oltre 300 m spuntavano, e tutto a gruppi ogni 12 m di cammino. Ora attorno a
-  ogni soglia c'è una fascia (12 % della distanza, 6–30 m) in cui l'oggetto si dissolve a retino secondo la distanza
-  dalla camera, nello shader (`PASSAGGI`, `kdLivello`): il livello che esce e quello che entra hanno trame
-  complementari (livelli pari diritta, dispari rovesciata), nessun pixel doppio; oltre l'ultimo livello svanisce; le
-  sagome diradate compaiono a puntini (soglia per albero, attributo `aPassaggio`). La regola del bordo del blocco
-  (sagome già da 120 m) è applicata uguale in JS e nello shader. Ogni livello si assegna con 6,5 m di margine, la
-  ridistribuzione ogni 5 m (era 12). Misure in headless nello stesso punto (seme 570549, blocco 97,00/80,64 km, bosco):
-  istanze 25 300 contro 26 900, triangoli elaborati ~350 mila contro ~296 mila (+18 %, quasi tutti vertici del
-  margine, del tutto dissolti, che non arrivano ai pixel); ridistribuzione completa 2,6–7,4 ms a pezzi in entrambe le
-  versioni. [Probabile] costo GPU piccolo (il costo della vegetazione segue i pixel, PRESTAZIONI.md): da confermare con
-  il percorso di prova nel bosco fitto.
+  **Deciso con l'utente (visuale pulita):** nel bosco tronchi e chiome coprivano quasi sempre il cavaliere; ora sparisce
+  solo ciò che lo copre davvero (`conVisuale` in `vegetazione3d.js`). Ogni oggetto è approssimato da volumi nel suo
+  sistema (tronco + 4 fasce di chioma: cilindri verticali, scatole per le fasce allungate come i muretti) e lo shader
+  controlla se i segmenti camera → piedi, busto e testa del cavaliere li attraversano (margine 0,35 m); i segmenti si
+  fermano 0,4 m prima del cavaliere (il tronco contro cui cammina resta). Calcolo solo per gli oggetti vicini alla
+  linea di vista. Storia delle richieste: prima spariva tutto ciò che era più vicino alla camera del cavaliere (anche
+  siepi e muretti di lato: tolto); poi la dissolvenza «a retino» sembrava sfocata, non coerente con la grafica: ora
+  l'oggetto **sparisce netto** (vertici fuori dallo schermo), senza trasparenze né `discard`. Erba e felci a ridosso
+  della camera (1,6 m) si rimpiccioliscono. Spento con la camera libera (C). Le ombre finte a terra restano. Valori
+  provabili da console: `kd.vegetazione.cfgVisuale` (margine, arretramento, raggio di erba e felci).
+  **Comparsa con la distanza (richieste dell'utente, nov. 2026):** camminando alberi, massi e altri oggetti «apparivano
+  dal nulla». Una prima versione li dissolveva a retino alle soglie di distanza (anche tra i modelli dello stesso
+  oggetto, disegnati due volte nella fascia: +41 % di triangoli nel bosco fitto) e l'utente l'ha trovata sfocata e
+  incoerente. Ora gli oggetti con una distanza massima (cespugli, sassi, siepi, muretti, tronchi caduti…) **crescono**
+  dal suolo negli ultimi metri prima di quella distanza (12 % della distanza, 6–30 m; `CRESCITA`, `kdCresci`), solidi;
+  le sagome diradate oltre 300 m crescono quando la densità supera la loro soglia (attributo `aSoglia`). Il passaggio tra
+  i modelli dello stesso oggetto (vicino → medio → sagoma) è istantaneo come in origine. Il livello più lontano si
+  assegna fino a 13 m oltre la sua distanza (lì misura zero); ridistribuzione ogni 12 m come prima. Misura in headless
+  (seme 570549, blocco 97,00/80,64 km): ~355 mila triangoli elaborati contro ~419 mila della versione a retino, nessun
+  errore. [Probabile] nessun costo GPU in più rispetto a prima delle due richieste (niente doppio disegno, niente
+  `discard`): da confermare con il percorso di prova nel bosco fitto.
 
 **8. Bordo del blocco e orizzonte.** Nell'orizzonte il bosco resta un colore (vincolo). [Probabile] con la nebbia
 solo dai 10 km, dal blocco il bosco «finisce» al bordo e oltre resta il colore piatto: si vedrà, soprattutto
@@ -2391,6 +2414,22 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
    e segmentato): tronco in un solo tornito modellato (groppa, spalle, garrese, ventre) al posto di cinque masse
    sovrapposte, più stretto; base del collo da 0,29 a 0,215 m; collo prolungato e cranio esteso dietro la nuca, così
    testa e collo si chiudono; più segmenti su tronco, collo, testa e gambe; gambe un poco più sottili.
+   *Seconda correzione* (dopo la prova su Pages: «ancora troppo giocattolo di legno, corpo tozzo, collo e testa con
+   angolazione fissa a 45°»): niente più solidi torniti dritti. Ogni parte è un **tubo a sezioni ovali lungo una curva**
+   (`tubo` in `cavallo3d.js`), con semilarghezza e due semialtezze diverse sopra e sotto: tronco più asciutto (largo
+   ~0,45 m, ventre a ~0,77 m da terra) con garrese e groppa; **collo ad arco** (da ~36° alla base a ~63° alla nuca,
+   cresta più alta della gola); **testa a ~60°** con ganasce, fronte piatta e muso; gambe con avambraccio e gamba
+   muscolosi e tendini dietro lo stinco, pastorale inclinato; coda che esce indietro e poi scende. Ombreggiatura finta
+   nei colori dei vertici (facce rivolte in basso più scure). 5.5 mila triangoli, stessi 12 snodi e 15 chiamate.
+   *Naturalezza invece di simmetria* (richiesta dell'utente): rilievi anatomici spostando i vertici lungo la normale
+   (spalla, scapola, punta della spalla, pettorali, tricipite, incavo dietro il gomito, fianco, punta dell'anca, groppa,
+   natiche, costole appena accennate), con ampiezze diverse a sinistra e a destra; rumore liscio sulla superficie e
+   sul colore del pelo; da fermo **posteriore destro in riposo** sulla punta dello zoccolo con l'anca che cede da quel
+   lato, anteriore sinistro un poco avanti, collo più basso e testa girata e inclinata verso il cavaliere; orecchie
+   diverse (una avanti, una di lato); criniera a ciocche che ricade a destra; coda che piega di lato. 5.536 triangoli.
+   Limite che resta [Certo]: ogni snodo è un pezzo rigido, quindi dove la gamba entra nel corpo si vede l'attacco.
+   Una pelle continua chiede una `SkinnedMesh` (ossa che deformano un'unica superficie). **Decisione dell'utente
+   (novembre 2026): per ora restano i pezzi rigidi**; la pelle unica si riconsidera più avanti.
 2. **Segue a piedi.** Tracce, distanza, andature animate (passo, trotto, galoppo), sosta e brucare, attesa se bloccato
    (bosco fitto, acqua, pendii), avviso «rimasto indietro», fischio con F, ostacolo per il cavaliere. *Prova:* correre e
    scattare nel bosco, guadare, salire un pendio ripido, fischiare da lontano.
