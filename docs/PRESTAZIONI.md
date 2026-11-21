@@ -190,6 +190,19 @@ Scheda Intel UHD 730 (il browser Brave nasconde il nome), 1920×935, seme 570549
 | 21/11/2026 | bosco fitto, **profondità invertita**, MSAA | **71,7** | 33,2 | 13,3 | 4,4 | 8,8 | 0,0 | 0,1 | 0,3 | 127 | 1253 mila |
 | 21/11/2026 | bosco fitto, profondità logaritmica, senza MSAA | 57,3 | 25,0 | 13,7 | 3,3 | 9,5 | 0,0 | 0,1 | 0,6 | 127 | 1234 mila |
 | 21/11/2026 | bosco fitto, main dopo #130–#132 (latifoglie leggere, vegetazione a pezzi, profondità invertita) | **83,1** | **49,8** | **10,9** | 4,4 | 6,5 | 0,0 | 0,1 | 0,3 | 131 | 1000 mila |
+| 21/11/2026 | **nuova base** partenza (rocca), main dopo #135–#140 (meno mare, borgo, campi, curvatura, foschia) | 99,2 ¹ | 98,0 ¹ | 7,2 | 3,8 | 2,6 | 0,3 | 0,1 | 0,4 | 272 | 708 mila |
+| 21/11/2026 | **nuova base** bosco fitto, stessa versione | 77,6 | 49,8 | 11,3 | 3,8 | **7,2** ⚠ | 0,0 | 0,1 | 0,2 | 128 | 1085 mila |
+
+Nuova base (21/11/2026, qualità alta = media sullo schermo di riferimento al 100 %). Le Carte sono rigenerate (#135):
+la scena della partenza e il bosco non sono gli stessi di prima, quindi il confronto con le righe precedenti è solo
+indicativo. ¹ Alla partenza gli FPS sono fermi alla frequenza dello schermo (~100 Hz): conta la GPU, 7,2 ms.
+- Bosco fitto: vegetazione 7,2 ms, **oltre il budget di 6,5** (sagome lontane 0,6 · sagome 1,6 · erba 0,1 · resto 4,9;
+  latifoglie vicine ~4400 istanze, 300 mila triangoli). Totale ancora entro il budget (11,3 su 15,5). Segnalato alla
+  sessione Vegetazione.
+- Partenza: CPU massimo 14,3 ms, quasi tutto «vegetazione: aggiorna» (massimo 13,5, 1% peggiori 4,4); prima il massimo
+  del processore era 7,2 ms. Non perde fotogrammi (peggiore 20,2 ms) ma va riportato sotto ~8 ms prima di borgo
+  abitato e personaggi. Segnalato alla sessione Vegetazione.
+- Terreno 3,8 ms in entrambi i punti (era 4,4–5,1).
 
 Ultima riga (bosco fitto, il caso peggiore): obiettivo raggiunto (83,1 FPS, 1% peggiori 49,8, fotogramma peggiore
 20,2 ms); scatti risolti (CPU massimo 7,2 ms, nessun compito lungo; prima il pannello F3 ricostruito a ogni fotogramma e la
