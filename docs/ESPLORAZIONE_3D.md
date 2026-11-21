@@ -1446,6 +1446,87 @@ siti validi su 30 semi su 30 (verifica automatica). Con il passo 9: dal borgo si
 
 - **Torri di sentinella dei valichi**: in M7 o con la milestone dei luoghi (oggi fuori da M7)?
 
+## M8 — Luoghi del mondo
+
+> **Stato: piano approvato dall'utente (21 novembre 2026)** con le decisioni seguenti:
+> 1. file nuovi approvati: `js/mondo/siti.js`, `js/3d/villaggio3d.js`, `js/3d/rovine3d.js`;
+> 2. monasteri (4–6) e città (2–4) **ricavati da una parte delle rocche** attuali: i luoghi maggiori restano 30–40;
+>    il percorso di prova va ricontrollato (la rocca del borgo di prova non deve cambiare tipo);
+> 3. quantità della tabella, con un tetto rigido di **+1,5 s** sul tempo di generazione: se si sfora si riducono prima
+>    i villaggi (verso 60) e le strade vanno solo ai villaggi;
+> 4. ordine: M8 passo 1 subito; poi M7 passo 9 (blocco che segue il cavaliere); poi M8 passi 2 e seguenti. I passi
+>    6–8 di M7 procedono in parallelo.
+
+Decisione dell'utente (novembre 2026): M8 comincia **prima di chiudere M7** (deroga alla regola 4; M7 resta ai passi
+6–9: porte e Carta del cronista, luci e persone, da lontano, blocco che segue il cavaliere). Oggi nel mondo ci sono
+solo le rocche con borgo (27–36), le case di campagna, ponti e guadi: tra un castello e l'altro (~17 km) il mondo è
+vuoto. Fazioni e nomi restano fuori da M8 (milestone a sé, «fazioni e nomi»).
+
+### Quanti luoghi
+
+[Certo] Il GDD (§2, *Dimensioni e densità*) conta tre gerarchie **separate**: luoghi maggiori 30–40 (castelli, città,
+monasteri), villaggi 60–100, luoghi speciali 60–100. Quindi villaggi e luoghi speciali **si aggiungono** ai 30–40,
+non ne fanno parte. Con ~10.000 km² di terra per mondo (tre semi: 9.800–10.000 km²): oggi un luogo ogni ~300 km²
+(uno ogni ~17 km); con M8 ~170–220 luoghi, uno ogni ~50 km² (**uno ogni ~7 km**: da qualunque punto un luogo entro
+3–4 km, ~40–60 minuti di cammino di gioco). [Probabile] È la densità giusta per non avere vuoti senza riempire il mondo
+di luoghi generici.
+
+| Tipo | Per mondo | Dove | A cosa serve (GDD, EARLY_GAME, EVENTS) |
+|---|---|---|---|
+| **Castelli** con borgo | ~28 (dai 30–40) | come oggi | corte, fazioni, mercato, Veglia |
+| **Monasteri / abbazie** | 4–6 (dai 30–40) | collina, bosco, monte, isolati | Volontà, guarigione, lore; cripta → dungeon |
+| **Città** | 2–4 (dai 30–40) | pianura, fiumi, costa (porto) | commercio, notizie, contratti (ultimo passo) |
+| **Villaggi** | 60–80 (frazioni di 6–10 case, villaggi di 12–20 con pieve e locanda) | vicino all'acqua, pendii dolci, sulle strade | locanda (Forza), voci, missioni locali; la Veglia («il villaggio vicino») |
+| **Rovine** (castello diroccato, torre crollata, chiesa sventrata, villaggio abbandonato) | 15–20 | ovunque, anche in alto | esplorazione, dungeon, covi |
+| **Abbandonati** (torre isolata, maniero decaduto, casale) | 10–15 | margini, colline | candidati **covo** (GDD §3) |
+| **Grotte** | 10–15 | monti, rocce, valli strette | dungeon, tane, covo |
+| **Eremi** | 6–10 | monte, bosco | Volontà, apprendisti, lore |
+| **Luoghi del fantastico** (cerchio di pietre, tumulo, albero sacro, rovine di un'altra epoca) | 8–12 | alture, brughiere, boschi | «creature, maledizioni, luoghi leggendari» (GDD §2 *Scoperta*): il tocco fantasy |
+| **Accampamenti** (briganti, mercanti, soldati) | 8–12 | boschi lontani dalle rocche; lungo le strade | incontri, combattimenti, notizie |
+| **Valichi**: torre di sentinella, ospizio | come i valichi (dato già pronto: sentinella all'85 %) | valichi | presidio, pedaggio, neve (GDD §2) |
+| **Ovili e pastori** | 1–2 entro 2–4 km da ogni castello, poi sparsi | pascoli | la Veglia («scacciare i lupi dall'ovile») |
+
+### Passi (ciascuno provato nel browser, una PR per passo)
+
+1. **Siti sulla Carta.** Tutti i tipi scelti nel Worker con le regole della tabella e distanze minime per tipo; i
+   villaggi diventano nodi delle strade (carrarecce); segni sulla Carta e «Vai a»; verifica automatica (30 semi).
+   *Prova:* distribuzione credibile, nessun vuoto più largo di ~10 km, tempo di generazione ≤ +1,5 s.
+2. **Villaggi e ovili 3D** (kit di `edifici3d.js`): case rurali attorno a uno slargo o lungo la strada, pieve,
+   locanda, fabbro, pozzo, forno, mulino sul fiume, orti e palizzata a volte; ovile con recinto. Spianata leggera
+   (terrapieno come i borghi, senza mura).
+3. **Monasteri ed eremi:** chiesa, chiostro, foresteria, infermeria, biblioteca, muro basso, orti; eremo con cappella.
+4. **Rovine e luoghi abbandonati:** mura e torri spezzate (dalla rocca, tagliate e senza tetti), macerie, edera;
+   torre, maniero e casale abbandonati come candidati covo.
+5. **Grotte e luoghi del fantastico:** imbocco nella roccia, cerchio di pietre, tumulo, albero sacro, rovine antiche.
+6. **Accampamenti:** tende, fuoco, carri, palizzata leggera.
+7. **Valichi:** torri di sentinella e ospizi.
+8. **Città** (2–4, dai 30–40) e porti: borgo grande con cattedrale e piazza.
+
+Le porte degli edifici nominati (locanda, pieve, chiostro…) avranno il punto «porta» come nel borgo, per il passo 6
+di M7 (Carta del cronista).
+
+### Decisioni tecniche
+
+- **File nuovi** (approvati, regola 2): `js/mondo/siti.js` (scelta dei siti di villaggi e luoghi speciali, senza
+  grafica, nel Worker come `luoghi.js`); `js/3d/villaggio3d.js` (villaggi, ovili, monasteri, eremi);
+  `js/3d/rovine3d.js` (rovine, abbandonati, grotte, luoghi del fantastico, accampamenti, sentinelle). Le città
+  riusano `borgo3d.js` e `rocca3d.js`.
+- **Terreno:** villaggi e monasteri con un terrapieno leggero (stesso meccanismo di `spianaLuoghi`, pezzi piccoli);
+  rovine, grotte e luoghi del fantastico sul terreno com'è. `VERSIONE_GENERATORE` a ogni cambio.
+- **Prestazioni** (`docs/PRESTAZIONI.md`, passo 6): un villaggio ≤ 20 chiamate e ≤ 30.000 triangoli, un luogo
+  speciale ≤ 8 chiamate; si costruiscono solo i luoghi nel blocco e vicini. [Probabile] Il caso peggiore è un blocco
+  con castello, due villaggi e un monastero: va misurato al percorso di prova.
+- **Classi delle rocche:** i 30–40 luoghi maggiori restano tali; una parte (4–6 monasteri, 2–4 città) cambia tipo,
+  scelta dal punteggio e dal carattere del sito (monasteri isolati e in alto, città in pianura o sulla costa).
+
+### Rischi
+
+- [Probabile] Il tempo di generazione: oggi luoghi e strade ~2 s; ~200 siti in più con le loro verifiche e le strade
+  verso i villaggi possono raddoppiarlo. Rimedio: verifiche leggere per i luoghi speciali, strade solo verso i
+  villaggi.
+- [Ipotesi] Troppi luoghi vicini a un castello affollano la Scena: distanza minima dai castelli (~2,5 km per i
+  villaggi, ~1,5 km per gli altri).
+
 ## Vegetazione e oggetti sparsi (in parallelo a M7)
 
 > Autorizzata dall'utente in parallelo a M7 (deroga alla regola 4 di `CLAUDE.md`). Design di partenza: M4,
