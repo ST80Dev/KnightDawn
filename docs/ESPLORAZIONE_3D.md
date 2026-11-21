@@ -1425,6 +1425,34 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
      mai un terzo in anticipo. Orizzonte: spostando il centro di ~1 km le fasce degli anelli cambiano posto; se i
      rilievi vicini «saltano» si rifà solo l'anello 1 e si spostano gli altri. La tappa 1 (pausa ~1,5 s) solo come prova,
      non a lungo in `main`. Un comando per forzare un cambio di blocco da codice (in `kd`) per il percorso di prova.
+10. **Corte del signore** (richiesta dell'utente, nov. 2026: «uno degli aspetti più belli e importanti dovrebbe essere
+    l'interazione con i soggetti delle casate padroni dei castelli»; manca la dimora dei signori, la rocca è piccola).
+    **Piano approvato dall'utente** («intanto rocche più grandi, ben articolate almeno graficamente, così facciamo spazio
+    all'eventuale interazione vera e propria con i signori»; «in M7 solo i luoghi»; «agli interni ci penseremo dopo»).
+    - *Due corti nella rocca*: **corte d'armi** (quella di oggi: mastio, sala d'armi, armeria, guardie, porta della
+      rocca) e **corte del signore**, oltre un muro interno basso (~5 m) con una porta ad arco, verso il retro, nel lato
+      più alto e riparato. Mastio sul confine tra le due (ultimo rifugio, come nei castelli dell'epoca).
+    - *Nella corte del signore*: **palazzo** (dimora: 2 piani nella rocca minore, 3 in casata e maggiore; piano nobile
+      con finestre ampie bifore, scala esterna in pietra o loggia al primo piano, stemma della casata sopra la porta,
+      camino grande); **giardino murato** (*hortus conclusus*: aiuole rialzate in quadri, vialetti di ghiaia, pergolato,
+      vasca o fontana al centro, 2–4 alberi da frutto); **pertinenze**: cucina con forno (comignolo grande, legna),
+      cantina e dispensa (porta bassa), colombaia (torretta), scuderia del signore, orto; **cappella** e **pozzo** qui
+      invece che nella corte d'armi. Nella sede maggiore anche un loggiato sul giardino.
+    - *Misure* (cinta della rocca; piani in `js/mondo/luoghi.js`, `CLASSI.*.rocca` +8–14 m per lato): minore 34×30 →
+      ~48×40 m, casata 46×40 → ~62×52, maggiore 58×50 → ~78×66. Il borgo non cambia. Cambiano le Carte generate:
+      `VERSIONE_GENERATORE`; verifica dei siti (`verifica.js`) su 30 semi; le sagome da lontano (sessione M6) leggono
+      già `MISURE_ROCCA` e i piani.
+    - *Fuori da M7* (decisioni dell'utente): **persone della casata e interazione** (signore, signora, castellano…,
+      «chiedi udienza», il contenuto con la milestone «fazioni e nomi»): i luoghi del passo 10 lasciano loro lo spazio
+      (sala grande, giardino, davanti al palazzo); **interni 3D** rinviati. Il palazzo ha la sua porta come gli altri
+      edifici nominati (Carta del cronista segnaposto).
+    - *Prestazioni*: palazzo e pertinenze nel kit di edifici (volumi uniti per materiale, nessun materiale nuovo salvo il
+      verde del giardino); giardino a istanze (aiuole, siepi, alberi). Budget della rocca invariato: ≤ 20 chiamate di
+      disegno con le pertinenze, da misurare sul percorso di prova.
+    - *Passi*: (a) piani più grandi e muro interno con la porta, verifica dei siti; (b) palazzo; (c) giardino e
+      pertinenze. Una PR per passo. *Prova:* cammino porta del borgo →
+      corte d'armi → corte del signore su tutte le rocche di due semi; porte e udienza raggiungibili; FPS sul percorso
+      di prova.
 
 ### Accettazione
 
@@ -2328,6 +2356,16 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
     mulattiere, 1,2 per i sentieri). Pendenza di traverso del terreno disegnato sulla carreggiata, mediana: seme 570549
     da 18 % a 0,8 %, 855588 (molti tornanti) da 21 % a 11,5 %, 48213 da 2,1 % a 0,3 %. `generaScena` dà anche
     `acqua.quoteStrade` (quota della strada per punto) per il nastro piano in larghezza.
+  - *Ancora carreggiate inclinate di traverso* (seconda segnalazione dell'utente, vicino a una rocca): misurato che
+    la quota vera aveva già il ripiano, ma i triangoli del blocco (un vertice ogni 7,8 m) sotto la carreggiata
+    andavano da un vertice sul ripiano a uno sulla scarpata (818 punti su 1106 oltre il 10 %, seme 570549). Ora
+    `spianaSottoStrade` (`generaScena`) dà la quota della strada ai vertici delle celle che la carreggiata tocca
+    (strade maestre, carrarecce e mulattiere): un ripiano di una cella sotto la strada, la scarpata accanto. Esclusi il
+    bordo del blocco, l'acqua, i piani dei luoghi, la striscia della rampa fuori dalle porte e i vertici che si
+    sposterebbero più di 3 m (l'altro lato di un tornante). Pendenza di traverso sotto la carreggiata, 90° percentile
+    lontano dai luoghi: seme 570549 da 11 % a 2,2 %, 855588 da 6,6 % a 1,5 %, 48213 da 6,2 % a 1,3 %; vicino ai luoghi
+    (entro 80 m dai piani) da 20 % a 14 %, 32 % a 28 %, 16,5 % a 14 %: lì restano i tornanti sulle scarpate dei
+    terrapieni e i tratti davanti alle porte.
 - **Vegetazione**: `distanzaStrada(carta, x, z)` è pronta; l'esclusione degli alberi dalla carreggiata è della
   sessione della vegetazione (passo 3 di questo piano).
 
