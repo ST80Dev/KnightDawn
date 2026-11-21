@@ -184,6 +184,10 @@ export const VEGETAZIONE = {
   versante: { pendenza: [15, 22], troppo: [34, 40], lunghezza: 350, soglia: [-0.05, 0.2], umidita: [0.3, 0.45] },
   // Alberi isolati veri (deciso con l'utente): uno ogni ~100–150 m nei prati.
   isolati: { base: 0.0012, umidita: 0.0025 },
+  // Massi erratici: pochi massi molto grandi (4–8 m) isolati nei prati, segni nel paesaggio (una cella di `passo` m
+  // ogni tanto). Alberi lungo le strade: a tratti (rumore su `lunghezza` m), a `banda` m dal bordo della carreggiata.
+  erratici: { passo: 220, probabilita: 0.3, scala: [1.8, 3.2] },
+  stradaAlberi: { passo: 3, banda: [2.5, 5], probabilita: 0.45, lunghezza: 180, soglia: 0.12 },
   limiteAlberi: [-0.5, 2],               // °C attorno a CLIMA.bosco: gli alberi si diradano e si abbassano
   pendenza: { alberi: [30, 40], arbusti: [36, 46], pareti: 48 },   // gradi (pendenza fine della mesh)
   riva: { celle: [1, 3], densita: 0.22, canne: 0.35 },             // celle di 7,8 m dall'acqua
@@ -914,6 +918,35 @@ export function posizionaVegetazione(o) {
         }
       }
     }
+  }
+
+  // Massi erratici nei prati (non nel bosco, nei campi, vicino a strade, case e terrapieni).
+  {
+    const ER = V.erratici, sR = derivaSeme(seme, 462);
+    griglia(ER.passo, sR, (ix, iz, X, Z, lx, lz, u) => {
+      if (u >= ER.probabilita) return;
+      trova(lx, lz);
+      if (!asciutta() || pendenzaFine() > 22 || campo(D.foresta) > 0.3 || campo(D.campo) > 0.05 || campo(D.erba) < 0.05) return;
+      if (oltreScarpata(X, Z) < 10 || oltreStrada(X, Z) < 6 || dCasa(X, Z) < 30) return;
+      const h = hash2(ix, iz, sR ^ 0x2545f491);
+      buffer.masso.push(lx, quota(), lz, ER.scala[0] + (ER.scala[1] - ER.scala[0]) * (h & 0xffff) / 65536,
+        ((h >>> 16) & 0x3ff) / 1024 * 2 * Math.PI, (h >>> 26) / 64);
+    });
+  }
+  // Alberi lungo le strade: a tratti, fuori dal bosco (lì ci sono già), all'asciutto, sotto il limite degli alberi.
+  if (o.carta?.strade) {
+    const SR = V.stradaAlberi, sR = derivaSeme(seme, 463);
+    griglia(SR.passo, sR, (ix, iz, X, Z, lx, lz, u) => {
+      if (u >= SR.probabilita) return;
+      const m = oltreStrada(X, Z);
+      if (m < SR.banda[0] || m > SR.banda[1] || fbm(X, Z, sR ^ 0x7f4a7c15, SR.lunghezza, 1) < SR.soglia) return;
+      trova(lx, lz);
+      if (!asciutta() || pendenzaFine() > 25 || campo(D.foresta) > 0.5 || campo(D.limite) < 0.3) return;
+      if (oltreScarpata(X, Z) < 5 || dCasa(X, Z) < KC.aia[1]) return;
+      const h = hash2(ix, iz, sR ^ 0x68e31da4) / 4294967296;
+      const tipo = campo(D.conifera) > 0.6 ? T.conifera : h < 0.6 ? T.riva : T.latifoglia;
+      emetti(tipo, ix, iz, sR, lx, lz, quota(), 0.85 + 0.3 * campo(D.limite));
+    });
   }
 
   // Pietre nell'alveo dei fiumi (non laghi né mare): sul fondo, solo dove affiorano o restano a pelo d'acqua.
