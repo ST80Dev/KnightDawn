@@ -256,5 +256,16 @@ export function creaAbitanti({ rocche, quota, seme = 1, creaPersona = creaPerson
   /** Riga da mostrare parlando con p. */
   const riga = (p) => RIGHE_PERSONE[p.ruolo] ?? '…';
 
-  return { object, persone, update, spingiFuori, personaVicina, riga };
+  /** Trasla tutti (posizioni e percorsi) di (dx, dz): al cambio di blocco (M6, passo 9). */
+  function sposta(dx, dz) {
+    const percorsi = new Set();
+    for (const p of persone) {
+      p.x += dx; p.z += dz;
+      if (p.P) percorsi.add(p.P);
+      p.modello.object.position.x += dx; p.modello.object.position.z += dz;
+    }
+    for (const P of percorsi) for (const q of P) { q[0] += dx; q[1] += dz; }
+  }
+
+  return { object, persone, update, spingiFuori, personaVicina, riga, sposta };
 }
