@@ -109,9 +109,14 @@ function raccogliEmissivi(radice) {
 }
 
 /** Cielo e luci dell'ora; poi le luci proprie di mura e castello e le ombre finte di cavaliere e cavallo. */
+// Copia di cieloScena.luceGiorno (0 notte → 1 giorno) con il nome di prima del passo 0: altre sessioni la usano
+// già nei loro branch (luci lontane, luci di rocche e borghi), così le loro unioni restano valide.
+let _luceGiorno = 1;
 function aggiornaCielo() {
-  if (!cieloScena.aggiorna(Calendar.oraDelGiorno())) return;
-  const giorno = cieloScena.luceGiorno;
+  const cambiato = cieloScena.aggiorna(Calendar.oraDelGiorno());
+  _luceGiorno = cieloScena.luceGiorno;
+  if (!cambiato) return;
+  const giorno = _luceGiorno;
   const luceRiflessa = 0.2 + 0.8 * giorno;
   for (const e of emissivi) e.m.emissive.copy(e.base).multiplyScalar(luceRiflessa);
   const ombra = knight && knight.object.getObjectByName('ombra-cavaliere');
@@ -1229,8 +1234,8 @@ function frame(now) {
     if (cavallo && !inPausa) cavallo.update(dt);
     tt = segna('cavaliere e tempo', tt);
     aggiornaCielo();
-    castle?.aggiornaLuci(now / 1000, 1 - cieloScena.luceGiorno);
-    for (const r of rocche) r.aggiornaLuci(now / 1000, 1 - cieloScena.luceGiorno);
+    castle?.aggiornaLuci(now / 1000, 1 - _luceGiorno);
+    for (const r of rocche) r.aggiornaLuci(now / 1000, 1 - _luceGiorno);
     tt = segna('cielo e luci', tt);
     aggiornaStato();
     aggiornaIndicatoreAndatura();
@@ -1256,7 +1261,7 @@ function frame(now) {
     tt = segna('camera', tt);
   }
   if (vegetazione && vegetazioneVisibile) {
-    vegetazione.aggiorna(camera.position.x, camera.position.z, sole.position, cieloScena.luceGiorno);
+    vegetazione.aggiorna(camera.position.x, camera.position.z, sole.position, _luceGiorno);
     tt = segna('vegetazione: aggiorna', tt);
     // Visuale pulita: ciò che sta tra camera e cavaliere si dirada (solo con la camera alle spalle)
     if (knight && modoCamera === 'segui' && !percorso) vegetazione.visuale(knight.stato.x, knight.stato.y, knight.stato.z);
