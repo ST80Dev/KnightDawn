@@ -1529,6 +1529,13 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      si legge più rado. Seme 570549:
      ~28 000 sagome lontane (63 ms) più ~12 500 nel blocco; seme 855588: ~13 000 più ~3 400. Nessun vuoto al bordo
      del blocco. Da rimisurare (sessione delle prestazioni, poi la scheda dell'utente con `?prova`).
+   - *Bosco fitto* (misura dell'utente sulla UHD 730, seme 570549 a 99937, 43289: vegetazione 10,3 ms contro 4 di
+     budget; «resto» 6,2 ms, sagome del blocco 3,3 ms con 59 000 istanze): latifoglie vicine con ciuffi pieni (80
+     triangoli l'uno, ~2450 ad albero) solo entro 25 m, da 25 a 60 m la stessa chioma a ciuffi semplici (20 triangoli,
+     ~650 ad albero; ogni specie ha un generatore suo, quindi la forma non cambia al passaggio); sagome del blocco
+     piene fino a 600 m dalla camera, poi diradate come (600/d)², la legge del bosco lontano, con cui al bordo si
+     raccordano. In headless nello stesso punto: latifoglie vicine da ~333 000 a ~145 000 triangoli, sagome del
+     blocco da 59 500 a 36 200, vegetazione da 792 000 a 571 000 triangoli; chiamate da 26 a 29.
    - *Collisioni (passo 3)*: tronchi, massi, affioramenti, tronchi caduti (tre cerchi) e sassi di scala ≥ 1,1 come
      cerchi in una griglia di 16 m, ostacolo per il cavaliere come le mura (`spingiFuori`). Prova: correndo contro un
      tronco il cavaliere si ferma a 0,6–0,8 m dal centro e ci scivola attorno.
