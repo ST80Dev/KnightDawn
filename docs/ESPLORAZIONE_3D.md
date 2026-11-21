@@ -1830,7 +1830,7 @@ nuovo: serve la conferma (regola 2).
 4. **Ponti e guadi.**
 5. **Viaggio sulla Carta** lungo le strade.
 
-### Passo 4 — Ponti e guadi (piano, da approvare)
+### Passo 4 — Ponti e guadi (approvato dall'utente: pietra per le maestre e luci > 20 m, legno altrimenti; presidi e pedaggi con i luoghi)
 
 Affidato alla sessione M6 su indicazione dell'utente (novembre 2026). Oggi nell'alveo la strada si interrompe: il
 fiume la taglia e il nastro resta a ±0,3 m dal terreno. Comandi e tasti restano per dopo (decisione dell'utente).
@@ -1883,8 +1883,21 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
 3. Guadi: pietre e ghiaia.
 4. Segni sulla Carta.
 
-**Da decidere**: (a) pietra per maestre e luci > 20 m, legno altrimenti? (b) presidio e pedaggio ai ponti (GDD: luoghi
-da sorvegliare) arrivano con i luoghi, non ora: d'accordo?
+**Fatto (da provare dall'utente):**
+- `strade.js`: nel tracciato fine le corse nell'acqua diventano `attraversamenti` (ponte se > 0,9 m d'acqua); profilo:
+  impalcato piano con rampe alla pendenza della classe, guado con soglia a 0,35 m d'acqua e discese nelle rive;
+  `tipo` per punto (0 strada, 1 ponte, 2 guado) letto da `distanzaStrada`; `spianaStrade` nel letto alza la soglia del
+  guado e sotto i ponti lascia il fiume. `attraversamentiBlocco` per la Scena; il nastro della strada salta i ponti.
+  Misure (seme 570549 / 48213): 8 / 14 ponti (luce fino a 61 / 97 m), 43 / 47 guadi, acqua sui guadi ≤ 0,35 m,
+  giuntura tra blocchi 0; vicino agli attraversamenti il 99 % del profilo entro la pendenza della classe.
+- `acqua.js`, `creaPonti`: pietra (fianco con archi estruso, uno ogni ~14 m, pile 1,8 m, schiena d'asino ≤ 1,2 m,
+  parapetti) o legno (tavolato, travi, cavalletti ogni ~6,5 m, parapetti a montanti); una mesh per ponte; ogni ponte è
+  suolo (`quotaSuolo`) e ostacolo (`spingiFuori`, parapetti). Guadi: pietre piatte accanto alla carreggiata, una
+  `InstancedMesh` per blocco. `main.js`: ponti in `componiSuolo`, negli ostacoli e negli occlusori.
+- Carta: segno «)(» per i ponti della rete; nella Carta zoomata ponti e guadi (puntini blu) delle Scene.
+- Prova in headless: sul ponte (`?seme=570549&prova&centro=39277,18877`) il cavaliere sta a 76,2 m sopra l'acqua a 72,8;
+  al guado (`&centro=91485,11432`) è nell'acqua a 0,3 m. FPS e ms da misurare sulla scheda vera (gruppo «resto»).
+- Non fatto: rostri delle pile, filari di conci nello shader, ghiaia colorata sotto l'acqua del guado.
 
 ### Fatto (passi 1–2)
 

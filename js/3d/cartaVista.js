@@ -513,6 +513,28 @@ export function createCartaVista(contenitore, opzioni = {}) {
     // Segni in pixel dello schermo, indipendenti dallo zoom.
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const P = (x, y) => [x * s + tx, y * s + ty];
+    // Ponti e guadi delle strade: nella Carta zoomata quelli delle Scene, altrimenti i ponti della rete (celle).
+    {
+      const segni = [];
+      if (stradeFini) for (const f of stradeFini) for (const at of f.attraversamenti ?? []) segni.push({ ...at, x: at.x / carta.cella, y: at.z / carta.cella });
+      else for (const p of carta.strade?.ponti ?? []) segni.push({ ponte: true, x: p.x, y: p.y, dx: 1, dz: 0 });
+      for (const g of segni) {
+        const [px, py] = P(g.x, g.y);
+        if (px < -10 || py < -10 || px > canvas.width + 10 || py > canvas.height + 10) continue;
+        if (g.ponte) {
+          // Ponte: due archetti contrapposti «)(» lungo la strada.
+          const a = Math.atan2(g.dz, g.dx), r = 4 * dpr;
+          ctx.save(); ctx.translate(px, py); ctx.rotate(a);
+          ctx.strokeStyle = 'rgba(60, 40, 25, 0.95)'; ctx.lineWidth = 1.6 * dpr;
+          ctx.beginPath(); ctx.arc(0, -r * 1.6, r, Math.PI * 0.2, Math.PI * 0.8); ctx.stroke();
+          ctx.beginPath(); ctx.arc(0, r * 1.6, r, -Math.PI * 0.8, -Math.PI * 0.2); ctx.stroke();
+          ctx.restore();
+        } else {
+          ctx.fillStyle = 'rgba(40, 80, 130, 0.9)';
+          for (const o of [-3, 0, 3]) { ctx.beginPath(); ctx.arc(px + o * dpr, py, 1.2 * dpr, 0, 2 * Math.PI); ctx.fill(); }
+        }
+      }
+    }
     // Gruppi montuosi: un segno e un numero (il nome arriverà con i luoghi); forcelle in giallo.
     if (carta.massicci) {
       ctx.font = `${Math.round(11 * dpr)}px Georgia, serif`;
