@@ -1536,6 +1536,16 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      piene fino a 600 m dalla camera, poi diradate come (600/d)², la legge del bosco lontano, con cui al bordo si
      raccordano. In headless nello stesso punto: latifoglie vicine da ~333 000 a ~145 000 triangoli, sagome del
      blocco da 59 500 a 36 200, vegetazione da 792 000 a 571 000 triangoli; chiamate da 26 a 29.
+   - *Campi coltivati* (dopo la milestone Prestazioni; decisioni dell'utente: niente stagioni, estensione come
+     proposta più «qualcosa intorno a case isolate e villaggi»): `CAMPAGNA.raggi` per tipo di luogo (rocca secondo la
+     classe 0,5–2 km; `villaggio` 0,3–0,7 km e `casa` 70–200 m già pronti per quando la milestone dei luoghi li
+     aggiungerà a `carta.luoghi`). `CAMPI_COLTIVATI`: campi dove la campagna è piena, pendenza fine sotto 9–16°,
+     all'asciutto, senza roccia, neve, sabbia né palude; terza componente di `aSuolo`. Lo shader del suolo (ramo che
+     finisce nella cottura: nel gioco non costa) disegna strisce lungo il verso del borgo (20–55 × 70–190 m, piegate
+     da un rumore su 128 m): arato con solchi, seminato, grano, fieno, maggese; orti più piccoli entro ~0,2 del raggio
+     pieno; capezzagne erbose tra un appezzamento e l'altro; dove la campagna finisce si fermano appezzamenti interi.
+     Nei campi niente alberi, arbusti né sassi, meno erba. Caricamento di un blocco vicino a un luogo: ~+60 ms.
+     Da fare: siepi e filari, muretti a secco; i campi negli anelli dell'orizzonte (ora solo nel blocco).
    - *Scatti*: la ridistribuzione delle istanze (ogni 12 m) si fa a pezzi, al più ~1,5 ms per fotogramma, e mai nel
      fotogramma in cui si rifà l'erba vicina; erba, felci e ciottoli si rifanno uno per fotogramma. In headless nel
      bosco fitto, camminando 200 m: costo peggiore di un fotogramma da ~11 a ~5–6 ms (resta il calcolo dell'erba).

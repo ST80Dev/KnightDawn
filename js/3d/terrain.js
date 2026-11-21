@@ -264,7 +264,7 @@ TEXTURE_NERA.needsUpdate = true;
  * Materiale del terreno del mondo generato a colore per pixel. La geometria deve avere gli attributi `base` (vec3)
  * e `strati` (vec4: roccia, neve, variazione, tono della roccia), oltre a `color` (colore per vertice completo, per
  * chi lo legge). (cx, cz): coordinate del mondo dell'origine della mesh.
- * Vegetazione: se la geometria ha anche `aSuolo` (vec2 per vertice: bosco sopra, vicinanza dell'acqua; lo aggiunge
+ * Vegetazione: se la geometria ha anche `aSuolo` (vec3 per vertice: bosco sopra, vicinanza dell'acqua, campi; lo aggiunge
  * vegetazione3d.js al blocco) sul prato compaiono lettiera sotto il bosco (marrone chiaro e scuro, quasi nero,
  * muschio) e fango vicino all'acqua; la terra nuda a chiazze nei prati c'è ovunque (anche negli anelli). `mezzo`:
  * metà lato del blocco, negli ultimi 120 m lettiera e fango sfumano (l'orizzonte non li ha).
@@ -326,6 +326,10 @@ export function materialeSuolo(cx, cz, mezzo = 1e9) {
     uOmbreForza: { value: new THREE.Vector2(0, 0) },
     // Prestazioni (docs/PRESTAZIONI.md, passo 3): colore del blocco «cotto» in una texture al caricamento (cuociSuolo).
     uCotto: { value: TEXTURE_NERA },
+    // Campi coltivati (vegetazione.js, CAMPI_COLTIVATI): origine del luogo (avvolta come vMondo) e verso dei solchi;
+    // raggio degli orti attorno al luogo. Li imposta vegetazione3d.js; la maschera è la terza componente di aSuolo.
+    uCampi: { value: new THREE.Vector4(0, 0, 1, 0) },
+    uOrti: { value: 0 },
   };
   mat.userData.uniformi = uniformi;
   mat.onBeforeCompile = (sh) => {
@@ -334,8 +338,8 @@ export function materialeSuolo(cx, cz, mezzo = 1e9) {
       .replace('#include <common>', `#include <common>
 attribute vec3 base;
 attribute vec4 strati;
-attribute vec2 aSuolo;
-varying vec2 vSuolo;
+attribute vec3 aSuolo;
+varying vec3 vSuolo;
 uniform vec2 uOrigine;
 varying vec3 vBase;
 varying vec4 vStrati;
@@ -364,7 +368,9 @@ uniform sampler2D uCotto;
 varying vec3 vBase;
 varying vec4 vStrati;
 varying vec2 vMondo;
-varying vec2 vSuolo;
+varying vec3 vSuolo;
+uniform vec4 uCampi;
+uniform float uOrti;
 float hashSuolo(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);
@@ -440,7 +446,7 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
       float blocco = 1.0 - smoothstep(uMezzo - 120.0, uMezzo, max(loc.x, loc.y));
       // Prestazioni: niente rumori dove non servono. Terra nuda solo sul prato entro 3 km; lettiera e fango solo dove
       // il blocco li porta (aSuolo, 0 negli anelli); la grana di 2 m solo vicino.
-      float suoloV = max(vSuolo.x, vSuolo.y) * blocco;
+      float suoloV = max(max(vSuolo.x, vSuolo.y), vSuolo.z) * blocco;
 #ifdef SUOLO_LONTANO
       if (false) {
 #else
@@ -458,13 +464,48 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
           cPrato = mix(cPrato, lett, vSuolo.x * 0.95 * prato * blocco);
           cPrato = mix(cPrato, vec3(0.07, 0.055, 0.035) * (0.8 + 0.4 * r2), smoothstep(0.3, 1.0, vSuolo.y) * 0.6 * blocco);
         }
+        if (vSuolo.z > 0.01) {
+          // Campi coltivati attorno ai luoghi (niente stagioni): strisce lungo il verso del borgo, larghe 20–55 m e
+          // lunghe 70–190 m, un po' piegate (rumore su 128 m); vicino al luogo orti più piccoli. Ogni appezzamento
+          // sceglie arato, seminato, grano, prato da sfalcio o maggese; tra uno e l'altro una capezzagna erbosa.
+          // Dove la campagna finisce si fermano appezzamenti interi (soglia per appezzamento), non un bordo sfumato.
+          vec2 dC = vMondo - uCampi.xy;
+          dC -= ${P.toFixed(1)} * floor(dC / ${P.toFixed(1)} + 0.5);
+          vec2 q = vec2(dot(dC, uCampi.zw), dot(dC, vec2(-uCampi.w, uCampi.z)));
+          q += (vec2(rumoreSuolo(p, 128.0), rumoreSuolo(p + 71.0, 128.0)) - 0.5) * 50.0;
+          float orto = 1.0 - step(uOrti + 60.0 * (r1 - 0.5), length(dC));
+          float banda = mix(110.0, 36.0, orto);
+          float hb = hashSuolo(vec2(floor(q.y / banda), 7.0 + orto));
+          float W = banda / (2.0 + floor(hb * (3.0 - orto)));
+          float j = floor(q.y / W);
+          float hj = hashSuolo(vec2(j, 3.0 + orto));
+          float L = mix(70.0 + 120.0 * hj, 18.0 + 22.0 * hj, orto);
+          float u = q.x + hj * 500.0;
+          float i = floor(u / L);
+          float h = hashSuolo(vec2(i, j) + 17.0), h2 = hashSuolo(vec2(i, j) + 41.0);
+          float fu = u - i * L, fv = q.y - j * W;
+          float bordoC = min(min(fu, L - fu), min(fv, W - fv));
+          float solchi = 0.5 + 0.5 * sin(fv * 6.2832 / mix(2.4, 1.3, orto));
+          vec3 cC;
+          if (orto > 0.5) cC = h < 0.35 ? vec3(0.15, 0.095, 0.05) * (0.85 + 0.2 * solchi)
+            : mix(vec3(0.12, 0.08, 0.04), vec3(0.05, 0.12, 0.03), 0.35 + 0.4 * smoothstep(0.3, 0.7, solchi));
+          else if (h < 0.24) cC = vec3(0.15, 0.095, 0.05) * (0.78 + 0.32 * solchi);                    // arato
+          else if (h < 0.46) cC = mix(vec3(0.10, 0.20, 0.03), vec3(0.15, 0.26, 0.05), solchi * 0.6);  // seminato
+          else if (h < 0.7) cC = vec3(0.42, 0.32, 0.11) * (0.9 + 0.15 * solchi);                    // grano
+          else if (h < 0.88) cC = vec3(0.24, 0.27, 0.09) * (0.9 + 0.12 * solchi);                  // fieno, prato da sfalcio
+          else cC = mix(cPrato, vec3(0.2, 0.14, 0.07), 0.45);                                          // maggese
+          cC *= 0.86 + 0.28 * r2;
+          cC = mix(cC, cPrato * 0.85, 1.0 - smoothstep(0.8, 1.8, bordoC));                             // capezzagna
+          float dentro = smoothstep(0.0, 0.06, vSuolo.z - (0.12 + 0.6 * h2));
+          cPrato = mix(cPrato, cC, dentro * blocco);
+        }
         // Colori vari e chiaroscuri da vicino (richiesta dell'utente: «colorazione varia e chiaroscuri marcati nel
         // breve anche senza pendenze, senza sprecare FPS in oggetti»): chiazze secche (ocra) e cupe (verde scuro) su
         // 4–16 m, luminosità che oscilla di ±25 % su 4 m entro ~150 m. Il rilievo finto è in normal_fragment_maps.
         float vicinoP = 1.0 - smoothstep(60.0, 180.0, dist);
         if (vicinoP > 0.0 && prato > 0.01) {
           float r5 = rumoreSuolo(p, 4.0), r6 = rumoreSuolo(p + 37.0, 16.0);
-          float aperto = 1.0 - vSuolo.x;
+          float aperto = (1.0 - vSuolo.x) * (1.0 - vSuolo.z);
           cPrato = mix(cPrato, vec3(0.30, 0.23, 0.07), smoothstep(0.58, 0.82, r6) * 0.4 * prato * aperto * vicinoP);
           cPrato = mix(cPrato, vec3(0.035, 0.08, 0.02), smoothstep(0.55, 0.8, r5 * 0.6 + r2 * 0.4) * 0.35 * prato * aperto * vicinoP);
           cPrato *= mix(1.0, 0.62 + 0.76 * r5, prato * vicinoP);
