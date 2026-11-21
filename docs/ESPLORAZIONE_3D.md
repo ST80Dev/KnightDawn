@@ -1316,6 +1316,32 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
 9. **Blocco che segue il cavaliere** (se l'utente lo approva in M7, punto 6). *Prova:* dal borgo di partenza
    si sale al crinale in 15–20 minuti reali senza fermarsi al bordo e senza stacchi visibili né cali di FPS al
    cambio di blocco; rocca e borgo restano al loro posto; tornando indietro si ritrova tutto.
+   **Piano (sessione M6, da approvare):**
+   - *Cosa costa oggi* (caricaScena, headless, seme 570549): blocco con fiumi e strade ~0,35 s, orizzonte ~0,5–0,6 s,
+     vegetazione ~0,4 s (posizionamento + costruzione), rocche, case e suolo cotto il resto: **1,3–1,6 s in un colpo
+     solo**. Fatto a ogni cambio di blocco (ogni ~1 km di cammino) sarebbe uno scatto di un secondo e più.
+   - *Quando*: il cavaliere a meno di ~350 m dal bordo del blocco (cioè ~650 m dal centro) → si prepara il blocco
+     centrato su di lui (griglia di `centroBlocco`), lo si sostituisce quando è pronto. Il bordo vero non si raggiunge
+     mai (oggi a 2 m il cavaliere si ferma).
+   - *Il cambio*: tutto si sposta di (vecchio centro − nuovo centro): cavaliere, cavallo, camera, persone. Le rocche
+     e le case già costruite che restano vicine si **spostano** (sono già oggetti del mondo), quelle che escono si
+     liberano, quelle che entrano si costruiscono. Terreno, acque, ponti, orizzonte, vegetazione si rifanno. Salvataggi
+     già in coordinate del mondo: invariati.
+   - *Tappe*:
+     1. **Cambio con pausa breve**: tutto come oggi, ma senza schermata di caricamento e con lo spostamento dello stato;
+        si misura la pausa sulla scheda dell'utente. Serve a verificare che niente si perda o si sposti male.
+     2. **Preparazione a pezzi in sottofondo**: il nuovo blocco si calcola a fette tra un fotogramma e l'altro (righe
+        della griglia, un tratto di fiume o di strada, un anello dell'orizzonte, una parte della vegetazione per volta,
+        entro ~4 ms per fotogramma: regola di `docs/PRESTAZIONI.md`); il cambio diventa un solo fotogramma (solo
+        l'invio delle geometrie alla scheda, preparato in anticipo). Obiettivo: nessuno scatto oltre ~50 ms.
+     3. *Se non basta*: posizionamento della vegetazione e quote del blocco nel Worker (moduli già senza grafica).
+   - *Chi tocca cosa*: l'orchestrazione è nuova e sta quasi tutta in `main.js` (caricaScena). Proposta: un modulo nuovo
+     `js/3d/blocchi.js` per la preparazione a pezzi e il cambio, così `main.js` resta leggibile e i conflitti con le
+     altre sessioni restano pochi (file nuovo: serve la conferma, regola 2). Le funzioni delle altre sessioni si
+     usano così come sono (`creaVegetazione`, `costruisciRocche`, `creaCaseCampagna`), chiedendo solo la versione «a
+     pezzi» dove servirà (Vegetazione per il posizionamento).
+   - *Prova*: dal borgo di partenza al crinale senza fermarsi; F3 con i ms del cambio; percorso di prova con un tratto
+     che attraversa due bordi di blocco.
 
 ### Accettazione
 
