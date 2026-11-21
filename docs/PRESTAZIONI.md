@@ -1,4 +1,11 @@
-# Milestone «Prestazioni» — piano (approvato, fase corrente)
+# Milestone «Prestazioni» — chiusa (novembre 2026)
+
+> **Chiusa dall'utente il 21/11/2026.** Risultato sulla scheda di riferimento (Intel UHD 730, 1884×917): partenza standard
+> da 38 a ~76 FPS; bosco fitto, il caso peggiore, 83 FPS (1% peggiori 49,8, fotogramma peggiore 20 ms), GPU 10,9 ms su
+> 15,5 di budget. Da qui in avanti il documento vale come **regola**: budget (sotto), regole per i contenuti nuovi
+> (passo 6) e percorso di prova per ogni PR che aggiunge cose disegnate. La sessione «M1 - grafica» resta il riferimento
+> per le prestazioni. Rimasti aperti, senza urgenza: terreno 4,4 ms (budget 4,5), passi 4–5 in parte (unire il cavaliere
+> per snodo prima di moltiplicare personaggi simili).
 
 > Richiesta dell'utente (novembre 2026): «senza continuare a mettere toppe e togliere cose man mano, come possiamo avere
 > una cosa più realistica da qui in avanti, se con questi elementi siamo già a 30 FPS? Con cavallo, personaggi ed
@@ -35,16 +42,16 @@ Nel codice di oggi [Probabile, da confermare con le misure del passo 1]:
 ## Obiettivi e budget
 
 - **60 FPS nel preset «medio»** sulla UHD 730 a 1920×1080; **mai sotto 30** in nessun preset (confermato dall'utente).
-- Budget per fotogramma (16,6 ms), **provvisorio**: si tara con le misure del passo 1.
+- Budget per fotogramma (16,6 ms), **ritarato sulle misure e approvato dall'utente (21/11/2026)**; vale nel caso
+  peggiore (bosco fitto, `&centro=99937,43289` del seme 570549), qualità media.
 
 | Sistema | GPU (ms) | Chiamate | Note |
 |---|---|---|---|
-| Terreno (blocco + orizzonte) | 4 | 15 | shader a livelli per distanza |
-| Vegetazione | 4 | 30 | impostor oltre la media distanza |
-| Edifici (rocca, borgo) | 2 | 40 | geometrie unite per materiale |
-| Personaggi (cavaliere, cavallo, persone) | 2 | 30 | 1–3 oggetti a personaggio |
-| Acqua, cielo, effetti | 1,5 | 10 | |
-| Margine | 3 | — | picchi, scheda più lenta |
+| Terreno (blocco + orizzonte) | 4,5 | 15 | blocco cotto in texture; anelli ridotti (misurato 4,4) |
+| Vegetazione | 6,5 | 35 | sagome oltre la media distanza (misurato 6,5 nel bosco fitto, 3,4 alla partenza) |
+| Borgo, cavallo e persone, insieme | 3 | 120 | edifici 1,5 + personaggi 1,5 nel profilatore; regole al passo 6 |
+| Acqua, cielo, effetti | 1,5 | 10 | (misurato 0,3–1,0) |
+| Totale | 15,5 | — | margine ~1 ms sui 16,6 dei 60 FPS |
 
 - CPU: JavaScript per fotogramma ≤ 4 ms; nessun lavoro pesante in un solo fotogramma (a pezzi o nel Worker).
 - Memoria GPU: texture ≤ 128 MB. Nessuna creazione di materiali o texture durante il gioco, solo al caricamento.
@@ -66,7 +73,24 @@ Nel codice di oggi [Probabile, da confermare con le misure del passo 1]:
      sguardo dalla vista di gioco 12 s, giro dalla vista alta 5 s; due volte, normale e per gruppi; tempo di gioco
      fermo), poi un riquadro con i numeri da copiare. Prova di riferimento: `?seme=570549&prova` (partenza nel bosco).
    In headless (SwiftShader) i timer GPU non ci sono: «profondità invertita possibile: sì» c'è già lì.
-2. **Fondamenta del renderer** (guadagni grandi, senza toccare i contenuti):
+2. **Fondamenta del renderer** — *prima si misura*: parametri facoltativi del percorso di prova (senza parametri il gioco
+   non cambia): `&profondita=log` (predefinita) | `invertita` | `normale`, `&msaa=0`, `&centro=x,z` (partenza in un
+   punto scelto, m del mondo; bosco fitto del seme 570549: `&centro=99937,43289`). [Probabile] la profondità invertita
+   dà precisione solo con un buffer di profondità in virgola mobile: con quello del canvas (24 bit interi) e la scena da
+   0,2 m a 130 km può far sfarfallare il lontano; le prove dicono quanto vale il guadagno prima di riscrivere il
+   renderer (profondità invertita su un render target a 32 bit, o due passate lontano/vicino).
+   **Deciso con l'utente (21/11/2026):** profondità **invertita** predefinita (bosco fitto 46,3 → 71,7 FPS; nessuno
+   sfarfallio visto dall'utente; con la logaritmica il polygonOffset delle strade non valeva, ora sì), ripiego sulla
+   logaritmica se manca `EXT_clip_control`. **MSAA resta acceso** (senza: +24 % ma bordi seghettati; candidato per un
+   preset «basso»). Nel bosco fitto la vegetazione resta oltre il budget (8,8–10,3 ms): latifoglie vicine ~2.450
+   triangoli l'una e 59k sagome nel blocco, alla sessione vegetazione.
+   **Preset e risoluzione adattiva — fatto** (`creaQualita` in `prestazioni.js`): tasto `F2` (qualità bassa / media /
+   alta, ricordata nel browser; `?qualita=` per le prove). Bassa: risoluzione ×0,75 e niente micro-rilievo di prato e
+   neve; media: come prima sulla scheda di riferimento (`devicePixelRatio` fino a 1,5); alta: fino a 2. Risoluzione
+   adattiva in tutti i preset: −10 % per volta (fino a ×0,6) se la GPU supera 15 ms (o i fotogrammi 18 ms senza timer),
+   +5 % dopo 3 s sotto 10,5 ms (o 14 ms); ferma durante il percorso di prova e nelle prove F4. Limite noto: senza
+   timer GPU, su uno schermo a 60 Hz i fotogrammi non scendono sotto 16,7 ms e la risoluzione non risale.
+   Seguito: (guadagni grandi, senza toccare i contenuti):
    - togliere la profondità logaritmica: provare `reversedDepthBuffer` (presente in three r187, richiede
      `EXT_clip_control`); se la precisione non basta, due passate (lontano: orizzonte con near ~300 m; poi si azzera la
      profondità e si disegna il vicino con far ~3 km);
@@ -91,13 +115,24 @@ Nel codice di oggi [Probabile, da confermare con le misure del passo 1]:
 5. **Oggetti composti.** Funzione comune che unisce le geometrie di un gruppo **per materiale**, rispettando gli snodi
    che si animano: rocca, cavaliere, poi ogni edificio del borgo. Livelli di dettaglio per gli edifici (lontano: volumi
    semplici).
-6. **Regole per i contenuti nuovi**, prima di farli:
-   - *edifici del borgo*: componenti ripetuti in `InstancedMesh` o uniti per materiale; niente interni finché non si
-     entra;
-   - *cavallo*: come il cavaliere, ~5–8 mila triangoli, pochi oggetti (uno per snodo animato);
-   - *persone*: 1–3 mila triangoli, unite per snodo; animate solo entro ~40 m, oltre ferme o impostor; al massimo
-     ~12 animate insieme (da tarare);
-   - ogni sistema nuovo dichiara costo e budget nella PR e nel proprio documento.
+6. **Regole per i contenuti nuovi** (M7 e dopo), da rispettare **prima** di farli. Budget complessivo di borgo, cavallo
+   e persone: **3 ms GPU, ≤ 120 chiamate di disegno in più, ≤ 1,5 ms CPU** nel caso peggiore.
+   - *Edifici del borgo*: ≤ 1.500 triangoli a casa vicino, ≤ 200 oltre ~150 m (volumi semplici); componenti ripetuti
+     (finestre, porte, travi, tegole, comignoli) in `InstancedMesh` **condivise tra tutte le case**, così le chiamate
+     del borgo intero restano ≤ 40 qualunque sia il numero di case; ≤ 8 materiali per tutto il borgo; il dettaglio dei
+     muri (pietra, intonaco, mattoni) in una texture generata una volta al caricamento, non in geometria; niente interni
+     finché non si entra; mura del borgo come la rocca, unite per materiale. Luci: nessuna `PointLight` oltre le 4–6
+     già previste; fiaccole e finestre con materiali emissivi.
+   - *Cavallo*: ≤ 6.000 triangoli, ≤ 12 oggetti (uno per snodo animato), materiali come il cavaliere (Phong per i
+     metalli, Lambert il resto); animazione procedurale come il cavaliere.
+   - *Persone*: ≤ 2.000 triangoli e ≤ 8 oggetti a persona (pezzi uniti per snodo); geometrie condivise tra persone
+     (colori diversi per istanza dove si può); animate a piena frequenza entro ~40 m, a metà frequenza fino a ~120 m,
+     ferme oltre, non disegnate (o sagome) oltre ~200 m; al più ~12 animate insieme e ~40 visibili.
+   - *Sempre*: nessun lavoro oltre ~1,5 ms in un solo fotogramma (a pezzi o nel Worker); niente materiali o texture
+     creati durante il gioco, solo al caricamento; alpha test solo dove serve; il cavaliere oggi è 86 oggetti
+     (0,1 ms GPU, ma pesa sulle chiamate): unirlo per snodo prima di moltiplicare personaggi simili.
+   - *Ogni PR* che aggiunge cose disegnate dichiara costo e budget e passa dal percorso di prova alla partenza e nel
+     caso peggiore (bosco fitto; nel borgo con `&centro=` sul borgo, quando c'è); risultati nella tabella in fondo.
 7. **Verifica e regola fissa.** Percorso di prova prima e dopo ogni PR che aggiunge cose disegnate; tabella dei risultati
    in fondo a questo documento. Una PR che fa sforare il budget non entra in `main` senza una decisione dell'utente.
 
@@ -149,6 +184,26 @@ Scheda Intel UHD 730 (il browser Brave nasconde il nome), 1920×935, seme 570549
 | Data | Versione | FPS medio | 1% peggiori | GPU totale | Terreno | Vegetazione | Edifici | Personaggi | Resto | Chiamate | Triangoli |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | 20/11/2026 | main dopo #122–#123 (riferimento) | 38,0 | 19,9 | 24,7 | **16,7** | 4,9 | 0,1 | 0,1 | 1,8 | 301 | 859 mila |
+| 20/11/2026 | main dopo #124–#125 (terreno cotto, sagome) ⚠ | 43,8 | 20,0 | 17,5 | 5,5 | **10,8** | 0,0 | 0,1 | 1,0 | 127 | 1222 mila |
+| 20/11/2026 | main dopo #126 (partenza standard) | **75,7** | 49,8 | **11,4** | 5,1 | 3,4 | 0,2 | 0,1 | 1,0 | 310 | 720 mila |
+| 21/11/2026 | bosco fitto (`&centro=99937,43289`), profondità logaritmica, MSAA | 46,3 | 24,9 | 16,4 | 4,9 | 10,3 | 0,0 | 0,1 | 0,9 | 127 | 1234 mila |
+| 21/11/2026 | bosco fitto, **profondità invertita**, MSAA | **71,7** | 33,2 | 13,3 | 4,4 | 8,8 | 0,0 | 0,1 | 0,3 | 127 | 1253 mila |
+| 21/11/2026 | bosco fitto, profondità logaritmica, senza MSAA | 57,3 | 25,0 | 13,7 | 3,3 | 9,5 | 0,0 | 0,1 | 0,6 | 127 | 1234 mila |
+| 21/11/2026 | bosco fitto, main dopo #130–#132 (latifoglie leggere, vegetazione a pezzi, profondità invertita) | **83,1** | **49,8** | **10,9** | 4,4 | 6,5 | 0,0 | 0,1 | 0,3 | 131 | 1000 mila |
+
+Ultima riga (bosco fitto, il caso peggiore): obiettivo raggiunto (83,1 FPS, 1% peggiori 49,8, fotogramma peggiore
+20,2 ms); scatti risolti (CPU massimo 7,2 ms, nessun compito lungo; prima il pannello F3 ricostruito a ogni fotogramma e la
+ridistribuzione della vegetazione tutta in un fotogramma). **Budget ritarati sulle misure (proposta all'utente):**
+terreno 4,5 · vegetazione 6,5 (bosco fitto) · borgo, cavallo e persone insieme 3 · resto 1,5 = ~15,5 ms su 16,6.
+
+Terza riga (stessa partenza della prima): obiettivo di 60 FPS raggiunto con margine (GPU 11,4 ms su 13,5; CPU 3,4 ms di
+media, 21,7 ms di massimo). Vegetazione: sagome lontane 1,2 · sagome nel blocco 0,4 · erba 1,3 · resto 0,5 ms. Resta da
+misurare un punto difficile (bosco fitto: la seconda riga, scena a 99937, 43289, aveva vegetazione a 10,8 ms).
+
+⚠ Seconda riga: la prova era partita dal salvataggio dell'utente (scena centrata a 99937, 43289), non dalla partenza
+standard: la vegetazione non è confrontabile. Da allora `?prova` non legge né scrive salvataggi (parte sempre dalla
+partenza del seme) e il riquadro separa la vegetazione (sagome lontane, sagome nel blocco, erba, resto) e riporta i
+tempi del processore (media, 1% peggiori, massimo).
 
 Lettura: la GPU è il collo di bottiglia (24,7 ms su 26,3 ms di fotogramma); il **terreno** vale due terzi. Edifici e
 personaggi costano ~0,1 ms: unire le geometrie (passo 5) non è urgente. Ordine dei passi rivisto: prima terreno

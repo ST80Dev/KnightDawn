@@ -210,6 +210,11 @@ function coltivatoIn(luoghi, x, z, seme) {
   d += CAMPAGNA.bordo.ampiezza * fbm(x, z, seme, CAMPAGNA.bordo.lunghezza, 2);
   return 1 - smoothstep(CAMPAGNA.raggio[0], CAMPAGNA.raggio[1], d);
 }
+/** La campagna della Carta come funzione (x, z) → 0–1: la usa anche il colore del terreno (coloreMondo). */
+export function campagnaMondo(carta) {
+  const seme = derivaSeme(carta.seme, 402);
+  return (x, z) => coltivatoIn(carta.luoghi, x, z, seme);
+}
 const CAMPI = ['alberi', 'limite', 'conifera', 'pino', 'secco', 'riva', 'cespuglio', 'alto', 'sterpo', 'canne',
   'sasso', 'masso', 'affioramento', 'tronco', 'foresta', 'erba', 'felce', 'frana', 'ciottolo'];
 
@@ -424,6 +429,7 @@ export function posizionaVegetazione(o) {
   const T = Object.fromEntries(TIPI.map((t) => [t.nome, t]));
   // Alberi: una griglia sola; la specie si sceglie per peso con un altro hash.
   const sA = derivaSeme(seme, 410);
+  const chiome = new Float32Array(n);
   griglia(V.passoAlberi, sA, (ix, iz, X, Z, lx, lz, u) => {
     trova(lx, lz);
     const p = campo(D.alberi);
@@ -437,7 +443,13 @@ export function posizionaVegetazione(o) {
     const tipo = (v -= wr) < 0 ? T.riva : (v -= ws) < 0 ? T.secco : (v -= wc) < 0 ? T.conifera : (v -= wp) < 0 ? T.pino : T.latifoglia;
     // Margine del bosco: alberi più giovani e bassi dove il bosco sfuma nel prato.
     const fo = campo(D.foresta), giovani = 4 * fo * (1 - fo);
-    emetti(tipo, ix, iz, sA, lx, lz, quota(), (0.55 + 0.45 * campo(D.limite)) * (1 - 0.35 * giovani));
+    const sc = (0.55 + 0.45 * campo(D.limite)) * (1 - 0.35 * giovani);
+    emetti(tipo, ix, iz, sA, lx, lz, quota(), sc);
+    // Chiome davvero piantate, per la lettiera: l'albero si somma ai 4 vertici vicini (bilineare).
+    const gx = Math.min(cols - 1.001, (lx + half) / cell), gz = Math.min(cols - 1.001, (lz + half) / cell);
+    const c0 = gx | 0, r0 = gz | 0, fx = gx - c0, fz = gz - r0, k = r0 * cols + c0;
+    chiome[k] += sc * (1 - fx) * (1 - fz); chiome[k + 1] += sc * fx * (1 - fz);
+    chiome[k + cols] += sc * (1 - fx) * fz; chiome[k + cols + 1] += sc * fx * fz;
   });
   // Gli altri tipi: ognuno la sua griglia.
   const regole = {
@@ -468,11 +480,23 @@ export function posizionaVegetazione(o) {
   }
   // Suolo per lo shader del terreno: per vertice [bosco sopra, vicinanza dell'acqua (1 nell'acqua, 0 oltre 4 celle)].
   // Niente lettiera nella spianata attorno a rocca e borgo (lì non ci sono alberi): sfuma in 30 m.
+  // La lettiera segue gli alberi davvero piantati (chiome sfocate su 3×3 vertici, ~23 m), non solo la copertura:
+  // dove il bosco è diradato (campagna attorno ai luoghi, margini) non restano macchie scure senza alberi sopra.
+  // Bosco fitto: ~1 albero per cella di vertici (densità 0,62 su celle di 6 m) → piena da 0,7.
   const suolo = new Float32Array(n * 2);
   for (let i = 0; i < n; i++) {
     const r = (i / cols) | 0, c = i - r * cols;
     const oltre = piani.length ? oltreScarpata(cx - half + c * cell, cz - half + r * cell) : Infinity;
-    suolo[i * 2] = D.foresta[i] * smoothstep(V.spianata, V.spianata + 30, oltre);
+    let somma = 0, peso = 0;
+    for (let dr = -1; dr <= 1; dr++) {
+      const rr = r + dr; if (rr < 0 || rr >= cols) continue;
+      for (let dc = -1; dc <= 1; dc++) {
+        const cc = c + dc; if (cc < 0 || cc >= cols) continue;
+        const w = (dr ? 1 : 2) * (dc ? 1 : 2); somma += w * chiome[rr * cols + cc]; peso += w;
+      }
+    }
+    const sotto = smoothstep(0.12, 0.7, somma / peso);
+    suolo[i * 2] = D.foresta[i] * sotto * smoothstep(V.spianata, V.spianata + 30, oltre);
     suolo[i * 2 + 1] = dist[i] === 0 ? 1 : Math.max(0, 1 - (dist[i] - 1) / (V.acquaCelle - 1));
   }
 
@@ -523,12 +547,12 @@ export const BOSCO_LONTANO = {
   griglia: 50,          // m: passo della griglia grossolana su cui si valutano copertura e quota
   raggio: 3000,         // m (in quadrato, dal centro del blocco): oltre, il bosco resta un colore
   // Prestazioni (misura della sessione M1: 137 000 sagome con alpha test raddoppiavano il fotogramma): oltre `da` m
-  // la densità cala fino a `fino` a `a` m, e le sagome diventano più grandi («ciuffi di bosco»: scala / √densità).
-  dirada: { da: 1300, a: 3000, fino: 0.08, scalaMax: 2.8 },
-  // La cella degli alberi cresce con la distanza (6 m al bordo del blocco, 12 m a 2 km, 24 m a 4 km): la densità
-  // cala come 1/d² e la scala cresce come la radice della cella, così da lontano la chioma resta piena.
-  // Cella di partenza 10 m (il blocco ne ha 6): alberi un po' più grandi, √(10/6), per non lasciare un vuoto al bordo.
-  cella: 10, cellaBlocco: 6, esponenteScala: 0.5,
+  // la densità cala fino a `fino` a `a` m.
+  dirada: { da: 1300, a: 3000, fino: 0.08 },
+  // La cella degli alberi cresce con la distanza (10 m al bordo del blocco, 20 m a 2 km): la densità cala come 1/d².
+  // Gli alberi restano della stessa taglia di quelli del blocco (l'utente: «gli alberi lontani sono molto grandi in
+  // proporzione»): prima la scala cresceva con la cella e col diradamento, fino a ×6 a 3 km.
+  cella: 10,
 };
 
 /**
@@ -605,9 +629,9 @@ export function boscoLontano(carta, cx, cz, half, quota, stagione = 0) {
         let v = (h2 / 4294967296) * (wl + wc + wp + ws);
         const tessera = (v -= ws) < 0 ? SAGOME.secco : (v -= wc) < 0 ? SAGOME.conifera : (v -= wp) < 0 ? SAGOME.pino
           : (h2 & 1 ? SAGOME.latifogliaTonda : SAGOME.latifogliaOvale);
-        const eta = 0.45 + 1.0 * ((h2 >>> 8) & 0xff) / 255;
-        const scala = eta * (0.55 + 0.45 * campo(lim, x, z)) * (voluta / B.cellaBlocco) ** B.esponenteScala
-          * Math.min(B.dirada.scalaMax, 1 / Math.sqrt(dirada));
+        // Stessa distribuzione di taglie del blocco (TIPI: [0,45, 1,45] con curva 1,4) e stesso limite degli alberi.
+        const eta = 0.45 + 1.0 * (((h2 >>> 8) & 0xff) / 256) ** 1.4;
+        const scala = eta * (0.55 + 0.45 * campo(lim, x, z));
         out.push(x, y, z, scala, tessera);
       }
     }

@@ -318,19 +318,21 @@ function creaModelli() {
   const F = COL.foglia, FF = COL.fogliaFaggio;
 
   // Latifoglie: quercia (larga e bassa), faggio (ovale e alto), castagno (irregolare, a due masse).
-  const quercia = () => unisci([
-    fusto(0.46, 0.3, 5.0, 8, COL.corteccia), ...rami(4, 3.6, 3.4, COL.corteccia, rnd),
-    ...chioma({ y: 7.6, a: 4.6, b: 3.1, ciuffi: 30, raggio: [0.8, 1.45], scuro: F[0], chiaro: F[1], rnd }),
-  ]);
-  const faggio = () => unisci([
-    fusto(0.36, 0.22, 6.5, 8, COL.cortecciaChiara), ...rami(3, 4.8, 3.0, COL.cortecciaChiara, rnd),
-    ...chioma({ y: 9.4, a: 3.2, b: 4.4, ciuffi: 28, raggio: [0.75, 1.3], scuro: FF[0], chiaro: FF[1], rnd }),
-  ]);
-  const castagno = () => unisci([
-    fusto(0.42, 0.26, 5.2, 8, COL.corteccia, { inclinaZ: -0.05 }), ...rami(3, 3.8, 3.2, COL.corteccia, rnd),
-    ...chioma({ x: 0.8, y: 8.0, a: 3.4, b: 2.9, ciuffi: 20, raggio: [0.75, 1.3], scuro: F[0], chiaro: F[1], rnd }),
-    ...chioma({ x: -2.4, y: 6.5, z: 0.6, a: 2.2, b: 1.9, ciuffi: 10, raggio: [0.7, 1.1], scuro: F[0], chiaro: F[1], rnd }),
-  ]);
+  // `det`: dettaglio dei ciuffi (1 = 80 triangoli, 0 = 20). Ogni specie ha il suo generatore: i due livelli vicini
+  // hanno la stessa forma (stessi ciuffi negli stessi punti), cambia solo quanto sono sfaccettati.
+  const quercia = (det) => { const r = casuale(311); return unisci([
+    fusto(0.46, 0.3, 5.0, 8, COL.corteccia), ...rami(4, 3.6, 3.4, COL.corteccia, r),
+    ...chioma({ y: 7.6, a: 4.6, b: 3.1, ciuffi: 30, raggio: [0.8, 1.45], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r }),
+  ]); };
+  const faggio = (det) => { const r = casuale(312); return unisci([
+    fusto(0.36, 0.22, 6.5, 8, COL.cortecciaChiara), ...rami(3, 4.8, 3.0, COL.cortecciaChiara, r),
+    ...chioma({ y: 9.4, a: 3.2, b: 4.4, ciuffi: 28, raggio: [0.75, 1.3], dettaglio: det, scuro: FF[0], chiaro: FF[1], rnd: r }),
+  ]); };
+  const castagno = (det) => { const r = casuale(313); return unisci([
+    fusto(0.42, 0.26, 5.2, 8, COL.corteccia, { inclinaZ: -0.05 }), ...rami(3, 3.8, 3.2, COL.corteccia, r),
+    ...chioma({ x: 0.8, y: 8.0, a: 3.4, b: 2.9, ciuffi: 20, raggio: [0.75, 1.3], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r }),
+    ...chioma({ x: -2.4, y: 6.5, z: 0.6, a: 2.2, b: 1.9, ciuffi: 10, raggio: [0.7, 1.1], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r }),
+  ]); };
   // Livelli (prestazioni, dopo la misura dell'utente: 28–30 FPS nel bosco; «meno definizione a centinaia di metri a
   // favore del realismo entro i 50 m»): vicino fino a 60 m, più ricco; medio fino a 300 m
   // con 3 ciuffi semplici (~70 triangoli); lontano un ciuffo solo e un fusto a 3 lati (~26).
@@ -339,7 +341,10 @@ function creaModelli() {
     ...chioma({ y, a, b, ciuffi: 3, raggio: [2.2, 2.8], dettaglio: 0, scuro: F[0], chiaro: F[1], rnd, morbido: 0.85, pieno: 0.3 }),
   ]);
   M.latifoglia = [
-    { fino: 60, varianti: [quercia(), faggio(), castagno()] },
+    // Misura nel bosco fitto (UHD 730): ~135 latifoglie entro 60 m da ~2450 triangoli valevano gran parte dei 6 ms
+    // della vegetazione. Ciuffi pieni entro 25 m; da 25 a 60 m stessa chioma a ciuffi semplici (~650 triangoli).
+    { fino: 25, varianti: [quercia(1), faggio(1), castagno(1)] },
+    { fino: 60, varianti: [quercia(0), faggio(0), castagno(0)] },
     { fino: 300, varianti: [latMedio(4.2, 3.1, 7.6), latMedio(3.2, 4.2, 9.2)] },
     { fino: Infinity, sagoma: [SAGOME.latifogliaTonda, SAGOME.latifogliaOvale] },
   ];
@@ -558,6 +563,10 @@ function scriviSagoma(a, j, x, y, z, s) {
   a[o + 12] = x; a[o + 13] = y; a[o + 14] = z; a[o + 15] = 1;
 }
 const SAGOMA_BORDO = { fascia: 150, oltre: 120 };
+// Sagome del blocco diradate con la distanza dalla camera (misura nel bosco fitto: 59 000 sagome, 3,3 ms): piene fino
+// a `da` m, poi la densità cala come (da/d)², la stessa legge del bosco lontano (cella 10 m al bordo del blocco, cioè
+// il 36 % della densità del blocco): al bordo le due densità si raccordano. Gli alberi dietro sono comunque coperti.
+const SAGOME_DIRADA = { da: 600 };
 
 // ─── Collisioni (passo 3; deciso con l'utente: tronchi, massi, affioramenti e sassi grandi bloccano; arbusti, erba e
 // sassi piccoli si attraversano) ───
@@ -624,6 +633,7 @@ const TONO = {
   rocce: [0.62, 1.2, 0], bosco: [0.8, 1.05, 0],
 };
 const GIALLO = new THREE.Color('#d9c85a');
+const RIDISTRIBUISCI = { ms: 1.5, pezzo: 3000 };   // tempo per fotogramma e alberi tra un controllo e l'altro
 const RIASSEGNA_DOPO = 12;              // m di spostamento della camera prima di ridistribuire le istanze
 // Raggi lunghi con densità bassa (richiesta dell'utente: il bordo del cerchio a ~30 m si vedeva).
 const VICINO = { erba: { raggio: 70, max: 12000 }, felce: { raggio: 70, max: 3000 }, ciottolo: { raggio: 50, max: 6000 }, rifai: 5 };
@@ -888,11 +898,14 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
     }
     // Sagome per albero (livello lontano): posizione, lato e tessera.
     const lSagoma = livelli.findIndex((L) => L.sagoma);
-    let sag = null;
+    let sag = null, caso = null;
     if (lSagoma >= 0 && atlante) {
       const tess = livelli[lSagoma].sagoma;
       sag = new Float32Array(t.n * 5);
+      caso = new Float32Array(t.n);
       for (let k = 0; k < t.n; k++) {
+        const ox = t.dati[k * STRIDE], oz = t.dati[k * STRIDE + 2];
+        caso[k] = (Math.abs(Math.sin(ox * 12.9898 + oz * 78.233) * 43758.5453)) % 1;   // fisso per albero
         const o = k * STRIDE, ti = tess[Math.floor(varia[k] * tess.length)];
         const alto = 0.72 + 0.56 * ((t.dati[o + 5] * 17.31) % 1);
         sag.set([t.dati[o], t.dati[o + 1], t.dati[o + 2], atlante.lato[ti] * t.dati[o + 3] * alto, ti], k * 5);
@@ -912,7 +925,7 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
       oggetto.add(m);
       return m;
     }));
-    tipi.push({ nome, n: t.n, livelli, mesh, matrici, colori, xz, varia, lSagoma, sag });
+    tipi.push({ nome, n: t.n, livelli, mesh, matrici, colori, xz, varia, lSagoma, sag, caso });
   }
 
   // Ombre finte e piede scuro nello shader del suolo (solo il mondo generato: materialeSuolo).
@@ -965,15 +978,26 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
     }
     return out;
   }
-  let ultimoVicino = null, msVicino = 0;
+  // Scatti (misura nel bosco fitto, CPU: erba, felci e ciottoli insieme 2–7 ms ogni 5 m): un tipo per fotogramma.
+  // La prima volta tutti subito.
+  let ultimoVicino = null, msVicino = 0, codaVicini = [];
   function aggiornaVicini(cx, cz) {
-    if (!pos.erbaAttorno) return;
-    if (ultimoVicino && Math.hypot(cx - ultimoVicino.x, cz - ultimoVicino.z) < VICINO.rifai) return;
+    if (!pos.erbaAttorno) return false;
+    const primaVolta = !ultimoVicino;
+    if (!codaVicini.length) {
+      if (ultimoVicino && Math.hypot(cx - ultimoVicino.x, cz - ultimoVicino.z) < VICINO.rifai) return false;
+      ultimoVicino = { x: cx, z: cz };
+      codaVicini = Object.keys(vicini);
+    }
     const t1 = performance.now();
-    ultimoVicino = { x: cx, z: cz };
-    const esito = pos.erbaAttorno(cx, cz, { erba: VICINO.erba.raggio, felce: VICINO.felce.raggio, ciottolo: VICINO.ciottolo.raggio });
-    for (const [nome, V] of Object.entries(vicini)) {
-      const T = esito[nome], am = V.mesh.instanceMatrix.array, ac = V.mesh.instanceColor.array;
+    do rifaiVicino(codaVicini.shift(), ultimoVicino.x, ultimoVicino.z); while (primaVolta && codaVicini.length);
+    msVicino = performance.now() - t1;
+    return true;
+  }
+  function rifaiVicino(nome, cx, cz) {
+    {
+      const V = vicini[nome];
+      const T = pos.erbaAttorno(cx, cz, { [nome]: V.raggio })[nome], am = V.mesh.instanceMatrix.array, ac = V.mesh.instanceColor.array;
       let j = 0;
       for (let k = 0; k < T.n && j < V.max; k++) {
         const o = k * STRIDE, x = T.dati[o], z = T.dati[o + 2];
@@ -1000,7 +1024,6 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
       V.mesh.instanceMatrix.needsUpdate = true;
       V.mesh.instanceColor.needsUpdate = true;
     }
-    msVicino = performance.now() - t1;
   }
 
   let ultimo = null, msAggiorna = 0;
@@ -1018,20 +1041,47 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
       uniSuolo.uOmbreForza.value.set(OMBRE.forza * giorno * Math.min(1, Math.max(0, (_v.y - 0.03) / 0.12)), OMBRE.piede * (0.6 + 0.4 * giorno));
       msOmbre = performance.now() - t2;
     }
-    aggiornaVicini(cx, cz);
-    if (ultimo && Math.hypot(cx - ultimo.x, cz - ultimo.z) < RIASSEGNA_DOPO) return;
-    const t1 = performance.now();
-    ultimo = { x: cx, z: cz };
-    let nSag = 0;
+    // Scatti (misura nel bosco fitto, CPU: erba vicina 2–7 ms ogni 5 m, ridistribuzione 3–6 ms ogni 12 m, fino a
+    // ~11 ms in un fotogramma): la ridistribuzione si fa a pezzi, al più ~RIDISTRIBUISCI.ms per fotogramma, e mai
+    // nel fotogramma in cui si è rifatto un tipo di erba. La prima volta tutto subito (la Scena è appena caricata).
+    const vicinoFatto = aggiornaVicini(cx, cz);
+    if (!lavoro && (!ultimo || Math.hypot(cx - ultimo.x, cz - ultimo.z) >= RIASSEGNA_DOPO)) {
+      const prima = !ultimo;
+      ultimo = { x: cx, z: cz };
+      lavoro = ridistribuisci(cx, cz);
+      if (prima) {
+        const t0 = performance.now();
+        while (!lavoro.next().done);
+        lavoro = null;
+        msAggiorna = performance.now() - t0;
+        return;
+      }
+    }
+    if (lavoro && !vicinoFatto) {
+      const t0 = performance.now();
+      let r;
+      do r = lavoro.next(); while (!r.done && performance.now() - t0 < RIDISTRIBUISCI.ms);
+      if (r.done) lavoro = null;
+      msAggiorna = performance.now() - t0;
+    }
+  }
+
+  // Ridistribuzione delle istanze tra livelli e varianti: generatore che si ferma ogni RIDISTRIBUISCI.pezzo alberi.
+  // Mentre lavora, ogni tipo resta come prima finché non è finito (i conteggi cambiano alla fine del tipo).
+  let lavoro = null;
+  function* ridistribuisci(cx, cz) {
+    let nSag = 0, passi = 0;
     const aS = sagomeBlocco ? sagomeBlocco.instanceMatrix.array : null;
     const tS = sagomeBlocco ? sagomeBlocco.geometry.attributes.aTessera.array : null;
     const bordoMin = halfBlocco - SAGOMA_BORDO.fascia, oltre2 = SAGOMA_BORDO.oltre * SAGOMA_BORDO.oltre;
+    const da2 = SAGOME_DIRADA.da * SAGOME_DIRADA.da;
     for (const T of tipi) {
       const L = T.livelli, nL = L.length, fino2 = L.map((l) => l.fino * l.fino);
       const conta = T.mesh.map((ms) => new Array(ms.length).fill(0));
       const am = T.mesh.map((ms) => ms.map((m) => m.instanceMatrix.array));
       const ac = T.mesh.map((ms) => ms.map((m) => m.instanceColor.array));
       for (let k = 0; k < T.n; k++) {
+        if (++passi % RIDISTRIBUISCI.pezzo === 0) yield;
         const dx = T.xz[k * 2] - cx, dz = T.xz[k * 2 + 1] - cz, d2 = dx * dx + dz * dz;
         let l = 0;
         while (l < nL && d2 > fino2[l]) l++;
@@ -1040,7 +1090,7 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
         if (T.sag && l !== T.lSagoma && d2 > oltre2
           && Math.max(Math.abs(T.xz[k * 2]), Math.abs(T.xz[k * 2 + 1])) > bordoMin) l = T.lSagoma;
         if (l === T.lSagoma) {
-          if (T.sag) {
+          if (T.sag && (d2 <= da2 || T.caso[k] * d2 < da2)) {
             const o = k * 5;
             scriviSagoma(aS, nSag, T.sag[o], T.sag[o + 1], T.sag[o + 2], T.sag[o + 3]);
             tS[nSag++] = T.sag[o + 4];
@@ -1070,7 +1120,6 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
       const at = sagomeBlocco.geometry.attributes.aTessera;
       at.clearUpdateRanges(); at.addUpdateRange(0, nSag); at.needsUpdate = true;
     }
-    msAggiorna = performance.now() - t1;
   }
 
   /**

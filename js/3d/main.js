@@ -25,7 +25,7 @@ import { distanzaStrada } from '../mondo/strade.js';
 import { posizionaVegetazione, coperturaMondo, coperturaTavullia } from '../mondo/vegetazione.js';
 import { creaVegetazione } from './vegetazione3d.js';
 import { semeDaTesto } from '../mondo/rumore.js';
-import { creaProfilatore, creaPercorso, GRUPPI, BUDGET_GPU } from './prestazioni.js';
+import { creaProfilatore, creaPercorso, GRUPPI, BUDGET_GPU, budgetDi, creaQualita } from './prestazioni.js';
 
 // Nebbia sulla distanza vera dalla camera, non sulla profondità lungo l'asse di vista (come fa Three.js):
 // con la profondità, un monte al bordo dello schermo riceveva meno nebbia e spariva girandosi verso di lui.
@@ -39,7 +39,12 @@ const NEBBIA = [900, 4000];               // m: inizio e fine della nebbia linea
 const NEBBIA_ORIZZONTE = [10000, 170000];
 const LONTANO = 130000;                   // m: distanza massima disegnata dalla camera
 const PARAMETRI = new URL(window.location.href).searchParams;
-const TAVULLIA = PARAMETRI.get('terreno') === 'tavullia';   // scena di prova (terreno reale, castello)
+const TAVULLIA = PARAMETRI.get('terreno') === 'tavullia';
+const PROVA_PRESTAZIONI = PARAMETRI.has('prova');             // percorso di prova: niente salvataggi (vedi init)
+const CENTRO_PROVA = (() => {                                   // ?centro=x,z (m del mondo) per il percorso di prova
+  const v = (PARAMETRI.get('centro') || '').split(',').map(Number);
+  return v.length === 2 && v.every(Number.isFinite) ? v : null;
+})();   // scena di prova (terreno reale, castello)
 const COLORE_ACQUA = '#4d7282';
 const PROFONDITA_GUADO = 0.9;             // m d'acqua oltre i quali il cavaliere non entra (fiumi piccoli: si guadano)
 
@@ -47,14 +52,51 @@ const PROFONDITA_GUADO = 0.9;             // m d'acqua oltre i quali il cavalier
 const canvas = document.getElementById('scena');
 // Buffer di profondità logaritmico: dal cavaliere a pochi metri fino all'orizzonte a ~110 km senza che le
 // superfici lontane (costa e mare, versanti vicini) si contendano i pixel.
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });
+// Profondità (docs/PRESTAZIONI.md, passo 2). Predefinita: **invertita** (EXT_clip_control). Misura sulla scheda di
+// riferimento, bosco fitto: 46,3 → 71,7 FPS rispetto alla logaritmica, che scrive la profondità in ogni pixel e impedisce
+// alla scheda di scartare in anticipo i pixel nascosti; nessuno sfarfallio visto dall'utente. Se il browser non ha
+// EXT_clip_control si ripiega sulla logaritmica (con la normale, da 0,2 m a 130 km, il lontano sfarfallerebbe).
+// Per le prove: ?profondita=log | invertita | normale e ?msaa=0 (senza MSAA: +24 % FPS nel bosco fitto, ma bordi
+// seghettati: candidato per un preset «basso»).
+const PROFONDITA = (() => {
+  const scelta = PARAMETRI.get('profondita');
+  if (['log', 'invertita', 'normale'].includes(scelta)) return scelta;
+  try {
+    const gl = document.createElement('canvas').getContext('webgl2');
+    const ok = !!gl && (gl.getSupportedExtensions() || []).includes('EXT_clip_control');
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
+    return ok ? 'invertita' : 'log';
+  } catch {
+    return 'log';
+  }
+})();
+const renderer = new THREE.WebGLRenderer({
+  canvas, antialias: PARAMETRI.get('msaa') !== '0',
+  logarithmicDepthBuffer: PROFONDITA === 'log', reversedDepthBuffer: PROFONDITA === 'invertita',
+});
 const profilatore = creaProfilatore(renderer);   // tempi GPU/CPU (docs/PRESTAZIONI.md, passo 1)
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(COLORE_CIELO);
 scene.fog = new THREE.Fog(COLORE_CIELO, NEBBIA[0], NEBBIA[1]);
+
+// Qualità (F2, ?qualita=basso|medio|alto, ricordata nel browser) e risoluzione adattiva: prestazioni.js.
+/** Micro-rilievo di prato e neve nello shader del suolo: spento nella qualità bassa. */
+function applicaRilievo(acceso, radice = scene) {
+  radice.traverse((o) => {
+    const m = o.material;
+    if (!o.isMesh || m?.customProgramCacheKey?.() !== 'suolo-mondo') return;
+    const d = { ...(m.defines || {}) };
+    if (acceso) delete d.SENZA_RILIEVO; else d.SENZA_RILIEVO = '';
+    m.defines = d;
+    m.needsUpdate = true;
+  });
+}
+const qualita = creaQualita(renderer, profilatore, PARAMETRI.get('qualita') || (() => {
+  try { return localStorage.getItem('kd-qualita'); } catch { return null; }
+})() || 'medio', applicaRilievo);
+qualita.imposta(qualita.chiave);
 
 const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.2, LONTANO);
 
@@ -504,6 +546,8 @@ async function caricaScena(desc) {
     // Colore del blocco in una texture (docs/PRESTAZIONI.md, passo 3): dopo la vegetazione, che aggiunge al terreno
     // l'attributo aSuolo (lettiera sotto il bosco, fango vicino all'acqua) letto dalla cottura.
     msCottura = cuociSuolo(renderer, terrain);
+    // I materiali nuovi nascono con il rilievo; il terreno qui non è ancora nella scena, si cerca in lui.
+    if (qualita.chiave === 'basso') applicaRilievo(false, terrain.mesh);
   }
   if (desc.tipo === 'tavullia') {
     // Profilo fisso di collina temperata; niente vegetazione sul colle del castello e sulla rampa.
@@ -640,7 +684,10 @@ async function entraTavullia() {
 
 async function init() {
   // Partita ripresa dal salvataggio automatico, se c'è; altrimenti nuova.
-  const ripresa = await Save.load(Save.AUTOSAVE_SLOT);
+  // Percorso di prova (?prova): niente salvataggio letto né scritto, così parte sempre dalla partenza standard del
+  // seme (misure confrontabili) e non tocca la partita dell'utente.
+  if (PROVA_PRESTAZIONI) nonSalvare = true;
+  const ripresa = PROVA_PRESTAZIONI ? null : await Save.load(Save.AUTOSAVE_SLOT);
   if (!ripresa) nuovaPartitaDati();
   const sc = ripresa ? Save.scenaSalvata : null;
   const finiti = (...v) => v.every(Number.isFinite);
@@ -679,6 +726,10 @@ async function init() {
         posizionaCavaliere(p.x, p.z, p.direzione);
         messaggio('Il punto salvato era dentro le mura di una rocca: si riparte fuori dalla porta del borgo.');
       }
+    } else if (PROVA_PRESTAZIONI && CENTRO_PROVA) {
+      // Percorso di prova in un punto scelto (?centro=x,z in metri del mondo): cavaliere al centro del blocco.
+      await caricaScena({ tipo: 'mondo', cx: CENTRO_PROVA[0], cz: CENTRO_PROVA[1] });
+      posizionaCavaliere(0, 0, Math.PI);
     } else {
       const sito = carta.luoghi?.find((l) => l.partenza);
       if (sito) {
@@ -702,7 +753,7 @@ async function init() {
       ? { terreno: 'tavullia', seme: carta?.seme, x: k.x, z: k.z, direzione: k.direzione }
       : { terreno: 'mondo', seme: carta.seme, cx: scenaAttuale.cx, cz: scenaAttuale.cz, x: k.x, z: k.z, direzione: k.direzione };
   };
-  Save.startAutosave();
+  if (!PROVA_PRESTAZIONI) Save.startAutosave();
   window.addEventListener('pagehide', salvaOra);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') salvaOra();
@@ -723,7 +774,7 @@ async function init() {
 
   // Per ispezione dalla console del browser (Knight, Calendar, Save sono comunque globali)
   window.kd = {
-    scene, camera, cam, controls, suolo, Knight, Calendar, Save, renderer,
+    scene, camera, cam, controls, suolo, Knight, Calendar, Save, renderer, qualita,
     get terrain() { return terrain; }, get knight() { return knight; }, get castle() { return castle; },
     get carta() { return carta; }, get scena() { return scenaAttuale; }, get orizzonte() { return orizzonte; },
     get rocche() { return rocche; },
@@ -733,7 +784,7 @@ async function init() {
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no'
     + ' · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: Carta (clic: vai lì)'
-    + ' · F3: info · F8: nuova partita',
+    + ' · F2: qualità · F3: info · F8: nuova partita',
   'aiuto');
 }
 
@@ -885,6 +936,10 @@ window.addEventListener('keydown', (e) => {
   } else if (e.code === 'F4' && !fpsEl.hidden) {
     e.preventDefault();
     applicaProva((provaPrestazioni + 1) % PROVE_PRESTAZIONI.length);
+  } else if (e.code === 'F2') {
+    e.preventDefault();
+    qualita.successiva();
+    messaggio(`Qualità ${qualita.nome} (F2 per cambiare)`);
   } else if (e.code === 'F9' && !fpsEl.hidden) {
     e.preventDefault();
     avviaPercorso();
@@ -903,7 +958,7 @@ function applicaProva(n) {
   _materialiSuolo.clear();
   const rocchePresenti = [castle, ...rocche].filter(Boolean).map((r) => r.object);
   for (const o of [vegetazione?.oggetto, orizzonte?.oggetto, ...rocchePresenti]) if (o) o.visible = true;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  qualita.azzeraAdattiva();
   provaPrestazioni = n;
   switch (n) {
     case 1: break;                         // «misura per gruppi»: cambia solo il modo di disegno (frame)
@@ -918,16 +973,28 @@ function applicaProva(n) {
     case 3: if (vegetazione) vegetazione.oggetto.visible = false; break;
     case 4: if (orizzonte) orizzonte.oggetto.visible = false; break;
     case 5: for (const o of rocchePresenti) o.visible = false; break;
-    case 6: renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * 0.6); break;
+    case 6: renderer.setPixelRatio(qualita.scala * 0.6); break;
   }
 }
 
-/** Gruppo di un figlio diretto della scena per il profilatore (null = «resto»). */
+/**
+ * Gruppo di un oggetto disegnabile per il profilatore (null = «resto»). La vegetazione si divide per tipo di mesh
+ * (sagome lontane, sagome nel blocco, erba, resto) dal nome, ovunque sia appesa.
+ */
 function gruppoDi(o) {
-  if ((terrain && o === terrain.mesh) || (orizzonte && o === orizzonte.oggetto)) return 'terreno';
-  if (vegetazione && o === vegetazione.oggetto) return 'vegetazione';
-  if ((castle && o === castle.object) || rocche.some((r) => r.object === o)) return 'edifici';
-  if (knight && o === knight.object) return 'personaggi';
+  const nome = o.name || '';
+  if (nome.startsWith('vegetazione')) {
+    if (nome.includes('sagome-lontane')) return 'veg. sagome lontane';
+    if (nome.includes('sagome')) return 'veg. sagome';
+    if (nome.includes('erba')) return 'veg. erba';
+    return 'veg. resto';
+  }
+  let top = o;
+  while (top.parent && top.parent !== scene) top = top.parent;
+  if ((terrain && top === terrain.mesh) || (orizzonte && top === orizzonte.oggetto)) return 'terreno';
+  if (vegetazione && top === vegetazione.oggetto) return 'veg. resto';
+  if ((castle && top === castle.object) || rocche.some((r) => r.object === top)) return 'edifici';
+  if (knight && top === knight.object) return 'personaggi';
   return null;
 }
 
@@ -935,10 +1002,11 @@ function gruppoDi(o) {
 let msCottura = null;                    // ms della cottura del colore del blocco (F3)
 let percorso = null;
 let percorsoNormale = null;               // istantanea alla fine del giro normale
-let provaAutomatica = PARAMETRI.has('prova');
+let provaAutomatica = PROVA_PRESTAZIONI;
 let attesaProva = 0;
 function avviaPercorso() {
   if (!knight || percorso) return;
+  qualita.azzeraAdattiva();               // misure confrontabili: risoluzione piena del preset, ferma durante il giro
   if (modoCamera === 'libera') cambiaModoCamera();
   const k = knight.stato;
   percorso = creaPercorso({ x: k.x, y: k.y, z: k.z, direzione: k.direzione });
@@ -955,21 +1023,43 @@ function fineDelPercorso() {
     `Knight Dawn — percorso di prova (${new Date().toISOString().slice(0, 16).replace('T', ' ')})`,
     `scheda: ${P.scheda}`,
     `timer GPU: ${P.timerGPU ? 'sì' : 'no'} · profondità invertita possibile: ${P.clipControl ? 'sì' : 'no'}`
-      + ` · MSAA ${P.campioniMSAA}× · profondità logaritmica: ${P.profonditaLog ? 'sì' : 'no'} · ${buf.x}×${buf.y} pixel`,
+      + ` · MSAA ${P.campioniMSAA}× · profondità: ${P.profonditaLog ? 'logaritmica' : P.profonditaInvertita ? 'invertita' : 'normale'}`
+      + ` · ${buf.x}×${buf.y} pixel`,
+    `qualità: ${qualita.nome} · risoluzione ×${fmt(qualita.scala, 2)}`,
     `scena: ${scenaAttuale?.tipo === 'mondo' ? `seme ${carta?.seme}, centro ${scenaAttuale.cx}, ${scenaAttuale.cz}` : scenaAttuale?.tipo}`
       + ` · vegetazione ${vegetazioneVisibile ? 'accesa' : 'spenta'}`,
     st ? `FPS medio ${fmt(st.fps, 1)} (${fmt(st.msMedio, 1)} ms) · 1% peggiori ${fmt(st.fps1, 1)} FPS`
       + ` · fotogramma peggiore ${fmt(st.msPeggiore, 1)} ms · ${st.fotogrammi} fotogrammi` : 'FPS: n/d',
+    st && Number.isFinite(st.cpuMedia) ? `CPU per fotogramma (logica + invio): media ${fmt(st.cpuMedia, 1)} ms · 1% peggiori`
+      + ` ${fmt(st.cpu99, 1)} ms · massimo ${fmt(st.cpuMax, 1)} ms` : 'CPU: n/d',
+    ...(st?.parti?.length ? ['CPU per parte (media · 1% peggiori · massimo, ms):',
+      ...st.parti.map((p) => `  ${p.nome}: ${fmt(p.media, 2)} · ${fmt(p.p99, 1)} · ${fmt(p.max, 1)}`)] : []),
+    st?.lunghi ? `compiti lunghi fuori dal fotogramma (> 50 ms): ${st.lunghi.n} · il più lungo ${fmt(st.lunghi.max)} ms` : '',
     `GPU totale: ${fmtMs(percorsoNormale?.totale)} · budget ${fmt(BUDGET_GPU.totale, 1)} ms`,
     `chiamate ${percorsoNormale?.calls ?? 'n/d'} · ${fmt((percorsoNormale?.triangles ?? 0) / 1000)} mila triangoli`,
     'GPU per gruppo (ripartizione):',
     ...GRUPPI.map((g) => {
-      const m = profilatore.media(g);
-      return `  ${g}: ${fmtMs(m)} · budget ${fmt(BUDGET_GPU[g], 1)}${m && m.media > BUDGET_GPU[g] ? '  ⚠ oltre il budget' : ''}`;
+      const m = profilatore.media(g), b = budgetDi(g);
+      return `  ${g}: ${fmtMs(m)}${b != null ? ` · budget ${fmt(b, 1)}${m && m.media > b ? '  ⚠ oltre il budget' : ''}` : ''}`;
     }),
+    (() => {
+      const v = GRUPPI.filter((g) => g.startsWith('veg.')).reduce((s, g) => s + (profilatore.media(g)?.media || 0), 0);
+      return `  vegetazione in tutto: ${fmt(v, 1)} ms · budget ${fmt(BUDGET_GPU.vegetazione, 1)}`
+        + (v > BUDGET_GPU.vegetazione ? '  ⚠ oltre il budget' : '');
+    })(),
   ];
+  // Gli oggetti più pesanti (triangoli disegnati, istanze comprese): per capire se qualcosa si duplica.
+  const pesi = [];
+  scene.traverseVisible((o) => {
+    if (!o.isMesh || !o.geometry) return;
+    const g = o.geometry, n = (g.index ? g.index.count : g.attributes.position?.count || 0) / 3;
+    pesi.push({ nome: o.name || o.parent?.name || '(senza nome)', ist: o.isInstancedMesh ? o.count : 1, tri: n * (o.isInstancedMesh ? o.count : 1) });
+  });
+  pesi.sort((a, b) => b.tri - a.tri);
+  righe.push(`oggetti visibili: ${pesi.length} (chiamate ≈ oggetti nel campo visivo) · i più pesanti:`);
+  for (const p of pesi.slice(0, 12)) righe.push(`  ${p.nome}: ${fmt(p.tri / 1000)} mila triangoli${p.ist > 1 ? ` · ${p.ist} istanze` : ''}`);
   percorso = null;
-  mostraRisultati(righe.join('\n'));
+  mostraRisultati(righe.filter((r) => r !== '').join('\n'));
 }
 function mostraRisultati(testo) {
   console.log(testo);
@@ -1032,6 +1122,8 @@ function puntoSottoCursore() {
 const fmt = (n, d = 0) => n.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d });
 
 const _dimBuffer = new THREE.Vector2();
+const PANNELLO_INTERVALLO_MS = 200;
+let _pannelloT = -Infinity;
 const infoFrame = { calls: 0, triangles: 0, msInvio: 0, msLogica: 0 };
 function aggiornaPannello(now) {
   fpsFrame++;
@@ -1042,20 +1134,27 @@ function aggiornaPannello(now) {
     fpsT0 = now;
   }
   if (fpsEl.hidden) return;
+  // Il testo si ricostruisce 5 volte al secondo, non a ogni fotogramma: il percorso di prova misurava fino a 23 ms
+  // di picco per il pannello (statistiche, raggio sotto il cursore, DOM), cioè scatti causati dalla misura stessa.
+  if (now - _pannelloT < PANNELLO_INTERVALLO_MS) return;
+  _pannelloT = now;
   let testo = rigaFps;
   const ri = infoFrame, buf = renderer.getDrawingBufferSize(_dimBuffer);
   testo += `\nprestazioni (F4 cambia, F9 percorso di prova): ${percorso ? 'PERCORSO DI PROVA in corso' : PROVE_PRESTAZIONI[provaPrestazioni]}`
     + ` · ${ri.calls} chiamate · ${fmt(ri.triangles / 1000)} mila triangoli · ${buf.x}×${buf.y} pixel`;
   const P = profilatore.info;
   testo += `\nscheda: ${P.scheda}\n  timer GPU: ${P.timerGPU ? 'sì' : 'no'} · profondità invertita possibile: ${P.clipControl ? 'sì' : 'no'}`
-    + ` · MSAA ${P.campioniMSAA}× · profondità logaritmica: ${P.profonditaLog ? 'sì' : 'no'}`;
+    + ` · MSAA ${P.campioniMSAA}× · profondità: ${P.profonditaLog ? 'logaritmica' : P.profonditaInvertita ? 'invertita' : 'normale'}`;
+  testo += `\nqualità: ${qualita.nome} (F2) · risoluzione ×${fmt(qualita.scala, 2)}`
+    + (qualita.adatta < 1 ? ` (adattiva ×${fmt(qualita.adatta, 2)})` : '');
   testo += `\nCPU: logica ${fmt(ri.msLogica, 1)} ms · invio comandi ${fmt(ri.msInvio, 1)} ms`;
   if (msCottura != null) testo += ` · suolo cotto in ${fmt(msCottura)} ms`;
   if (!P.timerGPU) testo += '\nGPU: timer non disponibili su questa scheda o browser (usare F4)';
   else if ((percorso ? percorso.modo : provaPrestazioni === 1 ? 'gruppi' : 'normale') === 'gruppi') {
     testo += '\nGPU per gruppo: ' + GRUPPI.map((g) => {
       const m = profilatore.media(g);
-      return `${g} ${m ? fmt(m.media, 1) : '…'}${m && m.media > BUDGET_GPU[g] ? '⚠' : ''}`;
+      const b = budgetDi(g);
+      return `${g} ${m ? fmt(m.media, 1) : '…'}${m && b != null && m.media > b ? '⚠' : ''}`;
     }).join(' · ') + ' ms';
   } else testo += `\nGPU: ${fmtMs(profilatore.media('totale'))} · budget ${fmt(BUDGET_GPU.totale, 1)} ms`;
   if (knight) {
@@ -1124,9 +1223,19 @@ function aggiornaPannello(now) {
 // ─── Render loop ────────────────────────────────────────────────────────
 const DT_MAX = 0.1;                        // s: dopo una pausa (scheda in background) niente salti
 let tPrec = performance.now();
+// Tempo di processore per parte del fotogramma (percorso di prova: per trovare gli scatti).
+const partiCPU = {};
+function segna(nome, t) {
+  const n = performance.now();
+  partiCPU[nome] = (partiCPU[nome] || 0) + (n - t);
+  return n;
+}
+
 function frame(now) {
   requestAnimationFrame(frame);
   const t0 = performance.now();
+  for (const k in partiCPU) partiCPU[k] = 0;
+  let tt = t0;
   const dtReale = Math.max(0, (now - tPrec) / 1000);
   const dt = THREE.MathUtils.clamp(dtReale, 0, DT_MAX);
   tPrec = now;
@@ -1143,11 +1252,14 @@ function frame(now) {
     } else {
       cam.prendiGiroMouse();               // in pausa il mouse non gira il cavaliere
     }
+    tt = segna('cavaliere e tempo', tt);
     aggiornaCielo();
     castle?.aggiornaLuci(now / 1000, 1 - _luceGiorno);
     for (const r of rocche) r.aggiornaLuci(now / 1000, 1 - _luceGiorno);
+    tt = segna('cielo e luci', tt);
     aggiornaStato();
     aggiornaIndicatoreAndatura();
+    tt = segna('interfaccia', tt);
     if (percorso) {
       const r = percorso.aggiorna(dtReale, camera, (x, z) => suolo.getHeight(x, z));
       if (r.azzera) {
@@ -1166,20 +1278,30 @@ function frame(now) {
       vincolaCameraLibera();
       aggiornaNebbia(controls.target);
     }
+    tt = segna('camera', tt);
   }
   if (vegetazione && vegetazioneVisibile) {
     vegetazione.aggiorna(camera.position.x, camera.position.z, sole.position, _luceGiorno);
+    tt = segna('vegetazione: aggiorna', tt);
     // Visuale pulita: ciò che sta tra camera e cavaliere si dirada (solo con la camera alle spalle)
     if (knight && modoCamera === 'segui' && !percorso) vegetazione.visuale(knight.stato.x, knight.stato.y, knight.stato.z);
     else vegetazione.visuale(null);
+    tt = segna('vegetazione: visuale', tt);
   }
   aggiornaPannello(now);
+  tt = segna('pannello F3', tt);
+  qualita.aggiorna(dtReale, !!percorso || provaPrestazioni !== 0);
   infoFrame.msLogica = performance.now() - t0;
   const modoDisegno = percorso ? percorso.modo : provaPrestazioni === 1 ? 'gruppi' : 'normale';
   const r = profilatore.disegna(scene, camera, modoDisegno, gruppoDi);
   infoFrame.calls = r.calls;
   infoFrame.triangles = r.triangles;
   infoFrame.msInvio = r.msInvio;
+  partiCPU['invio comandi'] = r.msInvio;
+  if (percorso) {
+    percorso.registraCPU(infoFrame.msLogica + r.msInvio);
+    percorso.registraParti(partiCPU);
+  }
 }
 
 camera.position.set(0, 300, 900);          // vista provvisoria mentre il terreno si carica

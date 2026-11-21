@@ -771,10 +771,10 @@ con copertura, fiumi mostrati, clima, luoghi, nomi e fazioni generati dalle stes
 - Copernicus e Terrarium includono edifici e alberi (modelli di superficie): i paesi veri lasciano
   piccoli rilievi dove nel gioco non ci sono.
 
-## M7 — Rocca e borgo — in pausa
+## M7 — Rocca e borgo — fase corrente (ripresa)
 
-> **In pausa** (novembre 2026, decisione dell'utente) durante la milestone «Prestazioni»: `docs/PRESTAZIONI.md`.
-> Si riprende quando quella è chiusa, con le regole per i contenuti nuovi (borgo, cavallo, persone) scritte lì.
+> Ripresa dopo la chiusura della milestone «Prestazioni» (21/11/2026). Prima di costruire borgo, cavallo e persone:
+> budget e regole in `docs/PRESTAZIONI.md` (passo 6); ogni PR passa dal percorso di prova.
 
 > **Riallineato (novembre 2026)** alla regione di 120×90 km, alla gerarchia di densità, al castello di valle,
 > ai valichi tra grandi valli e al tempo ×10 (`docs/GDD.md` §2 «Dimensioni e densità», «Valichi e forcelle»;
@@ -1523,9 +1523,22 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      cella; niente alberi in laghi e mare; una chiamata. Prima versione: seme 570549 ~137 000 sagome lontane, e la
      sessione delle prestazioni ha misurato che da sole raddoppiavano il fotogramma in headless (2190 contro 610 ms).
      **Ridotte** (obiettivo ≤ 20–30 000): raggio 3 km; oltre 1,3 km il bosco si dirada fino all'8 % a 3 km, con
-     alberi più grandi a compensare (scala fino a ×2,8) perché la massa resti; cella di base 10 m. Seme 570549:
+     alberi più grandi a compensare (scala fino a ×2,8) perché la massa resti; cella di base 10 m. **Corretto**
+     (l'utente: «gli alberi lontani sono molto grandi in proporzione»): la scala cresceva anche con la cella, ×1,3 al
+     bordo e fino a ×6 a 3 km; ora le sagome lontane hanno le stesse taglie degli alberi del blocco e il bosco lontano
+     si legge più rado. Seme 570549:
      ~28 000 sagome lontane (63 ms) più ~12 500 nel blocco; seme 855588: ~13 000 più ~3 400. Nessun vuoto al bordo
      del blocco. Da rimisurare (sessione delle prestazioni, poi la scheda dell'utente con `?prova`).
+   - *Bosco fitto* (misura dell'utente sulla UHD 730, seme 570549 a 99937, 43289: vegetazione 10,3 ms contro 4 di
+     budget; «resto» 6,2 ms, sagome del blocco 3,3 ms con 59 000 istanze): latifoglie vicine con ciuffi pieni (80
+     triangoli l'uno, ~2450 ad albero) solo entro 25 m, da 25 a 60 m la stessa chioma a ciuffi semplici (20 triangoli,
+     ~650 ad albero; ogni specie ha un generatore suo, quindi la forma non cambia al passaggio); sagome del blocco
+     piene fino a 600 m dalla camera, poi diradate come (600/d)², la legge del bosco lontano, con cui al bordo si
+     raccordano. In headless nello stesso punto: latifoglie vicine da ~333 000 a ~145 000 triangoli, sagome del
+     blocco da 59 500 a 36 200, vegetazione da 792 000 a 571 000 triangoli; chiamate da 26 a 29.
+   - *Scatti*: la ridistribuzione delle istanze (ogni 12 m) si fa a pezzi, al più ~1,5 ms per fotogramma, e mai nel
+     fotogramma in cui si rifà l'erba vicina; erba, felci e ciottoli si rifanno uno per fotogramma. In headless nel
+     bosco fitto, camminando 200 m: costo peggiore di un fotogramma da ~11 a ~5–6 ms (resta il calcolo dell'erba).
    - *Collisioni (passo 3)*: tronchi, massi, affioramenti, tronchi caduti (tre cerchi) e sassi di scala ≥ 1,1 come
      cerchi in una griglia di 16 m, ostacolo per il cavaliere come le mura (`spingiFuori`). Prova: correndo contro un
      tronco il cavaliere si ferma a 0,6–0,8 m dal centro e ci scivola attorno.
@@ -1535,6 +1548,12 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      (fino a −35 %); **legno morto** (5 % di alberi secchi anche nei boschi); **rive** con ghiaia e sassi. Da fare: campi,
      orti, siepi e muretti (shader del suolo e luoghi, con le sessioni M1, M6 e M7), alvei con ghiaia nell'acqua,
      fiori, biomi meno curati (palude, tundra, deserto); le cose della campagna con la milestone dei luoghi.
+   - *Suolo della campagna* (segnalato dalla sessione delle prestazioni: macchie scure dove il bosco è stato
+     diradato): il colore del terreno (`coloreMondo`) dipingeva il verde cupo del bosco dalla copertura anche dove
+     gli alberi non ci sono più → nella campagna (`campagnaMondo`) il bosco passa al colore del prato (~13 ms in più
+     per blocco vicino a un luogo, solo al caricamento). La lettiera (`aSuolo`) segue gli alberi davvero piantati
+     (chiome sfocate su 3×3 vertici) e non solo la copertura: nel bosco fitto resta quasi uguale (media da 0,94 a
+     0,91), attorno alla rocca del seme 570549 i vertici con lettiera > 0,3 scendono da 14 500 a 3 500.
 3. **Collisioni.** Tronchi, massi e affioramenti come ostacoli a griglia. *Prova:* si attraversa un bosco fitto
    scivolando tra i tronchi senza incastrarsi; la camera resta usabile nel bosco.
 4. **Arbusti e rocce.** Cespugli (macchia, margini, sottobosco), arbusti d'alta quota, sassi, massi, affioramenti
