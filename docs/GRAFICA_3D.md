@@ -82,6 +82,14 @@ Segnalazione dell'utente: «sembra un nastro di stoffa appoggiato sul rilievo»,
 - Shader: bordo frastagliato (fino al 22% della semilarghezza, rumore del mondo con periodo 8192 m, quindi uguale tra
   blocchi) che sfuma nell'erba calpestata; chiazze di tono; sassolini tondi entro 30 m. Costo trascurabile (pochi pixel).
 
+## Foschia e visibilità (`aggiornaNebbia` in `js/3d/main.js`)
+
+Segnalazione dell'utente (tramite M6): da 1500 m si vedeva quasi tutta la mappa (foschia fissa 10–170 km). Ora la fine
+della foschia è tirata per giorno dal seme e dal giorno del calendario: densa 40–50 km (15 %), di norma 55–75 km (60 %),
+limpida 110–150 km (25 %); tra un giorno e il successivo cambia con continuità. Con 65 km: a 35 km si perde ~55 % del
+contrasto, a 50 km ~85 %. Il valore del momento è nel pannello `F3` (riga «tempo»). Quando ci sarà il meteo, il tiro del
+giorno verrà da lì (pioggia e vento → limpida). Curvatura ed esagerazione dei rilievi lontani: `orizzonte.js` (M6).
+
 ## Prestazioni
 
 Budget, misure, cause note e piano della milestone «Prestazioni»: `docs/PRESTAZIONI.md` (scheda di riferimento:

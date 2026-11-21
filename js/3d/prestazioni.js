@@ -127,6 +127,7 @@ const FASI = [
   { durata: 5, distanza: 120, altezza: 70, avanti: 200 },
 ];
 const DURATA_GIRO = FASI.reduce((s, f) => s + f.durata, 0);
+const MAX_FOTOGRAMMA = 1;                 // s: un fotogramma più lungo invalida il percorso (finestra nascosta)
 const ATTESA_INIZIALE = 1.5;               // s di assestamento (compilazione, primi caricamenti) non contati
 
 /**
@@ -149,8 +150,11 @@ export function creaPercorso(centro) {
   } catch { osservatore = null; }
   let t = -ATTESA_INIZIALE;
   let finito = false;
+  let interrotto = 0;                      // s del fotogramma che ha invalidato la misura (0: valida)
   return {
     get finito() { return finito; },
+    /** Durata (s) del fotogramma lunghissimo che ha interrotto il percorso, 0 se la misura è valida. */
+    get interrotto() { return interrotto; },
     /** Modo di disegno del giro attuale. */
     get modo() { return t >= DURATA_GIRO ? 'gruppi' : 'normale'; },
     /**
@@ -158,6 +162,13 @@ export function creaPercorso(centro) {
      * true al primo fotogramma di ciascun giro (le medie del profilatore vanno ripulite lì).
      */
     aggiorna(dt, camera, quota) {
+      // Finestra nascosta o ridotta a icona: il browser ferma i fotogrammi e alla ripresa arriva un dt di decine di
+      // secondi, che faceva saltare tutto il percorso senza un campione (risultati tutti «n/d»). Misura non valida.
+      // Durante l'attesa iniziale il fotogramma lungo si ignora soltanto.
+      if (dt > MAX_FOTOGRAMMA) {
+        if (t < 0) dt = 0;
+        else { interrotto = dt; finito = true; osservatore?.disconnect(); return { mira: null, azzera: false }; }
+      }
       const prima = t;
       t += dt;
       const azzera = (prima < 0 && t >= 0) || (prima < DURATA_GIRO && t >= DURATA_GIRO);

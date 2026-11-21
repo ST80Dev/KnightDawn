@@ -16,6 +16,7 @@ import { loadTerrain, componiSuolo, createTerrain, coloreMondo, cuociSuolo } fro
 import { createKnight } from './knight3d.js';
 import { createFollowCamera } from './camera.js';
 import { createCastle, CLASSI_ROCCA } from './castle3d.js';
+import { createBorgo } from './borgo3d.js';
 import { createCartaVista } from './cartaVista.js';
 import { creaOrizzonte } from './orizzonte.js';
 import { creaAcqueScena } from './acqua.js';
@@ -33,10 +34,17 @@ THREE.ShaderChunk.fog_vertex = '#ifdef USE_FOG\n\tvFogDepth = length( mvPosition
 
 const COLORE_CIELO = '#c4d4d6';           // azzurro-pergamena, uguale alla nebbia
 const NEBBIA = [900, 4000];               // m: inizio e fine della nebbia lineare (foschia leggera)
-// m: con l'orizzonte (mondo generato). Più trasparente da quando salire per guardare lontano è un'azione
-// di gioco, e le grandi montagne servono a orientarsi fino a ~100 km: a 25 km si perde ~10 % del contrasto,
-// a 50 km ~25 %, a 100 km ~55 %. Più avanti dipenderà dal tempo atmosferico.
-const NEBBIA_ORIZZONTE = [10000, 170000];
+// Con l'orizzonte (mondo generato) la foschia dipende dal giorno (visibilitaDelGiorno): inizio a 1,5 km, fine
+// (`far`, m) tirata per giorno. Nebbia lineare addolcita (smoothstep di Three.js): con far 65 km a 20 km si perde
+// ~25 % del contrasto, a 35 km ~55 %, a 50 km ~85 % (sagome dei monti alti ancora leggibili). Giornate limpide
+// (dopo la pioggia, col vento) fino a far 150 km: a 80 km ~55 %, a 100 km ~75 %. Quando ci sarà il meteo, il tiro
+// del giorno verrà da lì.
+const NEBBIA_ORIZZONTE_INIZIO = 1500;
+const VISIBILITA = [                       // [probabilità, far minimo, far massimo] (m)
+  [0.15, 40000, 50000],                    // foschia densa, afa
+  [0.60, 55000, 75000],                    // di norma
+  [0.25, 110000, 150000],                  // limpida
+];
 const LONTANO = 130000;                   // m: distanza massima disegnata dalla camera
 const PARAMETRI = new URL(window.location.href).searchParams;
 const TAVULLIA = PARAMETRI.get('terreno') === 'tavullia';
@@ -483,10 +491,17 @@ function costruisciRocche(cx, cz, ter) {
     const rocca = createCastle(suoloMondo, {
       ...K, x, z, piano: l.piani[0].q,
       rotazione: Math.atan2(-l.verso.x, -l.verso.z),        // la porta (lato −Z locale) verso il borgo
-      rampa: { pendenzaMax: 0.25, lunghezzaMin: 3, lunghezzaMax: 40, parapetto: 0.5 },
+      // Con il borgo (passo 4) la rampa scende alla prima terrazza e finisce dentro di essa (anche più ripida):
+      // oltre c'è il muro di contenimento con la rampa della via.
+      rampa: { pendenzaMax: 0.25, lunghezzaMin: 3, parapetto: 0.5,
+        lunghezzaMax: l.piani.length > 1 ? Math.max(4, Math.min(40, 2 * l.piani[1].a - (K.latoZ / 2 + 3.5 - l.piani[0].a) - 4)) : 40 },
+      quotaPiede: l.piani.length > 1 ? l.piani[1].q : undefined,
     });
     rocca.luogo = l;
+    rocca.tipo = 'rocca';
     out.push(rocca);
+    // M7, passo 4: il borgo murato sulle terrazze, addossato alla rocca.
+    if (l.piani.length > 1) out.push(createBorgo(suoloMondo, l, x, z, { HZ: K.latoZ / 2, HX: K.latoX / 2, R: K.raggioTorre }));
   }
   return out;
 }
@@ -818,9 +833,31 @@ function vincolaCameraLibera() {
 // Nebbia: da vicino nasconde il bordo del mondo; allontanandosi si ritira per la vista d'insieme.
 // Di notte la nebbia, del colore del cielo notturno, si stringe: si vede bene solo attorno al punto
 // osservato. Le luci di case, castello e fuochi (future) dovranno ignorarla per restare visibili da lontano.
+/** `far` della foschia (m) per il giorno `g` (intero) del seme: tiro deterministico, stesso giorno = stessa vista. */
+function farDelGiorno(seme, g) {
+  let h = (Math.imul(seme | 0, 0x9e3779b1) ^ Math.imul(g | 0, 0x85ebca6b)) >>> 0;
+  h = Math.imul(h ^ (h >>> 16), 0x7feb352d) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 0x846ca68b) >>> 0;
+  const r = ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  let soglia = 0;
+  for (const [p, min, max] of VISIBILITA) {
+    soglia += p;
+    if (r < soglia) return min + (max - min) * ((r - soglia + p) / p);
+  }
+  return VISIBILITA.at(-1)[2];
+}
+
+/** Visibilità del momento: interpola tra il giorno corrente e il successivo, così cambia piano e senza scatti. */
+function visibilitaDelGiorno() {
+  const giorni = (Calendar.passiTotali + Calendar.frazione) / CALENDAR.PASSI_PER_GIORNO;
+  const g = Math.floor(giorni), f = giorni - g;
+  const seme = carta?.seme ?? 0;
+  return THREE.MathUtils.lerp(farDelGiorno(seme, g), farDelGiorno(seme, g + 1), f * f * (3 - 2 * f));
+}
+
 function aggiornaNebbia(puntoOsservato) {
   const dist = camera.position.distanceTo(puntoOsservato);
-  const nebbia = orizzonte ? NEBBIA_ORIZZONTE : NEBBIA;
+  const nebbia = orizzonte ? [NEBBIA_ORIZZONTE_INIZIO, visibilitaDelGiorno()] : NEBBIA;
   const nearGiorno = Math.max(nebbia[0], dist * 0.9);
   const farGiorno = Math.max(nebbia[1], nearGiorno + 3000);
   const g = _luceGiorno * _luceGiorno;     // la vista si allunga solo quando la luce è davvero tornata
@@ -1018,6 +1055,13 @@ function avviaPercorso() {
 const fmtMs = (m) => (m ? `${fmt(m.media, 1)} ms (picco ${fmt(m.max, 1)})` : 'n/d');
 function fineDelPercorso() {
   const st = percorso.statistiche();
+  if (percorso.interrotto || !st) {
+    const s = percorso.interrotto;
+    percorso = null;
+    messaggio(`Percorso di prova interrotto${s ? `: il browser si è fermato per ${fmt(s, 0)} s` : ''} (finestra nascosta`
+      + ' o ridotta a icona?). Rifallo con F9 lasciando la finestra in primo piano.', 10000);
+    return;
+  }
   const P = profilatore.info, buf = renderer.getDrawingBufferSize(_dimBuffer);
   const righe = [
     `Knight Dawn — percorso di prova (${new Date().toISOString().slice(0, 16).replace('T', ' ')})`,
@@ -1169,7 +1213,8 @@ function aggiornaPannello(now) {
       + ` · ore ${String(Math.floor(ora)).padStart(2, '0')}:${String(Math.floor((ora % 1) * 60)).padStart(2, '0')}`
       + ` · ${Calendar.eNotte() ? 'notte 1:' + TEMPO_SCENA.RAPPORTO_NOTTE : 'giorno 1:' + TEMPO_SCENA.RAPPORTO_GIORNO}`
       + (inPausa ? ' · in pausa' : '')
-      + ` · sole ${fmt(posizioneSole(ora).altezza)}° · Forza ${fmt(Knight.forza.cur, 2)}`;
+      + ` · sole ${fmt(posizioneSole(ora).altezza)}° · Forza ${fmt(Knight.forza.cur, 2)}`
+      + (orizzonte ? ` · foschia fino a ${fmt(visibilitaDelGiorno() / 1000)} km` : '');
     const pelo = livelloAcquaIn(k.x, k.z);
     if (!Number.isNaN(pelo)) testo += `\nacqua: pelo a ${fmt(pelo, 1)} m · profondità ${fmt(Math.max(0, pelo - k.y), 1)} m`;
     testo += `\ncamera: ${modoCamera === 'segui' ? 'alle spalle' : 'libera (C per tornare)'}`;
@@ -1185,7 +1230,12 @@ function aggiornaPannello(now) {
           + ` salto massimo ${fmt(t.salto, 1)} m, scarpate ≤ ${fmt(t.pendenza)}°, lavoro medio ${fmt(t.lavoro, 1)} m`
           + (t.pelo !== null ? `, acqua vicina a ${fmt(t.pelo, 1)} m` : '');
       }
-      for (const r of rocche) if (r.dentro(k.x, k.z)) testo += `\nnel cortile della rocca ${r.luogo.id + 1}`;
+      for (const r of rocche) {
+        if (!r.dentro(k.x, k.z)) continue;
+        testo += r.tipo === 'borgo' ? `\nnel borgo ${r.luogo.id + 1}` : `\nnel cortile della rocca ${r.luogo.id + 1}`;
+      }
+      for (const r of rocche) if (r.misure) testo += `\nborgo ${r.luogo.id + 1}: ${r.misure.terrazze} terrazze, ${r.misure.rampe} rampe,`
+        + ` ${r.misure.torri} torri, ${r.misure.oggetti} oggetti, ${fmt(r.misure.triangoli)} triangoli`;
     }
     if (castle) {
       testo += castle.dentro(k.x, k.z) ? '\ncastello: nel cortile'
