@@ -147,7 +147,7 @@ function chioma({ x = 0, y, z = 0, a, b, c = a, ciuffi, raggio, dettaglio = 1, s
     const px = x + dx * a * t, py = y + dy * b * t, pz = z + dz * c * t;
     const r = raggio[0] + (raggio[1] - raggio[0]) * rnd();
     let geo;
-    if (schegge) {
+    if (schegge || leggero) {
       // Ciuffo a schegge (richiesta dell'utente: niente «marshmallow di verde attaccati ai rami», senza arrivare alle
       // foglie singole): `schegge` tetraedri appiattiti orientati a caso dentro il ciuffo, contorno frastagliato.
       // Nucleo pieno (richiesta dell'utente: con le sole schegge «sembrano tutti alberi spogli»): un solido irregolare
@@ -167,6 +167,7 @@ function chioma({ x = 0, y, z = 0, a, b, c = a, ciuffi, raggio, dettaglio = 1, s
           pn.setXYZ(i, _v.x * f, _v.y * f, _v.z * f);
         } }
       nucleo.scale(1, 0.82, 1);
+      if (leggero) nucleo.rotateX((rnd() - 0.5) * 0.9);     // ottaedri storti: niente file di rombi uguali
       nucleo.rotateY(rnd() * 6.283);
       nucleo.translate(px, py, pz);
       nucleo.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(nucleo.attributes.position.count * 3), 3));
@@ -280,33 +281,6 @@ function piega(a, b, f, k, rnd) {
   const L = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) * k;
   return [a[0] + (b[0] - a[0]) * f + (rnd() - 0.5) * 2 * L, a[1] + (b[1] - a[1]) * f + (rnd() - 0.5) * L,
     a[2] + (b[2] - a[2]) * f + (rnd() - 0.5) * 2 * L];
-}
-
-/**
- * Chioma a masse (richiesta dell'utente: chiome «troppo arrotondate o piene, si vede che sono di un gioco»): `masse`
- * gruppi di foglie separati, ognuno con pochi ciuffi e un ramo dal fusto (`da`), sparsi nell'ellissoide (x, y, z, a,
- * b, c) con vuoti in mezzo da cui si vedono cielo e rami. Gli stessi triangoli di una chioma piena (masse × ciuffi).
- */
-function chiomaAMasse({ x = 0, y, z = 0, a, b, c = a, masse, ciuffi, raggio, dettaglio = 1, scuro, chiaro, rnd,
-  da = null, colRamo = COL.corteccia, rRamo = 0.1, alto = 0.25, schegge = 0 }) {
-  const parti = [], centri = [];
-  for (let m = 0, tent = 0; m < masse && tent < 200; tent++) {
-    let dx = rnd() * 2 - 1, dy = rnd() * 1.3 - 0.3 + alto, dz = rnd() * 2 - 1;
-    const l = Math.hypot(dx, dy, dz);
-    if (l < 0.05 || l > 1.4) continue;
-    dx /= l; dy /= l; dz /= l;
-    const t = 0.5 + 0.45 * rnd();
-    const px = x + dx * a * t, py = y + dy * b * t, pz = z + dz * c * t;
-    const ma = Math.min(a, c) * (0.3 + 0.2 * rnd());
-    if (centri.some(([qx, qy, qz, qa]) => Math.hypot(px - qx, py - qy, pz - qz) < 0.95 * (ma + qa))) continue;
-    centri.push([px, py, pz, ma]);
-    parti.push(...chioma({ x: px, y: py, z: pz, a: ma, b: ma * (0.65 + 0.3 * rnd()), c: ma * (0.8 + 0.35 * rnd()),
-      ciuffi, raggio, dettaglio, scuro, chiaro, rnd, pieno: 0.35, sotto: 0.3, morbido: 0.7, schegge, leggero: true, inviluppo: { x, y, z, a, b, c } }));
-    if (da) parti.push(ramoVerso(da[0] + (rnd() - 0.5) * 0.3, da[1] + rnd() * 0.8, da[2] + (rnd() - 0.5) * 0.3,
-      x + (px - x) * 0.85, py - ma * 0.4, z + (pz - z) * 0.85, rRamo, rRamo * 0.35, colRamo, 4));
-    m++;
-  }
-  return parti;
 }
 
 /**
@@ -545,9 +519,13 @@ function creaModelli() {
   // Livelli (prestazioni, dopo la misura dell'utente: 28–30 FPS nel bosco; «meno definizione a centinaia di metri a
   // favore del realismo entro i 50 m»): vicino fino a 60 m, più ricco; medio fino a 300 m
   // con 3 ciuffi semplici (~70 triangoli); lontano un ciuffo solo e un fusto a 3 lati (~26).
+  // Chioma alla stessa altezza e larghezza di quella vicina (richiesta dell'utente: oltre i 50 m «pali con ciuffi di
+  // cespuglio in cima»: le 3 masse staccate stavano 3–6 m più su della chioma vicina, verde misurato 2,3–9,5 m contro
+  // 5,8–13,8). Sette ciuffi a ottaedro che si toccano (8 triangoli l'uno): ~64 triangoli come prima.
   const latMedio = (a, b, y) => unisci([
-    fusto(0.4, 0.05, y - b * 0.1, 4, COL.corteccia),     // si assottiglia dentro la chioma, niente moncone in vista
-    ...chiomaAMasse({ y, a, b, masse: 3, ciuffi: 1, raggio: [1.5, 1.95], dettaglio: 0, scuro: F[0], chiaro: F[1], rnd, schegge: 2 }),
+    fusto(0.4, 0.05, y + b * 0.3, 4, COL.corteccia),     // si assottiglia dentro la chioma, niente moncone in vista
+    ...chioma({ y, a, b, ciuffi: 7, raggio: [1.55, 1.95], dettaglio: 0, scuro: F[0], chiaro: F[1], rnd, pieno: 0.2, sotto: 0.6,
+      morbido: 0.7, leggero: true }),
   ]);
   M.latifoglia = [
     // Misura nel bosco fitto (UHD 730): ~135 latifoglie entro 60 m da ~2450 triangoli valevano gran parte dei 6 ms
@@ -557,7 +535,7 @@ function creaModelli() {
     { fino: 50, varianti: [quercia(0), faggio(0), castagno(0)] },
     // Medio fino a 200 m (prima 300; misura nel bosco fitto dopo la Carta rigenerata: vegetazione 7,2 ms contro 6,5 di
     // budget, ~4400 latifoglie medie per ~300 000 triangoli); oltre, sagome.
-    { fino: 200, varianti: [latMedio(4.2, 3.1, 7.6), latMedio(3.2, 4.2, 9.2)] },
+    { fino: 200, varianti: [latMedio(3.0, 2.6, 5.1), latMedio(2.6, 3.0, 5.5)] },
     { fino: Infinity, sagoma: [SAGOME.latifogliaTonda, SAGOME.latifogliaOvale] },
   ];
 
@@ -577,18 +555,36 @@ function creaModelli() {
     { fino: Infinity, sagoma: [SAGOME.conifera] },
   ];
 
-  // Pino domestico: ombrello piatto, o a due ripiani.
+  // Pino domestico (richiesta dell'utente: «pali con ciuffi di cespuglio in cima»; prima un fusto dritto di 9 m e 3–18
+  // ciuffi stretti sopra): fusto storto che a metà altezza si apre in 2–3 branche divergenti, ombrello largo e piatto
+  // fatto di un gruppo di ciuffi in cima a ogni branca più uno al centro; verde da ~6 m in su invece che da ~8,6.
   const P = COL.fogliaPino;
+  const pinoDomestico = (seme, det) => {
+    const r = casuale(seme), parti = [], hF = 4.6 + 1.2 * r();
+    const P0 = [0, -0.5, 0], P2 = [(r() - 0.5) * 1.4, hF, (r() - 0.5) * 1.4], P1 = piega(P0, P2, 0.5, 0.08, r);
+    parti.push(det ? ramoCurvo([P0, P1, P2], 0.38, 0.24, COL.cortecciaPino, 7, 4) : ramoCurvo([P0, P1, P2], 0.38, 0.22, COL.cortecciaPino, 4, 2));
+    const nB = 2 + (r() < 0.6 ? 1 : 0), cime = [], a0 = r() * 6.283;
+    for (let k = 0; k < nB; k++) {
+      const a = a0 + k * 6.283 / nB + (r() - 0.5) * 0.8, d = 1.7 + 1.1 * r();
+      const e = [P2[0] + Math.cos(a) * d, hF + 2.4 + 0.9 * r(), P2[2] + Math.sin(a) * d];
+      const b0 = [P2[0], hF - 0.4, P2[2]];
+      parti.push(det ? ramoCurvo([b0, piega(b0, e, 0.5, 0.12, r), e], 0.2, 0.05, COL.cortecciaPino, 5, 4)
+        : ramoCurvo([b0, e], 0.2, 0.06, COL.cortecciaPino, 4, 1));
+      cime.push(e);
+    }
+    const cx = cime.reduce((t, e) => t + e[0], 0) / nB, cz = cime.reduce((t, e) => t + e[2], 0) / nB;
+    const cy = Math.max(...cime.map((e) => e[1])) + 0.5;
+    const inviluppo = { x: cx, y: cy, z: cz, a: 4.6, b: 1.5, c: 4.6 };
+    const gruppo = (x, y, z, a) => parti.push(...chioma({ x, y, z, a, b: a * 0.42, c: a * (0.85 + 0.3 * r()), ciuffi: det ? 8 : 2,
+      raggio: det ? [0.75, 1.1] : [1.5, 1.9], dettaglio: det, scuro: P[0], chiaro: P[1], rnd: r, pieno: 0.35, sotto: 0.15,
+      morbido: 0.75, schegge: det ? 2 : 0, leggero: !det, inviluppo }));
+    for (const e of cime) gruppo(e[0] + (e[0] - cx) * 0.25, e[1] + 0.55, e[2] + (e[2] - cz) * 0.25, 2.1 + 0.4 * r());
+    gruppo(cx, cy + 0.35, cz, 2.3);
+    return unisci(parti);
+  };
   M.pino = [
-    { fino: 60, varianti: [
-      unisci([fusto(0.36, 0.2, 9.4, 8, COL.cortecciaPino, { inclinaZ: 0.06 }), ...rami(4, 7.6, 3.2, COL.cortecciaPino, rnd),
-        ...chioma({ x: 0.55, y: 10.3, a: 4.6, b: 1.4, ciuffi: 18, raggio: [0.9, 1.4], scuro: P[0], chiaro: P[1], rnd, pieno: 0.4 })]),
-      unisci([fusto(0.34, 0.2, 8.4, 8, COL.cortecciaPino, { inclinaZ: -0.08 }), ...rami(3, 6.6, 3.0, COL.cortecciaPino, rnd),
-        ...chioma({ x: -0.6, y: 9.6, a: 3.6, b: 1.3, ciuffi: 12, raggio: [0.9, 1.3], scuro: P[0], chiaro: P[1], rnd, pieno: 0.4 }),
-        ...chioma({ x: 1.6, y: 8.1, z: 0.8, a: 2.2, b: 0.9, ciuffi: 6, raggio: [0.8, 1.1], scuro: P[0], chiaro: P[1], rnd, pieno: 0.4 })]),
-    ] },
-    { fino: 300, varianti: [unisci([fusto(0.34, 0.22, 9.2, 4, COL.cortecciaPino, { inclinaZ: 0.06 }),
-      ...chioma({ x: 0.5, y: 10.2, a: 4.2, b: 1.3, ciuffi: 3, raggio: [1.8, 2.3], dettaglio: 0, scuro: P[0], chiaro: P[1], rnd, morbido: 0.85 })])] },
+    { fino: 60, varianti: [pinoDomestico(411, 1), pinoDomestico(412, 1)] },
+    { fino: 300, varianti: [pinoDomestico(411, 0)] },
     { fino: Infinity, sagoma: [SAGOME.pino] },
   ];
 
@@ -596,10 +592,13 @@ function creaModelli() {
   const R = COL.fogliaRiva;
   M.riva = [
     { fino: 60, varianti: [unisci([
-      ...ramificato({ fusto: 5.5, cima: 9.5, rami: 6, parte: [0.6, 1.0], inc: [55, 75], lungo: 2.3, r0: 0.3, rCima: 0.22, tronco: [0.38, 0.22],
-        colRamo: COL.cortecciaBetulla, ciuffi: 2, rCiuffo: 0.95, raggio: [0.45, 0.7], dettaglio: 1, scuro: R[0], chiaro: R[1], rnd })])] },
-    { fino: 300, varianti: [unisci([fusto(0.34, 0.04, 9.5, 4, COL.cortecciaBetulla),
-      ...chiomaAMasse({ y: 10.3, a: 2.0, b: 5.2, masse: 5, ciuffi: 1, raggio: [1.0, 1.4], dettaglio: 0, scuro: R[0], chiaro: R[1], rnd, schegge: 2 })])] },
+      // (richiesta dell'utente: «pali con ciuffi in cima»: prima una cima nuda di ~9 m con tre ciuffi; ora cima corta e
+      // più rami ripidi lungo il fusto, colonna di foglie da ~3 m in su)
+      ...ramificato({ fusto: 4.6, cima: 3.6, rami: 8, parte: [0.3, 1.0], inc: [58, 78], lungo: 2.0, r0: 0.3, rCima: 0.2, tronco: [0.36, 0.2],
+        colRamo: COL.cortecciaBetulla, ciuffi: 2, rCiuffo: 1.05, raggio: [0.45, 0.7], dettaglio: 1, scuro: R[0], chiaro: R[1], rnd })])] },
+    { fino: 300, varianti: [unisci([fusto(0.34, 0.04, 8, 4, COL.cortecciaBetulla),
+      ...chioma({ y: 5.8, a: 1.8, b: 3.4, ciuffi: 10, raggio: [1.05, 1.35], dettaglio: 0, scuro: R[0], chiaro: R[1], rnd, pieno: 0.2,
+        sotto: 0.6, morbido: 0.7, leggero: true })])] },
     { fino: Infinity, sagoma: [SAGOME.riva] },
   ];
 
