@@ -18,7 +18,7 @@ import { createCavallo } from './cavallo3d.js';
 import { createFollowCamera } from './camera.js';
 import { createCastle } from './castle3d.js';
 import { createRocca } from './rocca3d.js';
-import { creaCaseCampagna } from './edifici3d.js';
+import { creaCaseCampagna, quotaFinestre } from './edifici3d.js';
 import { createBorgo } from './borgo3d.js';
 import { createCartaVista } from './cartaVista.js';
 import { creaOrizzonte } from './orizzonte.js';
@@ -468,6 +468,12 @@ const RIGHE_CRONISTA = {
   pozzo: "L'acqua è fredda e profonda; la corda è consumata dalle mani.",
 };
 let cronista = null;                       // la Carta del cronista aperta (elemento), o null
+
+// Un solo gestore del tasto d'azione (E): la prima voce disponibile, in ordine di priorità, agisce. Le altre
+// sessioni aggiungono qui la loro voce invece di un proprio keydown (persona vicina in testa, cavallo in fondo).
+const AZIONI_TASTO = [
+  { nome: 'porta', pronta: () => portaVicina, esegui: () => apriCronista(portaVicina) },
+];
 let portaVicina = null;                    // { nome, tipo, porta } dell'edificio vicino, o null
 let _invitoPorta = null;
 function cercaPortaVicina() {
@@ -524,6 +530,42 @@ function chiudiCronista() {
   cronista.remove();
   cronista = null;
   tasti.clear();
+}
+
+// ─── Luci vicine (M7, passo 7) ──────────────────────────────────────────
+// Le sorgenti di borghi, rocche e campagna (torce, forge) sono molte; PointLight vere solo per le LUCI_VICINE più
+// vicine al cavaliere, sempre le stesse (un numero fisso di luci: niente ricompilazione degli shader). Le altre
+// restano fiamme e aloni. Con la luce della torre-porta di ogni rocca si resta nelle 4–6 previste.
+const LUCI_VICINE = { quante: 4, raggio: 70 };
+const _luciVicine = [];
+function luciVicine(t, buio) {
+  if (!_luciVicine.length) {
+    for (let i = 0; i < LUCI_VICINE.quante; i++) {
+      const l = new THREE.PointLight('#ff9a40', 0, 14, 1.7);
+      l.name = 'luce-vicina';
+      scene.add(l);
+      _luciVicine.push(l);
+    }
+  }
+  const f = Math.min(1, Math.max(0, (buio - 0.15) / 0.5));
+  const st = knight?.stato;
+  const tutte = [];
+  if (f > 0 && st) {
+    for (const r of [...rocche, campagna]) for (const sg of r?.sorgenti ?? []) {
+      const d = Math.hypot(sg.x - st.x, sg.z - st.z);
+      if (d < LUCI_VICINE.raggio) tutte.push({ sg, d });
+    }
+    tutte.sort((a, b) => a.d - b.d);
+  }
+  _luciVicine.forEach((l, i) => {
+    const v = tutte[i];
+    if (!v) { l.intensity = 0; return; }
+    const tremolio = 0.85 + 0.1 * Math.sin(t * 13.1 + i * 1.7) + 0.05 * Math.sin(t * 23.7 + i);
+    l.position.set(v.sg.x, v.sg.y, v.sg.z);
+    l.color.set(v.sg.colore);
+    l.distance = v.sg.distanza;
+    l.intensity = v.sg.intensita * f * tremolio;
+  });
 }
 
 // Fatica per distanza: ogni fotogramma la strada fatta dal cavaliere consuma Forza (il tempo invece
@@ -1028,7 +1070,10 @@ window.addEventListener('keydown', (e) => {
     if ((e.code === 'Escape' || e.code === PORTA.tasto) && !e.repeat) chiudiCronista();
     return;
   }
-  if (e.code === PORTA.tasto && !e.repeat && portaVicina) { apriCronista(portaVicina); return; }
+  if (e.code === PORTA.tasto && !e.repeat) {
+    const azione = AZIONI_TASTO.find((a) => a.pronta());
+    if (azione) { azione.esegui(); return; }
+  }
   if (e.code.startsWith('Arrow')) e.preventDefault();
   tasti.add(e.code);
   if (e.code === 'KeyC' && !e.repeat && knight) cambiaModoCamera();
@@ -1424,7 +1469,12 @@ function frame(now) {
     tt = segna('cavaliere e tempo', tt);
     aggiornaCielo();
     castle?.aggiornaLuci(now / 1000, 1 - _luceGiorno);
-    for (const r of rocche) r.aggiornaLuci(now / 1000, 1 - _luceGiorno);
+    {
+      const quota = quotaFinestre(Calendar.oraDelGiorno());
+      for (const r of rocche) r.aggiornaLuci(now / 1000, 1 - _luceGiorno, quota);
+      campagna?.aggiornaLuci(now / 1000, 1 - _luceGiorno, quota);
+      luciVicine(now / 1000, 1 - _luceGiorno);
+    }
     tt = segna('cielo e luci', tt);
     aggiornaStato();
     aggiornaIndicatoreAndatura();
