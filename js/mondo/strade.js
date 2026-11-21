@@ -984,7 +984,8 @@ export function stradeBlocco(carta, cx, cz, half, passo = 2, quote = null) {
         const z = (i === 0 ? f.z[0] : f.z[i - 1] + (f.z[i] - f.z[i - 1]) * t) - cz;
         if (Math.abs(x) > half - 1 || Math.abs(z) > half - 1) { chiudi(); continue; }
         // Sul ponte niente nastro: la carreggiata è l'impalcato del ponte (js/3d/acqua.js, creaPonte).
-        if (f.tipo && i > 0 && f.tipo[i - 1] === 1 && f.tipo[i] === 1) { chiudi(); continue; }
+        // Al guado neanche: la strada passa sotto l'acqua (prima il nastro la attraversava sopra, segnalato dall'utente).
+        if (f.tipo && i > 0 && f.tipo[i - 1] > 0 && f.tipo[i] > 0) { chiudi(); continue; }
         pezzo.push(x, z, f.semi);
         hs.push(i === 0 ? f.h[0] : f.h[i - 1] + (f.h[i] - f.h[i - 1]) * t);
       }
