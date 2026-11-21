@@ -1723,7 +1723,15 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      foglie; più foglie lungo i rami nel bosco («troppi buchi»). Ciuffi a *schegge* («niente marshmallow di verde,
      senza arrivare alle foglie singole»): ogni ciuffo è un grappolo di tetraedri appiattiti orientati a caso (12 da
      vicino, 5–6 più lontano e nel livello medio), luce secondo l'inviluppo dell'intera chioma; anche i cespugli.
-     Bosco fitto in headless: 516 000 triangoli (prima delle chiome nuove 458 000): da misurare sulla scheda.
+     Correzioni successive dell'utente: con le sole schegge «sembrano alberi spogli» e poi «torna un po' alle
+     rotondità»: ogni ciuffo ha un *nucleo* tondeggiante (icosaedro deformato; ottaedro nel livello medio) e poche
+     schegge piccole di frangia (4 entro 18 m, 1 fino a 50 m, 2 nel medio), forme miste tetraedri/ottaedri; rami più
+     corti (−30 %) e ciuffi più grandi, chiome compatte. Tronco («stuzzicadenti dritto da base a cima», «troncato in
+     cima»): sopra il fusto si divide in 2–3 cime storte (quercia e castagno 3, faggio 2, riva 1) che si assottigliano
+     fino a 2–3 cm e finiscono dentro l'ultimo ciuffo; ramo e rametti finiscono a 1–2 cm; nel livello medio il fusto
+     sale dentro la chioma assottigliandosi. Spessore del tronco proporzionato all'altezza dell'istanza (larghezza =
+     altezza ±15 %, prima indipendenti). Cespugli: ciuffi ravvicinati e uno al centro.
+     Bosco fitto in headless: 530 000 triangoli (prima delle chiome nuove 458 000): da misurare sulla scheda.
      *Case fuori dal borgo* (richiesta dell'utente: case isolate o a gruppetti di 2–3 in mezzo o a lato dei campi):
      `CASE_CAMPAGNA` / `caseCampagna(carta)`, siti deterministici per Carta (4–9 gruppi per rocca secondo la classe,
      tra gli orti e il limite dei campi pieni, in piano, all'asciutto, lontano dai terrapieni e tra loro, orientati
