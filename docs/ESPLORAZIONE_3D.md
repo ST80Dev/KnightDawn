@@ -979,6 +979,21 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
         1799 m verso (362, 104), vicino alla seconda. Con lo zoccolo il rilievo cambia, quindi le sorgenti
         indicate sullo screenshot non sono più le stesse. Limite: le testate di questi due valichi restano
         basse (265–404 m e 219–869 m), quindi la salita all'ultimo tratto è ancora ripida.
+   - *Valichi come i passi dolomitici* (segnalato dall'utente: valichi in cima a cucuzzoli isolati, con la strada
+     che ci sale per niente). Misurato sul rilievo delle Scene (seme 395728): due valichi su quattro erano cime
+     (il terreno scendeva di oltre 150 m in 10–12 direzioni su 16). Causa: il passo era il punto più alto di un
+     percorso «minimax» in un corridoio di 3 km tra due testate; se la via bassa passava fuori dal corridoio,
+     il punto cadeva su un rilievo. Nuovo calcolo (`valichiTraValli`, `VERSIONE_GENERATORE` + `valichi-2`):
+     ogni cella appartiene alla valle in cui scende (il ramo di fiume tra due confluenze, bacino ≥ 40 km², entro
+     10 km di discesa); tra due valli confinanti il valico è il punto più basso del loro spartiacque. Condizioni:
+     giro lungo i fiumi ≥ 20 km (o sistemi diversi), passo 250 m sopra le due valli, tra 900 e 3000 m, entro
+     8 km da terra oltre 1700 m (una sella in collina non è un valico), cresta ai lati almeno 250 m sopra il passo
+     scavato entro 4 km. Punteggio: salita dalla valle più alta, pendenza della salita più ripida, grandezza
+     delle valli, strada risparmiata. Poi `luoghi.js` (`sellaFine`) cerca la sella sul rilievo delle Scene, su
+     una griglia di 125 m tra due punti giù per le due discese. 10 semi: 1–5 valichi (881–2526 m), nessun
+     cucuzzolo, 14 su 24 selle simmetriche (scende da due lati opposti e sale dagli altri due); gli altri sono
+     colli asimmetrici sul fianco di un massiccio o varchi dove si toccano tre valli. Strade: ogni valico è
+     collegato alle sue valli; regole del generatore tutte superate, tempi invariati.
    - *Valli più alte e torrenti* (richiesta dell'utente: fondovalle a 400 m sotto montagne di 2000 m sono rari;
      le sorgenti partono quasi dalle cime). Misurato: le «sorgenti» visibili erano solo i punti dove il bacino
      arriva a 150 km² (già un fiume); i torrenti esistevano nel drenaggio ma non si disegnavano. Due cambi

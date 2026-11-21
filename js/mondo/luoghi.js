@@ -1012,11 +1012,54 @@ export function valichiDaCarta(carta, V = VALICHI) {
   if (!carta.valichiCarta) return trovaValichi(carta, V);
   const seme = derivaSeme(carta.seme, 950);
   return carta.valichiCarta.map((v, id) => ({
-    id, x: v.x, y: v.y, quota: v.quota, scavo: v.scavo,
+    id, ...sellaFine(carta, v), scavo: v.scavo,
     sopra: v.quota - Math.max(v.valli[0].quota, v.valli[1].quota),
     deviazione: v.deviazione, valli: v.valli,
     presidio: hashUnita(Math.floor(v.x), Math.floor(v.y), seme) < V.presidio,
   }));
+}
+
+/**
+ * Sella del valico sul rilievo delle Scene (M6, deciso con l'utente: passi come quelli dolomitici). La Carta la
+ * trova su celle di 1 km; qui, su una griglia di `passo` m attorno, si cerca il percorso tra i due lati (due punti giù
+ * per le discese) che sale meno in alto: il suo punto più alto è la sella, che scende verso le due valli e sale lungo
+ * la cresta. Restituisce { x, y (km), quota }; senza lati (Carte di prima) il punto della Carta.
+ */
+export const SELLA_FINE = { passo: 125, margine: 1.5 };   // m; km attorno ai lati e al passo
+function sellaFine(carta, v) {
+  if (!v.lati) return { x: v.x, y: v.y, quota: v.quota };
+  const S = SELLA_FINE, C = carta.cella, p = S.passo;
+  const xs = [v.x, ...v.lati.map((l) => l.x)], ys = [v.y, ...v.lati.map((l) => l.y)];
+  const x0 = (Math.min(...xs) - S.margine) * C, z0 = (Math.min(...ys) - S.margine) * C;
+  const nx = Math.ceil(((Math.max(...xs) + S.margine) * C - x0) / p) + 1, nz = Math.ceil(((Math.max(...ys) + S.margine) * C - z0) / p) + 1;
+  const h = new Float32Array(nx * nz);
+  for (let r = 0; r < nz; r++) for (let c = 0; c < nx; c++) h[r * nx + c] = scavaFiumi(carta, x0 + c * p, z0 + r * p, quotaMondo(carta, x0 + c * p, z0 + r * p), _es);
+  const cella = (l) => Math.round((l.y * C - z0) / p) * nx + Math.round((l.x * C - x0) / p);
+  const a = cella(v.lati[0]), b = cella(v.lati[1]);
+  // Percorso «minimax» da a a b (Dijkstra sulla quota più alta raggiunta).
+  const costo = new Float32Array(nx * nz).fill(Infinity), da = new Int32Array(nx * nz).fill(-1);
+  const fatto = new Uint8Array(nx * nz), coda = [a];
+  costo[a] = h[a];
+  while (coda.length) {
+    let m = 0;
+    for (let k = 1; k < coda.length; k++) if (costo[coda[k]] < costo[coda[m]]) m = k;
+    const i = coda[m]; coda[m] = coda[coda.length - 1]; coda.pop();
+    if (fatto[i]) continue;
+    fatto[i] = 1;
+    if (i === b) break;
+    const c = i % nx, r = (i / nx) | 0;
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      const cc = c + dc, rr = r + dr;
+      if ((!dc && !dr) || cc < 0 || rr < 0 || cc >= nx || rr >= nz) continue;
+      const j = rr * nx + cc, nc = Math.max(costo[i], h[j]);
+      if (!fatto[j] && nc < costo[j]) { costo[j] = nc; da[j] = i; coda.push(j); }
+    }
+  }
+  if (!fatto[b]) return { x: v.x, y: v.y, quota: v.quota };
+  let alto = b;
+  for (let i = b; i !== a; i = da[i]) if (h[i] > h[alto]) alto = i;
+  const c = alto % nx, r = (alto / nx) | 0;
+  return { x: (x0 + c * p) / C, y: (z0 + r * p) / C, quota: h[alto] };
 }
 
 /** Aggiunge `carta.valichi`, `carta.luoghi`, `carta.candidatiLuoghi` e le statistiche alla Carta. */

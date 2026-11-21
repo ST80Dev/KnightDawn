@@ -223,9 +223,13 @@ Regole **nuove** per il 3D e per la varietà ravvicinata:
   gruppo. Ogni gruppo è un luogo («il monte X», con un nome quando arriveranno i luoghi) a cui andare.
   Niente distese di guglie uguali né creste tutte identiche: ci si perderebbe.
 - **Valichi e forcelle: due cose diverse** [deciso con l'utente, novembre 2026].
-  - *Valico*: passaggio ampio tra **due grandi valli diverse** che si addentrano da lati opposti fin sotto
-    una catena, nel punto più basso del crinale tra le loro testate; di solito tra **~1000 e ~2000 m**,
-    **valichi alti fino a ~2500 m** [deciso con l'utente: nessuna chiusura invernale, li affronta chi gioca].
+  - *Valico*: passaggio tra **due valli medio-grandi confinanti**, come i passi dolomitici: il punto **più
+    basso e più abbordabile dello spartiacque** tra le due, una sella vera che scende verso le due valli e sale
+    lungo la cresta ai lati (mai un cucuzzolo isolato) [deciso con l'utente, novembre 2026]; serve dove senza
+    il valico le due valli sarebbero lontane (sistemi diversi o un lungo giro lungo i fiumi); di solito tra
+    **~1000 e ~2000 m**, **valichi alti fino a ~2500 m**. Nessun valico si apre o si chiude, né con le stagioni
+    né per altro: si può sempre passare; su un valico alto pesano rischio e fatica (quota, neve, freddo), nel
+    costo del viaggio e negli eventi [deciso con l'utente].
     Se il crinale è troppo alto, il passo è scavato (al più di 500 m); al più un valico ogni ~20 km. I
     fondovalle salgono gradualmente addentrandosi nella catena (zoccolo dei contrafforti). È la via normale
     per passare da una valle all'altra (strade, pedaggi, imboscate). **Quasi sempre presidiato** da
@@ -286,7 +290,7 @@ In più:
    dire (nebbia della conoscenza, erede della nebbia di guerra del 2D). Da lontano i luoghi sono
    voci: nomi incerti, posizioni approssimate. Dalle alture si vede lontano: salire su un
    massiccio rivela il paesaggio attorno.
-2. **Le condizioni cambiano**: un valico chiuso dalla neve d'inverno, presidiato da una fazione
+2. **Le condizioni cambiano**: un valico alto più duro d'inverno (neve, freddo: rischio, mai chiusura), presidiato da una fazione
    ostile, infestato da briganti o gravato da un pedaggio. Le notizie arrivano in ritardo e
    imprecise (§3 *Propagazione delle informazioni*).
 3. **Il fantastico**: creature, maledizioni e luoghi leggendari.
