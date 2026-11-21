@@ -75,7 +75,9 @@ export function prisma(basso, alto, yb, yt) {
 const GRADAZIONE = { cielo: [-0.6, -0.8], lati: 0.36, chiazze: 0.16, fini: 0.08, tessera: 3.2 };
 // Tono di fondo diverso per ogni luogo (richiesta dell'utente), a caso entro questi limiti: chiarezza (×) e calore
 // (+ più bruno, − più grigio). Rocca e borgo dello stesso luogo hanno lo stesso tono.
-const TONO_LUOGO = { chiaro: [0.82, 1.1], caldo: [-0.07, 0.09] };
+// Una parte dei luoghi (`scuri`) ha pietra molto scura (basalto, pietra annerita: tipico dei castelli fantasy,
+// richiesta dell'utente), più fredda; gli altri restano nel range chiaro.
+const TONO_LUOGO = { chiaro: [0.82, 1.1], scuri: 0.2, scuro: [0.45, 0.66], caldo: [-0.07, 0.09] };
 let _muro = null;
 /**
  * Texture della muratura di pietra (256 px = GRADAZIONE.tessera m), ripetibile: corsi di altezza diversa, conci di
@@ -374,15 +376,19 @@ function costruisciTorcia(mat, matFiamma, matAlone) {
 /** Colore di muratura col tono di fondo del luogo (TONO_LUOGO): chiarezza e calore a caso, stabili per luogo. */
 export function tonoDelLuogo(luogo, colore) {
   const T = TONO_LUOGO, c = new THREE.Color(colore);
-  const chiaro = T.chiaro[0] + (T.chiaro[1] - T.chiaro[0]) * casoLuogo(luogo, 31);
-  const caldo = T.caldo[0] + (T.caldo[1] - T.caldo[0]) * casoLuogo(luogo, 37);
+  const q = casoLuogo(luogo, 31), scuro = q < T.scuri;
+  const chiaro = scuro ? T.scuro[0] + (T.scuro[1] - T.scuro[0]) * q / T.scuri
+    : T.chiaro[0] + (T.chiaro[1] - T.chiaro[0]) * (q - T.scuri) / (1 - T.scuri);
+  const caldo = (T.caldo[0] + (T.caldo[1] - T.caldo[0]) * casoLuogo(luogo, 37)) * (scuro ? 0.4 : 1) - (scuro ? 0.03 : 0);
   c.r = Math.min(1, c.r * chiaro * (1 + caldo)); c.g = Math.min(1, c.g * chiaro); c.b = Math.min(1, c.b * chiaro * (1 - caldo * 1.3));
   return c;
 }
 
 function casoLuogo(luogo, k) {
-  const s = Math.sin((luogo.x * 0.0123 + luogo.z * 0.0371 + k * 12.9898) * 43758.5453);
-  return s - Math.floor(s);
+  // Hash intero (uniforme; il vecchio sin(...)·43758 non lo era: 13 «scure» su 34 con soglia al 20 %).
+  let h = Math.imul(Math.floor(luogo.x) ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(Math.floor(luogo.z) + k * 7919, 0xc2b2ae35);
+  h ^= h >>> 16; h = Math.imul(h, 0x7feb352d); h ^= h >>> 15; h = Math.imul(h, 0x846ca68b); h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
 }
 
 // ─── Rocca ───────────────────────────────────────────────────────────────
