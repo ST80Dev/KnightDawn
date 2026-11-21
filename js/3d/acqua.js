@@ -477,6 +477,7 @@ export function creaPonti(attraversamenti, altezza) {
     const dentro = W / 2 - (pietra ? P.spessoreParapetto : 0.2);   // carreggiata utile tra i parapetti
     ponti.push({
       object: mesh, solidi: [mesh], materiale: at.materiale, luce: L,
+      asse: { x0: at.x0, z0: at.z0, x1: at.x1, z1: at.z1 },   // testate (per le prove dalla console)
       quotaSuolo(x, z) {
         const [u, v] = locale(x, z);
         return u >= 0 && u <= L && Math.abs(v) <= W / 2 ? cima(u) : null;

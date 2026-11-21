@@ -863,8 +863,15 @@ const COLLISIONI = { cella: 16, sassoMinimo: 1.1,
   raggio: { latifoglia: 0.42, conifera: 0.34, pino: 0.38, riva: 0.4, secco: 0.32, masso: 1.05, affioramento: 2.3,
     sasso: 0.3, tronco: 0.32, muretto: 0.4, siepe: 0.75 } };
 
+// Altezza della sommità sopra la base, al modello di scala 1 (m): rocce (moltiplicata per la scala verticale
+// dell'istanza), tronco caduto, muretto. Serve a gradini e scavalcamento (knight3d.js): sotto ~0,4 m ci si sale sopra,
+// fino a ~1,2 m si scavalca, oltre è un muro. Gli alberi non hanno sommità (contano sempre).
+const SOMMITA = { sasso: 0.3, masso: 1.2, affioramento: 1.15, tronco: 0.52, muretto: 0.88 };
+const CALPESTABILE = 0.5;   // m: sommità sopra la base fin dove ci si può stare sopra (gradino)
+
 function* creaCollisioni(pos, stanco = () => false, pausa = null) {
   const C = COLLISIONI, celle = new Map();
+  let cima = Infinity, alto = Infinity;            // sommità (quota assoluta) e altezza sopra la base dell'istanza in corso
   const aggiungi = (x, z, r) => {
     const i0 = Math.floor((x - r) / C.cella), i1 = Math.floor((x + r) / C.cella);
     const j0 = Math.floor((z - r) / C.cella), j1 = Math.floor((z + r) / C.cella);
@@ -872,7 +879,7 @@ function* creaCollisioni(pos, stanco = () => false, pausa = null) {
       const k = i * 100003 + j;
       let l = celle.get(k);
       if (!l) celle.set(k, (l = []));
-      l.push(x, z, r);
+      l.push(x, z, r, cima, alto);
     }
   };
   let n = 0;
@@ -882,6 +889,16 @@ function* creaCollisioni(pos, stanco = () => false, pausa = null) {
     for (let k = 0; k < t.n; k++) {
       const o = k * STRIDE, x = t.dati[o], z = t.dati[o + 2], s = t.dati[o + 3], rot = t.dati[o + 4], v = t.dati[o + 5];
       if (nome === 'sasso' && s < C.sassoMinimo) continue;           // i sassi piccoli si attraversano
+      // Sommità come le istanze (vegetazione: matrici in creaVegetazione): rocce abbassate di 0,15·s e con altezza
+      // propria, muretti abbassati di 8 cm; il resto non roccioso con la sua altezza per istanza.
+      const v4 = (v * 17.31) % 1, y0 = t.dati[o + 1];
+      if (SOMMITA[nome] === undefined) { cima = Infinity; alto = Infinity; }
+      else {
+        const base = t.gruppo === 'rocce' ? y0 - 0.15 * s : nome === 'muretto' ? y0 - 0.08 : y0;
+        const sv = t.gruppo === 'rocce' ? s * (0.55 + 0.7 * v) : nome === 'muretto' ? s * (0.88 + 0.24 * v4) : s * (0.85 + 0.3 * v4);
+        cima = base + SOMMITA[nome] * sv;
+        alto = cima - y0;
+      }
       if (t.gruppo === 'rocce') {
         const largo = 0.7 + 0.8 * ((v * 3.71) % 1), lungo = 0.7 + 0.7 * ((v * 7.13) % 1);   // come le istanze
         aggiungi(x, z, r0 * s * (largo + lungo) / 2);
@@ -894,14 +911,19 @@ function* creaCollisioni(pos, stanco = () => false, pausa = null) {
       if (pausa && (k & 1023) === 1023 && stanco()) yield* pausa();
     }
   }
-  /** Punto (x, z) spinto fuori dai tronchi e dalle rocce (raggio del cavaliere), o null se libero. */
-  function spingiFuori(x, z, raggio) {
+  /**
+   * Punto (x, z) spinto fuori dai tronchi e dalle rocce (raggio del cavaliere), o null se libero. Ciò che ha la
+   * sommità entro yPiedi + superabile non conta (gradino o scavalcamento).
+   */
+  function spingiFuori(x, z, raggio, yPiedi = -Infinity, superabile = 0) {
     const l = celle.get(Math.floor(x / C.cella) * 100003 + Math.floor(z / C.cella));
     if (!l) return null;
+    const sopra = yPiedi + superabile;
     let mosso = false;
     for (let iter = 0; iter < 3; iter++) {
       let qui = false;
-      for (let k = 0; k < l.length; k += 3) {
+      for (let k = 0; k < l.length; k += 5) {
+        if (l[k + 3] <= sopra) continue;
         const ex = x - l[k], ez = z - l[k + 1], min = l[k + 2] + raggio, d2 = ex * ex + ez * ez;
         if (d2 >= min * min) continue;
         const d = Math.sqrt(d2);
@@ -912,7 +934,19 @@ function* creaCollisioni(pos, stanco = () => false, pausa = null) {
     }
     return mosso ? { x, z } : null;
   }
-  return { spingiFuori, n };
+  /** Sommità più alta tra le rocce basse (gradino) sotto il punto, o null: il cavaliere ci sale sopra. */
+  function quotaOstacoli(x, z) {
+    const l = celle.get(Math.floor(x / C.cella) * 100003 + Math.floor(z / C.cella));
+    if (!l) return null;
+    let h = null;
+    for (let k = 0; k < l.length; k += 5) {
+      if (l[k + 4] > CALPESTABILE) continue;
+      const ex = x - l[k], ez = z - l[k + 1], r = l[k + 2];
+      if (ex * ex + ez * ez <= r * r && (h === null || l[k + 3] > h)) h = l[k + 3];
+    }
+    return h;
+  }
+  return { spingiFuori, quotaOstacoli, n };
 }   // m: vicino al bordo del blocco, oltre questa distanza, sagome
 
 // ─── Istanze ─────────────────────────────────────────────────────────────
@@ -1633,7 +1667,7 @@ export function* creaVegetazioneAPezzi(pos, terrain = null, renderer = null, bud
       while (ombre.passo(dir, 500)) if (performance.now() - t > budget) { yield; t = performance.now(); }
     },
     /** Ostacolo per il cavaliere (stessa interfaccia delle mura del castello). */
-    spingiFuori: collisioni.spingiFuori, ostacoli: collisioni.n,
+    spingiFuori: collisioni.spingiFuori, quotaOstacoli: collisioni.quotaOstacoli, ostacoli: collisioni.n,
     get lontano() { return lontano ? { n: lontano.count, ms: msLontano } : null; },
     /**
      * Visuale pulita: posizione del cavaliere (x, y, z) da tenere libera dalla vegetazione, o null per spegnerla

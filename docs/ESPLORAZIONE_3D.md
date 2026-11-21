@@ -238,6 +238,30 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
     ripide, **mai sotto ×0,5** (sul punto più ripido, ~30°: cammino 0,75 m/s, corsa 2,5 m/s). Di traverso
     si rallenta poco. Anche il blocco a 35° ora conta la pendenza del passo, non quella del versante:
     un pendio ripido si può tagliare di traverso. F3 mostra pendenza di marcia e fattore.
+  - **Gradini, scavalcamento, pendenza a 40° — fatto** (deciso con l'utente, nov. 2026; prima ogni stacco del
+    suolo, anche di pochi cm come il bordo della carreggiata o l'attacco di un ponte, valeva come una parete):
+    - *Gradino automatico* fino a **0,4 m** (`cfg.gradino`): uno stacco più ripido del limite ma basso si sale
+      camminando, purché oltre il bordo si stia in piedi (così un pendio ripidissimo non passa per una fila di
+      gradini). Il corpo raggiunge la quota nuova in pochi decimi di secondo (`stato.yVis`), i piedi la trovano
+      già da soli.
+    - *Scavalcamento con `Spazio`*, contestuale, **niente salto libero** (il gioco non è un action game): ostacoli e
+      stacchi tra 0,4 e **1,2 m** (`cfg.scavalcoMax`; la traversa alta dei recinti è a ~1,17 m) entro ~1 m davanti,
+      profondi al più 1,5 m; atterraggio libero, non più di 1,5 m sotto. ~1 s, gambe raccolte e mano sull'ostacolo.
+      L'HUD invita («Spazio: scavalca» / «sali») quando si può. Oltre 1,2 m non si passa: niente arrampicata.
+    - *Collisioni con l'altezza* (cambio architetturale approvato): scatole e cerchi possono avere `cima` (quota
+      assoluta della sommità); `spingiFuori(x, z, r, yPiedi, superabile)` ignora ciò che ha la cima entro
+      yPiedi + superabile. Senza `cima` un ostacolo è un muro alto (tutti quelli di prima). Con la cima: parapetti
+      delle rampe di rocca e Tavullia, cataste, botti, recinti (`edifici3d.js`), rocce, tronchi caduti e muretti a
+      secco (`vegetazione3d.js`, sommità per tipo e per istanza). Le rocce entro mezzo metro fanno anche suolo
+      (`quotaOstacoli`, terzo argomento di `componiSuolo`): ci si sale sopra. Effetto collaterale voluto: una roccia
+      **sotto** un ponte non ferma più chi cammina sull'impalcato. Le altezze si leggono dagli ostacoli stessi
+      (`spingiFuori` con `superabile` crescente), così lo scavalcamento vale per ogni modulo senza conoscerne le forme.
+      Cavallo e persone restano ostacoli pieni. I ponti non hanno parapetti scavalcabili (si cadrebbe nel fiume).
+    - *Pendenza massima in salita* **40°** (era 35°), con fatica tra 35° e 40° (velocità fino a metà al limite).
+      Non è un limite universale: su roccia a gradoni si sale anche di più, su ghiaione e fango meno; quando ci
+      saranno i tipi di superficie andrà per tipo. Sui dati a 30 m pareti e gradoni sono appiattiti, quindi 40°
+      misurati sono pendii veri più ripidi. Le pareti (48°) contano solo sul terreno naturale (`getSlopeNaturale`).
+    - Scendere da uno stacco non ha ancora limiti (oltre ~1 m arriveranno i danni, con le cadute).
   - **Pendenza e fatica — fatto in M5**: il consumo di Forza cresce con la distanza, la salita e
     l'andatura. Sulla Carta la salita costerà anche tempo; nelle Scene il tempo è quello reale compresso.
   - **Cadute** (dopo M5): oltre ~30–35° in discesa o di traverso, probabilità di scivolare per metro che

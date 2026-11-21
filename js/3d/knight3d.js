@@ -23,7 +23,18 @@ export const KNIGHT_CFG = {
   velIndietro: 2.4,          // m/s, corsetta (andatura normale)
   velIndietroScatto: 3.2,    // m/s, con Shift
   velRotazione: 2.0,    // rad/s con A/D (circa 115°/s), massima tenendo premuto; in corsa un po' meno
-  pendenzaMax: 35,      // gradi: oltre questa pendenza, nella direzione di marcia, il cavaliere non sale
+  // Pendenza massima in salita (deciso con l'utente, era 35°): 40° nella direzione di marcia. Non è un limite
+  // universale (su roccia a gradoni si sale anche di più, su ghiaione e fango meno): con i tipi di superficie andrà per
+  // tipo. Sui dati a 30 m pareti e gradoni sono già appiattiti, quindi 40° misurati sono pendii veri più ripidi.
+  pendenzaMax: 40,
+  pendenzaFatica: 35,   // gradi: da qui al limite la salita rallenta ancora, fino a metà al limite
+  // Gradini e ostacoli (deciso con l'utente): uno stacco fino a `gradino` si sale da soli camminando; fino a
+  // `scavalcoMax` si scavalca con Spazio (muretti, recinti, cataste, tronchi, massi bassi); oltre non si passa (niente
+  // arrampicata). Niente salto libero: il gioco non è un action game.
+  gradino: 0.4,         // m
+  scavalcoMax: 1.2,     // m sopra i piedi (traversa alta dei recinti: ~1,17 m)
+  scavalcoProfondita: 1.5, // m: un ostacolo più profondo di così non si scavalca
+  scavalcoDiscesa: 1.5, // m: atterrando non si scende di più
   pendenzaParete: 48,   // gradi: su un terreno così ripido non si sta, in nessuna direzione (pareti invalicabili)
   // Velocità secondo la pendenza nella direzione di marcia (curva tipo Tobler, ammorbidita per il gioco):
   // un po' più veloce sulle discese dolci (~3°), più lento in salita e sulle discese ripide.
@@ -544,6 +555,8 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     bloccato: false,       // true se l'ultimo passo è stato fermato da una pendenza
     andatura: 'corsetta',  // 'camminata' | 'corsetta' | 'scatto'
     pendenzaMarcia: 0,     // tangente della pendenza nella direzione di marcia (+ = salita)
+    yVis: NaN,             // quota disegnata: segue `y` in fretta, così salendo un gradino il corpo non scatta
+    scavalco: null,        // scavalcamento in corso (vedi cercaScavalco)
     fattorePendenza: 1,    // moltiplicatore di velocità dovuto alla pendenza
   };
 
@@ -551,17 +564,24 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
 
   // Un punto è raggiungibile se non obbliga a salire su una pendenza oltre il limite.
   // Conta la pendenza nella direzione del passo: un versante ripido si può tagliare di traverso, una parete no.
+  // Uno stacco più ripido del limite ma basso (gradino, bordo della carreggiata, sasso) si sale, se oltre il bordo
+  // si sta in piedi: così un pendio ripidissimo non passa per una fila di gradini.
+  const pendenzaNaturale = terrain.getSlopeNaturale || terrain.getSlope;
   function puoAndare(x, z) {
     const d = Math.hypot(x - stato.x, z - stato.z);
     if (d < 1e-5) return true;
     // Acqua alta (se il terreno la segnala): non ci si entra; chi ci si trova già può uscirne.
     if (terrain.percorribile && !terrain.percorribile(x, z) && terrain.percorribile(stato.x, stato.z)) return false;
-    // Parete: oltre pendenzaParete non ci si entra (né salendo di traverso né scendendo); chi ci si trova
-    // già può spostarsi verso il meno ripido.
-    const pareteQui = terrain.getSlope(x, z);
-    if (pareteQui > cfg.pendenzaParete && pareteQui >= terrain.getSlope(stato.x, stato.z)) return false;
-    const salita = terrain.getHeight(x, z) - terrain.getHeight(stato.x, stato.z);
-    return !(salita > 0 && Math.atan(salita / d) > cfg.pendenzaMax * Math.PI / 180);
+    // Parete (solo terreno naturale: gradini e bordi costruiti non lo sono): oltre pendenzaParete non ci si entra
+    // (né salendo di traverso né scendendo); chi ci si trova già può spostarsi verso il meno ripido.
+    const pareteQui = pendenzaNaturale(x, z);
+    if (pareteQui > cfg.pendenzaParete && pareteQui >= pendenzaNaturale(stato.x, stato.z)) return false;
+    const h1 = terrain.getHeight(x, z), salita = h1 - terrain.getHeight(stato.x, stato.z);
+    const tMax = Math.tan(cfg.pendenzaMax * Math.PI / 180);
+    if (salita <= d * tMax) return true;
+    if (salita > cfg.gradino) return false;
+    const ux = (x - stato.x) / d, uz = (z - stato.z) / d;
+    return terrain.getHeight(x + ux * 0.3, z + uz * 0.3) - h1 <= 0.3 * tMax;
   }
 
   // Pendenza (tangente, + = salita) lungo la direzione (dx, dz) unitaria, dal punto attuale a 1 m
@@ -576,16 +596,126 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     const salita = g > 0, strada = salita && terrain.suStrada && terrain.suStrada(stato.x, stato.z);
     const K = salita ? (strada ? cfg.pendenzaKSalitaStrada : cfg.pendenzaKSalita) : cfg.pendenzaK;
     const f = Math.exp(-K * Math.abs(g + 0.05)) / Math.exp(-K * 0.05);
-    return clamp(f, salita ? (strada ? cfg.fattoreMinSalitaStrada : cfg.fattoreMinSalita) : cfg.fattoreMin, cfg.fattoreMax);
+    let v = clamp(f, salita ? (strada ? cfg.fattoreMinSalitaStrada : cfg.fattoreMinSalita) : cfg.fattoreMin, cfg.fattoreMax);
+    // Oltre pendenzaFatica (35°) la salita si fa a fatica: fino a metà della velocità al limite (40°).
+    if (salita) {
+      const ang = Math.atan(g) * 180 / Math.PI;
+      v *= 1 - 0.5 * clamp((ang - cfg.pendenzaFatica) / (cfg.pendenzaMax - cfg.pendenzaFatica), 0, 1);
+    }
+    return v;
   }
 
-  // Punto (x, z) spinto fuori da mura e torri: contro un muro il cavaliere ci scivola lungo.
+  // Punto (x, z) spinto fuori da mura e torri: contro un muro il cavaliere ci scivola lungo. Ciò che è più basso
+  // di un gradino non ferma (ci si sale sopra: le rocce basse fanno suolo, vedi componiSuolo).
   function fuoriDagliOstacoli(x, z) {
     for (const o of ostacoli) {
-      const p = o.spingiFuori(x, z, cfg.raggio);
+      const p = o.spingiFuori(x, z, cfg.raggio, stato.y, cfg.gradino);
       if (p) { x = p.x; z = p.z; }
     }
     return [x, z];
+  }
+
+  // ─── Scavalcamento (Spazio) ───
+  // Davanti al cavaliere, entro ~1 m, un ostacolo più alto di un gradino ma non oltre scavalcoMax (muretto,
+  // recinto, catasta, tronco, masso basso) oppure uno stacco del suolo della stessa altezza (bordo di un terrazzo):
+  // lo supera con un movimento di ~1 s e atterra oltre, o sopra lo stacco. Le altezze si leggono dagli ostacoli
+  // stessi (spingiFuori con `superabile` crescente), così vale per tutti i moduli senza conoscerne le forme.
+  function occupato(x, z, r, yPiedi, superabile) {
+    for (const o of ostacoli) {
+      const p = o.spingiFuori(x, z, r, yPiedi, superabile);
+      if (p && (Math.abs(p.x - x) > 1e-4 || Math.abs(p.z - z) > 1e-4)) return true;
+    }
+    return false;
+  }
+  // stacco: salto minimo del suolo tra due campioni perché sia un gradone (un pendio, anche ripido, non lo è)
+  const SCAVALCO = { passo: 0.12, davanti: 1.0, cerca: 3.0, stacco: 0.25 };
+  /** Scavalcamento possibile davanti, o null: { x1, z1, y1, cima, tipo: 'scavalca' | 'sali' }. */
+  function cercaScavalco() {
+    if (stato.scavalco) return null;
+    const fx = Math.sin(stato.direzione), fz = Math.cos(stato.direzione), y = stato.y;
+    let ingresso = -1, cima = y, uscita = -1, tipo = 'scavalca', prima = y;
+    for (let t = 0.2; t <= SCAVALCO.cerca; t += SCAVALCO.passo) {
+      const px = stato.x + fx * t, pz = stato.z + fz * t, suolo = terrain.getHeight(px, pz);
+      const oggetto = occupato(px, pz, 0.05, y, cfg.gradino);
+      const gradone = suolo - prima > SCAVALCO.stacco && suolo - y > cfg.gradino;
+      prima = suolo;
+      if (ingresso < 0) {
+        if (t > SCAVALCO.davanti + cfg.raggio) return null;            // niente davanti, entro un metro
+        if (!oggetto && !gradone) continue;
+        ingresso = t;
+      }
+      if (oggetto) {
+        let liv = null;                                                // altezza dell'ostacolo qui sopra i piedi
+        for (let l = cfg.gradino + 0.1; l <= cfg.scavalcoMax + 1e-6; l += 0.1) {
+          if (!occupato(px, pz, 0.05, y, l)) { liv = l; break; }
+        }
+        if (liv === null) return null;                                 // muro alto
+        cima = Math.max(cima, y + liv);
+        if (t - ingresso > cfg.scavalcoProfondita) return null;
+        continue;
+      }
+      // Nessun oggetto qui: oltre l'ostacolo, oppure sopra uno stacco del suolo.
+      if (suolo - y > cfg.scavalcoMax) return null;
+      if (suolo - y > cfg.gradino && cima <= y) tipo = 'sali';
+      uscita = t;
+      break;
+    }
+    if (uscita < 0) return null;
+    const tL = uscita + cfg.raggio + 0.05;
+    const x1 = stato.x + fx * tL, z1 = stato.z + fz * tL, y1 = terrain.getHeight(x1, z1);
+    if (y1 - y > cfg.scavalcoMax || y - y1 > cfg.scavalcoDiscesa) return null;
+    if (terrain.percorribile && !terrain.percorribile(x1, z1)) return null;
+    if (occupato(x1, z1, cfg.raggio, y1, cfg.gradino)) return null;    // atterraggio libero
+    const tMax = Math.tan(cfg.pendenzaMax * Math.PI / 180);
+    if (terrain.getHeight(x1 + fx * 0.4, z1 + fz * 0.4) - y1 > 0.4 * tMax) return null;   // e ci si sta in piedi
+    if (Math.abs(x1) > lim() || Math.abs(z1) > lim()) return null;
+    return { x1, z1, y1, cima: Math.max(cima, y1), tipo };
+  }
+  function avviaScavalco(p) {
+    const salto = p.cima - stato.y, dist = Math.hypot(p.x1 - stato.x, p.z1 - stato.z);
+    stato.scavalco = { t: 0, x0: stato.x, z0: stato.z, y0: stato.y, x1: p.x1, z1: p.z1, y1: p.y1, cima: p.cima,
+      durata: clamp(0.55 + 0.4 * salto + 0.12 * dist, 0.7, 1.4) * (stato.velocita > 3 ? 0.85 : 1) };
+    stato.velocita *= 0.4;
+  }
+  // Posa dello scavalcamento: gambe raccolte, busto in avanti, mano destra verso l'ostacolo. k: 0 → 1 → 0.
+  function posaScavalco(k) {
+    mod.corpo.position.y = 0;
+    for (const g of gambe) {
+      g.mod.anca.rotation.x = -1.25 * k;
+      g.mod.ginocchio.rotation.x = 1.9 * k;
+      g.mod.caviglia.rotation.x = -0.65 * k;
+      g.mod.caviglia.rotation.z = 0;
+    }
+    mod.busto.rotation.x = 0.03 + 0.45 * k;
+    mod.busto.rotation.y = 0;
+    mod.busto.position.y = 0.98;
+    mod.testa.rotation.x = -0.3 * k;
+    mod.braccioD.spalla.rotation.x = -1.15 * k;
+    mod.braccioD.spalla.rotation.z = -0.07;
+    mod.braccioD.gomito.rotation.x = -0.2;
+    mod.braccioS.spalla.rotation.x = -0.35 * k;
+    mod.braccioS.spalla.rotation.z = 0.13;
+    mod.braccioS.gomito.rotation.x = -0.9;
+    mod.mantello.rotation.x = 0.15 + 0.5 * k;
+  }
+  function aggiornaScavalco(dt) {
+    const S = stato.scavalco;
+    S.t = Math.min(1, S.t + dt / S.durata);
+    const e = S.t * S.t * (3 - 2 * S.t), arco = Math.sin(Math.PI * S.t);
+    stato.x = lerp(S.x0, S.x1, e);
+    stato.z = lerp(S.z0, S.z1, e);
+    // Il corpo si alza quanto basta perché i piedi raccolti (~0,3 m sopra la radice) passino sopra la cima.
+    const base = lerp(S.y0, S.y1, e), alza = Math.max(0.12, S.cima + 0.05 - (S.y0 + S.y1) / 2 - 0.3);
+    stato.y = terrain.getHeight(stato.x, stato.z);
+    stato.yVis = base + alza * arco;
+    mod.root.position.set(stato.x, stato.yVis, stato.z);
+    mod.root.rotation.y = stato.direzione;
+    posaScavalco(arco);
+    if (S.t >= 1) {
+      stato.scavalco = null;
+      stato.y = terrain.getHeight(stato.x, stato.z);
+      stato.yVis = stato.y;
+    }
   }
 
   // Sposta di (dx, dz). Se il passo è bloccato prova a scivolare lungo un solo asse,
@@ -621,6 +751,16 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
    */
   function update(dt, input) {
     stato.tempo += dt;
+    if (stato.scavalco) {                    // durante lo scavalcamento i comandi aspettano
+      aggiornaScavalco(dt);
+      stato.velEffettiva = 0;
+      aggiornaOmbra();
+      return;
+    }
+    if (input.scavalca) {
+      const p = cercaScavalco();
+      if (p) { avviaScavalco(p); aggiornaScavalco(0); aggiornaOmbra(); return; }
+    }
     const direzionePrima = stato.direzione;
 
     // Rotazione: i tasti partono e si fermano in modo morbido, il mouse è diretto.
@@ -662,9 +802,12 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     stato.velEffettiva += (Math.abs(percorso) / Math.max(dt, 1e-4) - stato.velEffettiva) * avvicina(12, dt);
     if (stato.velEffettiva < 0.005) stato.velEffettiva = 0;
 
-    // Segue esattamente la superficie disegnata
+    // Segue esattamente la superficie disegnata; il corpo raggiunge in fretta la quota nuova (gradini, sassi):
+    // salire o scendere uno stacco non è uno scatto. Uno spostamento grande (cambio di Scena) va subito.
     stato.y = terrain.getHeight(stato.x, stato.z);
-    mod.root.position.set(stato.x, stato.y, stato.z);
+    if (!(Math.abs(stato.y - stato.yVis) < 1.5)) stato.yVis = stato.y;
+    else stato.yVis += (stato.y - stato.yVis) * avvicina(stato.y > stato.yVis ? 16 : 12, dt);
+    mod.root.position.set(stato.x, stato.yVis, stato.z);
     mod.root.rotation.y = stato.direzione;
 
     const giro = Math.abs(Math.atan2(Math.sin(stato.direzione - direzionePrima), Math.cos(stato.direzione - direzionePrima)));
@@ -686,7 +829,7 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
   // Coordinate locali (lx a sinistra del cavaliere = +X, lz in avanti) → quota del terreno relativa ai piedi
   function suoloLocale(lx, lz) {
     const sd = Math.sin(stato.direzione), cd = Math.cos(stato.direzione);
-    return terrain.getHeight(stato.x + lx * cd + lz * sd, stato.z - lx * sd + lz * cd) - stato.y;
+    return terrain.getHeight(stato.x + lx * cd + lz * sd, stato.z - lx * sd + lz * cd) - stato.yVis;
   }
 
   function anima(dt, percorso, giro) {
@@ -787,6 +930,8 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     cfg,
     stato,
     update,
+    /** Scavalcamento possibile davanti (per l'invito «Spazio» nel HUD), o null. */
+    cercaScavalco,
     /** Punto da inquadrare (petto del cavaliere), in coordinate del mondo. */
     puntoMira(out = new THREE.Vector3()) {
       return out.set(stato.x, stato.y + 1.3, stato.z);
