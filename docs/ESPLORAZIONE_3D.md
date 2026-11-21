@@ -2340,8 +2340,11 @@ si resta sotto 1,5 ms e ≤ 10 chiamate (cupola 1, stelle 1, precipitazioni 1). 
 
 ### Accordi con le altre sessioni (da prendere)
 
-- **M1 - Grafica:** gruppo «cielo» separato nel profilatore (oggi cupola e nuvole finirebbero in «resto»); foschia di
-  M1 spostata in `cielo.js` e poi sostituita dal meteo.
+- **M1 - Grafica** (risposta ricevuta): spostamento della foschia in `cielo.js` e sostituzione col meteo confermati. Gruppo
+  «cielo» nel profilatore pronto sul branch di M1 `claude/keen-gauss-74qlkn` (da unire con l'ok dell'utente): ci rientra
+  ogni oggetto figlio diretto della scena con nome che comincia per «cielo» (`cielo-cupola`, `cielo-stelle`,
+  `cielo-precipitazioni`); «acqua, cielo ed effetti» somma cielo e resto contro 1,5 ms. Per questo la cupola è una mesh e
+  non `scene.background` (lo sfondo nel percorso per gruppi finirebbe in «ter. blocco»).
 - **M7:** `materialeMuro` scurisce fino a ×0,38 le facce girate dalla luce più forte; col cielo coperto la luce più forte
   resta il sole indebolito e le mura avrebbero ombre nette sotto un cielo senza sole. Proposta: attenuare con `luceDiretta`.
 - **Vegetazione:** ombre finte attenuate con `luceDiretta`; conferma che la neve a terra resta solo da `limiteNevi`
