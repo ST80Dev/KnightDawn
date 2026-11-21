@@ -13,7 +13,12 @@ const SEZIONE_FIUME = [-1, 1];          // vertici attraverso il nastro (× semi
 // Fiumi nel blocco: la griglia del terreno (7,8 m) non scava un alveo largo pochi metri e il terreno disegnato tra due
 // vertici di sponda spuntava dall'acqua a morsi (segnalato dall'utente). Come per le strade, il nastro è fitto e,
 // dove il terreno disegnato sta sopra il pelo, gli si appoggia appena sopra: il bordo dell'acqua resta quello del nastro.
-const FIUME_SCENA = { sezione: [-1, -0.5, 0, 0.5, 1], passo: 2.5, sopraTerreno: 0.1 };
+// I bordi sfumano (alfa per vertice della sezione) su un nastro più largo dell'alveo: niente «nastro sottile steso sul
+// prato» a bordi netti (segnalato dall'utente); l'acqua piena sta nell'alveo, la sfumatura sulle sponde.
+// Tra i vertici del nastro il terreno (triangoli da 7,8 m) poteva ancora spuntare a bande che attraversano il fiume
+// (segnalato dall'utente): sollevaSuTerreno (come per le strade) controlla dentro ogni quadrilatero e alza i vertici.
+const FIUME_SCENA = { sezione: [-1, -0.6, -0.3, 0, 0.3, 0.6, 1], alfa: [0, 1, 1, 1, 1, 1, 0], largo: 1.4, passo: 2.5,
+  sopraTerreno: 0.1, margine: 0.08 };
 
 /**
  * Nastro d'acqua lungo un pezzo di tracciato [x, z, pelo, semilarghezza, …] (coordinate locali): due vertici
@@ -21,7 +26,7 @@ const FIUME_SCENA = { sezione: [-1, -0.5, 0, 0.5, 1], passo: 2.5, sopraTerreno: 
  * dividono in parti non più lunghe di passo; `quota(x, z, pelo)` dà l'altezza di ciascun vertice (senza: appena
  * sopra il pelo dell'acqua).
  */
-export function creaNastro(t, mat, passo = Infinity, quota = null, sezione = SEZIONE_FIUME) {
+export function creaNastro(t, mat, passo = Infinity, quota = null, sezione = SEZIONE_FIUME, { largo = 1.15, alfa = null, terreno = null, margine = 0.05 } = {}) {
   const pt = [];                                          // punti suddivisi: x, z, pelo, w
   const m = t.length / 4;
   for (let i = 0; i < m; i++) {
@@ -43,12 +48,13 @@ export function creaNastro(t, mat, passo = Infinity, quota = null, sezione = SEZ
     let tx = pt[b * 4] - pt[a * 4], tz = pt[b * 4 + 1] - pt[a * 4 + 1];
     const l = Math.hypot(tx, tz) || 1;
     tx /= l; tz /= l;
-    const x = pt[i * 4], z = pt[i * 4 + 1], pelo = pt[i * 4 + 2], w = pt[i * 4 + 3] * 1.15;
+    const x = pt[i * 4], z = pt[i * 4 + 1], pelo = pt[i * 4 + 2], w = pt[i * 4 + 3] * largo;
     for (let j = 0; j < k; j++) {
       const px = x - tz * w * sezione[j], pz = z + tx * w * sezione[j];
       pos.set([px, quota ? quota(px, pz, pelo) : pelo + SOPRA_PELO, pz], (i * k + j) * 3);
     }
   }
+  if (terreno) sollevaSuTerreno(pos, q, k, terreno, margine);
   const indici = [];
   for (let i = 0; i < q - 1; i++) {
     for (let j = 0; j < k - 1; j++) {
@@ -58,6 +64,11 @@ export function creaNastro(t, mat, passo = Infinity, quota = null, sezione = SEZ
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  if (alfa) {                                             // colore bianco (vale quello del materiale), alfa per sezione
+    const col = new Float32Array(q * k * 4).fill(1);
+    for (let i = 0; i < q; i++) for (let j = 0; j < k; j++) col[(i * k + j) * 4 + 3] = alfa[j];
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 4));
+  }
   geo.setIndex(indici);
   geo.computeVertexNormals();
   const mesh = new THREE.Mesh(geo, mat);
@@ -84,9 +95,9 @@ export function creaAcqueScena(acqua, meta, colore, centro) {
 
   const F = FIUME_SCENA, alt = acqua.altezza;
   const matFiume = alt ? mat.clone() : mat;
-  if (alt) Object.assign(matFiume, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8 });
+  if (alt) Object.assign(matFiume, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8, vertexColors: true });
   const quota = alt ? (x, z, pelo) => Math.max(pelo + SOPRA_PELO, alt(x, z) + F.sopraTerreno) : null;
-  for (const t of acqua.tracciati) gruppo.add(alt ? creaNastro(t, matFiume, F.passo, quota, F.sezione) : creaNastro(t, mat));
+  for (const t of acqua.tracciati) gruppo.add(alt ? creaNastro(t, matFiume, F.passo, quota, F.sezione, { ...F, terreno: alt }) : creaNastro(t, mat));
 
   // Laghi in quota.
   const { cols, rows, cellSize } = meta, half = (cols - 1) * cellSize / 2;
@@ -209,7 +220,7 @@ float rumoreStrada(vec2 p) {
  * comparivano e sparivano muovendo la camera (segnalazione dell'utente). Per ogni quadrilatero del nastro si campiona il
  * terreno su una griglia 4×4 e, dove supera la strada, si alzano i quattro vertici quanto basta (+ STRADA.margine).
  */
-function sollevaSuTerreno(pos, m, k, altezza) {
+function sollevaSuTerreno(pos, m, k, altezza, margine = STRADA.margine) {
   const alza = new Float32Array(m * k);
   for (let i = 0; i < m - 1; i++) {
     for (let j = 0; j < k - 1; j++) {
@@ -220,7 +231,7 @@ function sollevaSuTerreno(pos, m, k, altezza) {
           const u = a / 3, w = b / 3, c = [(1 - u) * (1 - w), u * (1 - w), (1 - u) * w, u * w];
           let x = 0, y = 0, z = 0;
           for (let q = 0; q < 4; q++) { x += c[q] * pos[v[q] * 3]; y += c[q] * pos[v[q] * 3 + 1]; z += c[q] * pos[v[q] * 3 + 2]; }
-          const d = altezza(x, z) + STRADA.margine - y;
+          const d = altezza(x, z) + margine - y;
           if (d > serve) serve = d;
         }
       }
@@ -235,14 +246,16 @@ function sollevaSuTerreno(pos, m, k, altezza) {
  * cavaliere per posare i piedi SULLA strada, che sta qualche centimetro sopra il terreno (prima i piedi ci affondavano).
  * Coordinate locali del blocco. Indice a griglia di 4 m.
  */
-export function suoloStrade(gruppo) {
-  const CELLA = 4, celle = new Map(), tri = [];
+const RAMPA_BORDO = 0.4;               // tangente (~22°) della salita dal terreno alla carreggiata, sul bordo
+export function suoloStrade(gruppo, terreno = null) {
+  const CELLA = 4, celle = new Map(), tri = [], bordi = [];
   gruppo?.traverse((o) => {
     if (o.name !== 'strada' || !o.geometry?.index) return;
-    const p = o.geometry.attributes.position.array, idx = o.geometry.index.array;
+    const p = o.geometry.attributes.position.array, idx = o.geometry.index.array, bo = o.geometry.userData.bordo;
     for (let n = 0; n < idx.length; n += 3) {
       const t = [idx[n], idx[n + 1], idx[n + 2]].flatMap((v) => [p[v * 3], p[v * 3 + 1], p[v * 3 + 2]]);
       const id = tri.push(t) - 1;
+      bordi.push(bo ? [bo[idx[n]], bo[idx[n + 1]], bo[idx[n + 2]]] : null);
       const x0 = Math.floor(Math.min(t[0], t[3], t[6]) / CELLA), x1 = Math.floor(Math.max(t[0], t[3], t[6]) / CELLA);
       const z0 = Math.floor(Math.min(t[2], t[5], t[8]) / CELLA), z1 = Math.floor(Math.max(t[2], t[5], t[8]) / CELLA);
       for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) {
@@ -262,7 +275,14 @@ export function suoloStrade(gruppo) {
         const l1 = ((t[5] - t[8]) * (x - t[6]) + (t[6] - t[3]) * (z - t[8])) / det;
         const l2 = ((t[8] - t[2]) * (x - t[6]) + (t[0] - t[6]) * (z - t[8])) / det;
         const l3 = 1 - l1 - l2;
-        if (l1 >= -1e-6 && l2 >= -1e-6 && l3 >= -1e-6) return l1 * t[1] + l2 * t[4] + l3 * t[7];
+        if (l1 >= -1e-6 && l2 >= -1e-6 && l3 >= -1e-6) {
+          const h = l1 * t[1] + l2 * t[4] + l3 * t[7], b = bordi[id];
+          if (!terreno || !b) return h;
+          // Dal prato alla carreggiata niente scalino (segnalato dall'utente: il cavaliere non risaliva in strada):
+          // vicino al bordo la superficie su cui si cammina sale dal terreno alla strada con pendenza RAMPA_BORDO.
+          const tH = terreno(x, z), dB = l1 * b[0] + l2 * b[1] + l3 * b[2];
+          return h > tH ? tH + Math.min(h - tH, dB * RAMPA_BORDO) : h;
+        }
       }
       return null;
     },
@@ -322,6 +342,8 @@ export function creaNastroStrada(t, mat, altezza, quote = null) {
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.setAttribute('aTrasversale', new THREE.BufferAttribute(trasv, 1));
+  // Metri dal bordo della carreggiata per vertice (solo per suoloStrade, non va sulla scheda).
+  geo.userData.bordo = Float32Array.from(trasv, (s, n) => (1 - Math.abs(s)) * t[Math.floor(n / k) * 3 + 2]);
   geo.setIndex(indici);
   geo.computeVertexNormals();
   // Luce uniforme in larghezza: in ogni sezione la normale è la media della sezione (segue solo la salita o la discesa

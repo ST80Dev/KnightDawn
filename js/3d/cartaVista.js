@@ -43,15 +43,15 @@ COLORI_BIOMI[BIOMA.ROCCIA] = [142, 136, 130]; COLORI_BIOMI[BIOMA.PIANURA_N] = [1
 COLORI_BIOMI[BIOMA.PIANURA_S] = [206, 190, 128];
 const COLORE_VALICO = [232, 180, 60];
 const FASCE = [['pianura', 0, 200], ['collina', 200, 700], ['pedemonte', 700, 1500], ['montagna', 1500, Infinity]];
-const MARE_BASSO = [122, 158, 168], MARE_FONDO = [40, 70, 92];
-const LAGO = [104, 150, 178];
-const COLORE_FIUME = '#2f6690';
-const COLORE_STRADA = 'rgba(122, 74, 38, 0.95)';   // strade di terra battuta
-const COLORE_SENTIERO = 'rgba(150, 40, 30, 0.9)';
+export const MARE_BASSO = [122, 158, 168], MARE_FONDO = [40, 70, 92];
+export const LAGO = [104, 150, 178];
+export const COLORE_FIUME = '#2f6690';
+export const COLORE_STRADA = 'rgba(122, 74, 38, 0.95)';   // strade di terra battuta
+export const COLORE_SENTIERO = 'rgba(150, 40, 30, 0.9)';
 // [classe, spessore (come i fiumi), tratteggio]: dalla più importante.
-const STILE_STRADE = [['maestra', 1.6, []], ['carrareccia', 1.2, []], ['mulattiera', 1.0, [3, 2]], ['sentiero', 0.9, [1.5, 2]]];
+export const STILE_STRADE = [['maestra', 1.6, []], ['carrareccia', 1.2, []], ['mulattiera', 1.0, [3, 2]], ['sentiero', 0.9, [1.5, 2]]];
 // Nella Carta zoomata: larghezza minima in pixel per classe (si leggono sul rilievo) e bordino chiaro attorno.
-const STRADE_ZOOM = { minimo: { maestra: 3.2, carrareccia: 2.6, mulattiera: 2.1, sentiero: 1.7 }, bordo: 1.6,
+export const STRADE_ZOOM = { minimo: { maestra: 3.2, carrareccia: 2.6, mulattiera: 2.1, sentiero: 1.7 }, bordo: 1.6,
   coloreBordo: 'rgba(238, 224, 190, 0.85)' };
 
 /**
@@ -59,7 +59,7 @@ const STRADE_ZOOM = { minimo: { maestra: 3.2, carrareccia: 2.6, mulattiera: 2.1,
  * terreno delle Scene (coloreMondo: biomi, bosco, campagna, roccia, ghiaioni, neve), per vedere sulla Carta boschi,
  * radure, campi e spianate rocciose [chiesto dall'utente, novembre 2026].
  */
-function coloreNaturale(carta) {
+export function coloreNaturale(carta) {
   const stagione = typeof Calendar !== 'undefined' ? Calendar.stagione : 0;
   const f = coloreMondo(carta, stagione);
   // Il bosco vero (anche quello di versante, che nelle Scene fanno gli alberi e non il colore del terreno): dalla
@@ -78,26 +78,26 @@ const CHIOME = new THREE.Color('#2f4f22');     // verde scuro delle chiome viste
 const COSTA = [70, 52, 30];
 const ESAGERAZIONE = 6;           // quanto il rilievo pesa nell'ombreggiatura
 const COLORE_PANORAMA = 'rgba(150, 40, 30, 0.9)';
-const COLORE_CAVALIERE = '#e8402a';
+export const COLORE_CAVALIERE = '#e8402a';
 const DISTANZE_CAVALIERE = [10, 20];   // km: cerchi attorno al cavaliere
 // Tempo di marcia a piedi sulla Carta (docs/GDD.md §3 Viaggio): un Passo (3 h) ogni VIAGGIO.METRI_PER_PASSO.
 const MINUTI_PER_KM = typeof VIAGGIO !== 'undefined' ? 180 * 1000 / VIAGGIO.METRI_PER_PASSO : 37;
 const ORE_MARCIA_GIORNO = 9;           // ~3 Passi di marcia al giorno
 // Rocche (M7): segno più grande secondo la classe; candidati scartati come puntini (pulsante «Candidati»).
-const CLASSI_ROCCA = { minore: ['rocca minore', 5], casata: ['castello di casata', 6.5], maggiore: ['sede maggiore', 8] };
+export const CLASSI_ROCCA = { minore: ['rocca minore', 5], casata: ['castello di casata', 6.5], maggiore: ['sede maggiore', 8] };
 const COLORE_ROCCA = '#8c1c13';
 const COLORE_VALICHI = '#d9822b';
 // Luoghi maggiori che non sono rocche (M8): stesso segno della rocca, altro colore e altra lettera.
-const TIPI_LUOGO = { rocca: [COLORE_ROCCA, 'R'], monastero: ['#4b2f7a', 'M'], citta: ['#1d4f86', 'C'] };
+export const TIPI_LUOGO = { rocca: [COLORE_ROCCA, 'R'], monastero: ['#4b2f7a', 'M'], citta: ['#1d4f86', 'C'] };
 // Siti di villaggi e luoghi speciali (M8, js/mondo/siti.js): colore del segno.
-const COLORI_SITI = { villaggio: '#5a3416', ovile: '#6f8f3a', rovina: '#6b6359', abbandonato: '#3c3833', grotta: '#1d1a17',
+export const COLORI_SITI = { villaggio: '#5a3416', ovile: '#6f8f3a', rovina: '#6b6359', abbandonato: '#3c3833', grotta: '#1d1a17',
   eremo: '#4b2f7a', fantastico: '#1f7a6a', accampamento: '#b0451c', sentinella: '#d9822b', ospizio: '#d9822b' };
 // Ordine del menu «Vai a» (M8): luoghi maggiori, poi i siti.
 const VAI_A = ['rocca', 'monastero', 'citta', 'villaggio', 'rovina', 'abbandonato', 'grotta', 'eremo', 'fantastico',
   'accampamento', 'sentinella', 'ospizio', 'ovile'];
 
 /** Segno di un sito (M8) in pixel dello schermo, lato ~2m. */
-function segnoSito(ctx, s, px, py, m) {
+export function segnoSito(ctx, s, px, py, m) {
   ctx.fillStyle = COLORI_SITI[s.tipo]; ctx.strokeStyle = COLORI_SITI[s.tipo];
   ctx.beginPath();
   switch (s.tipo) {
@@ -138,13 +138,13 @@ const DETTAGLIO = { da: 1, passo: 2, attesa: 120, budget: 12, esagerazione: 2, e
   percorsi: 130,    // km: finestra entro cui si cercano e si disegnano i percorsi dei fiumi sul terreno
   strade: 24 };     // km: finestra entro cui si cerca il tracciato fine delle strade (~50–100 ms per tratto di 4 km)
 const fasciaDi = (m) => FASCE.find(([, a, b]) => m >= a && m < b)?.[0] ?? 'montagna';
-const LUCE = (() => {             // luce da nord-ovest, alta 45°
+export const LUCE = (() => {             // luce da nord-ovest, alta 45°
   const x = -1, y = -1, z = 1.4142135623730951;
   const l = Math.sqrt(x * x + y * y + z * z);
   return [x / l, y / l, z / l];
 })();
 
-function tinta(scala, t) {
+export function tinta(scala, t) {
   for (let i = 1; i < scala.length; i++) {
     if (t <= scala[i][0]) {
       const [t0, c0] = scala[i - 1], [t1, c1] = scala[i];

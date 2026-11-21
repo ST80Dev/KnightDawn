@@ -70,7 +70,7 @@ html, body {
 /* Indicatore dell'andatura attiva (camminata) */
 #hud .andatura {
   position: absolute;
-  bottom: 8px;
+  bottom: calc(8px + var(--minimappa, 0px));   /* sopra la minimappa */
   right: 8px;
   padding: 3px 10px;
   background: rgba(26, 14, 4, 0.6);
@@ -280,3 +280,59 @@ html, body {
 #caricamento .barra { height: 8px; border: 1px solid #8a6030; border-radius: 3px; overflow: hidden; }
 #caricamento .barra i { display: block; height: 100%; width: 0; background: #b08a3a; transition: width 0.2s; }
 #carta button:disabled { opacity: 0.5; cursor: wait; }
+
+/* Minimappa (js/3d/minimappa.js): in basso a destra; allargata con N */
+#minimappa {
+  position: fixed;
+  right: 8px;
+  bottom: 8px;
+  padding: 4px;
+  background: rgba(26, 14, 4, 0.92);
+  border: 1px solid #5a3a18;
+  border-radius: 4px;
+  color: #d8c8a0;
+  font-size: 12px;
+  user-select: none;
+}
+#minimappa[hidden] { display: none; }
+#minimappa canvas { display: block; border-radius: 2px; cursor: zoom-in; }
+#minimappa.allargata canvas { cursor: crosshair; }
+#minimappa .nord {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 4px;
+  background: rgba(26, 14, 4, 0.7);
+  border-radius: 2px;
+  font-weight: bold;
+  pointer-events: none;
+}
+#minimappa .scala {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 5px;
+  background: rgba(26, 14, 4, 0.6);
+  border-radius: 2px;
+  pointer-events: none;
+}
+#minimappa .scala i { display: block; height: 4px; border: 1px solid #f4ead0; border-top: 0; }
+#minimappa .comandi { position: absolute; top: 8px; right: 8px; display: flex; gap: 3px; }
+#minimappa button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: rgba(42, 26, 12, 0.85);
+  color: #d8c8a0;
+  border: 1px solid #8a6030;
+  border-radius: 3px;
+  font: 14px/1 Georgia, serif;
+  cursor: pointer;
+}
+#minimappa button:hover { background: #3a2410; }
+#minimappa .piede:empty { display: none; }
+#minimappa .piede { padding: 4px 2px 0; color: #b8a880; }

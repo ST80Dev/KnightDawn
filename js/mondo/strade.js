@@ -15,7 +15,7 @@
 // oltre la pendenza massima conta come la strada a tornanti che servirebbe: dislivello / p_max × `tornanti`.
 
 import { BIOMA, ACQUA } from './carta.js';
-import { quotaMondo, scavaFiumi, livelloLago, distanzaPiano, raffinaZona, quotaPiano } from './scena.js';
+import { quotaMondo, scavaFiumi, livelloLago, distanzaPiano, raffinaZona, quotaPiano, spianaLuoghi } from './scena.js';
 import { smoothstep, completa } from './rumore.js';
 
 export const STRADE = {
@@ -64,9 +64,13 @@ export const STRADE = {
     guado: 4,
     passo: 5,                   // m tra i punti del tracciato finale
     liscia: [3, 2],             // media mobile ±3 punti, 2 passate (toglie i gradini senza tagliare i tornanti)
-    portaDritta: 30,            // m: tratto dritto lungo la normale della porta di un borgo, fino alla porta
+    portaDritta: 12,            // m: tratto dritto lungo la normale della porta di un borgo, fino alla porta
     lisciaTerreno: 2,           // passate di media 3×3 sulle quote della griglia prima di cercare il percorso
+    lisciaVera: 1,              // passate dopo cui si prende anche la pendenza «vera» (la più ripida delle due conta)
     profilo: [5, 3],            // quota della strada: media mobile ±5 punti (25 m), 3 passate
+    profiloMax: 1.5,            // pendenza massima del profilo: × pmax della classe (scavi e riporti per i gradini)
+    taglio: 3,                  // m: scavo o riporto massimo del profilo rispetto al terreno lisciato
+    raccordoEstremi: 30,        // m: agli estremi del tratto la quota resta quella di prima (incroci, porte)
     scarpata: 0.6,              // pendenza massima delle scarpate di taglio e di riporto (~31°)
     raccordo: 18,               // m oltre il bordo entro cui il terreno segue la strada
     ritorno: 10,                // m per tornare al terreno naturale
@@ -580,6 +584,10 @@ function portaIn(carta, x, z) {
 function terreno(carta, x, z, esito) {
   return scavaFiumi(carta, x, z, quotaMondo(carta, x, z), esito);
 }
+/** Terreno con i terrapieni dei luoghi (le loro scarpate a 25° ci sono anche per la strada: quotaFinale le mette sopra). */
+function terrenoLuoghi(carta, x, z, esito) {
+  return spianaLuoghi(carta, x, z, terreno(carta, x, z, esito));
+}
 
 /** Tracciato fine di un tratto: griglia di 20 m nel corridoio, costo per passo con la pendenza della classe. */
 function tracciaTratto(carta, tr, W) { return completa(tracciaTrattoAPezzi(carta, tr, W)); }
@@ -620,7 +628,7 @@ function* tracciaTrattoAPezzi(carta, tr, W = STRADE.scena.corridoio) {
     if (d2[k] > W * W) continue;
     if (k % PEZZO === 0) yield;
     const x = x0 + (k % nx) * g, z = z0 + ((k / nx) | 0) * g;
-    const h = terreno(carta, x, z, esito);
+    const h = terrenoLuoghi(carta, x, z, esito);
     const lago = livelloLago(carta, x, z);
     if (!Number.isNaN(lago) || h < 0) continue;                      // laghi e mare: fuori
     // Terrapieni di rocca e borgo: niente strada sui piani (le scarpate sì: la porta sta sul bordo del borgo,
@@ -639,8 +647,12 @@ function* tracciaTrattoAPezzi(carta, tr, W = STRADE.scena.corridoio) {
   const sA = cellaDi(A.x, A.z), sB = cellaDi(B.x, B.z);
   for (const s of [sA, sB]) if (Number.isNaN(hq[s])) { hq[s] = terreno(carta, x0 + (s % nx) * g, z0 + ((s / nx) | 0) * g, esito); acqua[s] = 0; }
   // Pendenze sul terreno lisciato (media su ~60 m, `lisciaTerreno` passate): la strada segue la forma del versante
-  // e fa tornanti ampi, invece di zigzagare tra le gobbe del rilievo fine.
+  // e fa tornanti ampi, invece di zigzagare tra le gobbe del rilievo fine. Conta però anche la pendenza vera (media
+  // su ~40 m, `lisciaVera` passate): su una cima stretta la lisciatura la nascondeva e la strada saliva dritta a 30°
+  // verso la rocca (segnalato dall'utente).
+  let hv = null;
   for (let it = 0; it < S.lisciaTerreno; it++) {
+    if (it === S.lisciaVera) hv = hq.slice();
     const t = hq.slice();
     for (let k = 0; k < N; k++) {
       if (Number.isNaN(hq[k])) continue;
@@ -676,7 +688,7 @@ function* tracciaTrattoAPezzi(carta, tr, W = STRADE.scena.corridoio) {
       if (Number.isNaN(hq[kk])) continue;
       let km = -1;
       if (v >= 8) { km = (r + Math.round(DY[v] / 2)) * nx + c + Math.round(DX[v] / 2); if (Number.isNaN(hq[km])) continue; }
-      const L = LUNGO[v] * g, p = Math.abs(hq[kk] - hq[k]) / L, pp = p / K.p0;
+      const L = LUNGO[v] * g, p = Math.max(Math.abs(hq[kk] - hq[k]), hv ? Math.abs(hv[kk] - hv[k]) : 0) / L, pp = p / K.p0;
       let costo = L * (1 + pp * pp);
       if (p > K.pmax) costo *= 1 + S.oltre * (p - K.pmax) / K.pmax;
       const w = Math.max(acqua[kk], km >= 0 ? acqua[km] : 0);
@@ -751,7 +763,7 @@ function* tracciaTrattoAPezzi(carta, tr, W = STRADE.scena.corridoio) {
   // Quota della strada: il terreno lungo il percorso, saltando l'acqua (lì passerà un ponte o un guado), lisciata.
   const m = fx.length, h = new Array(m), bagnato = new Uint8Array(m), pelo = new Float64Array(m), suolo = new Float64Array(m);
   for (let i = 0; i < m; i++) {
-    h[i] = suolo[i] = terreno(carta, fx[i], fz[i], esito);
+    h[i] = suolo[i] = terrenoLuoghi(carta, fx[i], fz[i], esito);
     bagnato[i] = Number.isNaN(esito.livello) ? 0 : 1; pelo[i] = esito.livello;
   }
   let prima = -1;
@@ -779,6 +791,28 @@ function* tracciaTrattoAPezzi(carta, tr, W = STRADE.scena.corridoio) {
       if (k === kR) break;
       const d = Math.hypot(fx[k] - P.x, fz[k] - P.z);
       hh[k] = qs + (hR - qs) * Math.min(1, d / dR);
+    }
+  }
+  // Pendenza massima del profilo (segnalato dall'utente: gradini a 30–57° verso una rocca): la quota della strada non
+  // sale né scende più di `profiloMax`·pmax per metro; i gradini corti si tagliano o si riempiono, al più di `taglio` m
+  // dal profilo di prima (oltre resta la salita: lì il tracciato avrebbe dovuto girare). Agli estremi (incroci, porte)
+  // la quota resta quella di prima, raccordata su `raccordoEstremi` m.
+  {
+    const G = K.pmax * S.profiloMax, T = S.taglio, base = hh.slice();
+    const lung = new Float64Array(m);
+    for (let i = 1; i < m; i++) lung[i] = Math.hypot(fx[i] - fx[i - 1], fz[i] - fz[i - 1]);
+    const F = base.slice(), B = base.slice();
+    for (let i = 1; i < m; i++) F[i] = Math.min(Math.max(F[i], F[i - 1] - G * lung[i]), F[i - 1] + G * lung[i]);
+    for (let i = m - 2; i >= 0; i--) B[i] = Math.min(Math.max(B[i], B[i + 1] - G * lung[i + 1]), B[i + 1] + G * lung[i + 1]);
+    let d0 = 0;
+    const dFine = new Float64Array(m);
+    for (let i = m - 2; i >= 0; i--) dFine[i] = dFine[i + 1] + lung[i + 1];
+    for (let i = 0; i < m; i++) {
+      if (i > 0) d0 += lung[i];
+      let v = (F[i] + B[i]) / 2;
+      v = Math.min(Math.max(v, base[i] - T), base[i] + T);
+      const w = 1 - Math.min(1, Math.min(d0, dFine[i]) / S.raccordoEstremi);
+      hh[i] = v + (base[i] - v) * w;
     }
   }
   // Attraversamenti: corse di punti nell'acqua. Ponte (acqua profonda): impalcato piano tra le due rive asciutte e rampe;
@@ -950,7 +984,8 @@ export function stradeBlocco(carta, cx, cz, half, passo = 2, quote = null) {
         const z = (i === 0 ? f.z[0] : f.z[i - 1] + (f.z[i] - f.z[i - 1]) * t) - cz;
         if (Math.abs(x) > half - 1 || Math.abs(z) > half - 1) { chiudi(); continue; }
         // Sul ponte niente nastro: la carreggiata è l'impalcato del ponte (js/3d/acqua.js, creaPonte).
-        if (f.tipo && i > 0 && f.tipo[i - 1] === 1 && f.tipo[i] === 1) { chiudi(); continue; }
+        // Al guado neanche: la strada passa sotto l'acqua (prima il nastro la attraversava sopra, segnalato dall'utente).
+        if (f.tipo && i > 0 && f.tipo[i - 1] > 0 && f.tipo[i] > 0) { chiudi(); continue; }
         pezzo.push(x, z, f.semi);
         hs.push(i === 0 ? f.h[0] : f.h[i - 1] + (f.h[i] - f.h[i - 1]) * t);
       }
