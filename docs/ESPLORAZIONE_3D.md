@@ -1323,9 +1323,21 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
    più vicine al cavaliere entro 70 m, con tremolio; numero fisso, quindi nessuna ricompilazione degli shader.
    Il buio viene da `aggiornaLuci(t, buio, quota)` di rocca, borgo e campagna (col meteo il buio lo darà il cielo).
    Prova (headless, seme 12345, ore 21): finestre e torce accese, porta del borgo illuminata; cammino 34/34.
-   Da misurare sulla scheda dell'utente: FPS di notte nel borgo. *Persone:* modelli della sessione M1
-   (`js/3d/persone3d.js`, `creaPersona({ ruolo, colori, seme }) → { object, update(dt, stato) }`); qui posti,
-   percorsi e un segnaposto con la stessa interfaccia.
+   Da misurare sulla scheda dell'utente: FPS di notte nel borgo.
+   **Stato delle persone: fatto con segnaposto, da provare dall'utente.** File nuovi approvati dall'utente:
+   `js/3d/abitanti3d.js` (questa sessione: posti, percorsi, collisioni, «E: parla») e `js/3d/persone3d.js` (sessione
+   M1: i modelli, `creaPersona({ ruolo, colori, seme }) → { object, update(dt, { modo, velocita }) }`); finché non
+   c'è, un segnaposto a capsula con la stessa interfaccia. *Posti:* accanto alla porta (non davanti) di taverna
+   (oste), fabbro, stalla (stalliere), guaritore, cappella e chiesa (chierico), sala d'armi (maestro d'armi), armeria
+   (armaiolo), loggia (mercante); due guardie fuori dalla porta del borgo, una fuori da quella della rocca.
+   *Popolani* (3 / 6 / 10 per borgo minore / casata / maggiore; popolani, popolane, bambini) camminano a tratti lungo
+   le strade del borgo, un po' fuori mezzeria, con soste; si fermano se davanti c'è qualcuno o il cavaliere. Chi sta
+   fermo si volta verso il cavaliere che arriva. Di notte restano fuori solo guardie e oste. Oltre 110 m non si
+   disegnano né si muovono. Il cavaliere non le attraversa (ostacolo come mura e ponti). *«E: parla»*: entro 2,6 m e
+   rivolti verso la persona (~45°) compare «E: parla — L'oste» e si apre una carta con una riga segnaposto; la
+   persona ha la precedenza sulla porta. Prova (headless, seme 12345): 16 persone, i 6 popolani camminano 60 s
+   senza mai scendere sotto 0,84 m tra loro; «parla» con l'oste; cammino 34/34 e porte 8/8 con le persone in scena.
+   Da fare dopo: campagna (contadini), il simbolo sopra chi ha qualcosa da dire, i modelli di M1.
 8. **Da lontano.** Sagoma negli anelli, luci lontane. *Prova:* dal fondovalle a 2–5 km la rocca si
    riconosce di giorno e di notte; nessuna rocca «doppia» tra modello e sagoma; FPS invariati fuori dal sito.
    **Fatto (sessione M6, da provare dall'utente):** `sagomeLuoghi` in `orizzonte.js`. Per i luoghi che la Scena non
