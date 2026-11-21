@@ -722,7 +722,9 @@ export function posizionaVegetazione(o) {
    * quindi tornando in un punto si ritrovano gli stessi ciuffi. Formato come `tipi` (STRIDE per oggetto).
    */
   const sE = derivaSeme(seme, 450), sF = derivaSeme(seme, 451), sC = derivaSeme(seme, 452);
-  function erbaAttorno(lx0, lz0, raggi) {
+  // `fascia` (facoltativa) [k, n]: solo la k-esima di n fasce di righe del cerchio (lavoro diviso tra fotogrammi;
+  // le fasce insieme danno esattamente il cerchio intero).
+  function erbaAttorno(lx0, lz0, raggi, fascia = null) {
     const esito = {};
     for (const [nome, P, sm, A] of [['erba', V.vicino.passoErba, sE, D.erba], ['felce', V.vicino.passoFelci, sF, D.felce],
       ['ciottolo', V.vicino.passoCiottoli, sC, D.ciottolo]]) {
@@ -730,7 +732,11 @@ export function posizionaVegetazione(o) {
       if (r <= 0) { esito[nome] = { dati: new Float32Array(0), n: 0 }; continue; }
       const X0 = cx + lx0, Z0 = cz + lz0;
       const i0 = Math.floor((X0 - r) / P), i1 = Math.floor((X0 + r) / P);
-      const j0 = Math.floor((Z0 - r) / P), j1 = Math.floor((Z0 + r) / P);
+      let j0 = Math.floor((Z0 - r) / P), j1 = Math.floor((Z0 + r) / P);
+      if (fascia) {
+        const nR = j1 - j0 + 1, a = j0 + Math.floor(nR * fascia[0] / fascia[1]);
+        j1 = j0 + Math.floor(nR * (fascia[0] + 1) / fascia[1]) - 1; j0 = a;
+      }
       for (let iz = j0; iz <= j1; iz++) {
         for (let ix = i0; ix <= i1; ix++) {
           const hj = hash2(ix, iz, sm ^ 0x9e3779b9);
