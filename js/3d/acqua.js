@@ -9,6 +9,11 @@ import * as THREE from 'three';
 
 const PASSO_LAGHI = 4;
 export const SOPRA_PELO = 0.03;        // m: il nastro appena sopra il pelo dell'acqua
+const SEZIONE_FIUME = [-1, 1];          // vertici attraverso il nastro (× semilarghezza), per l'orizzonte
+// Fiumi nel blocco: la griglia del terreno (7,8 m) non scava un alveo largo pochi metri e il terreno disegnato tra due
+// vertici di sponda spuntava dall'acqua a morsi (segnalato dall'utente). Come per le strade, il nastro è fitto e,
+// dove il terreno disegnato sta sopra il pelo, gli si appoggia appena sopra: il bordo dell'acqua resta quello del nastro.
+const FIUME_SCENA = { sezione: [-1, -0.5, 0, 0.5, 1], passo: 2.5, sopraTerreno: 0.1 };
 
 /**
  * Nastro d'acqua lungo un pezzo di tracciato [x, z, pelo, semilarghezza, …] (coordinate locali): due vertici
@@ -16,7 +21,7 @@ export const SOPRA_PELO = 0.03;        // m: il nastro appena sopra il pelo dell
  * dividono in parti non più lunghe di passo; `quota(x, z, pelo)` dà l'altezza di ciascun vertice (senza: appena
  * sopra il pelo dell'acqua).
  */
-export function creaNastro(t, mat, passo = Infinity, quota = null) {
+export function creaNastro(t, mat, passo = Infinity, quota = null, sezione = SEZIONE_FIUME) {
   const pt = [];                                          // punti suddivisi: x, z, pelo, w
   const m = t.length / 4;
   for (let i = 0; i < m; i++) {
@@ -30,8 +35,8 @@ export function creaNastro(t, mat, passo = Infinity, quota = null) {
     }
     pt.push(t[i * 4], t[i * 4 + 1], t[i * 4 + 2], t[i * 4 + 3]);
   }
-  const q = pt.length / 4;
-  const pos = new Float32Array(q * 2 * 3);
+  const q = pt.length / 4, k = sezione.length;
+  const pos = new Float32Array(q * k * 3);
   for (let i = 0; i < q; i++) {
     // Direzione del tratto (ai capi quella del tratto stesso: blocco e orizzonte si chiudono sulla stessa linea).
     const a = Math.max(0, i - 1), b = Math.min(q - 1, i + 1);
@@ -39,14 +44,17 @@ export function creaNastro(t, mat, passo = Infinity, quota = null) {
     const l = Math.hypot(tx, tz) || 1;
     tx /= l; tz /= l;
     const x = pt[i * 4], z = pt[i * 4 + 1], pelo = pt[i * 4 + 2], w = pt[i * 4 + 3] * 1.15;
-    const xa = x - tz * w, za = z + tx * w, xb = x + tz * w, zb = z - tx * w;
-    const ya = quota ? quota(xa, za, pelo) : pelo + SOPRA_PELO, yb = quota ? quota(xb, zb, pelo) : pelo + SOPRA_PELO;
-    pos.set([xa, ya, za, xb, yb, zb], i * 6);
+    for (let j = 0; j < k; j++) {
+      const px = x - tz * w * sezione[j], pz = z + tx * w * sezione[j];
+      pos.set([px, quota ? quota(px, pz, pelo) : pelo + SOPRA_PELO, pz], (i * k + j) * 3);
+    }
   }
   const indici = [];
   for (let i = 0; i < q - 1; i++) {
-    const s = i * 2;
-    indici.push(s, s + 2, s + 1, s + 1, s + 2, s + 3);
+    for (let j = 0; j < k - 1; j++) {
+      const s = i * k + j;
+      indici.push(s, s + k, s + 1, s + 1, s + k, s + k + 1);
+    }
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
@@ -74,7 +82,11 @@ export function creaAcqueScena(acqua, meta, colore, centro) {
   gruppo.name = 'acque-scena';
   const mat = materialeAcqua(colore);
 
-  for (const t of acqua.tracciati) gruppo.add(creaNastro(t, mat));
+  const F = FIUME_SCENA, alt = acqua.altezza;
+  const matFiume = alt ? mat.clone() : mat;
+  if (alt) Object.assign(matFiume, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8 });
+  const quota = alt ? (x, z, pelo) => Math.max(pelo + SOPRA_PELO, alt(x, z) + F.sopraTerreno) : null;
+  for (const t of acqua.tracciati) gruppo.add(alt ? creaNastro(t, matFiume, F.passo, quota, F.sezione) : creaNastro(t, mat));
 
   // Laghi in quota.
   const { cols, rows, cellSize } = meta, half = (cols - 1) * cellSize / 2;
