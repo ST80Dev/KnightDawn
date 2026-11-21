@@ -555,11 +555,20 @@ function creaAtlante(renderer, geometrie) {
 }
 
 /** Materiale delle sagome: rivolte alla camera attorno all'asse verticale, luce come il terreno (normale in alto). */
-function materialeSagome(texture) {
+function materialeSagome(texture, uniDirada) {
   const mat = new THREE.MeshLambertMaterial({ map: texture, alphaTest: 0.5 });
   mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uDirada = uniDirada;
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aTessera;')
+      .replace('#include <common>', `#include <common>
+attribute float aTessera;
+// Passaggio graduale (vedi PASSAGGI): x = distanza da cui l'albero è sagoma (0: sempre), y = 1 trama rovesciata,
+// z = soglia di diradamento dell'albero (< 0: mai diradato)
+attribute vec3 aPassaggio;
+uniform vec2 uDirada;    // distanza da cui le sagome si diradano, esponente (densità (da/d)^(2k))
+varying float vKdLivello;
+varying float vKdRovescia;
+${GLSL_PASSAGGI}`)
       .replace('#include <uv_vertex>', `#include <uv_vertex>
   vMapUv = vec2((uv.x + aTessera) / ${ATLANTE.tessere.toFixed(1)}, uv.y);`)
       .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\n  objectNormal = vec3(0.0, 1.0, 0.0);')
@@ -569,9 +578,29 @@ function materialeSagome(texture) {
   vec3 kdV = cameraPosition - kdC; kdV.y = 0.0;
   vec3 kdR = normalize(vec3(kdV.z, 0.0, -kdV.x) + vec3(1e-4, 0.0, 0.0));
   vec4 mvPosition = viewMatrix * vec4(kdC + kdR * position.x * kdS + vec3(0.0, position.y * kdS, 0.0), 1.0);
-  gl_Position = projectionMatrix * mvPosition;`);
+  gl_Position = projectionMatrix * mvPosition;
+  {
+    float kdD = distance(kdC.xz, cameraPosition.xz);
+    float kdVis = kdLivello(aPassaggio.x, -1.0, kdD);
+    if (aPassaggio.z >= 0.0) {
+      float kdP = kdD <= uDirada.x ? 1.0 : pow(uDirada.x * uDirada.x / (kdD * kdD), uDirada.y);
+      kdVis *= smoothstep(aPassaggio.z - ${PASSAGGI.comparsa.toFixed(3)}, aPassaggio.z, kdP);   // piena da vicino (p = 1)
+    }
+    vKdLivello = 1.0 - kdVis;
+    vKdRovescia = aPassaggio.y;
+    if (vKdLivello > 0.999) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+  }`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying float vKdLivello;
+varying float vKdRovescia;${GLSL_RETINO}`)
+      .replace('void main() {', `void main() {
+  if (vKdLivello > 0.0) {
+    float kdS = kdSogliaRetino();
+    if (vKdLivello >= (vKdRovescia > 0.5 ? 1.0 - kdS : kdS)) discard;
+  }`);
   };
-  mat.customProgramCacheKey = () => 'kd-sagome-1';
+  mat.customProgramCacheKey = () => 'kd-sagome-2';
   return mat;
 }
 
@@ -589,6 +618,12 @@ function meshSagome(materiale, n, nome) {
   const t = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, n)), 1);
   t.setUsage(THREE.DynamicDrawUsage);
   m.geometry.setAttribute('aTessera', t);
+  // Passaggio graduale: di base sempre visibile (inizio 0, trama diritta, mai diradata)
+  const pas = new Float32Array(Math.max(1, n) * 3);
+  for (let i = 0; i < pas.length; i += 3) pas[i + 2] = -1;
+  const ap = new THREE.InstancedBufferAttribute(pas, 3);
+  ap.setUsage(THREE.DynamicDrawUsage);
+  m.geometry.setAttribute('aPassaggio', ap);
   m.frustumCulled = false;
   m.count = 0; m.visible = false;
   m.name = nome;
@@ -680,7 +715,10 @@ const TONO = {
 };
 const GIALLO = new THREE.Color('#d9c85a');
 const RIDISTRIBUISCI = { ms: 1.5, pezzo: 2000 };   // tempo per fotogramma e alberi tra un controllo e l'altro
-const RIASSEGNA_DOPO = 12;              // m di spostamento della camera prima di ridistribuire le istanze
+// m di spostamento della camera prima di ridistribuire le istanze (era 12: con i passaggi graduali ogni livello si
+// assegna con un margine di questa misura in più, PASSAGGI.margine, e un margine più stretto costa meno vertici;
+// la ridistribuzione resta a pezzi, entro il tetto di RIDISTRIBUISCI.ms per fotogramma)
+const RIASSEGNA_DOPO = 5;
 // Raggi lunghi con densità bassa (richiesta dell'utente: il bordo del cerchio a ~30 m si vedeva).
 const VICINO = { erba: { raggio: 70, max: 12000 }, felce: { raggio: 70, max: 3000 }, ciottolo: { raggio: 50, max: 6000 }, rifai: 5 };
 
@@ -698,6 +736,32 @@ function materialeFili(opz) {
   mat.customProgramCacheKey = () => 'kd-fili-1';
   return mat;
 }
+
+// ─── Passaggi graduali tra i livelli di dettaglio (richiesta dell'utente: alberi, massi e altri oggetti «apparivano dal
+// nulla» camminando, in mezzo ad altre cose) ───
+// Prima ogni istanza stava in un solo livello e cambiava di colpo: oltre l'ultima distanza spariva, tra un livello e
+// l'altro saltava (modelli diversi), le sagome diradate oltre 300 m spuntavano avvicinandosi. Ora attorno a ogni soglia
+// c'è una fascia (PASSAGGI.quota della distanza, tra min e max m) in cui l'oggetto si dissolve «a retino» in funzione
+// della distanza dalla camera, nello shader e quindi senza scatti: il livello che esce perde pixel mentre quello che
+// entra li prende, con trame complementari (livelli pari trama diritta, dispari rovesciata: nessun pixel doppio).
+// Oltre l'ultimo livello l'oggetto svanisce a puntini; le sagome diradate compaiono a puntini (soglia per albero).
+// Perché la dissolvenza segua la camera tra una ridistribuzione e l'altra, ogni livello si assegna con un margine di
+// PASSAGGI.margine m (≥ RIASSEGNA_DOPO): nel margine i vertici si elaborano ma, del tutto dissolti, non si disegnano.
+const PASSAGGI = { quota: 0.12, min: 6, max: 30, margine: 6.5, comparsa: 0.08 };
+/** Larghezza della fascia di passaggio attorno alla soglia F (m); la stessa formula è nello shader (KD_BANDA). */
+const banda = (F) => Math.min(PASSAGGI.max, Math.max(PASSAGGI.min, F * PASSAGGI.quota));
+const GLSL_PASSAGGI = `
+float kdBanda(float F) { return clamp(F * ${PASSAGGI.quota.toFixed(3)}, ${PASSAGGI.min.toFixed(1)}, ${PASSAGGI.max.toFixed(1)}); }
+// Quota visibile (0–1) di un livello che va da ini a fin (fin < 0: senza fine; ini <= 0: dall'inizio) alla distanza d.
+float kdLivello(float ini, float fin, float d) {
+  float v = 1.0;
+  if (ini > 0.0) { float b = 0.5 * kdBanda(ini); v *= smoothstep(ini - b, ini + b, d); }
+  if (fin > 0.0) { float b = 0.5 * kdBanda(fin); v *= 1.0 - smoothstep(fin - b, fin + b, d); }
+  return v;
+}`;
+const GLSL_RETINO = `
+const float KD_RETINO[16] = float[16](0., 8., 2., 10., 12., 4., 14., 6., 3., 11., 1., 9., 15., 7., 13., 5.);
+float kdSogliaRetino() { ivec2 i = ivec2(mod(gl_FragCoord.xy, 4.0)); return (KD_RETINO[i.y * 4 + i.x] + 0.5) / 16.0; }`;
 
 // ─── Visuale pulita (richiesta dell'utente: nel bosco tronchi e chiome si mettevano tra la camera e il cavaliere) ───
 // Si dirada «a retino» solo ciò che copre davvero il cavaliere (seconda richiesta dell'utente: prima sparivano anche
@@ -764,8 +828,11 @@ function volumiVisuale(geo) {
  * Aggiunge al materiale il diradamento della visuale. modo: 'pieno' (alberi, arbusti, rocce, muretti) | 'vicino'
  * (erba, felci). `geo`: la geometria della mesh (solo 'pieno', per i volumi).
  */
-function conVisuale(mat, uni, modo, geo = null) {
+function conVisuale(mat, uni, modo, geo = null, livello = null) {
   const vol = modo === 'pieno' ? volumiVisuale(geo) : null;
+  // livello: { ini, fin (Infinity = senza fine), inverti (trama rovesciata), bordo (alberi: regola del bordo del blocco) }
+  const liv = livello ? new THREE.Vector4(livello.ini, Number.isFinite(livello.fin) ? livello.fin : -1,
+    livello.inverti ? 1 : 0, livello.bordo ? 1 : 0) : null;
   const prima = mat.onBeforeCompile.bind(mat);
   mat.onBeforeCompile = (sh, renderer) => {
     prima(sh, renderer);
@@ -778,6 +845,7 @@ function conVisuale(mat, uni, modo, geo = null) {
       sh.uniforms.uVolC = { value: vol.cil };
       sh.uniforms.uRaggio = { value: vol.raggio };
     }
+    if (liv) { sh.uniforms.uLivello = { value: liv }; sh.uniforms.uBordo = uni.uBordo; }
     const calcolo = modo === 'pieno' ? `
       mat4 kdM = modelMatrix * instanceMatrix;
       vec3 kdO = kdM[3].xyz;
@@ -820,7 +888,11 @@ function conVisuale(mat, uni, modo, geo = null) {
 uniform vec3 uCav;
 uniform float uVisuale;
 uniform vec4 uVisCfg;
-varying float vKdDirada;${vol ? `
+varying float vKdDirada;
+varying float vKdLivello;${liv ? `
+uniform vec4 uLivello;   // ini, fin (< 0 senza fine), trama rovesciata, regola del bordo
+uniform vec2 uBordo;     // oltre questa |x| o |z| ... dalla distanza y gli alberi sono sagome
+${GLSL_PASSAGGI}` : ''}${vol ? `
 uniform vec3 uVol0[${VOLUMI_VISUALE}], uVol1[${VOLUMI_VISUALE}];
 uniform vec4 uVolC[${VOLUMI_VISUALE}];
 uniform float uRaggio;
@@ -845,20 +917,31 @@ bool kdSegVolume(vec3 p, vec3 q, vec3 s0, vec3 s1, vec4 c, float mr) {
 }` : ''}`)
       .replace('#include <project_vertex>', `#include <project_vertex>
     {${calcolo}
-      if (vKdDirada > 0.999) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);   // tutto diradato: fuori dallo schermo
+      vKdLivello = 0.0;${liv ? `
+      {
+        vec3 kdQ = (modelMatrix * instanceMatrix[3]).xyz;
+        float kdIni = uLivello.x, kdFin = uLivello.y;
+        if (uLivello.w > 0.5 && max(abs(kdQ.x), abs(kdQ.z)) > uBordo.x) {   // vicino al bordo: sagome da uBordo.y
+          kdIni = min(kdIni, uBordo.y);
+          if (kdFin > 0.0) kdFin = min(kdFin, uBordo.y);
+        }
+        vKdLivello = (kdFin > 0.0 && kdFin <= kdIni) ? 1.0 : 1.0 - kdLivello(kdIni, kdFin, distance(kdQ.xz, cameraPosition.xz));
+      }` : ''}
+      if (vKdDirada > 0.999 || vKdLivello > 0.999) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);   // non si vede: fuori dallo schermo
     }`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
 varying float vKdDirada;
-const float KD_RETINO[16] = float[16](0., 8., 2., 10., 12., 4., 14., 6., 3., 11., 1., 9., 15., 7., 13., 5.);`)
+varying float vKdLivello;${GLSL_RETINO}`)
       .replace('void main() {', `void main() {
-  if (vKdDirada > 0.0) {
-    ivec2 kdI = ivec2(mod(gl_FragCoord.xy, 4.0));
-    if (vKdDirada >= (KD_RETINO[kdI.y * 4 + kdI.x] + 0.5) / 16.0) discard;
+  if (vKdDirada > 0.0 || vKdLivello > 0.0) {
+    float kdS = kdSogliaRetino();
+    if (vKdDirada >= kdS) discard;
+    if (vKdLivello >= ${liv && liv.z > 0.5 ? '1.0 - kdS' : 'kdS'}) discard;   // trama ${liv && liv.z > 0.5 ? 'rovesciata' : 'diritta'}
   }`);
   };
   const chiave = mat.customProgramCacheKey.bind(mat);
-  mat.customProgramCacheKey = () => `${chiave()}|kd-visuale-${modo}-4`;
+  mat.customProgramCacheKey = () => `${chiave()}|kd-visuale-${modo}-5${liv ? `-liv${liv.z > 0.5 ? 'r' : 'd'}` : ''}`;
   return mat;
 }
 
@@ -991,18 +1074,22 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
     uCav: { value: new THREE.Vector3() },
     uVisuale: { value: 0 },                   // 0 finché non arriva la posizione del cavaliere
     uVisCfg: { value: new THREE.Vector4(VISUALE.margineMin, VISUALE.margineMax, VISUALE.arretra, VISUALE.vicino) },
+    uBordo: { value: new THREE.Vector2(1e9, SAGOMA_BORDO.oltre) },   // x impostato più sotto (serve halfBlocco)
   };
+  const uniDirada = { value: new THREE.Vector2(SAGOME_DIRADA.da, 0) };
 
   // Sagome: atlante (serve il renderer) e mesh delle sagome del blocco, comune a tutti gli alberi.
   let atlante = null, matSagome = null, sagomeBlocco = null;
   if (renderer) {
     atlante = creaAtlante(renderer, modelli.sorgentiSagome);
-    matSagome = materialeSagome(atlante.texture);
+    matSagome = materialeSagome(atlante.texture, uniDirada);
     const nAlberi = Object.values(pos.tipi).filter((t) => t.gruppo === 'alberi').reduce((s, t) => s + t.n, 0);
     sagomeBlocco = meshSagome(matSagome, nAlberi, 'vegetazione-sagome');
     oggetto.add(sagomeBlocco);
   }
   const halfBlocco = terrain ? terrain.half : 1000;
+  uniVis.uBordo.value.x = halfBlocco - SAGOMA_BORDO.fascia;
+  uniDirada.value.y = Math.log(SAGOME_DIRADA.bordo) / Math.log(SAGOME_DIRADA.da / halfBlocco) / 2;
 
   const tipi = [];
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), p = new THREE.Vector3();
@@ -1056,9 +1143,10 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
         sag.set([t.dati[o], t.dati[o + 1], t.dati[o + 2], atlante.lato[ti] * t.dati[o + 3] * alto, ti], k * 5);
       }
     }
-    const mesh = livelli.map((L) => (L.sagoma ? [] : L.varianti).map((geo, vi) => {
+    const mesh = livelli.map((L, li) => (L.sagoma ? [] : L.varianti).map((geo, vi) => {
+      const livello = { ini: li > 0 ? livelli[li - 1].fino : 0, fin: L.fino, inverti: li % 2 === 1, bordo: !!sag };
       const m = new THREE.InstancedMesh(geo,
-        conVisuale(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: !!L.piatto }), uniVis, 'pieno', geo), t.n);
+        conVisuale(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: !!L.piatto }), uniVis, 'pieno', geo, livello), t.n);
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(t.n * 3), 3);
       m.instanceColor.setUsage(THREE.DynamicDrawUsage);
@@ -1218,36 +1306,46 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
     let nSag = 0, passi = 0;
     const aS = sagomeBlocco ? sagomeBlocco.instanceMatrix.array : null;
     const tS = sagomeBlocco ? sagomeBlocco.geometry.attributes.aTessera.array : null;
-    const bordoMin = halfBlocco - SAGOMA_BORDO.fascia, oltre2 = SAGOMA_BORDO.oltre * SAGOMA_BORDO.oltre;
-    const da2 = SAGOME_DIRADA.da * SAGOME_DIRADA.da;
-    const kDir = Math.log(SAGOME_DIRADA.bordo) / Math.log(SAGOME_DIRADA.da / halfBlocco) / 2;   // su d², quindi /2
+    const pS = sagomeBlocco ? sagomeBlocco.geometry.attributes.aPassaggio.array : null;
+    const bordoMin = halfBlocco - SAGOMA_BORDO.fascia, oltre = SAGOMA_BORDO.oltre;
+    const da = SAGOME_DIRADA.da, kDir = uniDirada.value.y, M = PASSAGGI.margine;
     for (const T of tipi) {
-      const L = T.livelli, nL = L.length, fino2 = L.map((l) => l.fino * l.fino);
+      // Intervallo di ogni livello [ini, fin) e quello allargato in cui va assegnato (fascia di passaggio + margine)
+      const L = T.livelli, nL = L.length;
+      const ini = L.map((_, l) => (l > 0 ? L[l - 1].fino : 0)), fin = L.map((l) => l.fino);
       const conta = T.mesh.map((ms) => new Array(ms.length).fill(0));
       const am = T.mesh.map((ms) => ms.map((m) => m.instanceMatrix.array));
       const ac = T.mesh.map((ms) => ms.map((m) => m.instanceColor.array));
       for (let k = 0; k < T.n; k++) {
         if (++passi % RIDISTRIBUISCI.pezzo === 0) yield;
-        const dx = T.xz[k * 2] - cx, dz = T.xz[k * 2 + 1] - cz, d2 = dx * dx + dz * dz;
-        let l = 0;
-        while (l < nL && d2 > fino2[l]) l++;
-        if (l === nL) continue;                    // oltre l'ultima distanza: non si disegna
-        // Verso il bordo del blocco, già a media distanza, sagome: continuano senza stacchi quelle dell'orizzonte.
-        if (T.sag && l !== T.lSagoma && d2 > oltre2
-          && Math.max(Math.abs(T.xz[k * 2]), Math.abs(T.xz[k * 2 + 1])) > bordoMin) l = T.lSagoma;
-        if (l === T.lSagoma) {
-          if (T.sag && (d2 <= da2 || T.caso[k] < (da2 / d2) ** kDir)) {
+        const x = T.xz[k * 2], z = T.xz[k * 2 + 1], dx = x - cx, dz = z - cz, d = Math.sqrt(dx * dx + dz * dz);
+        // Verso il bordo del blocco gli alberi sono sagome già da `oltre` m (continuano quelle dell'orizzonte):
+        // la stessa regola è nello shader (uBordo), così i passaggi restano complementari.
+        const bordo = T.sag && Math.max(Math.abs(x), Math.abs(z)) > bordoMin;
+        for (let l = 0; l < nL; l++) {
+          let a = ini[l], b = fin[l];
+          if (bordo) { a = Math.min(a, oltre); b = Math.min(b, oltre); }
+          if (b <= a) continue;                                     // livello vuoto qui
+          if (a > 0 && d < a - banda(a) / 2 - M) continue;          // troppo vicino: non è ancora questo livello
+          if (Number.isFinite(b) && d > b + banda(b) / 2 + M) continue;   // troppo lontano
+          if (l === T.lSagoma) {
+            if (!T.sag) continue;
+            // Diradate oltre `da`: c'è (o ci sarà entro il margine) se la sua soglia è sotto la densità a quella distanza
+            const dm = Math.max(d - M, da);
+            if (!(d - M <= da || T.caso[k] - PASSAGGI.comparsa < (da * da / (dm * dm)) ** kDir)) continue;
             const o = k * 5;
             scriviSagoma(aS, nSag, T.sag[o], T.sag[o + 1], T.sag[o + 2], T.sag[o + 3]);
-            tS[nSag++] = T.sag[o + 4];
+            tS[nSag] = T.sag[o + 4];
+            pS[nSag * 3] = a; pS[nSag * 3 + 1] = l % 2; pS[nSag * 3 + 2] = T.caso[k];
+            nSag++;
+            continue;
           }
-          continue;
+          const vi = Math.floor(T.varia[k] * T.mesh[l].length);
+          const j = conta[l][vi]++;
+          am[l][vi].set(T.matrici.subarray(k * 16, k * 16 + 16), j * 16);
+          const c = ac[l][vi];
+          c[j * 3] = T.colori[k * 3]; c[j * 3 + 1] = T.colori[k * 3 + 1]; c[j * 3 + 2] = T.colori[k * 3 + 2];
         }
-        const vi = Math.floor(T.varia[k] * T.mesh[l].length);
-        const j = conta[l][vi]++;
-        am[l][vi].set(T.matrici.subarray(k * 16, k * 16 + 16), j * 16);
-        const c = ac[l][vi];
-        c[j * 3] = T.colori[k * 3]; c[j * 3 + 1] = T.colori[k * 3 + 1]; c[j * 3 + 2] = T.colori[k * 3 + 2];
       }
       T.mesh.forEach((ms, l) => ms.forEach((m, vi) => {
         const n = conta[l][vi];
@@ -1265,6 +1363,8 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
       sagomeBlocco.instanceMatrix.needsUpdate = true;
       const at = sagomeBlocco.geometry.attributes.aTessera;
       at.clearUpdateRanges(); at.addUpdateRange(0, nSag); at.needsUpdate = true;
+      const ap = sagomeBlocco.geometry.attributes.aPassaggio;
+      ap.clearUpdateRanges(); ap.addUpdateRange(0, nSag * 3); ap.needsUpdate = true;
     }
   }
 

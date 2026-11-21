@@ -127,6 +127,10 @@ Ogni milestone si chiude solo dopo test nel browser da parte dell'utente.
   si alza per scavalcarlo. Girando da fermo il cavaliere fa piccoli passi sul posto. Il tasto `C` passa
   ancora alla camera libera di debug (OrbitControls). Parametri provabili da console: `kd.cam.cfg`.
   Misurato in headless: camera mai a meno di 45 cm dal suolo, linea di vista mai sotto il terreno.
+  Ritocchi chiesti dall'utente (nov. 2026): all'indietro la velocità segue l'andatura (camminata 1,0, corsetta 2,4,
+  scatto 3,2 m/s; prima 0,9 fissi), senza busto inclinato né mantello alzato; la rotazione con A/D parte con
+  accelerazione costante (4,5 rad/s², piena a 115°/s in ~0,45 s) e si spegne subito lasciando il tasto: un tocco di
+  0,1–0,15 s gira di 3–5° invece di ~17° (misurato in headless).
 
 ### M4 — Castello
 - `js/3d/castle3d.js`: castello procedurale (mura, 4 torri, mastio, porta), posizionato su un punto
@@ -1505,6 +1509,19 @@ Deserto e steppa: arbusti secchi radi, sassi; niente piante esotiche (stile medi
   libera (C). Le ombre finte a terra restano. Valori provabili da console: `kd.vegetazione.cfgVisuale`. [Probabile] il
   `discard` toglie al GPU il test di profondità anticipato sulla vegetazione: costo da verificare con F3 nel bosco
   fitto.
+  **Passaggi graduali tra i livelli (richiesta dell'utente, nov. 2026):** camminando alberi, massi e altri oggetti
+  «apparivano dal nulla»: oltre l'ultima distanza del tipo sparivano di colpo, tra un livello e l'altro il modello
+  cambiava di colpo, le sagome diradate oltre 300 m spuntavano, e tutto a gruppi ogni 12 m di cammino. Ora attorno a
+  ogni soglia c'è una fascia (12 % della distanza, 6–30 m) in cui l'oggetto si dissolve a retino secondo la distanza
+  dalla camera, nello shader (`PASSAGGI`, `kdLivello`): il livello che esce e quello che entra hanno trame
+  complementari (livelli pari diritta, dispari rovesciata), nessun pixel doppio; oltre l'ultimo livello svanisce; le
+  sagome diradate compaiono a puntini (soglia per albero, attributo `aPassaggio`). La regola del bordo del blocco
+  (sagome già da 120 m) è applicata uguale in JS e nello shader. Ogni livello si assegna con 6,5 m di margine, la
+  ridistribuzione ogni 5 m (era 12). Misure in headless nello stesso punto (seme 570549, blocco 97,00/80,64 km, bosco):
+  istanze 25 300 contro 26 900, triangoli elaborati ~350 mila contro ~296 mila (+18 %, quasi tutti vertici del
+  margine, del tutto dissolti, che non arrivano ai pixel); ridistribuzione completa 2,6–7,4 ms a pezzi in entrambe le
+  versioni. [Probabile] costo GPU piccolo (il costo della vegetazione segue i pixel, PRESTAZIONI.md): da confermare con
+  il percorso di prova nel bosco fitto.
 
 **8. Bordo del blocco e orizzonte.** Nell'orizzonte il bosco resta un colore (vincolo). [Probabile] con la nebbia
 solo dai 10 km, dal blocco il bosco «finisce» al bordo e oltre resta il colore piatto: si vedrà, soprattutto
