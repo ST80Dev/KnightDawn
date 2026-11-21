@@ -1342,6 +1342,14 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
      pezzi» dove servirà (Vegetazione per il posizionamento).
    - *Prova*: dal borgo di partenza al crinale senza fermarsi; F3 con i ms del cambio; percorso di prova con un tratto
      che attraversa due bordi di blocco.
+   - *Note della sessione M1 (prestazioni)*, da rispettare alla tappa 2: nel fotogramma del cambio non devono cadere
+     la cottura del suolo (`cuociSuolo`, render 2048²), il caricamento sulla scheda di terreno, istanze della vegetazione
+     e texture (ombre, piede, cotto) né compilazioni di shader: tutto nella preparazione, uno per fotogramma
+     (`renderer.initTexture`, `renderer.compileAsync` o un render del gruppo nuovo in un bersaglio 1×1). Il blocco vecchio
+     si libera a pezzi nei fotogrammi dopo (`dispose`), non nel cambio. Al più due blocchi e due orizzonti in memoria,
+     mai un terzo in anticipo. Orizzonte: spostando il centro di ~1 km le fasce degli anelli cambiano posto; se i
+     rilievi vicini «saltano» si rifà solo l'anello 1 e si spostano gli altri. La tappa 1 (pausa ~1,5 s) solo come prova,
+     non a lungo in `main`. Un comando per forzare un cambio di blocco da codice (in `kd`) per il percorso di prova.
 
 ### Accettazione
 
