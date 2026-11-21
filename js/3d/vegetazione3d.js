@@ -401,6 +401,14 @@ function creaModelli() {
 
   // Cespugli: ciuffi su una cupola bassa (due forme da vicino).
   const C = COL.cespuglio, MG = COL.mugo;
+  // Siepi (richiesta dell'utente: «senza collegamento con il terreno, si vedono sospese»): ciuffi su un ellissoide
+  // che scende sotto il terreno, fitti in basso; i tratti a passo 1,7 m si toccano.
+  const siepe = (det, ciuffi) => unisci(chioma({ y: 0.85, a: 1.05, b: 1.2, c: 0.85, ciuffi, raggio: [0.5, 0.75],
+    dettaglio: det, scuro: C[0], chiaro: C[1], rnd, sotto: 0.9, pieno: 0.4, morbido: 0.8 }));
+  M.siepe = [
+    { fino: 40, varianti: [siepe(1, 7), siepe(1, 7)] },
+    { fino: 180, varianti: [siepe(0, 5)] },
+  ];
   M.cespuglio = [
     { fino: 35, varianti: [
       unisci(chioma({ y: 0.55, a: 1.0, b: 0.65, ciuffi: 7, raggio: [0.4, 0.6], scuro: C[0], chiaro: C[1], rnd, sotto: 0, pieno: 0.3 })),
@@ -599,7 +607,7 @@ const SAGOME_DIRADA = { da: 300, bordo: 0.36 };
 // modello di scala 1 (m), moltiplicato per la scala dell'istanza; il tronco caduto è una fila di tre cerchi.
 const COLLISIONI = { cella: 16, sassoMinimo: 1.1,
   raggio: { latifoglia: 0.42, conifera: 0.34, pino: 0.38, riva: 0.4, secco: 0.32, masso: 1.05, affioramento: 2.3,
-    sasso: 0.3, tronco: 0.32, muretto: 0.4 } };
+    sasso: 0.3, tronco: 0.32, muretto: 0.4, siepe: 0.75 } };
 
 function creaCollisioni(pos) {
   const C = COLLISIONI, celle = new Map();
@@ -774,6 +782,7 @@ const FORMA_OMBRA = {
   canne: { h: 1.0, r: 0.45, v: 1.0, a: 0.4, p: 0.6 }, sasso: { h: 0.1, r: 0.35, v: 0.15, a: 0.6, p: 0.45 },
   masso: { h: 0.4, r: 1.3, v: 0.8, a: 0.7, p: 1.6 }, affioramento: { h: 0.2, r: 3.0, v: 0.6, a: 0.6, p: 3.2 },
   tronco: { h: 0.25, r: 1.6, v: 0.3, a: 0.5, p: 1.8 }, muretto: { h: 0.45, r: 1.2, v: 0.5, a: 0.55, p: 1.3 },
+  siepe: { h: 1.0, r: 1.1, v: 1.2, a: 0.65, p: 1.3 },
 };
 const OMBRE = { lato: 1024, latoPiede: 2048, rifaiGradi: 5, perFotogramma: 8000, forza: 0.5, piede: 0.42 };
 
@@ -906,7 +915,7 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
     for (let k = 0; k < t.n; k++) {
       const d = t.dati, o = k * STRIDE;
       const s = d[o + 3], rot = d[o + 4], v = d[o + 5];
-      p.set(d[o], d[o + 1] + (roccia ? -0.15 * s : 0), d[o + 2]);
+      p.set(d[o], d[o + 1] + (roccia ? -0.15 * s : nome === 'siepe' ? -0.12 * s : 0), d[o + 2]);
       // Rocce inclinate; alberi e arbusti tra slanciati e tozzi, larghi e stretti, con un'inclinazione minima.
       const v2 = (v * 7.13) % 1, v3 = (v * 3.71) % 1;
       e.set(roccia ? (v - 0.5) * 0.5 : (v2 - 0.5) * 0.06, rot, roccia ? (v3 - 0.5) * 0.4 : (v3 - 0.5) * 0.06);

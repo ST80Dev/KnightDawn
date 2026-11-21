@@ -1595,6 +1595,12 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      siepe è un muretto (tratti di 2,2 m di pietre spaccate a passo 1,7 m, alti ~1 m, diritti lungo il confine; da
      50 a 220 m un blocco semplice; oltre, una striscia di pietra nel suolo cotto), con un varco di 5 m per lato per
      passare; collisione come i tronchi caduti (tre cerchi). 300–1300 tratti in un blocco attorno a una rocca.
+     *Siepi* (richieste dell'utente: «senza collegamento con il terreno, si vedono sospese»; «non attraversabili, con
+     punti dove cessa e si possa passare»; «più di un punto per lato, una cosa naturale»): tipo `siepe` con un modello
+     suo che scende sotto il terreno (alta ~1,8–2,2 m), collisione a cerchi da 0,75 m che si toccano (il cavaliere ci
+     sbatte); aperture naturali: ogni tratto di 28 m ha col 60 % un'apertura larga 2,6–6 m in un punto a caso (anche
+     nella striscia del suolo cotto). I muretti restano con un varco solo per lato. Prova: camminando verso una siepe
+     il cavaliere si ferma a 0,6–1,2 m (11 su 12; il dodicesimo passa da un'apertura).
      *Case fuori dal borgo* (richiesta dell'utente: case isolate o a gruppetti di 2–3 in mezzo o a lato dei campi):
      `CASE_CAMPAGNA` / `caseCampagna(carta)`, siti deterministici per Carta (4–9 gruppi per rocca secondo la classe,
      tra gli orti e il limite dei campi pieni, in piano, all'asciutto, lontano dai terrapieni e tra loro, orientati

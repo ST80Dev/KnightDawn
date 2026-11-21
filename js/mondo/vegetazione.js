@@ -168,7 +168,8 @@ export const TIPI = [
   { nome: 'masso', gruppo: 'rocce', passo: 16, scala: [0.4, 3.4], curva: 2.5 },
   { nome: 'affioramento', gruppo: 'rocce', passo: 40, scala: [0.7, 1.5] },
   { nome: 'tronco', gruppo: 'bosco', passo: 15, scala: [0.7, 1.2] },
-  { nome: 'muretto', gruppo: 'muri', scala: [0.95, 1.1] },          // sui confini dei campi vicino al borgo (PARCELLE)
+  { nome: 'muretto', gruppo: 'muri', scala: [0.95, 1.1] },
+  { nome: 'siepe', gruppo: 'arbusti', scala: [1.0, 1.25] },          // cespugli fitti delle siepi (PARCELLE)          // sui confini dei campi vicino al borgo (PARCELLE)
 ];
 export const STRIDE = 6;                 // per oggetto: x, quota, z (locali al blocco), scala, rotazione, variante
 
@@ -268,7 +269,10 @@ export const PARCELLE = {
   // Strade (richiesta dell'utente: i campi non tagliati a metà dalle strade, al più fino al margine): ogni lato di una
   // strada ha appezzamenti suoi (righe spostate di `lato` m) e i campi finiscono a `margine` m dal bordo, con erba.
   strada: { lato: 1000, margine: [0.6, 2.2], lontano: 25, fascia: 20 },
-  siepi: { lungo: 0.4, traverso: 0.2, filari: 0.25, passo: 1.7, passoFilare: 9, dentro: 0.9, striscia: [1.6, 2.4] },
+  siepi: { lungo: 0.4, traverso: 0.2, filari: 0.25, passo: 1.7, passoFilare: 9, dentro: 0.9, striscia: [1.6, 2.4],
+    // Aperture naturali (richiesta dell'utente: «più di un punto per lato, una cosa naturale»): ogni tratto di `cella` m
+    // ha un'apertura con probabilità `quota`, in un punto a caso, larga 2·(larghezza) m.
+    aperture: { cella: 28, quota: 0.6, larghezza: [1.3, 3.0] } },
   // Muretti a secco: vicino al luogo (fino a `oltreOrti` m oltre il limite degli orti) una parte (`quota`) dei confini
   // con la siepe è un muretto; su ogni lato un varco largo 2·`varco` m per passare.
   muretti: { oltreOrti: 150, quota: 0.6, varco: 2.5, dentro: 0.6, striscia: [0.5, 1.0] },
@@ -294,6 +298,13 @@ const siepeLunga = (i, j) => hashCampi(i, j + 59) < PARCELLE.siepi.lungo * 256;
 const siepeCorta = (i, j) => hashCampi(i, j + 83) < PARCELLE.siepi.traverso * 256;
 const filare = (i, j, lato) => hashCampi(i, j + 97 + lato) < PARCELLE.siepi.filari * 256;
 const muro = (i, j, lato) => hashCampi(i, j + 113 + lato) < PARCELLE.muretti.quota * 256;
+/** La siepe ha un'apertura in questo punto del lato (`lungo`: m dall'inizio del lato)? Come `apertura` nello shader. */
+function aperturaSiepe(i, j, lato, lungo) {
+  const A = PARCELLE.siepi.aperture, c = Math.floor(lungo / A.cella), b = hashCampi(i, j + 141 + 7 * lato);
+  if (hashCampi(c, b) >= A.quota * 256) return false;
+  const centro = (c + 0.2 + 0.6 * hashCampi(c, b + 1) / 255) * A.cella;
+  return Math.abs(lungo - centro) < A.larghezza[0] + (A.larghezza[1] - A.larghezza[0]) * hashCampi(c, b + 2) / 255;
+}
 /** Centro del varco del muretto lungo il lato (m dall'inizio del lato lungo `lunghezza`). */
 const varco = (i, j, lato, lunghezza) => lunghezza * (0.15 + 0.7 * hashCampi(i, j + 127 + 4 * lato) / 255);
 
@@ -776,10 +787,12 @@ export function posizionaVegetazione(o) {
       if (albero) { emetti(h & 1 ? T.riva : T.latifoglia, ix, iz, sS, lx, lz, quota(), 0.9); return; }
       // Muretto: vicino al luogo e sui lati scelti, fuori dal varco; orientato lungo il confine (direzione misurata
       // invertendo la piega mezzo metro prima e dopo).
+      // Siepi e muretti non si attraversano (richiesta dell'utente): su ogni lato un varco dove cessano e si passa.
       const M = PC.muretti, y = quota();
-      if (triangolo(aCampi, 4, 2) < M.oltreOrti && muro(i, j, lato)) {
-        const lungo = lato ? ver.W : ver.L, lungoQui = lato ? ver.fv : ver.fu;
-        if (Math.abs(lungoQui - varco(i, j, lato, lungo)) < M.varco) return;
+      const lungo = lato ? ver.W : ver.L, lungoQui = lato ? ver.fv : ver.fu;
+      const eMuro = triangolo(aCampi, 4, 2) < M.oltreOrti && muro(i, j, lato);
+      if (eMuro ? Math.abs(lungoQui - varco(i, j, lato, lungo)) < M.varco : aperturaSiepe(i, j, lato, lungoQui)) return;
+      if (eMuro) {
         // Diritto: sulla linea a M.dentro dal confine, senza lo spostamento di traverso delle siepi.
         const qxS = lato ? ver.u0 + M.dentro : qx, qyS = (lato ? qy : j * ver.W + M.dentro) - ls * PC.strada.lato;
         alMondo(qxS, qyS, P);
@@ -792,7 +805,7 @@ export function posizionaVegetazione(o) {
         buffer.muretto.push(ax - cx, y, az - cz, 0.95 + 0.15 * (hm & 0xff) / 255, rot, (hm >>> 26) / 64);
         return;
       }
-      emetti(T.cespuglio, ix, iz, sS, lx, lz, y, 1.15 + 0.3 * ((h >>> 8) & 0xff) / 255);
+      emetti(T.siepe, ix, iz, sS, lx, lz, y, 1);
     };
     const passoL = S.passo;
     for (let ls = 0; ls < 2; ls++)
@@ -807,7 +820,7 @@ export function posizionaVegetazione(o) {
             const alb = filare(i, j, 0), ps = alb ? S.passoFilare : passoL;
             for (let k = Math.ceil((u0 + 1) / ps); k * ps < u0 + L - 1; k++) {
               const jit = hash2(k, j, sS ^ 0x51ed270b);
-              pianta(k * ps + ((jit & 0xff) / 255 - 0.5) * 0.6 * ps, j * W + S.dentro + (((jit >>> 8) & 0xff) / 255 - 0.5) * 0.5,
+              pianta(k * ps + ((jit & 0xff) / 255 - 0.5) * 0.35 * ps, j * W + S.dentro + (((jit >>> 8) & 0xff) / 255 - 0.5) * 0.5,
                 i, j, 0, alb, k, j * 2, ls);
             }
           }
@@ -816,7 +829,7 @@ export function posizionaVegetazione(o) {
             const alb = filare(i, j, 1), ps = alb ? S.passoFilare : passoL;
             for (let k = Math.ceil((j * W + 2.5) / ps); k * ps < (j + 1) * W - 0.5; k++) {
               const jit = hash2(i, k, sS ^ 0x2f8b1c3d);
-              pianta(u0 + S.dentro + ((jit & 0xff) / 255 - 0.5) * 0.5, k * ps + (((jit >>> 8) & 0xff) / 255 - 0.5) * 0.6 * ps,
+              pianta(u0 + S.dentro + ((jit & 0xff) / 255 - 0.5) * 0.5, k * ps + (((jit >>> 8) & 0xff) / 255 - 0.5) * 0.35 * ps,
                 i, j, 1, alb, i, k * 2 + 1, ls);
             }
           }
