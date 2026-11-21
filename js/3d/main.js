@@ -1053,6 +1053,7 @@ function gruppoDi(o) {
   }
   let top = o;
   while (top.parent && top.parent !== scene) top = top.parent;
+  if ((top.name || '').startsWith('cielo')) return 'cielo';
   if (terrain && top === terrain.mesh) return 'ter. blocco';
   if (orizzonte && top === orizzonte.oggetto) return 'ter. orizzonte';
   if (vegetazione && top === vegetazione.oggetto) return 'veg. resto';
@@ -1072,7 +1073,8 @@ function avviaPercorso() {
   qualita.azzeraAdattiva();               // misure confrontabili: risoluzione piena del preset, ferma durante il giro
   if (modoCamera === 'libera') cambiaModoCamera();
   const k = knight.stato;
-  percorso = creaPercorso({ x: k.x, y: k.y, z: k.z, direzione: k.direzione });
+  percorso = creaPercorso({ x: k.x, y: k.y, z: k.z, direzione: k.direzione },
+    { maxFotogramma: PARAMETRI.has('lento') ? Infinity : undefined });
   percorsoNormale = null;
   profilatore.azzera();
   fpsEl.hidden = false;
@@ -1112,9 +1114,9 @@ function fineDelPercorso() {
       const m = profilatore.media(g), b = budgetDi(g);
       return `  ${g}: ${fmtMs(m)}${b != null ? ` · budget ${fmt(b, 1)}${m && m.media > b ? '  ⚠ oltre il budget' : ''}` : ''}`;
     }),
-    ...Object.entries(FAMIGLIE).map(([pre, chiave]) => {
-      const v = GRUPPI.filter((g) => g.startsWith(pre)).reduce((s, g) => s + (profilatore.media(g)?.media || 0), 0);
-      return `  ${chiave} in tutto: ${fmt(v, 1)} ms · budget ${fmt(BUDGET_GPU[chiave], 1)}`
+    ...Object.entries(FAMIGLIE).map(([chiave, gruppi]) => {
+      const v = gruppi.reduce((s, g) => s + (profilatore.media(g)?.media || 0), 0);
+      return `  ${chiave === 'resto' ? 'acqua, cielo ed effetti' : chiave} in tutto: ${fmt(v, 1)} ms · budget ${fmt(BUDGET_GPU[chiave], 1)}`
         + (v > BUDGET_GPU[chiave] + 0.05 ? '  ⚠ oltre il budget' : '');
     }),
   ];
