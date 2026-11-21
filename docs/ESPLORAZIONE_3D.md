@@ -1301,6 +1301,16 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
      passo 6 (Carta del cronista).
 6. **Porte → Carta del cronista.** Soglie, «E: entra», overlay segnaposto, tempo fermo. *Prova:* ogni
    edificio nominato si apre e si chiude; il tempo non scorre.
+   **Stato: fatto, da provare dall'utente.** Ogni edificio nominato di rocca e borgo (e il pozzo) ha la sua porta
+   nel blocco (`edifici3d.js`, `edifici[].porta`: x, z e normale). Entro 2,4 m, dalla parte giusta e rivolto verso la
+   porta compare «E: entra — Taverna»; E apre la **Carta del cronista segnaposto** (nome, una riga per tipo
+   d'edificio, «Esci»; Esc o E per uscire): tempo fermo e cavaliere fermo finché è aperta; entrare per ora non costa
+   tempo. Il tasto è **provvisorio** (la scelta dei tasti è rinviata dall'utente; la porta vicina ha la precedenza
+   su altri usi di E, come concordato con la sessione Cavallo). Prova (headless, seme 12345): 8 porte su 8
+   raggiunte a piedi, invito e apertura giusti, ora ferma con la Carta aperta.
+   *Ripartizione dei passi rimasti* (utente: farli in questa sessione, o in quelle già aperte se toccano i loro file):
+   passi 6 e 7 qui; le persone segnaposto proposte alla sessione M1 (modelli insieme al cavaliere unito per snodo);
+   passi 8 (sagome da lontano, orizzonte) e 9 (blocco che segue il cavaliere) proposti alla sessione M6.
 7. **Luci notturne e persone.** Torce, finestre, forgia, gruppo di luci vicine; figure ai loro posti e
    popolani che camminano, simbolo e «E: parla». *Prova:* di notte il borgo si vede acceso da qualche
    centinaio di metri; FPS di notte nel borgo; le persone non si attraversano.

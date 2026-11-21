@@ -837,6 +837,11 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
       chiamate++;
       triangoli += (m.isInstancedMesh ? m.count : 1) * (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3;
     });
+    // Porte degli edifici nominati anche nel blocco (x, z) con la normale verso fuori (nx, nz): per «Entra» (M7, passo 6).
+    for (const e of edifici) {
+      const p = e.porta;
+      Object.assign(p, { x: X(p.u, p.v), z: Z(p.u, p.v), nx: ux * p.fu - uz * p.fv, nz: uz * p.fu + ux * p.fv });
+    }
     return { object, solidi, scatole, edifici, misure: { case: case_, edifici: edifici.length, istanze, zone: zone.size, chiamate, triangoli } };
   }
 
