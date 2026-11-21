@@ -44,6 +44,7 @@ const STRADE = {
   vicolo: { larghezza: 2.6, sopra: 0.13 },
   pendenzaVia: 0.1,                        // oltre, la via principale sale a tornanti
   passo: 2,                                // m tra le sezioni del nastro
+  tessera: 3.2,                            // m: lato della texture del selciato (512 px)
 };
 
 // Pietra grigio-bruna come la rocca, un poco più calda (pietra più comune, meno squadrata).
@@ -55,28 +56,67 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 // ─── Ciottolato: texture generata una volta (docs/PRESTAZIONI.md: dettaglio in texture, non in geometria) ───
 let _ciottolato = null;
 function texturaCiottolato() {
+  // Sanpietrini grossi e irregolari (richiesta dell'utente: niente «mosaico»): 512 px = STRADE.tessera m, pietre di
+  // ~15–25 cm in file approssimative di traverso alla strada, consumate, coi bordi storti; terra bruna tra le pietre,
+  // qualche pietra mancante (resta la terra), erba nelle fughe, polvere e fango a chiazze larghe.
   if (_ciottolato) return _ciottolato;
-  const N = 256, c = document.createElement('canvas');
+  const N = 512, c = document.createElement('canvas');
   c.width = c.height = N;
   const g = c.getContext('2d');
   let s = 12345;
   const rnd = () => ((s = (s * 1103515245 + 12345) >>> 0) / 4294967296);
-  g.fillStyle = '#857d70';                               // malta e terra tra i ciottoli
+  const lim = (v) => (v < 0 ? 0 : v > 255 ? 255 : v);
+  g.fillStyle = 'rgb(112,96,76)';                          // terra tra le pietre
   g.fillRect(0, 0, N, N);
-  // Ciottoli: ellissi irregolari, toni di grigio caldo; disegnati anche a cavallo dei bordi (texture ripetibile).
-  for (let k = 0; k < 230; k++) {
-    const x = rnd() * N, y = rnd() * N, rx = 7 + rnd() * 9, ry = 5 + rnd() * 7, a = rnd() * Math.PI;
-    const t = 165 + Math.floor(rnd() * 55), cal = Math.floor(rnd() * 12);
+  for (let k = 0; k < 4000; k++) {                          // grana della terra
+    const v = 80 + Math.floor(rnd() * 70);
+    g.fillStyle = `rgba(${v + 20},${v + 8},${v - 10},0.5)`;
+    g.fillRect(rnd() * N, rnd() * N, 1 + rnd() * 2, 1 + rnd() * 2);
+  }
+  const pietra = (x, y, w, h) => {
+    const v = 120 + Math.floor(rnd() * 80), cal = Math.floor(rnd() * 16) - 4;
+    const pts = [];
+    for (let k = 0; k < 7; k++) {                           // contorno storto, angoli smussati
+      const a = k / 7 * Math.PI * 2 + rnd() * 0.5;
+      const rx = w / 2 * (0.78 + rnd() * 0.22), ry = h / 2 * (0.78 + rnd() * 0.22);
+      const cs = Math.cos(a), sn = Math.sin(a), q = Math.pow(Math.abs(cs) ** 3 + Math.abs(sn) ** 3, -1 / 3);   // quasi quadrata
+      pts.push([x + cs * rx * q, y + sn * ry * q]);
+    }
     for (const dx of [-N, 0, N]) for (const dy of [-N, 0, N]) {
-      const cx = x + dx, cy = y + dy;
-      if (cx < -20 || cy < -20 || cx > N + 20 || cy > N + 20) continue;
-      const gr = g.createRadialGradient(cx - rx * 0.3, cy - ry * 0.3, 1, cx, cy, Math.max(rx, ry));
-      gr.addColorStop(0, `rgb(${t + 25 + cal},${t + 22},${t + 16})`);
-      gr.addColorStop(1, `rgb(${t - 25 + cal},${t - 27},${t - 32})`);
+      if (x + dx < -60 || x + dx > N + 60 || y + dy < -60 || y + dy > N + 60) continue;
+      const gr = g.createLinearGradient(x + dx, y + dy - h / 2, x + dx, y + dy + h / 2);
+      gr.addColorStop(0, `rgb(${lim(v + 22 + cal)},${lim(v + 18)},${lim(v + 10)})`);
+      gr.addColorStop(1, `rgb(${lim(v - 30 + cal)},${lim(v - 34)},${lim(v - 40)})`);
       g.fillStyle = gr;
       g.beginPath();
-      g.ellipse(cx, cy, rx, ry, a, 0, Math.PI * 2);
-      g.fill();
+      pts.forEach(([px, py], k) => (k ? g.lineTo(px + dx, py + dy) : g.moveTo(px + dx, py + dy)));
+      g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(40,30,20,0.35)'; g.lineWidth = 1.5; g.stroke();
+    }
+  };
+  for (let y = 0; y < N;) {
+    const h = 26 + Math.floor(rnd() * 14);
+    let x = -Math.floor(rnd() * 30);
+    while (x < N) {
+      const w = 26 + Math.floor(rnd() * 22);
+      if (rnd() > 0.08) pietra(x + w / 2 + (rnd() - 0.5) * 4, y + h / 2 + (rnd() - 0.5) * 5, w - 4, h - 4);   // l'8 % manca
+      x += w;
+    }
+    y += h;
+  }
+  for (let k = 0; k < 120; k++) {                           // erba nelle fughe
+    const x = rnd() * N, y = rnd() * N;
+    g.strokeStyle = `rgba(${70 + rnd() * 30},${95 + rnd() * 30},${40 + rnd() * 20},0.7)`;
+    g.lineWidth = 1;
+    for (let f = 0; f < 4; f++) { g.beginPath(); g.moveTo(x, y); g.lineTo(x + (rnd() - 0.5) * 8, y - 3 - rnd() * 6); g.stroke(); }
+  }
+  for (let k = 0; k < 28; k++) {                            // polvere e fango a chiazze larghe
+    const x = rnd() * N, y = rnd() * N, r = 30 + rnd() * 90, fango = rnd() < 0.3;
+    for (const dx of [-N, 0, N]) for (const dy of [-N, 0, N]) {
+      const gr = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
+      gr.addColorStop(0, fango ? `rgba(70,55,40,${0.25 + rnd() * 0.2})` : `rgba(165,145,115,${0.3 + rnd() * 0.25})`);
+      gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr; g.fillRect(x + dx - r, y + dy - r, 2 * r, 2 * r);
     }
   }
   const tex = new THREE.CanvasTexture(c);
@@ -438,7 +478,7 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
           const bordo = (j === 0 || j === 4) ? 1 + 0.18 * Math.sin(lung * 0.9 + j * 2.1 + fase) * Math.sin(lung * 0.37 + fase) : 1;
           const u = P[i][0] + nu * t * S.larghezza * bordo, v = P[i][1] + nv * t * S.larghezza * bordo;
           pos.push(X(u, v), terreno(u, v) + S.sopra, Z(u, v));
-          uv.push(t * S.larghezza / 1.6, lung / 1.6);
+          uv.push(t * S.larghezza / STRADE.tessera, lung / STRADE.tessera);
         }
       }
       for (let i = 0; i + 1 < P.length; i++) {

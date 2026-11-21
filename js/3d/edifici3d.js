@@ -49,6 +49,9 @@ const IRREGOLARE = { fuoriSquadra: 0.08, alto: [0.32, 0.6], lungo: [0.45, 0.95],
   // Cantonali solo su una parte degli spigoli e a tratti (utente: spigoli tutti pieni sembravano restauri di oggi).
   spigolo: 0.3, tratto: [0.3, 0.8], buco: 0.3 };
 export const DETTAGLIO = { lontano: 160, zona: 60 };
+// Piede degli edifici: fascia di terra larga `largo` m, un sasso ogni ~passoSassi m con probabilità `sassi`, sassi
+// di `sasso` m.
+const BASE = { largo: [0.35, 0.65], passoSassi: 1.1, sassi: 0.45, sasso: [0.18, 0.5] };
 
 /** Tipi di casa: larghezza (lungo la via) e profondità [min, max] in m, piani [min, max], intonaco (probabilità). */
 export const TIPI_CASA = {
@@ -118,6 +121,49 @@ function texturaTetto() {
   _tetto.wrapS = _tetto.wrapT = THREE.RepeatWrapping;
   _tetto.anisotropy = 4;
   return _tetto;
+}
+
+/**
+ * Terra al piede degli edifici (256 × 128 px: u lungo il muro, v dal muro verso fuori): terra battuta bruna, ghiaia,
+ * chiazze di muschio e d'erba, più scura contro il muro; l'alpha cala verso fuori con un bordo frastagliato
+ * (alphaTest: nessuna trasparenza da ordinare).
+ */
+let _base = null;
+function texturaBase() {
+  if (_base) return _base;
+  const W = 256, H = 128, c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d'), rnd = rndDa(3131);
+  const img = g.createImageData(W, H), d = img.data;
+  const onda = (x) => 0.45 + 0.22 * Math.sin(x * 0.07) + 0.16 * Math.sin(x * 0.19 + 1.3) + 0.1 * Math.sin(x * 0.43 + 2.1);
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const t = y / H, k = (y * W + x) * 4, rumore = rnd();
+      const verso = Math.max(0, 1 - t * 1.2);                 // ombra di contatto: scura contro il muro
+      let r0 = 92 - 50 * verso + (rumore - 0.5) * 30, g0 = 82 - 46 * verso + (rumore - 0.5) * 26, b0 = 62 - 36 * verso + (rumore - 0.5) * 20;
+      d[k] = lim(r0); d[k + 1] = lim(g0); d[k + 2] = lim(b0);
+      // Bordo sfumato a puntini: sempre piena contro il muro, poi sempre più rada fino a sparire (alphaTest).
+      const bordo = 0.35 + 0.5 * onda(x);
+      d[k + 3] = t < bordo * 0.4 || rnd() > (t - bordo * 0.4) / (bordo * 0.8) ? 255 : 0;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  g.globalCompositeOperation = 'source-atop';                // ghiaia e chiazze solo dove c'è terra
+  for (let k = 0; k < 120; k++) {
+    const x = rnd() * W, y = rnd() * H, rr = 1 + rnd() * 2.5, v = 90 + Math.floor(rnd() * 60);
+    g.fillStyle = `rgb(${v},${v - 6},${v - 14})`;
+    g.beginPath(); g.ellipse(x, y, rr * 1.3, rr, rnd() * 3, 0, Math.PI * 2); g.fill();
+  }
+  for (let k = 0; k < 30; k++) {
+    const x = rnd() * W, y = rnd() * H, rr = 5 + rnd() * 14, muschio = rnd() < 0.5;
+    const gr = g.createRadialGradient(x, y, 0, x, y, rr);
+    gr.addColorStop(0, muschio ? 'rgba(70,88,40,0.6)' : 'rgba(120,105,80,0.35)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(x - rr, y - rr, 2 * rr, 2 * rr);
+  }
+  _base = new THREE.CanvasTexture(c);
+  _base.colorSpace = THREE.SRGBColorSpace;
+  _base.wrapS = THREE.RepeatWrapping; _base.wrapT = THREE.ClampToEdgeWrapping;
+  return _base;
 }
 
 /** Paglia (512 px = 6,4 m): fili lungo la falda (v), a mazzi in file orizzontali, toni dal dorato al grigio. */
@@ -245,6 +291,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
   /** Segna una geometria con tinta (moltiplica il colore), muschio (verde verso il basso) ed edera (verde al piede). */
   const segna = (g, o) => { Object.assign(g.userData, o); return g; };
   const sagome = [];                                   // scatole invisibili per la camera
+  const piedi = [];                                    // fasce di terra attorno agli edifici (piede())
   const scatole = [];                                  // collisioni (locali)
   const dettagli = [];                                 // { tipo, u, v, y, fu, fv, sx, sy, sz }
   const edifici = [];                                  // edifici nominati: { tipo, nome, porta: { u, v, fu, fv } }
@@ -322,7 +369,8 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
       }
     }
     if (porta) {
-      dettagli.push({ tipo: bottega ? 'portone' : 'porta', u: c[0] + n[0] * 0.05, v: c[1] + n[1] * 0.05, y: pavimento, fu: n[0], fv: n[1] });
+      dettagli.push({ tipo: 'porta', u: c[0] + n[0] * 0.05, v: c[1] + n[1] * 0.05, y: pavimento, fu: n[0], fv: n[1],
+        ...(bottega ? { sx: 2.17, sy: 1.18 } : { sx: 0.9 + rnd() * 0.2, sy: 0.92 + rnd() * 0.12 }) });   // portone: la stessa porta più grande
     }
   }
 
@@ -358,7 +406,8 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     const pavimento = (quota ?? mx) + 0.15;
     const R = rett(c, s, f, a, b);
     const umido = rnd() < 0.45 ? 1.2 + rnd() * 1.8 : 0;   // edera e muffa al piede (m)
-    parti.pietra.push(segna(prisma(q4(R), q4(R), Math.min(mn, pavimento) - 0.6, pavimento + 0.5), { edera: umido }));   // zoccolo
+    parti.pietra.push(segna(prisma(q4(R), q4(R), Math.min(mn, pavimento) - 0.6, pavimento + 0.5), { edera: umido, sporco: 1 }));   // zoccolo
+    piede(c, s, f, a, b);
     const H = piani * PIANO, gronda = pavimento + H;
     // Pareti un po' fuori squadra (richiesta dell'utente: niente spigoli tutti lineari): ogni angolo spostato di
     // qualche cm, diverso alla base e in cima; il tetto sporge e copre la differenza.
@@ -398,6 +447,28 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     sagome.push(prisma(q4(R), q4(R), Math.min(mn, pavimento) - 0.5, colmo));
     scatole.push({ cu: c[0], cv: c[1], au: s[0], av: s[1], hl: a + 0.05, hw: b + 0.05 });
     return { pavimento, gronda, colmo, s, a, b };
+  }
+
+  /**
+   * Piede dell'edificio (richiesta dell'utente: che sembri appoggiato sul terreno, non staccato): una fascia di terra
+   * battuta, polvere, ghiaia e muschio attorno alla pianta, col bordo esterno irregolare (texture con alpha), e
+   * qualche sasso mezzo interrato lungo il muro. La fascia si disegna sempre (pochi triangoli), i sassi spariscono da
+   * lontano con gli altri dettagli.
+   */
+  function piede(c, s, f, a, b, largo = BASE.largo[0] + rnd() * (BASE.largo[1] - BASE.largo[0])) {
+    piedi.push({ c, s, f, a, b, w: largo });
+    const giro = 2 * (2 * a + 2 * b);
+    for (let k = 0, n = Math.round(giro / BASE.passoSassi); k < n; k++) {
+      if (rnd() > BASE.sassi) continue;
+      let t = rnd() * giro, i, j;                            // punto sul perimetro
+      if (t < 2 * a) { i = -a + t; j = -b; } else if ((t -= 2 * a) < 2 * b) { i = a; j = -b + t; } else if ((t -= 2 * b) < 2 * a) { i = a - t; j = b; } else { t -= 2 * a; i = -a; j = b - t; }
+      const fuori = 0.12 + rnd() * 0.35, ni = Math.sign(i) * (Math.abs(i) >= a - 1e-6 ? 1 : 0), nj = Math.sign(j) * (Math.abs(j) >= b - 1e-6 ? 1 : 0);
+      const u = c[0] + s[0] * (i + ni * fuori) + f[0] * (j + nj * fuori), v = c[1] + s[1] * (i + ni * fuori) + f[1] * (j + nj * fuori);
+      const dim = BASE.sasso[0] + rnd() * (BASE.sasso[1] - BASE.sasso[0]), ang = rnd() * Math.PI * 2;
+      const sy = dim * (0.45 + rnd() * 0.35);                 // mezzo interrato: si vede poco più di metà
+      dettagli.push({ tipo: 'sasso', u, v, y: terreno(u, v) + sy * 0.12, fu: Math.cos(ang), fv: Math.sin(ang), rot: (rnd() - 0.5) * 0.6,
+        sx: dim * (0.9 + rnd() * 0.6), sy, sz: dim * (0.8 + rnd() * 0.5) });
+    }
   }
 
   /**
@@ -526,7 +597,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     }
     // Cella campanaria: aperture scure sui quattro lati.
     for (const [nu, nv] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      dettagli.push({ tipo: 'cella', u: c[0] + nu * (h + 0.03), v: c[1] + nv * (h + 0.03), y: alto - 2.4, fu: nu, fv: nv, sx: lato * 0.45 });
+      dettagli.push({ tipo: 'finestra', u: c[0] + nu * (h + 0.03), v: c[1] + nv * (h + 0.03), y: alto - 2.4, fu: nu, fv: nv, sx: lato * 0.72, sy: 1.9 });
     }
     sagome.push(prisma(q4(R), q4(R), base, alto + lato * 0.9));
     scatole.push({ cu: c[0], cv: c[1], au: 1, av: 0, hl: h, hw: h });
@@ -622,7 +693,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     const verde = [0.5, 0.62, 0.34];
     let o = 0;
     for (const { n, d } of pezzi) {
-      if (d.tinta || d.muschio || d.edera) {
+      if (d.tinta || d.muschio || d.edera || d.sporco) {
         let y0 = Infinity, y1 = -Infinity;
         for (let i = o; i < o + n; i++) { const y = pos.getY(i); if (y < y0) y0 = y; if (y > y1) y1 = y; }
         for (let i = o; i < o + n; i++) {
@@ -634,7 +705,12 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
           if (d.muschio && y1 - y0 > 0.05) m = Math.max(m, d.muschio * Math.pow(1 - (y - y0) / (y1 - y0), 2) * (0.4 + macchia));
           if (d.edera) m = Math.max(m, 0.75 * Math.max(0, 1 - (y - (y0 + 0.6)) / d.edera) * macchia);
           m = Math.min(0.85, m);
-          col.setXYZ(i, Math.min(1, r0 * (1 - m + m * verde[0])), Math.min(1, g0 * (1 - m + m * verde[1])), Math.min(1, b0 * (1 - m + m * verde[2])));
+          r0 *= 1 - m + m * verde[0]; g0 *= 1 - m + m * verde[1]; b0 *= 1 - m + m * verde[2];
+          if (d.sporco && y1 - y0 > 0.05) {                  // terra e polvere salite dal suolo: bruno verso il basso
+            const t = Math.pow(1 - (y - y0) / (y1 - y0), 1.4) * d.sporco * (0.75 + 0.25 * macchia);
+            r0 *= 1 - t * 0.35; g0 *= 1 - t * 0.42; b0 *= 1 - t * 0.55;
+          }
+          col.setXYZ(i, Math.min(1, r0), Math.min(1, g0), Math.min(1, b0));
         }
       }
       o += n;
@@ -657,6 +733,41 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
       m.name = `${nome}-${k}`;
       object.add(m);
     }
+    if (piedi.length) {                                  // fasce di terra al piede degli edifici
+      const pos = [], uv = [], idx = [];
+      for (const { c, s, f, a, b, w } of piedi) {
+        // Quattro lati, ciascuno a tratti di ~1,5 m, prolungati agli spigoli per chiudere gli angoli.
+        const lati = [[[-a - w, -b], [a + w, -b], [0, -1]], [[a, -b - w], [a, b + w], [1, 0]], [[a + w, b], [-a - w, b], [0, 1]], [[-a, b + w], [-a, -b - w], [-1, 0]]];
+        let lung = rnd() * 10;
+        for (const [[i0, j0], [i1, j1], [ni, nj]] of lati) {
+          const L = Math.hypot(i1 - i0, j1 - j0), n = Math.max(2, Math.ceil(L / 1.5)), base0 = pos.length / 3;
+          for (let k = 0; k <= n; k++) {
+            const i = i0 + (i1 - i0) * k / n, j = j0 + (j1 - j0) * k / n;
+            for (const [o, vv] of [[0.02, 0], [w, 1]]) {
+              const u = c[0] + s[0] * (i + ni * o) + f[0] * (j + nj * o), v = c[1] + s[1] * (i + ni * o) + f[1] * (j + nj * o);
+              pos.push(X(u, v), terreno(u, v) + 0.035, Z(u, v));
+              uv.push((lung + L * k / n) / 2.5, vv);
+            }
+          }
+          for (let k = 0; k < n; k++) { const q = base0 + 2 * k; idx.push(q, q + 2, q + 1, q + 1, q + 2, q + 3); }
+          lung += L;
+        }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      geo.setIndex(idx);
+      geo.computeVertexNormals();
+      const nrm = geo.attributes.normal;                   // le normali in su (il verso dei lati dipende dagli assi)
+      let giu = 0;
+      for (let i = 0; i < nrm.count; i++) if (nrm.getY(i) < 0) giu++;
+      if (giu > nrm.count / 2) { for (let i = 0; i < idx.length; i += 3) { const t = idx[i + 1]; idx[i + 1] = idx[i + 2]; idx[i + 2] = t; } geo.setIndex(idx); geo.computeVertexNormals(); }
+      const mb = new THREE.MeshLambertMaterial({ map: texturaBase(), alphaTest: 0.5, side: THREE.DoubleSide });
+      mb.polygonOffset = true; mb.polygonOffsetFactor = -3; mb.polygonOffsetUnits = -3;
+      const m = new THREE.Mesh(geo, mb);
+      m.name = `${nome}-piede`;
+      object.add(m);
+    }
     {
       const geo = unisci(sagome);                         // invisibile: solo per il raycast della camera
       if (geo) {
@@ -671,15 +782,14 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     const geoD = {
       finestra: (() => { const g = new THREE.BoxGeometry(0.62, 0.85, 0.14); return g; })(),
       porta: (() => { const g = new THREE.BoxGeometry(1.2, 2.2, 0.16); g.translate(0, 1.1, 0); return g; })(),
-      portone: (() => { const g = new THREE.BoxGeometry(2.6, 2.6, 0.16); g.translate(0, 1.3, 0); return g; })(),
       comignolo: (() => { const g = new THREE.BoxGeometry(0.6, 1.4, 0.6); g.translate(0, 0.7, 0); return rifinisci(g, false); })(),
       trave: new THREE.BoxGeometry(1, 1, 1),
       imposta: new THREE.BoxGeometry(0.42, 0.95, 0.05),
-      cella: (() => { const g = new THREE.BoxGeometry(1, 1.6, 0.1); return g; })(),
       cantonale: rifinisci(new THREE.BoxGeometry(1, 1, 1), false),
+      sasso: rifinisci(new THREE.IcosahedronGeometry(0.5, 0).toNonIndexed(), false),
     };
-    const matD = { finestra: mat.finestra, porta: mat.legno, portone: mat.legno, comignolo: mat.pietra, cella: mat.finestra, cantonale: mat.pietra,
-      trave: mat.legno, imposta: mat.legno };
+    const matD = { finestra: mat.finestra, porta: mat.legno, comignolo: mat.pietra, cantonale: mat.pietra,
+      trave: mat.legno, imposta: mat.legno, sasso: mat.pietra };
     // Zone: al più 2 × 2 qualunque sia la grandezza (le chiamate restano ≤ 4 × tipi di dettaglio), di lato almeno
     // DETTAGLIO.zona m.
     let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
