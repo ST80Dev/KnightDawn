@@ -625,10 +625,17 @@ export function* createBorgoAPezzi(suolo, luogo, ox, oz, rocca) {
   }
   // Edifici nominati lungo la via principale, dalla porta.
   const daFare = [...K.edifici];
+  // Lotto del prossimo edificio da posare: largo quanto l'edificio più recinto e tettoia ai lati (tutti e tre i giri:
+  // prima il terzo usava la sola larghezza dell'edificio, e la tettoia del fabbro poteva finire sulla via).
+  const prossimoEdificio = () => {
+    if (!daFare.length) return null;
+    const E = EDIFICI[daFare[0]];
+    return { ...E, largo: E.largo + (E.recinto ? 2 * E.recinto + 2 : 0) + (E.tettoia ? 2 * E.tettoia + 1 : 0) };
+  };
   let inizioPezzo = performance.now();
   if (via) {
     for (const lato of [1, -1]) {
-      yield* lungo(via, lato, () => (daFare.length ? { ...EDIFICI[daFare[0]], largo: EDIFICI[daFare[0]].largo + (EDIFICI[daFare[0]].recinto ? 2 * EDIFICI[daFare[0]].recinto + 2 : 0) + (EDIFICI[daFare[0]].tettoia ? 2 * EDIFICI[daFare[0]].tettoia + 1 : 0) } : null),
+      yield* lungo(via, lato, prossimoEdificio,
         (L) => { const tipo = daFare.shift(); kit.edificio(tipo, { u: L.c[0], v: L.c[1], fu: L.f[0], fv: L.f[1] }); }, { da: 3 });
     }
   }
@@ -636,7 +643,7 @@ export function* createBorgoAPezzi(suolo, luogo, ox, oz, rocca) {
     if (!daFare.length) break;
     if (st === via) continue;
     for (const lato of [1, -1]) {
-      yield* lungo(st, lato, () => (daFare.length ? { ...EDIFICI[daFare[0]], largo: EDIFICI[daFare[0]].largo + (EDIFICI[daFare[0]].recinto ? 2 * EDIFICI[daFare[0]].recinto + 2 : 0) + (EDIFICI[daFare[0]].tettoia ? 2 * EDIFICI[daFare[0]].tettoia + 1 : 0) } : null),
+      yield* lungo(st, lato, prossimoEdificio,
         (L) => { const tipo = daFare.shift(); kit.edificio(tipo, { u: L.c[0], v: L.c[1], fu: L.f[0], fv: L.f[1] }); });
     }
   }
@@ -673,7 +680,7 @@ export function* createBorgoAPezzi(suolo, luogo, ox, oz, rocca) {
   for (const st of strade) {                            // la chiesa, se non è andata sulla piazza
     if (!daFare.length) break;
     for (const lato of [1, -1]) {
-      yield* lungo(st, lato, () => (daFare.length ? { ...EDIFICI[daFare[0]] } : null),
+      yield* lungo(st, lato, prossimoEdificio,
         (L) => { const tipo = daFare.shift(); kit.edificio(tipo, { u: L.c[0], v: L.c[1], fu: L.f[0], fv: L.f[1] }); });
     }
   }
