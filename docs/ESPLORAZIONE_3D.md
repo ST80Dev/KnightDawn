@@ -1699,7 +1699,14 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      componente di `aSuolo`, a chiazze su ~35 m nelle prime due celle dai fiumi, dipinta nel suolo cotto.
      *Massi erratici* (`VEGETAZIONE.erratici`): pochi massi di 4–8 m isolati nei prati (non nel bosco, nei campi,
      vicino a strade, case e terrapieni). *Alberi lungo le strade* (`stradaAlberi`): a tratti, a 2,5–5 m dal bordo,
-     fuori dal bosco; ~200 in un blocco attorno alla rocca di partenza.
+     fuori dal bosco; poi ridotti (richiesta dell'utente: «il mondo medievale è più casuale, non un viale»): pochi
+     tratti, radi, sparsi tra 2,5 e 10 m dal bordo (~50 in un blocco).
+     *Chiome e cespugli* (richiesta dell'utente: chiome «troppo arrotondate o piene, si vede che sono di un gioco»;
+     arbusti «con pezzi vuoti, fatti da più elementi, non un blocco come un masso»; senza appesantire): `chiomaAMasse`,
+     la chioma in 4–7 masse separate, ognuna con pochi ciuffi e un ramo dal fusto (`ramoVerso`), con vuoti da cui si
+     vedono cielo e rami; stesso numero di ciuffi di prima (latifoglie, alberi di riva, livello medio con 4 masse).
+     Cespugli di 4–6 ciuffi bassi su rametti, il più basso a terra. Niente foglie con alpha test (costose sulla
+     scheda di riferimento). Bosco fitto in headless: triangoli della vegetazione da 458 000 a 491 000 (+7 %, rami).
      *Case fuori dal borgo* (richiesta dell'utente: case isolate o a gruppetti di 2–3 in mezzo o a lato dei campi):
      `CASE_CAMPAGNA` / `caseCampagna(carta)`, siti deterministici per Carta (4–9 gruppi per rocca secondo la classe,
      tra gli orti e il limite dei campi pieni, in piano, all'asciutto, lontano dai terrapieni e tra loro, orientati

@@ -187,7 +187,9 @@ export const VEGETAZIONE = {
   // Massi erratici: pochi massi molto grandi (4–8 m) isolati nei prati, segni nel paesaggio (una cella di `passo` m
   // ogni tanto). Alberi lungo le strade: a tratti (rumore su `lunghezza` m), a `banda` m dal bordo della carreggiata.
   erratici: { passo: 220, probabilita: 0.3, scala: [1.8, 3.2] },
-  stradaAlberi: { passo: 3, banda: [2.5, 5], probabilita: 0.45, lunghezza: 180, soglia: 0.12 },
+  // (richiesta dell'utente: «non esagerare, il mondo medievale è più casuale, non piantati lungo il percorso»): pochi
+  // tratti, radi, sparsi in una fascia larga: alberi rimasti accanto alla strada, non un viale.
+  stradaAlberi: { passo: 3, banda: [2.5, 10], probabilita: 0.07, lunghezza: 260, soglia: 0.32 },
   limiteAlberi: [-0.5, 2],               // °C attorno a CLIMA.bosco: gli alberi si diradano e si abbassano
   pendenza: { alberi: [30, 40], arbusti: [36, 46], pareti: 48 },   // gradi (pendenza fine della mesh)
   riva: { celle: [1, 3], densita: 0.22, canne: 0.35 },             // celle di 7,8 m dall'acqua
