@@ -2263,6 +2263,8 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
    calda verso il sole al tramonto (non ora).
 9. **Neve in pianura al Nord, ogni tanto** (21/11/2026): possibile anche a quota bassa nelle regioni settentrionali.
 10. **Meteo per zona, tendenziale** (21/11/2026): non uguale in tutto il mondo, ma con tendenze secondo bioma e latitudine.
+11. **Salti da 1 a 3 gradini con frequenza calante** (21/11/2026; esempi dell'utente: sereno → nuvoloso, nuvoloso → neve,
+   velato → pioggia forte).
 
 **Cosa c'è oggi** [Certo, dal codice]: `scene.background` è un colore unico uguale alla nebbia (niente sfumatura, sole,
 luna, stelle, nuvole). La nebbia di giorno va da 1,5 km a 40–150 km (tiro del giorno, interpolato con continuità tra un
@@ -2302,8 +2304,11 @@ leggono la luce del sole e dovranno sapere quanto è «diretta»: ombre finte de
 
    L'indice viene da un **rumore liscio sul tempo** (valore all'inizio del periodo), spostato dalle tendenze della zona:
    `umidita` della cella (umido → più nuvole e precipitazioni), bioma (sabbia e sud arido più sereni, palude più nebbia,
-   montagna più nuvole), latitudine (il nord più coperto) e stagione; la frequenza è scelta perché tra due periodi vicini si salti al più di un gradino
-   (sereno → poco nuvoloso → velato → coperto → pioggia, mai sereno → pioggia). Niente catena da ripercorrere: lo stato di
+   montagna più nuvole), latitudine (il nord più coperto) e stagione. Tra un periodo e il successivo lo stato cambia di
+   **1–3 gradini con frequenza calante** (decisione 11) [valori da tarare guardando]: di norma resta o cambia di 1; di 2
+   circa una volta su 6; di 3 circa una volta su 20 (temporale d'estate velato → pioggia forte, fronte freddo al nord poco
+   nuvoloso → neve). Si ottiene con il rumore liscio (passi di 0–1) più rari «salti» tirati dal seme per il periodo;
+   le tendenze della zona restano, quindi niente neve dal caldo (la neve dipende comunque dalla temperatura del luogo). Niente catena da ripercorrere: lo stato di
    qualunque periodo si calcola direttamente, quindi è lo stesso caricando un salvataggio o tornando nello stesso luogo.
    **Nebbia vera** (inizio ~100 m, fine 0,6–2,5 km, luce ×0,3): non un gradino della scala ma una variante del sereno o del
    velato nei periodi di notte e del mattino, in autunno e inverno, nelle celle basse e umide [regola da tarare].
@@ -2346,6 +2351,14 @@ si resta sotto 1,5 ms e ≤ 10 chiamate (cupola 1, stelle 1, precipitazioni 1). 
    Tavullia e pannello F3 senza errori.
 1. **Cupola a gradiente, sole e luna, alba e tramonto.** Zenit più scuro e saturo, orizzonte = nebbia; al crepuscolo il
    cielo è caldo verso il sole e freddo dalla parte opposta (la nebbia resta di un colore solo).
+   **Stato: fatto, da provare dall'utente** (insieme al passo 0). `creaCupola` in `cielo.js`: sfera `cielo-cupola` di 5 km
+   attorno alla camera (segue qualunque camera la disegni), disegnata per prima, senza profondità né nebbia; 48×24
+   segmenti, uno shader leggero (nessuna texture). Colori in `CICLO.colori` (`zenitGiorno`, `zenitNotte`,
+   `zenitCrepuscolo`, `alonCrepuscolo`, `discoLuna`): all'orizzonte e sotto è il colore della nebbia (in headless nessuna
+   riga tra terreno lontano e cielo, anche dalle alture); fascia calda bassa dalla parte del sole tra ~14° e −8° di
+   altezza; disco del sole di 0,75° (più grande del vero, per vederlo dalla vista di gioco) con due aloni; luna di 0,6°
+   nella direzione della luce lunare (fissa, alta a sud-est), solo di notte. Nel percorso di prova la cupola finisce in
+   «resto» finché non entra in `main` il gruppo «cielo» di M1.
 2. **Stelle di notte.**
 3. **Meteo a periodi senza nuvole disegnate:** scala, periodi, regione, foschia standard al posto di quella per giorno,
    luci, `?meteo=`, F3. Qui si provano con M7 le mura col cielo coperto e con Vegetazione le ombre finte.

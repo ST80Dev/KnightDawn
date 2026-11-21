@@ -36,6 +36,11 @@ export const CICLO = {
   colori: {
     cieloGiorno: new THREE.Color('#c4d4d6'), cieloNotte: new THREE.Color('#0b1019'),
     cieloCrepuscolo: new THREE.Color('#d9a882'),
+    // Cupola (passo 1): lo zenit è più scuro e saturo dell'orizzonte; l'orizzonte resta il colore della nebbia.
+    zenitGiorno: new THREE.Color('#6f9cc0'), zenitNotte: new THREE.Color('#03060c'),
+    zenitCrepuscolo: new THREE.Color('#4a5f86'),
+    alonCrepuscolo: new THREE.Color('#f0a060'),   // fascia calda sopra l'orizzonte, dalla parte del sole
+    discoLuna: new THREE.Color('#e4e8ee'),
     soleGiorno: new THREE.Color('#fff0d4'), soleBasso: new THREE.Color('#ffb070'),
     emisferaCieloGiorno: new THREE.Color('#dce8ec'), emisferaCieloNotte: new THREE.Color('#5a6c94'),
     emisferaTerraGiorno: new THREE.Color('#8a7550'), emisferaTerraNotte: new THREE.Color('#2c2a2a'),
@@ -79,6 +84,74 @@ export function visibilitaDelGiorno(seme, giorni) {
   return THREE.MathUtils.lerp(farDelGiorno(seme, g), farDelGiorno(seme, g + 1), f * f * (3 - 2 * f));
 }
 
+// ─── Cupola del cielo ───
+// Sfera attorno alla camera, disegnata per prima, senza profondità né nebbia. In basso (direzione orizzontale e
+// sotto) ha esattamente il colore della nebbia, così il terreno lontano, che nella nebbia sfuma in quel colore,
+// non lascia una riga all'orizzonte, anche dalle alture. Sopra: gradiente verso lo zenit, fascia calda dalla parte
+// del sole al crepuscolo, disco e alone del sole, disco della luna. Un solo calcolo leggero per pixel di cielo.
+const RAGGIO_CUPOLA = 5000;               // m: qualunque valore tra near e far va bene (niente profondità)
+const RAGGIO_SOLE = 0.75 * _gradi;        // più grande del vero (0,27°): si deve vedere dalla vista di gioco
+const RAGGIO_LUNA = 0.6 * _gradi;
+
+const VERTICI_CUPOLA = /* glsl */ `
+  varying vec3 vDir;
+  void main() {
+    vDir = position;
+    vec4 p = modelViewMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * p;
+  }`;
+const FRAMMENTI_CUPOLA = /* glsl */ `
+  uniform vec3 uOrizzonte, uZenit, uAlone, uColoreSole, uColoreLuna;
+  uniform vec3 uDirSole, uDirLuna;
+  uniform float uCrepuscolo, uSole, uLuna, uCosSole, uCosLuna;
+  varying vec3 vDir;
+  void main() {
+    vec3 d = normalize(vDir);
+    float h = d.y;
+    // Gradiente: nullo sotto e all'orizzonte (colore della nebbia), pieno verso lo zenit.
+    float t = smoothstep(0.0, 1.0, pow(clamp(h, 0.0, 1.0), 0.55));
+    vec3 col = mix(uOrizzonte, uZenit, t);
+    // Crepuscolo: fascia calda bassa dalla parte del sole, che si allarga attorno a lui.
+    vec3 sOriz = normalize(vec3(uDirSole.x, 0.0, uDirSole.z) + 1e-5);
+    float verso = max(dot(normalize(vec3(d.x, 0.0, d.z) + 1e-5), sOriz), 0.0);
+    float fascia = smoothstep(0.0, 0.03, h) * (1.0 - smoothstep(0.02, 0.35, h));
+    col = mix(col, uAlone, uCrepuscolo * fascia * (0.25 + 0.75 * verso * verso));
+    // Sole: alone largo, alone stretto, disco. Solo sopra l'orizzonte (sotto c'è il terreno o il mare).
+    float s = dot(d, uDirSole);
+    float sopra = smoothstep(-0.01, 0.01, h);
+    col += uColoreSole * uSole * sopra * (0.10 * pow(max(s, 0.0), 12.0) + 0.35 * pow(max(s, 0.0), 300.0));
+    col = mix(col, uColoreSole * 1.6, uSole * sopra * smoothstep(uCosSole - 0.00004, uCosSole + 0.00004, s));
+    // Luna: disco pallido e alone appena accennato.
+    float l = dot(d, uDirLuna);
+    col += uColoreLuna * uLuna * sopra * (0.03 * pow(max(l, 0.0), 40.0) + 0.10 * pow(max(l, 0.0), 2000.0));
+    col = mix(col, uColoreLuna, uLuna * sopra * smoothstep(uCosLuna - 0.00004, uCosLuna + 0.00004, l));
+    gl_FragColor = vec4(col, 1.0);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }`;
+
+function creaCupola() {
+  const materiale = new THREE.ShaderMaterial({
+    uniforms: {
+      uOrizzonte: { value: new THREE.Color() }, uZenit: { value: new THREE.Color() },
+      uAlone: { value: new THREE.Color() }, uColoreSole: { value: new THREE.Color() },
+      uColoreLuna: { value: CICLO.colori.discoLuna.clone() },
+      uDirSole: { value: new THREE.Vector3(0, 1, 0) }, uDirLuna: { value: new THREE.Vector3(0, 1, 0) },
+      uCrepuscolo: { value: 0 }, uSole: { value: 0 }, uLuna: { value: 0 },
+      uCosSole: { value: Math.cos(RAGGIO_SOLE) }, uCosLuna: { value: Math.cos(RAGGIO_LUNA) },
+    },
+    vertexShader: VERTICI_CUPOLA, fragmentShader: FRAMMENTI_CUPOLA,
+    side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
+  });
+  const cupola = new THREE.Mesh(new THREE.SphereGeometry(RAGGIO_CUPOLA, 48, 24), materiale);
+  cupola.name = 'cielo-cupola';
+  cupola.renderOrder = -1000;              // prima di tutto: il resto la copre
+  cupola.frustumCulled = false;
+  // Segue la camera (qualunque camera la disegni: anche quella del percorso di prova).
+  cupola.onBeforeRender = (_r, _s, cam) => { cupola.position.copy(cam.position); cupola.updateMatrixWorld(); };
+  return cupola;
+}
+
 /**
  * Crea luci, sfondo e nebbia della scena.
  * @returns {{ sole: THREE.DirectionalLight, luna: THREE.DirectionalLight, emisfera: THREE.HemisphereLight,
@@ -102,6 +175,10 @@ export function creaCielo(scene) {
   const luna = new THREE.DirectionalLight('#9fb4dc', 0);
   luna.position.set(600, 700, 750);
   scene.add(luna);
+  const cupola = creaCupola();
+  scene.add(cupola);
+  const U = cupola.material.uniforms;
+  U.uDirLuna.value.copy(luna.position).normalize();
 
   const _col = new THREE.Color();
   let _oraCielo = -1;
@@ -131,6 +208,16 @@ export function creaCielo(scene) {
     _col.copy(C.cieloNotte).lerp(C.cieloGiorno, giorno).lerp(C.cieloCrepuscolo, crepuscolo * 0.75);
     scene.background.copy(_col);
     scene.fog.color.copy(_col);
+
+    U.uOrizzonte.value.copy(_col);
+    U.uZenit.value.copy(C.zenitNotte).lerp(C.zenitGiorno, giorno).lerp(C.zenitCrepuscolo, crepuscolo * 0.6);
+    U.uAlone.value.copy(C.alonCrepuscolo);
+    U.uCrepuscolo.value = Math.max(crepuscolo, 1 - smoothstep(2, 14, Math.abs(altezza))) * smoothstep(-8, -1, altezza);
+    // Direzione vera del sole (anche sotto l'orizzonte: il disco scende dietro i monti).
+    U.uDirSole.value.set(Math.sin(z) * Math.cos(a), Math.sin(a), -Math.cos(z) * Math.cos(a));
+    U.uColoreSole.value.copy(sole.color);
+    U.uSole.value = smoothstep(-3, 2, altezza);
+    U.uLuna.value = 1 - giorno;
     return true;
   }
 
@@ -148,7 +235,7 @@ export function creaCielo(scene) {
   }
 
   return {
-    sole, luna, emisfera,
+    sole, luna, emisfera, cupola,
     get luceGiorno() { return _luceGiorno; },
     aggiorna,
     /** Forza il ricalcolo al prossimo aggiorna (nuova Scena: luci proprie di castello e mura). */
