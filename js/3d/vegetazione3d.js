@@ -8,7 +8,7 @@
 // deformate a codice, colori per vertice, un materiale per livello; nessun asset esterno (regola 6).
 
 import * as THREE from 'three';
-import { STRIDE, SAGOME, boscoLontano } from '../mondo/vegetazione.js';
+import { STRIDE, SAGOME, boscoLontanoAPezzi, finisci } from '../mondo/vegetazione.js';
 
 // ─── Costruzione delle geometrie ─────────────────────────────────────────
 
@@ -147,7 +147,7 @@ function chioma({ x = 0, y, z = 0, a, b, c = a, ciuffi, raggio, dettaglio = 1, s
     const px = x + dx * a * t, py = y + dy * b * t, pz = z + dz * c * t;
     const r = raggio[0] + (raggio[1] - raggio[0]) * rnd();
     let geo;
-    if (schegge) {
+    if (schegge || leggero) {
       // Ciuffo a schegge (richiesta dell'utente: niente «marshmallow di verde attaccati ai rami», senza arrivare alle
       // foglie singole): `schegge` tetraedri appiattiti orientati a caso dentro il ciuffo, contorno frastagliato.
       // Nucleo pieno (richiesta dell'utente: con le sole schegge «sembrano tutti alberi spogli»): un solido irregolare
@@ -167,6 +167,7 @@ function chioma({ x = 0, y, z = 0, a, b, c = a, ciuffi, raggio, dettaglio = 1, s
           pn.setXYZ(i, _v.x * f, _v.y * f, _v.z * f);
         } }
       nucleo.scale(1, 0.82, 1);
+      if (leggero) nucleo.rotateX((rnd() - 0.5) * 0.9);     // ottaedri storti: niente file di rombi uguali
       nucleo.rotateY(rnd() * 6.283);
       nucleo.translate(px, py, pz);
       nucleo.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(nucleo.attributes.position.count * 3), 3));
@@ -280,33 +281,6 @@ function piega(a, b, f, k, rnd) {
   const L = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]) * k;
   return [a[0] + (b[0] - a[0]) * f + (rnd() - 0.5) * 2 * L, a[1] + (b[1] - a[1]) * f + (rnd() - 0.5) * L,
     a[2] + (b[2] - a[2]) * f + (rnd() - 0.5) * 2 * L];
-}
-
-/**
- * Chioma a masse (richiesta dell'utente: chiome «troppo arrotondate o piene, si vede che sono di un gioco»): `masse`
- * gruppi di foglie separati, ognuno con pochi ciuffi e un ramo dal fusto (`da`), sparsi nell'ellissoide (x, y, z, a,
- * b, c) con vuoti in mezzo da cui si vedono cielo e rami. Gli stessi triangoli di una chioma piena (masse × ciuffi).
- */
-function chiomaAMasse({ x = 0, y, z = 0, a, b, c = a, masse, ciuffi, raggio, dettaglio = 1, scuro, chiaro, rnd,
-  da = null, colRamo = COL.corteccia, rRamo = 0.1, alto = 0.25, schegge = 0 }) {
-  const parti = [], centri = [];
-  for (let m = 0, tent = 0; m < masse && tent < 200; tent++) {
-    let dx = rnd() * 2 - 1, dy = rnd() * 1.3 - 0.3 + alto, dz = rnd() * 2 - 1;
-    const l = Math.hypot(dx, dy, dz);
-    if (l < 0.05 || l > 1.4) continue;
-    dx /= l; dy /= l; dz /= l;
-    const t = 0.5 + 0.45 * rnd();
-    const px = x + dx * a * t, py = y + dy * b * t, pz = z + dz * c * t;
-    const ma = Math.min(a, c) * (0.3 + 0.2 * rnd());
-    if (centri.some(([qx, qy, qz, qa]) => Math.hypot(px - qx, py - qy, pz - qz) < 0.95 * (ma + qa))) continue;
-    centri.push([px, py, pz, ma]);
-    parti.push(...chioma({ x: px, y: py, z: pz, a: ma, b: ma * (0.65 + 0.3 * rnd()), c: ma * (0.8 + 0.35 * rnd()),
-      ciuffi, raggio, dettaglio, scuro, chiaro, rnd, pieno: 0.35, sotto: 0.3, morbido: 0.7, schegge, leggero: true, inviluppo: { x, y, z, a, b, c } }));
-    if (da) parti.push(ramoVerso(da[0] + (rnd() - 0.5) * 0.3, da[1] + rnd() * 0.8, da[2] + (rnd() - 0.5) * 0.3,
-      x + (px - x) * 0.85, py - ma * 0.4, z + (pz - z) * 0.85, rRamo, rRamo * 0.35, colRamo, 4));
-    m++;
-  }
-  return parti;
 }
 
 /**
@@ -497,6 +471,30 @@ function felce(rnd, fronde = 7) {
  * Geometrie per tipo: un array di livelli { fino (m), varianti: [geo…], piatto (sfaccettato) }. Le varianti danno
  * forme diverse da vicino (ognuna una chiamata di disegno); in più ogni istanza ha scala e proporzioni sue.
  */
+/**
+ * Modelli condivisi tra i blocchi (passo 9 di M7: ~200 ms a ogni cambio di blocco per rifare geometrie sempre uguali):
+ * si costruiscono una volta. Le geometrie hanno `userData.condivisa`: chi libera un blocco non deve chiamarne
+ * dispose() (se lo fa, Three.js le ricarica sulla scheda al primo uso: funziona, ma costa).
+ */
+let _modelli = null;
+function modelliCondivisi() {
+  if (_modelli) return _modelli;
+  _modelli = creaModelli();
+  for (const [k, v] of Object.entries(_modelli)) {
+    if (k === 'sorgentiSagome') continue;
+    for (const L of v) for (const g of L.varianti || []) g.userData.condivisa = true;
+  }
+  for (const g of _modelli.sorgentiSagome) g.userData.condivisa = true;
+  return _modelli;
+}
+/** Atlante delle sagome per renderer, anch'esso fatto una volta (la texture è condivisa: non va liberata). */
+const _atlanti = new WeakMap();
+function atlanteCondiviso(renderer, sorgenti) {
+  let a = _atlanti.get(renderer);
+  if (!a) { a = creaAtlante(renderer, sorgenti); a.texture.userData.condivisa = true; _atlanti.set(renderer, a); }
+  return a;
+}
+
 function creaModelli() {
   const rnd = casuale(20261119);
   const M = {};
@@ -521,9 +519,13 @@ function creaModelli() {
   // Livelli (prestazioni, dopo la misura dell'utente: 28–30 FPS nel bosco; «meno definizione a centinaia di metri a
   // favore del realismo entro i 50 m»): vicino fino a 60 m, più ricco; medio fino a 300 m
   // con 3 ciuffi semplici (~70 triangoli); lontano un ciuffo solo e un fusto a 3 lati (~26).
+  // Chioma alla stessa altezza e larghezza di quella vicina (richiesta dell'utente: oltre i 50 m «pali con ciuffi di
+  // cespuglio in cima»: le 3 masse staccate stavano 3–6 m più su della chioma vicina, verde misurato 2,3–9,5 m contro
+  // 5,8–13,8). Sette ciuffi a ottaedro che si toccano (8 triangoli l'uno): ~64 triangoli come prima.
   const latMedio = (a, b, y) => unisci([
-    fusto(0.4, 0.05, y - b * 0.1, 4, COL.corteccia),     // si assottiglia dentro la chioma, niente moncone in vista
-    ...chiomaAMasse({ y, a, b, masse: 3, ciuffi: 1, raggio: [1.5, 1.95], dettaglio: 0, scuro: F[0], chiaro: F[1], rnd, schegge: 2 }),
+    fusto(0.4, 0.05, y + b * 0.3, 4, COL.corteccia),     // si assottiglia dentro la chioma, niente moncone in vista
+    ...chioma({ y, a, b, ciuffi: 7, raggio: [1.55, 1.95], dettaglio: 0, scuro: F[0], chiaro: F[1], rnd, pieno: 0.2, sotto: 0.6,
+      morbido: 0.7, leggero: true }),
   ]);
   M.latifoglia = [
     // Misura nel bosco fitto (UHD 730): ~135 latifoglie entro 60 m da ~2450 triangoli valevano gran parte dei 6 ms
@@ -533,7 +535,7 @@ function creaModelli() {
     { fino: 50, varianti: [quercia(0), faggio(0), castagno(0)] },
     // Medio fino a 200 m (prima 300; misura nel bosco fitto dopo la Carta rigenerata: vegetazione 7,2 ms contro 6,5 di
     // budget, ~4400 latifoglie medie per ~300 000 triangoli); oltre, sagome.
-    { fino: 200, varianti: [latMedio(4.2, 3.1, 7.6), latMedio(3.2, 4.2, 9.2)] },
+    { fino: 200, varianti: [latMedio(3.0, 2.6, 5.1), latMedio(2.6, 3.0, 5.5)] },
     { fino: Infinity, sagoma: [SAGOME.latifogliaTonda, SAGOME.latifogliaOvale] },
   ];
 
@@ -553,18 +555,36 @@ function creaModelli() {
     { fino: Infinity, sagoma: [SAGOME.conifera] },
   ];
 
-  // Pino domestico: ombrello piatto, o a due ripiani.
+  // Pino domestico (richiesta dell'utente: «pali con ciuffi di cespuglio in cima»; prima un fusto dritto di 9 m e 3–18
+  // ciuffi stretti sopra): fusto storto che a metà altezza si apre in 2–3 branche divergenti, ombrello largo e piatto
+  // fatto di un gruppo di ciuffi in cima a ogni branca più uno al centro; verde da ~6 m in su invece che da ~8,6.
   const P = COL.fogliaPino;
+  const pinoDomestico = (seme, det) => {
+    const r = casuale(seme), parti = [], hF = 4.6 + 1.2 * r();
+    const P0 = [0, -0.5, 0], P2 = [(r() - 0.5) * 1.4, hF, (r() - 0.5) * 1.4], P1 = piega(P0, P2, 0.5, 0.08, r);
+    parti.push(det ? ramoCurvo([P0, P1, P2], 0.38, 0.24, COL.cortecciaPino, 7, 4) : ramoCurvo([P0, P1, P2], 0.38, 0.22, COL.cortecciaPino, 4, 2));
+    const nB = 2 + (r() < 0.6 ? 1 : 0), cime = [], a0 = r() * 6.283;
+    for (let k = 0; k < nB; k++) {
+      const a = a0 + k * 6.283 / nB + (r() - 0.5) * 0.8, d = 1.7 + 1.1 * r();
+      const e = [P2[0] + Math.cos(a) * d, hF + 2.4 + 0.9 * r(), P2[2] + Math.sin(a) * d];
+      const b0 = [P2[0], hF - 0.4, P2[2]];
+      parti.push(det ? ramoCurvo([b0, piega(b0, e, 0.5, 0.12, r), e], 0.2, 0.05, COL.cortecciaPino, 5, 4)
+        : ramoCurvo([b0, e], 0.2, 0.06, COL.cortecciaPino, 4, 1));
+      cime.push(e);
+    }
+    const cx = cime.reduce((t, e) => t + e[0], 0) / nB, cz = cime.reduce((t, e) => t + e[2], 0) / nB;
+    const cy = Math.max(...cime.map((e) => e[1])) + 0.5;
+    const inviluppo = { x: cx, y: cy, z: cz, a: 4.6, b: 1.5, c: 4.6 };
+    const gruppo = (x, y, z, a) => parti.push(...chioma({ x, y, z, a, b: a * 0.42, c: a * (0.85 + 0.3 * r()), ciuffi: det ? 8 : 2,
+      raggio: det ? [0.75, 1.1] : [1.5, 1.9], dettaglio: det, scuro: P[0], chiaro: P[1], rnd: r, pieno: 0.35, sotto: 0.15,
+      morbido: 0.75, schegge: det ? 2 : 0, leggero: !det, inviluppo }));
+    for (const e of cime) gruppo(e[0] + (e[0] - cx) * 0.25, e[1] + 0.55, e[2] + (e[2] - cz) * 0.25, 2.1 + 0.4 * r());
+    gruppo(cx, cy + 0.35, cz, 2.3);
+    return unisci(parti);
+  };
   M.pino = [
-    { fino: 60, varianti: [
-      unisci([fusto(0.36, 0.2, 9.4, 8, COL.cortecciaPino, { inclinaZ: 0.06 }), ...rami(4, 7.6, 3.2, COL.cortecciaPino, rnd),
-        ...chioma({ x: 0.55, y: 10.3, a: 4.6, b: 1.4, ciuffi: 18, raggio: [0.9, 1.4], scuro: P[0], chiaro: P[1], rnd, pieno: 0.4 })]),
-      unisci([fusto(0.34, 0.2, 8.4, 8, COL.cortecciaPino, { inclinaZ: -0.08 }), ...rami(3, 6.6, 3.0, COL.cortecciaPino, rnd),
-        ...chioma({ x: -0.6, y: 9.6, a: 3.6, b: 1.3, ciuffi: 12, raggio: [0.9, 1.3], scuro: P[0], chiaro: P[1], rnd, pieno: 0.4 }),
-        ...chioma({ x: 1.6, y: 8.1, z: 0.8, a: 2.2, b: 0.9, ciuffi: 6, raggio: [0.8, 1.1], scuro: P[0], chiaro: P[1], rnd, pieno: 0.4 })]),
-    ] },
-    { fino: 300, varianti: [unisci([fusto(0.34, 0.22, 9.2, 4, COL.cortecciaPino, { inclinaZ: 0.06 }),
-      ...chioma({ x: 0.5, y: 10.2, a: 4.2, b: 1.3, ciuffi: 3, raggio: [1.8, 2.3], dettaglio: 0, scuro: P[0], chiaro: P[1], rnd, morbido: 0.85 })])] },
+    { fino: 60, varianti: [pinoDomestico(411, 1), pinoDomestico(412, 1)] },
+    { fino: 300, varianti: [pinoDomestico(411, 0)] },
     { fino: Infinity, sagoma: [SAGOME.pino] },
   ];
 
@@ -572,10 +592,13 @@ function creaModelli() {
   const R = COL.fogliaRiva;
   M.riva = [
     { fino: 60, varianti: [unisci([
-      ...ramificato({ fusto: 5.5, cima: 9.5, rami: 6, parte: [0.6, 1.0], inc: [55, 75], lungo: 2.3, r0: 0.3, rCima: 0.22, tronco: [0.38, 0.22],
-        colRamo: COL.cortecciaBetulla, ciuffi: 2, rCiuffo: 0.95, raggio: [0.45, 0.7], dettaglio: 1, scuro: R[0], chiaro: R[1], rnd })])] },
-    { fino: 300, varianti: [unisci([fusto(0.34, 0.04, 9.5, 4, COL.cortecciaBetulla),
-      ...chiomaAMasse({ y: 10.3, a: 2.0, b: 5.2, masse: 5, ciuffi: 1, raggio: [1.0, 1.4], dettaglio: 0, scuro: R[0], chiaro: R[1], rnd, schegge: 2 })])] },
+      // (richiesta dell'utente: «pali con ciuffi in cima»: prima una cima nuda di ~9 m con tre ciuffi; ora cima corta e
+      // più rami ripidi lungo il fusto, colonna di foglie da ~3 m in su)
+      ...ramificato({ fusto: 4.6, cima: 3.6, rami: 8, parte: [0.3, 1.0], inc: [58, 78], lungo: 2.0, r0: 0.3, rCima: 0.2, tronco: [0.36, 0.2],
+        colRamo: COL.cortecciaBetulla, ciuffi: 2, rCiuffo: 1.05, raggio: [0.45, 0.7], dettaglio: 1, scuro: R[0], chiaro: R[1], rnd })])] },
+    { fino: 300, varianti: [unisci([fusto(0.34, 0.04, 8, 4, COL.cortecciaBetulla),
+      ...chioma({ y: 5.8, a: 1.8, b: 3.4, ciuffi: 10, raggio: [1.05, 1.35], dettaglio: 0, scuro: R[0], chiaro: R[1], rnd, pieno: 0.2,
+        sotto: 0.6, morbido: 0.7, leggero: true })])] },
     { fino: Infinity, sagoma: [SAGOME.riva] },
   ];
 
@@ -836,7 +859,7 @@ const COLLISIONI = { cella: 16, sassoMinimo: 1.1,
   raggio: { latifoglia: 0.42, conifera: 0.34, pino: 0.38, riva: 0.4, secco: 0.32, masso: 1.05, affioramento: 2.3,
     sasso: 0.3, tronco: 0.32, muretto: 0.4, siepe: 0.75 } };
 
-function creaCollisioni(pos) {
+function* creaCollisioni(pos, stanco = () => false, pausa = null) {
   const C = COLLISIONI, celle = new Map();
   const aggiungi = (x, z, r) => {
     const i0 = Math.floor((x - r) / C.cella), i1 = Math.floor((x + r) / C.cella);
@@ -864,6 +887,7 @@ function creaCollisioni(pos) {
         for (const d of [0.6, 2.5, 4.4]) aggiungi(x + Math.cos(rot) * d * s, z - Math.sin(rot) * d * s, r0 * s);
       } else aggiungi(x, z, r0 * Math.max(0.6, s));
       n++;
+      if (pausa && (k & 1023) === 1023 && stanco()) yield* pausa();
     }
   }
   /** Punto (x, z) spinto fuori dai tronchi e dalle rocce (raggio del cavaliere), o null se libero. */
@@ -958,6 +982,7 @@ const ALLUNGATA = 1.4;                           // rapporto dei lati oltre il q
  * metà del raggio orizzontale massimo. Per ogni volume: min e max (scatola) e, in `cil`, centro x, z, raggio e 1 se
  * cilindro / 0 se scatola. min > max = volume vuoto.
  */
+const _volumi = new WeakMap();
 function volumiVisuale(geo) {
   const p = geo.attributes.position;
   let rMax = 0, yTop = -Infinity;
@@ -999,7 +1024,9 @@ function volumiVisuale(geo) {
  * suo livello più lontano (cresce prima di quella distanza), altrimenti null.
  */
 function conVisuale(mat, uni, modo, geo = null, fine = null) {
-  const vol = modo === 'pieno' ? volumiVisuale(geo) : null;
+  // Volumi per geometria, calcolati una volta (le geometrie dei modelli sono condivise tra i blocchi).
+  let vol = null;
+  if (modo === 'pieno') { vol = _volumi.get(geo); if (!vol) { vol = volumiVisuale(geo); _volumi.set(geo, vol); } }
   const prima = mat.onBeforeCompile.bind(mat);
   mat.onBeforeCompile = (sh, renderer) => {
     prima(sh, renderer);
@@ -1154,13 +1181,14 @@ function stampa(buf, lato, cx, cz, a, b, ux, uz, forza) {
  * Ombre del blocco. `oggetti`: Float32Array [x, z, s, tipo…] (coordinate locali). Restituisce le due texture e
  * `passo(sole)`: avanza il calcolo delle ombre del sole (a pezzi) e, quando ha finito, aggiorna la texture.
  */
-function creaOmbre(oggetti, forme, half) {
+function* creaOmbre(oggetti, forme, half, stanco = () => false, pausa = null) {
   const n = oggetti.length / 4;
-  // Piede: fisso, calcolato subito.
+  // Piede: fisso, calcolato subito (a pezzi se `pausa`: generatore, si usa con yield*).
   const LP = OMBRE.latoPiede, kp = LP / (2 * half), bp = new Uint8Array(LP * LP);
   for (let i = 0; i < n; i++) {
     const f = forme[oggetti[i * 4 + 3]], r = f.p * oggetti[i * 4 + 2] * kp;
     stampa(bp, LP, (oggetti[i * 4] + half) * kp, (oggetti[i * 4 + 1] + half) * kp, r, r, 1, 0, 0.85);
+    if (pausa && (i & 511) === 511 && stanco()) yield* pausa();
   }
   const piede = texturaCanale(bp, LP);
   // Sole: due array, uno mostrato e uno in lavorazione.
@@ -1168,10 +1196,12 @@ function creaOmbre(oggetti, forme, half) {
   const buf = [new Uint8Array(L * L), new Uint8Array(L * L)];
   const sole = texturaCanale(buf[0], L);
   let mostrato = 0, lavoro = null, disegnato = null;
-  function passo(dir) {
+  // `quanti`: oggetti da stampare in questa chiamata (prepara a pezzi); senza, la prima volta tutto e poi perFotogramma.
+  // Restituisce true se il lavoro è ancora in corso.
+  function passo(dir, quanti = 0) {
     if (!lavoro) {
-      if (dir.y < 0.03) return;
-      if (disegnato && disegnato.angleTo(dir) < OMBRE.rifaiGradi * Math.PI / 180) return;
+      if (dir.y < 0.03) return false;
+      if (disegnato && disegnato.angleTo(dir) < OMBRE.rifaiGradi * Math.PI / 180) return false;
       const b = buf[1 - mostrato];
       b.fill(0);
       const dx = -dir.x, dz = -dir.z, l = Math.hypot(dx, dz) || 1;
@@ -1179,7 +1209,8 @@ function creaOmbre(oggetti, forme, half) {
       lavoro = { b, i: 0, ux: dx / l, uz: dz / l, cot, dir: dir.clone() };
     }
     // La prima volta tutto subito (si è appena caricata la Scena); poi a pezzi, per non dare scatti.
-    const { b, ux, uz, cot } = lavoro, fine = disegnato ? Math.min(n, lavoro.i + OMBRE.perFotogramma) : n;
+    const { b, ux, uz, cot } = lavoro;
+    const fine = quanti ? Math.min(n, lavoro.i + quanti) : disegnato ? Math.min(n, lavoro.i + OMBRE.perFotogramma) : n;
     for (let i = lavoro.i; i < fine; i++) {
       const f = forme[oggetti[i * 4 + 3]], s = oggetti[i * 4 + 2];
       const sposta = f.h * s * cot, a = (f.r * s + f.v * s * cot) * ko, r = f.r * s * ko;
@@ -1194,15 +1225,28 @@ function creaOmbre(oggetti, forme, half) {
       disegnato = lavoro.dir;
       lavoro = null;
     }
+    return !!lavoro;
   }
   return { sole, piede, passo, oggetti: n };
 }
 
 export function creaVegetazione(pos, terrain = null, renderer = null) {
+  return finisci(creaVegetazioneAPezzi(pos, terrain, renderer, Infinity));
+}
+
+/**
+ * creaVegetazione a pezzi (passo 9 di M7): generatore che fa `yield` ogni ~`budget` ms e alla fine restituisce lo
+ * stesso oggetto, pronto ma non ancora in scena. Il caricamento sulla scheda (compileAsync, initTexture) resta a chi
+ * chiama. Nota: assegna subito al terreno gli attributi aSuolo e aCampi (prima del primo yield).
+ */
+export function* creaVegetazioneAPezzi(pos, terrain = null, renderer = null, budget = 2.5) {
   const t0 = performance.now();
+  let tPezzo = t0, attesa = 0;
+  const stanco = () => performance.now() - tPezzo > budget;
+  function* pausa() { const ty = performance.now(); yield; tPezzo = performance.now(); attesa += tPezzo - ty; }
   const oggetto = new THREE.Group();
   oggetto.name = 'vegetazione';
-  const modelli = creaModelli();
+  const modelli = modelliCondivisi();
 
   // Suolo: lettiera sotto il bosco e fango vicino all'acqua (shader del terreno, terrain.js).
   const superficie = terrain?.mesh.getObjectByName('terreno-superficie');
@@ -1226,12 +1270,13 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
   // Sagome: atlante (serve il renderer) e mesh delle sagome del blocco, comune a tutti gli alberi.
   let atlante = null, matSagome = null, sagomeBlocco = null;
   if (renderer) {
-    atlante = creaAtlante(renderer, modelli.sorgentiSagome);
+    atlante = atlanteCondiviso(renderer, modelli.sorgentiSagome);
     matSagome = materialeSagome(atlante.texture, uniDirada);
     const nAlberi = Object.values(pos.tipi).filter((t) => t.gruppo === 'alberi').reduce((s, t) => s + t.n, 0);
     sagomeBlocco = meshSagome(matSagome, nAlberi, 'vegetazione-sagome');
     oggetto.add(sagomeBlocco);
   }
+  if (stanco()) yield* pausa();
   const halfBlocco = terrain ? terrain.half : 1000;
   uniDirada.value.y = Math.log(SAGOME_DIRADA.bordo) / Math.log(SAGOME_DIRADA.da / halfBlocco) / 2;
 
@@ -1240,6 +1285,7 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
   for (const [nome, t] of Object.entries(pos.tipi)) {
     const livelli = modelli[nome];
     if (!livelli || !t.n) continue;
+    if (stanco()) yield* pausa();
     // Matrici e colori di tutte le istanze, calcolati una volta.
     const matrici = new Float32Array(t.n * 16), colori = new Float32Array(t.n * 3), xz = new Float32Array(t.n * 2);
     const varia = new Float32Array(t.n);
@@ -1273,6 +1319,7 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
         _c.setRGB(b * (1 + 0.12 * w), b * (1 + 0.03 * w), b * (1 - 0.12 * w));
       } else _c.setRGB(b, b, b).lerp(GIALLO, giallo * ((v * 5) % 1));
       colori[k * 3] = _c.r; colori[k * 3 + 1] = _c.g; colori[k * 3 + 2] = _c.b;
+      if ((k & 1023) === 1023 && stanco()) yield* pausa();
     }
     // Sagome per albero (livello lontano): posizione, lato e tessera.
     const lSagoma = livelli.findIndex((L) => L.sagoma);
@@ -1287,24 +1334,35 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
         const o = k * STRIDE, ti = tess[Math.floor(varia[k] * tess.length)];
         const alto = 0.72 + 0.56 * ((t.dati[o + 5] * 17.31) % 1);
         sag.set([t.dati[o], t.dati[o + 1], t.dati[o + 2], atlante.lato[ti] * t.dati[o + 3] * alto, ti], k * 5);
+        if ((k & 1023) === 1023 && stanco()) yield* pausa();
       }
     }
-    const mesh = livelli.map((L, li) => (L.sagoma ? [] : L.varianti).map((geo, vi) => {
-      // Il livello più lontano, se finisce a una distanza, fa crescere l'oggetto prima di quella distanza
-      const fine = li === livelli.length - 1 && Number.isFinite(L.fino) ? L.fino : null;
-      const m = new THREE.InstancedMesh(geo,
-        conVisuale(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: !!L.piatto }), uniVis, 'pieno', geo, fine), t.n);
-      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(t.n * 3), 3);
-      m.instanceColor.setUsage(THREE.DynamicDrawUsage);
-      m.frustumCulled = false;                 // le istanze coprono tutto il blocco
-      m.count = 0;
-      m.visible = false;
-      m.name = `vegetazione-${nome}-${L.fino}-${vi}`;
-      oggetto.add(m);
-      return m;
-    }));
+    if (stanco()) yield* pausa();
+    const mesh = [];
+    for (let li = 0; li < livelli.length; li++) {
+      const L = livelli[li], ml = [];
+      mesh.push(ml);
+      if (L.sagoma) continue;
+      for (let vi = 0; vi < L.varianti.length; vi++) {
+        const geo = L.varianti[vi];
+        // Il livello più lontano, se finisce a una distanza, fa crescere l'oggetto prima di quella distanza
+        const fine = li === livelli.length - 1 && Number.isFinite(L.fino) ? L.fino : null;
+        const m = new THREE.InstancedMesh(geo,
+          conVisuale(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: !!L.piatto }), uniVis, 'pieno', geo, fine), t.n);
+        m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(t.n * 3), 3);
+        m.instanceColor.setUsage(THREE.DynamicDrawUsage);
+        m.frustumCulled = false;                 // le istanze coprono tutto il blocco
+        m.count = 0;
+        m.visible = false;
+        m.name = `vegetazione-${nome}-${L.fino}-${vi}`;
+        oggetto.add(m);
+        ml.push(m);
+        if (stanco()) yield* pausa();
+      }
+    }
     tipi.push({ nome, n: t.n, livelli, mesh, matrici, colori, xz, varia, lSagoma, sag, caso });
+    if (stanco()) yield* pausa();
   }
 
   // Ombre finte e piede scuro nello shader del suolo (solo il mondo generato: materialeSuolo).
@@ -1313,12 +1371,16 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
   if (uniSuolo && terrain) {
     const nomi = Object.keys(FORMA_OMBRA), forme = nomi.map((k) => FORMA_OMBRA[k]);
     const lista = [];
-    nomi.forEach((nome, ti) => {
-      const t = pos.tipi[nome];
-      if (!t) return;
-      for (let k = 0; k < t.n; k++) lista.push(t.dati[k * STRIDE], t.dati[k * STRIDE + 2], t.dati[k * STRIDE + 3], ti);
-    });
-    ombre = creaOmbre(Float32Array.from(lista), forme, terrain.half);
+    for (let ti = 0; ti < nomi.length; ti++) {
+      const t = pos.tipi[nomi[ti]];
+      if (!t) continue;
+      for (let k = 0; k < t.n; k++) {
+        lista.push(t.dati[k * STRIDE], t.dati[k * STRIDE + 2], t.dati[k * STRIDE + 3], ti);
+        if ((k & 2047) === 2047 && stanco()) yield* pausa();
+      }
+    }
+    if (stanco()) yield* pausa();
+    ombre = yield* creaOmbre(Float32Array.from(lista), forme, terrain.half, stanco, pausa);
     uniSuolo.uOmbre.value = ombre.sole;
     uniSuolo.uPiede.value = ombre.piede;
     uniSuolo.uOmbreForza.value.set(0, OMBRE.piede);
@@ -1517,21 +1579,26 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
    */
   let lontano = null, msLontano = 0;
   function aggiungiLontano(carta, cx, cz, quota, stagione = 0) {
+    finisci(aggiungiLontanoAPezzi(carta, cx, cz, quota, stagione, Infinity));
+  }
+  /** aggiungiLontano a pezzi: `yield` ogni ~`budget` ms; alla fine le sagome lontane sono nell'oggetto. */
+  function* aggiungiLontanoAPezzi(carta, cx, cz, quota, stagione = 0, budget = 2.5) {
     if (!matSagome || !quota) return;
-    const b = boscoLontano(carta, cx, cz, halfBlocco, quota, stagione);
-    const t2 = performance.now();
+    const b = yield* boscoLontanoAPezzi(carta, cx, cz, halfBlocco, quota, stagione, budget);
+    let t2 = performance.now(), ms = 0;
     lontano = meshSagome(matSagome, b.n, 'vegetazione-sagome-lontane');
     const a = lontano.instanceMatrix.array, ta = lontano.geometry.attributes.aTessera.array;
     for (let k = 0; k < b.n; k++) {
       const o = k * 5, ti = b.dati[o + 4];
       scriviSagoma(a, k, b.dati[o], b.dati[o + 1], b.dati[o + 2], atlante.lato[ti] * b.dati[o + 3]);
       ta[k] = ti;
+      if ((k & 2047) === 2047 && performance.now() - t2 > budget) { ms += performance.now() - t2; yield; t2 = performance.now(); }
     }
     lontano.count = b.n; lontano.visible = b.n > 0;
     lontano.instanceMatrix.needsUpdate = true;
     lontano.geometry.attributes.aTessera.needsUpdate = true;
     oggetto.add(lontano);
-    msLontano = b.ms + performance.now() - t2;
+    msLontano = b.ms + ms + performance.now() - t2;
   }
 
   /** Istanze disegnate, chiamate e triangoli della vegetazione (F3). */
@@ -1546,10 +1613,21 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
       ciottoli: vicini.ciottolo.mesh.count };
   }
 
-  const collisioni = creaCollisioni(pos);
+  if (stanco()) yield* pausa();
+  const collisioni = yield* creaCollisioni(pos, stanco, pausa);
+  if (stanco()) yield* pausa();
   const conteggi = Object.fromEntries(Object.entries(pos.tipi).map(([k, t]) => [k, t.n]));
   return {
-    oggetto, aggiorna, statistiche, conteggi, aggiungiLontano,
+    oggetto, aggiorna, statistiche, conteggi, aggiungiLontano, aggiungiLontanoAPezzi,
+    /**
+     * Prima ombra del sole a pezzi (generatore, `yield` ogni ~`budget` ms), da chiamare prima di mostrare il blocco:
+     * altrimenti il primo aggiorna() la calcola tutta in un fotogramma. `dir`: direzione verso il sole (Vector3).
+     */
+    *preparaOmbre(dir, budget = 2.5) {
+      if (!ombre) return;
+      let t = performance.now();
+      while (ombre.passo(dir, 500)) if (performance.now() - t > budget) { yield; t = performance.now(); }
+    },
     /** Ostacolo per il cavaliere (stessa interfaccia delle mura del castello). */
     spingiFuori: collisioni.spingiFuori, ostacoli: collisioni.n,
     get lontano() { return lontano ? { n: lontano.count, ms: msLontano } : null; },
@@ -1567,6 +1645,6 @@ export function creaVegetazione(pos, terrain = null, renderer = null) {
     nascondiOmbre: () => { if (uniSuolo) uniSuolo.uOmbreForza.value.set(0, 0); },
     totale: Object.values(conteggi).reduce((s, v) => s + v, 0),
     msPosiziona: pos.ms, msCampi: pos.msCampi,
-    msCostruzione: performance.now() - t0,
+    msCostruzione: performance.now() - t0 - attesa,
   };
 }

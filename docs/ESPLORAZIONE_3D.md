@@ -1983,6 +1983,13 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      Tronco e rami curvi («stuzzicadenti incastrati»): `ramoCurvo`, tubo lungo una curva Catmull-Rom che si assottiglia;
      tronco con l'asse un po' storto, cime, rami e rametti in un pezzo solo con piccole pieghe a caso (`piega`); 3–6
      tratti entro 18 m, 2–4 fino a 50 m.
+     Livelli medi coerenti con i vicini («pali con ciuffi di cespuglio in cima», vista dall'alto oltre i 50 m): la
+     latifoglia media (50–200 m) aveva il verde a 5,8–13,8 m contro 2,3–9,5 del modello vicino, in 3 masse staccate;
+     ora 7 ottaedri che si toccano alla stessa altezza e larghezza (~64 triangoli come prima; `chioma` con `leggero` e
+     senza schegge). Pioppo di riva: cima corta e 8 rami ripidi (prima una cima nuda di ~9 m), medio con il verde da
+     ~3 m. Pino domestico rifatto (`pinoDomestico`): fusto storto che si apre in 2–3 branche, ombrello largo e piatto
+     con un gruppo di ciuffi su ogni branca e uno al centro (~1150 triangoli vicino, ~100 medio). Bosco fitto invariato
+     (763 000 contro 769 000 triangoli in headless, con le fasce di passaggio).
      Bosco fitto in headless: ~550 000 triangoli (prima delle chiome nuove 458 000): da misurare sulla scheda.
      *Case fuori dal borgo* (richiesta dell'utente: case isolate o a gruppetti di 2–3 in mezzo o a lato dei campi):
      `CASE_CAMPAGNA` / `caseCampagna(carta)`, siti deterministici per Carta (4–9 gruppi per rocca secondo la classe,
@@ -1991,6 +1998,13 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      niente siepi né muretti. Gli edifici li disegna chi fa le case (M7, passo 5): `pos.case` ha posizione e verso.
      Da fare: i campi negli anelli dell'orizzonte (ora solo nel blocco); il bordo della zona coltivata segue i
      triangoli del terreno (un po' seghettato).
+   - *A pezzi* (passo 9 di M7, blocco che segue il cavaliere): `posizionaVegetazioneAPezzi(o, budget)`,
+     `boscoLontanoAPezzi(…, budget)`, `creaVegetazioneAPezzi(pos, terrain, renderer, budget)` e, sull'oggetto,
+     `aggiungiLontanoAPezzi(…, budget)` e `preparaOmbre(dir, budget)`: generatori che fanno `yield` ogni ~`budget` ms
+     (2,5) e alla fine restituiscono lo stesso risultato delle versioni intere (che ora li eseguono fino in fondo;
+     verificato uguale, oggetto per oggetto). Modelli, atlante delle sagome e volumi della visuale si fanno una volta
+     sola e si condividono tra i blocchi (`userData.condivisa`: chi libera un blocco non ne chiama dispose). In
+     headless: pezzi ≤ ~4–5 ms; costruzione 3D da ~360 a ~95 ms (modelli già fatti).
    - *Scatti*: la ridistribuzione delle istanze (ogni 12 m) si fa a pezzi, al più ~1,5 ms per fotogramma, e mai nel
      fotogramma in cui si rifà l'erba vicina; erba, felci e ciottoli si rifanno uno per fotogramma. In headless nel
      bosco fitto, camminando 200 m: costo peggiore di un fotogramma da ~11 a ~5–6 ms (resta il calcolo dell'erba).

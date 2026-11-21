@@ -532,7 +532,24 @@ function densitaVertice(cp, pend, pf, distAcqua, x, z, semeBordo, D, i, coltivat
  * @returns {{ tipi: Object<string, {dati: Float32Array, n: number, gruppo: string}>, ms: number, msCampi: number }}
  */
 export function posizionaVegetazione(o) {
+  return finisci(posizionaVegetazioneAPezzi(o, Infinity));
+}
+
+/** Porta a termine un generatore «a pezzi» e ne restituisce il risultato. */
+export function finisci(g) {
+  for (;;) { const r = g.next(); if (r.done) return r.value; }
+}
+
+/**
+ * Stesso lavoro di posizionaVegetazione, a pezzi (passo 9 di M7, blocco che segue il cavaliere): un generatore che fa
+ * `yield` ogni ~`budget` ms di lavoro e alla fine restituisce (`return`) lo stesso risultato. `ms` conta solo il lavoro,
+ * non le pause tra un pezzo e l'altro. Con budget Infinity non si ferma mai (posizionaVegetazione).
+ */
+export function* posizionaVegetazioneAPezzi(o, budget = 2.5) {
   const t0 = performance.now();
+  let tPezzo = t0, attesa = 0;
+  const stanco = () => performance.now() - tPezzo > budget;
+  function* pausa() { const ty = performance.now(); yield; tPezzo = performance.now(); attesa += tPezzo - ty; }
   const { heights, cols, cell, cx, cz, copertura, seme } = o;
   const V = VEGETAZIONE, n = cols * cols, half = cell * (cols - 1) / 2;
   const H = (c, r) => heights[(r < 0 ? 0 : r >= cols ? cols - 1 : r) * cols + (c < 0 ? 0 : c >= cols ? cols - 1 : c)];
@@ -559,6 +576,7 @@ export function posizionaVegetazione(o) {
     }
   }
 
+  if (stanco()) yield* pausa();
   // Distanza (in celle, fino a 3) dai soli fiumi: rive e alvei con sassi e massi (non laghi e mare).
   const DF = V.fiume.fascia.length + 1;
   const distFiume = new Uint8Array(n).fill(DF);
@@ -580,6 +598,7 @@ export function posizionaVegetazione(o) {
     }
   }
 
+  if (stanco()) yield* pausa();
   // Densità per vertice.
   const D = {};
   for (const k of CAMPI) D[k] = new Float32Array(n);
@@ -596,9 +615,10 @@ export function posizionaVegetazione(o) {
       const x = cx - half + c * cell, z = cz - half + r * cell;
       copertura(_cop, x, z, heights[i], pend);
       densitaVertice(_cop, pend, pf, dist[i], x, z, semeBordo, D, i, coltivatoIn(luoghi, x, z, semeCampagna), distFiume[i]);
+      if ((c & 63) === 63 && stanco()) yield* pausa();
     }
   }
-  const msCampi = performance.now() - t0;
+  const msCampi = performance.now() - t0 - attesa;
 
   // Lettura dei campi in un punto locale: bilineare sui vertici; quota e pendenza sul triangolo disegnato.
   let _c = 0, _r = 0, _u = 0, _v = 0;
@@ -657,10 +677,13 @@ export function posizionaVegetazione(o) {
   const KC = CASE_CAMPAGNA;
   const caseQui = o.carta ? caseCampagna(o.carta).filter((k) => Math.abs(k.x - cx) < half + 60 && Math.abs(k.z - cz) < half + 60
     && oltreStrada(k.x, k.z) >= KC.strada) : [];
+  if (stanco()) yield* pausa();
   const dCasa = (X, Z) => { let m = Infinity; for (const k of caseQui) { const d = Math.hypot(X - k.x, Z - k.z); if (d < m) m = d; } return m; };
   if (caseQui.length) {
     for (let i = 0; i < n; i++) {
-      const r = (i / cols) | 0, c = i - r * cols, d = dCasa(cx - half + c * cell, cz - half + r * cell);
+      const r = (i / cols) | 0, c = i - r * cols;
+      if ((c & 63) === 0 && stanco()) yield* pausa();
+      const d = dCasa(cx - half + c * cell, cz - half + r * cell);
       if (d >= KC.aia[1]) continue;
       const f = smoothstep(KC.aia[0], KC.aia[1], d);
       for (const k of CAMPI) if (k !== 'campo' && k !== 'foresta' && k !== 'limite' && k !== 'conifera' && k !== 'pino'
@@ -668,6 +691,7 @@ export function posizionaVegetazione(o) {
     }
   }
 
+  if (stanco()) yield* pausa();
   const buffer = {};
   for (const t of TIPI) buffer[t.nome] = [];
   const emetti = (t, ix, iz, sm, lx, lz, y, fattoreScala) => {
@@ -677,7 +701,8 @@ export function posizionaVegetazione(o) {
   };
 
   // Una griglia del mondo di passo P: chiama f(ix, iz, X, Z, lx, lz, u) per ogni cella con il suo punto spostato.
-  const griglia = (P, sm, f) => {
+  // Generatore: si ferma tra una riga e l'altra quando il pezzo ha esaurito il tempo (si usa con yield*).
+  function* griglia(P, sm, f) {
     const i0 = Math.ceil((cx - half) / P) - 1, i1 = Math.floor((cx + half) / P);
     const j0 = Math.ceil((cz - half) / P) - 1, j1 = Math.floor((cz + half) / P);
     for (let iz = j0; iz <= j1; iz++) {
@@ -688,15 +713,17 @@ export function posizionaVegetazione(o) {
         const lx = X - cx, lz = Z - cz;
         if (lx < -half || lx > half || lz < -half || lz > half) continue;
         f(ix, iz, X, Z, lx, lz, u);
+        if ((ix & 127) === 127 && stanco()) yield* pausa();
       }
+      if (stanco()) yield* pausa();
     }
-  };
+  }
 
   const T = Object.fromEntries(TIPI.map((t) => [t.nome, t]));
   // Alberi: una griglia sola; la specie si sceglie per peso con un altro hash.
   const sA = derivaSeme(seme, 410);
   const chiome = new Float32Array(n);
-  griglia(V.passoAlberi, sA, (ix, iz, X, Z, lx, lz, u) => {
+  yield* griglia(V.passoAlberi, sA, (ix, iz, X, Z, lx, lz, u) => {
     trova(lx, lz);
     const p = campo(D.alberi);
     if (u >= p || !asciutta()) return;
@@ -722,11 +749,12 @@ export function posizionaVegetazione(o) {
     cespuglio: D.cespuglio, 'arbusto alto': D.alto, sterpo: D.sterpo, canne: D.canne,
     sasso: D.sasso, masso: D.masso, affioramento: D.affioramento, tronco: D.tronco, ramo: D.ramo,
   };
-  TIPI.forEach((t, k) => {
-    if (t.gruppo === 'alberi') return;
+  for (let k = 0; k < TIPI.length; k++) {
+    const t = TIPI[k];
+    if (t.gruppo === 'alberi') continue;
     const sm = derivaSeme(seme, 420 + k), A = regole[t.nome];
     const vegetale = t.gruppo !== 'rocce';
-    griglia(t.passo, sm, (ix, iz, X, Z, lx, lz, u) => {
+    yield* griglia(t.passo, sm, (ix, iz, X, Z, lx, lz, u) => {
       trova(lx, lz);
       if (u >= campo(A)) return;
       if (t.nome !== 'canne' && !asciutta()) return;
@@ -737,8 +765,9 @@ export function posizionaVegetazione(o) {
       if (vegetale ? !lontanoDaStrada(X, Z, ix, iz, sm) : oltreStrada(X, Z) < (t.nome === 'sasso' ? 0 : V.strada.massi)) return;
       emetti(t, ix, iz, sm, lx, lz, quota(), t.nome === 'masso' ? 1 + 1.2 * campo(D.frana) : 1);
     });
-  });
+  }
 
+  if (stanco()) yield* pausa();
   // Orientamento dei campi: lungo il verso del luogo più vicino con campagna (i solchi seguono il borgo).
   let campi = null, dMin = Infinity;
   for (const l of luoghi || []) {
@@ -782,6 +811,7 @@ export function posizionaVegetazione(o) {
       suolo[i * 4 + 3] = 1 - G.celle[dF] * smoothstep(G.soglia[0], G.soglia[1],
         fbm(cx - half + c * cell, cz - half + r * cell, sG, G.lunghezza, 2));
     }
+    if ((c & 63) === 63 && stanco()) yield* pausa();
   }
 
   // Coordinate dei campi per vertice (PARCELLE): q lungo e di traverso al verso del borgo, piegate; terza
@@ -795,6 +825,7 @@ export function posizionaVegetazione(o) {
     const vx = -campi.uz, vz = campi.ux;
     for (let i = 0; i < n; i++) {
       const r = (i / cols) | 0, c = i - r * cols, x = cx - half + c * cell, z = cz - half + r * cell;
+      if ((c & 63) === 0 && stanco()) yield* pausa();
       // Il vertice e gli 8 vicini: ogni triangolo che tocca un campo ha tutti i vertici calcolati.
       let serve = false;
       for (let dr = -1; dr <= 1 && !serve; dr++) for (let dc = -1; dc <= 1; dc++) {
@@ -898,6 +929,7 @@ export function posizionaVegetazione(o) {
     for (let jb = Math.floor((qy0 + ls * PC.strada.lato) / PC.banda[0]); jb * PC.banda[0] <= qy1 + ls * PC.strada.lato; jb++) {
       const W = PC.banda[0] / (2 + Math.floor(hashCampi(jb, 7) * PC.extra[0] / 256));
       for (let j = Math.round(jb * PC.banda[0] / W), jn = j + Math.round(PC.banda[0] / W); j < jn; j++) {
+        if (stanco()) yield* pausa();
         const hj = hashCampi(j, 3) / 255, L = PC.lungo[0][0] + PC.lungo[0][1] * hj, off = hj * PC.spostamento;
         for (let i = Math.floor((qx0 + off) / L); i * L - off <= qx1; i++) {
           const u0 = i * L - off;
@@ -924,10 +956,11 @@ export function posizionaVegetazione(o) {
     }
   }
 
+  if (stanco()) yield* pausa();
   // Massi erratici nei prati (non nel bosco, nei campi, vicino a strade, case e terrapieni).
   {
     const ER = V.erratici, sR = derivaSeme(seme, 462);
-    griglia(ER.passo, sR, (ix, iz, X, Z, lx, lz, u) => {
+    yield* griglia(ER.passo, sR, (ix, iz, X, Z, lx, lz, u) => {
       if (u >= ER.probabilita) return;
       trova(lx, lz);
       if (!asciutta() || pendenzaFine() > 22 || campo(D.foresta) > 0.3 || campo(D.campo) > 0.05 || campo(D.erba) < 0.05) return;
@@ -940,7 +973,7 @@ export function posizionaVegetazione(o) {
   // Alberi lungo le strade: a tratti, fuori dal bosco (lì ci sono già), all'asciutto, sotto il limite degli alberi.
   if (o.carta?.strade) {
     const SR = V.stradaAlberi, sR = derivaSeme(seme, 463);
-    griglia(SR.passo, sR, (ix, iz, X, Z, lx, lz, u) => {
+    yield* griglia(SR.passo, sR, (ix, iz, X, Z, lx, lz, u) => {
       if (u >= SR.probabilita) return;
       const m = oltreStrada(X, Z);
       if (m < SR.banda[0] || m > SR.banda[1] || fbm(X, Z, sR ^ 0x7f4a7c15, SR.lunghezza, 1) < SR.soglia) return;
@@ -956,7 +989,7 @@ export function posizionaVegetazione(o) {
   // Pietre nell'alveo dei fiumi (non laghi né mare): sul fondo, solo dove affiorano o restano a pelo d'acqua.
   if (o.acqua) {
     const A = V.fiume.alveo, sA = derivaSeme(seme, 460), F = o.acqua.fiume, Lg = o.acqua.lago;
-    griglia(A.passo, sA, (ix, iz, X, Z, lx, lz, u) => {
+    yield* griglia(A.passo, sA, (ix, iz, X, Z, lx, lz, u) => {
       trova(lx, lz);
       const i = _r * cols + _c;
       // I fiumi sono larghi uno o due vertici: il pelo è la media dei vertici bagnati della cella, e il punto è
@@ -990,6 +1023,7 @@ export function posizionaVegetazione(o) {
   for (const t of TIPI) {
     const b = buffer[t.nome];
     tipi[t.nome] = { dati: Float32Array.from(b), n: b.length / STRIDE, gruppo: t.gruppo };
+    if (stanco()) yield* pausa();
   }
   /**
    * Erba, felci e ciottoli in un cerchio attorno a (lx, lz) locali, raggio per tipo ({erba, felce, ciottolo}) o unico: stesse regole (griglie del mondo, hash) del resto,
@@ -1031,7 +1065,7 @@ export function posizionaVegetazione(o) {
     return esito;
   }
 
-  return { tipi, ms: performance.now() - t0, msCampi, suolo, campi, aCampi, case: caseQui, erbaAttorno };
+  return { tipi, ms: performance.now() - t0 - attesa, msCampi, suolo, campi, aCampi, case: caseQui, erbaAttorno };
 }
 
 // ─── Bosco lontano (sagome negli anelli dell'orizzonte) ──────────────────
@@ -1061,7 +1095,15 @@ export const BOSCO_LONTANO = {
  * @returns {{ dati: Float32Array, n: number, ms: number }}  per albero: x, quota, z (locali), scala, tessera (SAGOME)
  */
 export function boscoLontano(carta, cx, cz, half, quota, stagione = 0) {
+  return finisci(boscoLontanoAPezzi(carta, cx, cz, half, quota, stagione, Infinity));
+}
+
+/** boscoLontano a pezzi (come posizionaVegetazioneAPezzi): `yield` ogni ~`budget` ms, alla fine lo stesso risultato. */
+export function* boscoLontanoAPezzi(carta, cx, cz, half, quota, stagione = 0, budget = 2.5) {
   const t0 = performance.now();
+  let tPezzo = t0, attesa = 0;
+  const stanco = () => performance.now() - tPezzo > budget;
+  function* pausa() { const ty = performance.now(); yield; tPezzo = performance.now(); attesa += tPezzo - ty; }
   const B = BOSCO_LONTANO, G = B.griglia, R = B.raggio;
   const copertura = coperturaMondo(carta, stagione), semeBordo = derivaSeme(carta.seme, 401);
   const semeCampagna = derivaSeme(carta.seme, 402);
@@ -1074,6 +1116,7 @@ export function boscoLontano(carta, cx, cz, half, quota, stagione = 0) {
       const h = Math.max(Math.abs(x), Math.abs(z)) < half ? NaN : quota(x, z);
       H[r * ng + c] = h;
     }
+    if (stanco()) yield* pausa();
   }
   const D = {};
   for (const k of CAMPI) D[k] = new Float32Array(1);
@@ -1095,6 +1138,7 @@ export function boscoLontano(carta, cx, cz, half, quota, stagione = 0) {
         coltivatoIn(carta.luoghi, cx + x, cz + z, semeCampagna));
       alb[i] = D.alberi[0]; con[i] = D.conifera[0]; pin[i] = D.pino[0]; sec[i] = D.secco[0]; lim[i] = D.limite[0];
     }
+    if (stanco()) yield* pausa();
   }
   const campo = (A, x, z) => {
     let fx = (x + R) / G, fz = (z + R) / G;
@@ -1133,6 +1177,7 @@ export function boscoLontano(carta, cx, cz, half, quota, stagione = 0) {
         const scala = eta * (0.55 + 0.45 * campo(lim, x, z));
         out.push(x, y, z, scala, tessera);
       }
+      if (stanco()) yield* pausa();
     }
   }
   // Fascia alberata lungo i fiumi anche da lontano (richiesta dell'utente: «a grandi linee, una fascia alberata»):
@@ -1144,6 +1189,7 @@ export function boscoLontano(carta, cx, cz, half, quota, stagione = 0) {
     const sF = derivaSeme(carta.seme, 471);
     for (const pz of tracciatiFiumi(carta, cx, cz, half, false, R)) {
       for (let k = 0; k + 7 < pz.length; k += 4) {
+        if (stanco()) yield* pausa();
         const ax = pz[k], az = pz[k + 1], bx = pz[k + 4], bz = pz[k + 5], w = pz[k + 3];
         const lun = Math.hypot(bx - ax, bz - az);
         if (lun < 1e-3) continue;
@@ -1172,6 +1218,6 @@ export function boscoLontano(carta, cx, cz, half, quota, stagione = 0) {
       }
     }
   }
-  return { dati: Float32Array.from(out), n: out.length / 5, ms: performance.now() - t0 };
+  return { dati: Float32Array.from(out), n: out.length / 5, ms: performance.now() - t0 - attesa };
 }
 
