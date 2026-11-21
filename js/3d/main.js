@@ -25,7 +25,7 @@ import { distanzaStrada } from '../mondo/strade.js';
 import { posizionaVegetazione, coperturaMondo, coperturaTavullia } from '../mondo/vegetazione.js';
 import { creaVegetazione } from './vegetazione3d.js';
 import { semeDaTesto } from '../mondo/rumore.js';
-import { creaProfilatore, creaPercorso, GRUPPI, BUDGET_GPU, budgetDi } from './prestazioni.js';
+import { creaProfilatore, creaPercorso, GRUPPI, BUDGET_GPU, budgetDi, creaQualita } from './prestazioni.js';
 
 // Nebbia sulla distanza vera dalla camera, non sulla profondità lungo l'asse di vista (come fa Three.js):
 // con la profondità, un monte al bordo dello schermo riceveva meno nebbia e spariva girandosi verso di lui.
@@ -75,12 +75,28 @@ const renderer = new THREE.WebGLRenderer({
   logarithmicDepthBuffer: PROFONDITA === 'log', reversedDepthBuffer: PROFONDITA === 'invertita',
 });
 const profilatore = creaProfilatore(renderer);   // tempi GPU/CPU (docs/PRESTAZIONI.md, passo 1)
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(COLORE_CIELO);
 scene.fog = new THREE.Fog(COLORE_CIELO, NEBBIA[0], NEBBIA[1]);
+
+// Qualità (F2, ?qualita=basso|medio|alto, ricordata nel browser) e risoluzione adattiva: prestazioni.js.
+/** Micro-rilievo di prato e neve nello shader del suolo: spento nella qualità bassa. */
+function applicaRilievo(acceso, radice = scene) {
+  radice.traverse((o) => {
+    const m = o.material;
+    if (!o.isMesh || m?.customProgramCacheKey?.() !== 'suolo-mondo') return;
+    const d = { ...(m.defines || {}) };
+    if (acceso) delete d.SENZA_RILIEVO; else d.SENZA_RILIEVO = '';
+    m.defines = d;
+    m.needsUpdate = true;
+  });
+}
+const qualita = creaQualita(renderer, profilatore, PARAMETRI.get('qualita') || (() => {
+  try { return localStorage.getItem('kd-qualita'); } catch { return null; }
+})() || 'medio', applicaRilievo);
+qualita.imposta(qualita.chiave);
 
 const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.2, LONTANO);
 
@@ -530,6 +546,8 @@ async function caricaScena(desc) {
     // Colore del blocco in una texture (docs/PRESTAZIONI.md, passo 3): dopo la vegetazione, che aggiunge al terreno
     // l'attributo aSuolo (lettiera sotto il bosco, fango vicino all'acqua) letto dalla cottura.
     msCottura = cuociSuolo(renderer, terrain);
+    // I materiali nuovi nascono con il rilievo; il terreno qui non è ancora nella scena, si cerca in lui.
+    if (qualita.chiave === 'basso') applicaRilievo(false, terrain.mesh);
   }
   if (desc.tipo === 'tavullia') {
     // Profilo fisso di collina temperata; niente vegetazione sul colle del castello e sulla rampa.
@@ -756,7 +774,7 @@ async function init() {
 
   // Per ispezione dalla console del browser (Knight, Calendar, Save sono comunque globali)
   window.kd = {
-    scene, camera, cam, controls, suolo, Knight, Calendar, Save, renderer,
+    scene, camera, cam, controls, suolo, Knight, Calendar, Save, renderer, qualita,
     get terrain() { return terrain; }, get knight() { return knight; }, get castle() { return castle; },
     get carta() { return carta; }, get scena() { return scenaAttuale; }, get orizzonte() { return orizzonte; },
     get rocche() { return rocche; },
@@ -766,7 +784,7 @@ async function init() {
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no'
     + ' · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: Carta (clic: vai lì)'
-    + ' · F3: info · F8: nuova partita',
+    + ' · F2: qualità · F3: info · F8: nuova partita',
   'aiuto');
 }
 
@@ -918,6 +936,10 @@ window.addEventListener('keydown', (e) => {
   } else if (e.code === 'F4' && !fpsEl.hidden) {
     e.preventDefault();
     applicaProva((provaPrestazioni + 1) % PROVE_PRESTAZIONI.length);
+  } else if (e.code === 'F2') {
+    e.preventDefault();
+    qualita.successiva();
+    messaggio(`Qualità ${qualita.nome} (F2 per cambiare)`);
   } else if (e.code === 'F9' && !fpsEl.hidden) {
     e.preventDefault();
     avviaPercorso();
@@ -936,7 +958,7 @@ function applicaProva(n) {
   _materialiSuolo.clear();
   const rocchePresenti = [castle, ...rocche].filter(Boolean).map((r) => r.object);
   for (const o of [vegetazione?.oggetto, orizzonte?.oggetto, ...rocchePresenti]) if (o) o.visible = true;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  qualita.azzeraAdattiva();
   provaPrestazioni = n;
   switch (n) {
     case 1: break;                         // «misura per gruppi»: cambia solo il modo di disegno (frame)
@@ -951,7 +973,7 @@ function applicaProva(n) {
     case 3: if (vegetazione) vegetazione.oggetto.visible = false; break;
     case 4: if (orizzonte) orizzonte.oggetto.visible = false; break;
     case 5: for (const o of rocchePresenti) o.visible = false; break;
-    case 6: renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2) * 0.6); break;
+    case 6: renderer.setPixelRatio(qualita.scala * 0.6); break;
   }
 }
 
@@ -984,6 +1006,7 @@ let provaAutomatica = PROVA_PRESTAZIONI;
 let attesaProva = 0;
 function avviaPercorso() {
   if (!knight || percorso) return;
+  qualita.azzeraAdattiva();               // misure confrontabili: risoluzione piena del preset, ferma durante il giro
   if (modoCamera === 'libera') cambiaModoCamera();
   const k = knight.stato;
   percorso = creaPercorso({ x: k.x, y: k.y, z: k.z, direzione: k.direzione });
@@ -1002,6 +1025,7 @@ function fineDelPercorso() {
     `timer GPU: ${P.timerGPU ? 'sì' : 'no'} · profondità invertita possibile: ${P.clipControl ? 'sì' : 'no'}`
       + ` · MSAA ${P.campioniMSAA}× · profondità: ${P.profonditaLog ? 'logaritmica' : P.profonditaInvertita ? 'invertita' : 'normale'}`
       + ` · ${buf.x}×${buf.y} pixel`,
+    `qualità: ${qualita.nome} · risoluzione ×${fmt(qualita.scala, 2)}`,
     `scena: ${scenaAttuale?.tipo === 'mondo' ? `seme ${carta?.seme}, centro ${scenaAttuale.cx}, ${scenaAttuale.cz}` : scenaAttuale?.tipo}`
       + ` · vegetazione ${vegetazioneVisibile ? 'accesa' : 'spenta'}`,
     st ? `FPS medio ${fmt(st.fps, 1)} (${fmt(st.msMedio, 1)} ms) · 1% peggiori ${fmt(st.fps1, 1)} FPS`
@@ -1121,6 +1145,8 @@ function aggiornaPannello(now) {
   const P = profilatore.info;
   testo += `\nscheda: ${P.scheda}\n  timer GPU: ${P.timerGPU ? 'sì' : 'no'} · profondità invertita possibile: ${P.clipControl ? 'sì' : 'no'}`
     + ` · MSAA ${P.campioniMSAA}× · profondità: ${P.profonditaLog ? 'logaritmica' : P.profonditaInvertita ? 'invertita' : 'normale'}`;
+  testo += `\nqualità: ${qualita.nome} (F2) · risoluzione ×${fmt(qualita.scala, 2)}`
+    + (qualita.adatta < 1 ? ` (adattiva ×${fmt(qualita.adatta, 2)})` : '');
   testo += `\nCPU: logica ${fmt(ri.msLogica, 1)} ms · invio comandi ${fmt(ri.msInvio, 1)} ms`;
   if (msCottura != null) testo += ` · suolo cotto in ${fmt(msCottura)} ms`;
   if (!P.timerGPU) testo += '\nGPU: timer non disponibili su questa scheda o browser (usare F4)';
@@ -1264,6 +1290,7 @@ function frame(now) {
   }
   aggiornaPannello(now);
   tt = segna('pannello F3', tt);
+  qualita.aggiorna(dtReale, !!percorso || provaPrestazioni !== 0);
   infoFrame.msLogica = performance.now() - t0;
   const modoDisegno = percorso ? percorso.modo : provaPrestazioni === 1 ? 'gruppi' : 'normale';
   const r = profilatore.disegna(scene, camera, modoDisegno, gruppoDi);

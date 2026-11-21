@@ -517,8 +517,13 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
   {
     // Cumuli larghi (~8 m), onde del vento allungate, grana fine (~1 m): inclinano la normale dove c'è neve.
+    // SENZA_RILIEVO: qualità «bassa» (prestazioni.js): niente micro-rilievo di neve e prato.
+#ifdef SENZA_RILIEVO
+    float wNeve = 0.0;
+#else
     float wNeve = kdNeve * uDettaglioNeve.x
       * (1.0 - smoothstep(uDettaglioNeve.y, uDettaglioNeve.z, length(vViewPosition)));
+#endif
     if (wNeve > 0.001) {
       const float e = 0.12;
       vec2 p = vMondo;
