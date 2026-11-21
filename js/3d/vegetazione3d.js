@@ -131,8 +131,11 @@ function cono(r, h, lati, y, scuro, chiaro, { seme = 1, frastaglio = 0.15, x = 0
  * mescolate a quelle dei ciuffi: niente aspetto a palle sfaccettate. Dentro e sotto più scuro (ombra delle foglie).
  */
 function chioma({ x = 0, y, z = 0, a, b, c = a, ciuffi, raggio, dettaglio = 1, scuro, chiaro, rnd, morbido = 0.75,
-  pieno = 0.55, sotto = 0.35 }) {
+  pieno = 0.55, sotto = 0.35, schegge = 0, inviluppo = null }) {
   const parti = [];
+  // Luce e colore secondo l'inviluppo dell'intera chioma (se dato): un albero fatto di gruppi di foglie si illumina
+  // come una chioma sola, non come tante palle.
+  const E = inviluppo || { x, y, z, a, b, c };
   const ca = new THREE.Color(scuro), cb = new THREE.Color(chiaro), tinta = new THREE.Color();
   for (let k = 0; k < ciuffi; k++) {
     // Direzione a caso; meno ciuffi sotto (la chioma è più piena in alto e ai lati).
@@ -143,23 +146,42 @@ function chioma({ x = 0, y, z = 0, a, b, c = a, ciuffi, raggio, dettaglio = 1, s
     const t = pieno + (1 - pieno) * rnd();
     const px = x + dx * a * t, py = y + dy * b * t, pz = z + dz * c * t;
     const r = raggio[0] + (raggio[1] - raggio[0]) * rnd();
-    const geo = new THREE.IcosahedronGeometry(r, dettaglio);
-    const p = geo.attributes.position, seme = rnd() * 10;
-    for (let i = 0; i < p.count; i++) {
-      _v.set(p.getX(i), p.getY(i), p.getZ(i));
-      const f = bozza(_v.x / r, _v.y / r, _v.z / r, seme, 0.22);
-      p.setXYZ(i, _v.x * f + px, _v.y * f * 0.85 + py, _v.z * f + pz);
+    let geo;
+    if (schegge) {
+      // Ciuffo a schegge (richiesta dell'utente: niente «marshmallow di verde attaccati ai rami», senza arrivare alle
+      // foglie singole): `schegge` tetraedri appiattiti orientati a caso dentro il ciuffo, contorno frastagliato.
+      const pezzi = [];
+      for (let j = 0; j < schegge; j++) {
+        const g = new THREE.TetrahedronGeometry(r * (0.42 + 0.28 * rnd()));
+        g.scale(1, 0.45 + 0.25 * rnd(), 1);
+        g.rotateX(rnd() * 6.283); g.rotateY(rnd() * 6.283); g.rotateZ(rnd() * 6.283);
+        let qx, qy, qz, q2;
+        do { qx = rnd() * 2 - 1; qy = rnd() * 2 - 1; qz = rnd() * 2 - 1; q2 = qx * qx + qy * qy + qz * qz; } while (q2 > 1);
+        g.translate(px + qx * r * 0.7, py + qy * r * 0.55, pz + qz * r * 0.7);
+        g.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 3), 3));
+        pezzi.push(g);
+      }
+      geo = unisci(pezzi);
+    } else {
+      geo = new THREE.IcosahedronGeometry(r, dettaglio);
+      const p0 = geo.attributes.position, seme = rnd() * 10;
+      for (let i = 0; i < p0.count; i++) {
+        _v.set(p0.getX(i), p0.getY(i), p0.getZ(i));
+        const f = bozza(_v.x / r, _v.y / r, _v.z / r, seme, 0.22);
+        p0.setXYZ(i, _v.x * f + px, _v.y * f * 0.85 + py, _v.z * f + pz);
+      }
     }
+    const p = geo.attributes.position;
     geo.computeVertexNormals();
     const nf = geo.attributes.normal;
     for (let i = 0; i < p.count; i++) {
-      _n.set((p.getX(i) - x) / (a * a), (p.getY(i) - y) / (b * b), (p.getZ(i) - z) / (c * c)).normalize().multiplyScalar(morbido);
+      _n.set((p.getX(i) - E.x) / (E.a * E.a), (p.getY(i) - E.y) / (E.b * E.b), (p.getZ(i) - E.z) / (E.c * E.c)).normalize().multiplyScalar(morbido);
       _v.set(nf.getX(i), nf.getY(i), nf.getZ(i)).multiplyScalar(1 - morbido).add(_n).normalize();
       nf.setXYZ(i, _v.x, _v.y, _v.z);
     }
     tinta.setRGB(1 + (rnd() - 0.5) * 0.16, 1 + (rnd() - 0.5) * 0.12, 1 + (rnd() - 0.5) * 0.16);
     parti.push(colora(geo, (col, qx, qy, qz) => {
-      const ex = (qx - x) / a, ey = (qy - y) / b, ez = (qz - z) / c;
+      const ex = (qx - E.x) / E.a, ey = (qy - E.y) / E.b, ez = (qz - E.z) / E.c;
       const fuori = Math.min(1.15, Math.sqrt(ex * ex + ey * ey + ez * ez));   // 0 al centro, ~1 sulla superficie
       const alto = Math.min(1, Math.max(0, (ey + 1) / 2));
       col.copy(ca).lerp(cb, alto * 0.8 + 0.2 * fuori).multiplyScalar(0.62 + 0.38 * fuori).multiply(tinta);
@@ -218,7 +240,7 @@ function ramoVerso(x0, y0, z0, x1, y1, z1, r0, r1, colore, lati = 5) {
  * b, c) con vuoti in mezzo da cui si vedono cielo e rami. Gli stessi triangoli di una chioma piena (masse × ciuffi).
  */
 function chiomaAMasse({ x = 0, y, z = 0, a, b, c = a, masse, ciuffi, raggio, dettaglio = 1, scuro, chiaro, rnd,
-  da = null, colRamo = COL.corteccia, rRamo = 0.1, alto = 0.25 }) {
+  da = null, colRamo = COL.corteccia, rRamo = 0.1, alto = 0.25, schegge = 0 }) {
   const parti = [], centri = [];
   for (let m = 0, tent = 0; m < masse && tent < 200; tent++) {
     let dx = rnd() * 2 - 1, dy = rnd() * 1.3 - 0.3 + alto, dz = rnd() * 2 - 1;
@@ -231,7 +253,7 @@ function chiomaAMasse({ x = 0, y, z = 0, a, b, c = a, masse, ciuffi, raggio, det
     if (centri.some(([qx, qy, qz, qa]) => Math.hypot(px - qx, py - qy, pz - qz) < 0.95 * (ma + qa))) continue;
     centri.push([px, py, pz, ma]);
     parti.push(...chioma({ x: px, y: py, z: pz, a: ma, b: ma * (0.65 + 0.3 * rnd()), c: ma * (0.8 + 0.35 * rnd()),
-      ciuffi, raggio, dettaglio, scuro, chiaro, rnd, pieno: 0.35, sotto: 0.3, morbido: 0.6 }));
+      ciuffi, raggio, dettaglio, scuro, chiaro, rnd, pieno: 0.35, sotto: 0.3, morbido: 0.7, schegge, inviluppo: { x, y, z, a, b, c } }));
     if (da) parti.push(ramoVerso(da[0] + (rnd() - 0.5) * 0.3, da[1] + rnd() * 0.8, da[2] + (rnd() - 0.5) * 0.3,
       x + (px - x) * 0.85, py - ma * 0.4, z + (pz - z) * 0.85, rRamo, rRamo * 0.35, colRamo, 4));
     m++;
@@ -250,28 +272,45 @@ function chiomaAMasse({ x = 0, y, z = 0, a, b, c = a, masse, ciuffi, raggio, det
 function ramificato({ fusto: hF, cima, rami: nR, parte, inc, lungo, r0, colRamo, ciuffi, rCiuffo, raggio, dettaglio,
   scuro, chiaro, rnd, piatto = 1 }) {
   const parti = [];
+  const inviluppo = { x: 0, y: hF + cima * 0.45, z: 0, a: lungo * 0.95, b: cima * 0.75 + 1, c: lungo * 0.95 };
   const foglie = (x, y, z, k = 1) => parti.push(...chioma({ x, y, z, a: rCiuffo * k * (0.8 + 0.4 * rnd()),
     b: rCiuffo * k * piatto * (0.65 + 0.3 * rnd()), c: rCiuffo * k * (0.8 + 0.4 * rnd()), ciuffi, raggio, dettaglio,
-    scuro, chiaro, rnd, pieno: 0.3, sotto: 0.35, morbido: 0.55 }));
+    scuro, chiaro, rnd, pieno: 0.3, sotto: 0.35, morbido: 0.7, schegge: dettaglio ? 12 : 5, inviluppo }));
   // Cima: prosegue il fusto, un po' storta, con ciuffetti lungo tutta la sua lunghezza.
   const tx = (rnd() - 0.5) * 0.8, tz = (rnd() - 0.5) * 0.8;
   parti.push(ramoVerso(0, hF - 0.3, 0, tx, hF + cima, tz, r0 * 0.75, r0 * 0.2, colRamo, 5));
-  for (const t of [0.45, 0.75, 1.0]) foglie(tx * t + (rnd() - 0.5) * 0.6, hF + cima * t, tz * t + (rnd() - 0.5) * 0.6, t === 1 ? 1.1 : 0.85);
+  for (const t of [0.3, 0.55, 0.8, 1.0]) foglie(tx * t + (rnd() - 0.5) * 0.8, hF + cima * t, tz * t + (rnd() - 0.5) * 0.8, t === 1 ? 1.2 : 1.0);
+  // Rami principali (richiesta dell'utente: «rami troppo fuori dal tronco, cadrebbero per gravità; direzioni e lunghezze
+  // diverse»): direzioni irregolari (angolo aureo più caso), lunghezze molto diverse, due tratti con il secondo che
+  // piega in su; rametti 1–3 con angoli e lunghezze diverse; ogni punta coperta di foglie.
+  let an = rnd() * Math.PI * 2;
   for (let k = 0; k < nR; k++) {
-    const an = (k / nR) * Math.PI * 2 + (rnd() - 0.5) * 1.1;
-    const y0 = hF * (parte[0] + (parte[1] - parte[0]) * ((k * 0.618 + rnd() * 0.3) % 1));
-    const el = (inc[0] + (inc[1] - inc[0]) * rnd()) * Math.PI / 180, L = lungo * (0.75 + 0.5 * rnd());
-    const ex = Math.cos(an) * Math.cos(el) * L, ey = y0 + Math.sin(el) * L, ez = Math.sin(an) * Math.cos(el) * L;
-    parti.push(ramoVerso(0, y0, 0, ex, ey, ez, r0 * 0.55, r0 * 0.15, colRamo, 4));
-    // Ciuffetti lungo il ramo e in punta.
-    for (const t of [0.55, 1.0]) if (t === 1 || rnd() < 0.75) foglie(ex * t, y0 + (ey - y0) * t + 0.15, ez * t, t === 1 ? 1.0 : 0.75);
-    // Due rametti, verso fuori e un po' in su, con ciuffo in punta.
-    for (let j = 0; j < 2; j++) {
-      const t = 0.4 + 0.35 * j + rnd() * 0.1, bx = ex * t, by = y0 + (ey - y0) * t, bz = ez * t;
-      const a2 = an + (j ? 1 : -1) * (0.5 + 0.6 * rnd()), l2 = L * (0.35 + 0.25 * rnd());
-      const cx2 = bx + Math.cos(a2) * l2, cy2 = by + l2 * (0.2 + 0.5 * rnd()), cz2 = bz + Math.sin(a2) * l2;
-      parti.push(ramoVerso(bx, by, bz, cx2, cy2, cz2, r0 * 0.18, r0 * 0.06, colRamo, 3));
-      foglie(cx2, cy2 + 0.1, cz2, 0.8);
+    an += 2.39996 + (rnd() - 0.5) * 1.2;
+    const y0 = hF * (parte[0] + (parte[1] - parte[0]) * ((k * 0.618 + rnd() * 0.35) % 1));
+    const el = (inc[0] + (inc[1] - inc[0]) * rnd()) * Math.PI / 180, L = lungo * (0.45 + 0.7 * rnd());
+    const ca = Math.cos(an), sa = Math.sin(an);
+    // Primo tratto (60 %) e secondo che sale di 15–35° in più.
+    const L1 = L * 0.6, L2 = L * 0.45, el2 = Math.min(1.45, el + (0.26 + 0.35 * rnd()));
+    const mx = ca * Math.cos(el) * L1, my = y0 + Math.sin(el) * L1, mz = sa * Math.cos(el) * L1;
+    const ex = mx + ca * Math.cos(el2) * L2, ey = my + Math.sin(el2) * L2, ez = mz + sa * Math.cos(el2) * L2;
+    const rr = r0 * (0.32 + 0.12 * rnd());
+    parti.push(ramoVerso(0, y0, 0, mx, my, mz, rr, rr * 0.6, colRamo, 4));
+    parti.push(ramoVerso(mx, my, mz, ex, ey, ez, rr * 0.6, rr * 0.2, colRamo, 4));
+    // Foglie lungo tutto il ramo (richiesta dell'utente: nel bosco «troppi buchi che fanno vedere i rami»): nel primo
+    // tratto, alla piega e in punta; vuoti più piccoli.
+    foglie(mx * 0.55, y0 + (my - y0) * 0.55 + 0.25, mz * 0.55, 0.75);
+    foglie(mx, my + 0.2, mz, 0.9);
+    foglie(ex, ey + 0.1, ez, 1.1);
+    const nRam = 1 + Math.floor(rnd() * 3);
+    for (let j = 0; j < nRam; j++) {
+      const t = 0.3 + 0.6 * rnd(), seg = t < 0.6;
+      const bx = seg ? mx * t / 0.6 : mx + (ex - mx) * (t - 0.6) / 0.4, by = seg ? y0 + (my - y0) * t / 0.6 : my + (ey - my) * (t - 0.6) / 0.4;
+      const bz = seg ? mz * t / 0.6 : mz + (ez - mz) * (t - 0.6) / 0.4;
+      const a2 = an + (rnd() < 0.5 ? -1 : 1) * (0.4 + 0.9 * rnd()), l2 = L * (0.2 + 0.35 * rnd());
+      const e2 = (-0.15 + 0.85 * rnd());                       // da un po' in giù a molto in su
+      const cx2 = bx + Math.cos(a2) * Math.cos(e2) * l2, cy2 = by + Math.sin(e2) * l2, cz2 = bz + Math.sin(a2) * Math.cos(e2) * l2;
+      parti.push(ramoVerso(bx, by, bz, cx2, cy2, cz2, rr * 0.35, rr * 0.1, colRamo, 3));
+      foglie(cx2, cy2 + 0.1, cz2, 0.6 + 0.35 * rnd());
     }
   }
   return parti;
@@ -399,25 +438,25 @@ function creaModelli() {
   // Alberi ramificati: foglie lungo i rami a tutte le altezze, vuoti e rami visibili (≈ 30–34 ciuffi come prima).
   const quercia = (det) => { const r = casuale(311); return unisci([
     fusto(0.46, 0.3, 4.2, 8, COL.corteccia),
-    ...ramificato({ fusto: 4.2, cima: 4.4, rami: 5, parte: [0.55, 1.0], inc: [18, 42], lungo: 4.4, r0: 0.5,
-      colRamo: COL.corteccia, ciuffi: 2, rCiuffo: 1.05, raggio: [0.42, 0.68], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r, piatto: 0.85 }),
+    ...ramificato({ fusto: 4.2, cima: 4.6, rami: 5, parte: [0.55, 1.0], inc: [32, 62], lungo: 4.6, r0: 0.5,
+      colRamo: COL.corteccia, ciuffi: 2, rCiuffo: 1.25, raggio: [0.52, 0.85], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r, piatto: 0.85 }),
   ]); };
   const faggio = (det) => { const r = casuale(312); return unisci([
     fusto(0.36, 0.22, 4.6, 8, COL.cortecciaChiara),
-    ...ramificato({ fusto: 4.6, cima: 6.2, rami: 5, parte: [0.5, 1.0], inc: [40, 65], lungo: 3.6, r0: 0.4,
-      colRamo: COL.cortecciaChiara, ciuffi: 2, rCiuffo: 0.95, raggio: [0.4, 0.64], dettaglio: det, scuro: FF[0], chiaro: FF[1], rnd: r }),
+    ...ramificato({ fusto: 4.6, cima: 6.2, rami: 5, parte: [0.5, 1.0], inc: [45, 75], lungo: 3.8, r0: 0.4,
+      colRamo: COL.cortecciaChiara, ciuffi: 2, rCiuffo: 1.15, raggio: [0.5, 0.8], dettaglio: det, scuro: FF[0], chiaro: FF[1], rnd: r }),
   ]); };
   const castagno = (det) => { const r = casuale(313); return unisci([
     fusto(0.42, 0.26, 3.8, 8, COL.corteccia, { inclinaZ: -0.05 }),
-    ...ramificato({ fusto: 3.8, cima: 4.6, rami: 5, parte: [0.45, 1.0], inc: [22, 55], lungo: 4.0, r0: 0.46,
-      colRamo: COL.corteccia, ciuffi: 2, rCiuffo: 1.0, raggio: [0.42, 0.66], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r }),
+    ...ramificato({ fusto: 3.8, cima: 4.8, rami: 5, parte: [0.45, 1.0], inc: [35, 68], lungo: 4.2, r0: 0.46,
+      colRamo: COL.corteccia, ciuffi: 2, rCiuffo: 1.2, raggio: [0.52, 0.82], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r }),
   ]); };
   // Livelli (prestazioni, dopo la misura dell'utente: 28–30 FPS nel bosco; «meno definizione a centinaia di metri a
   // favore del realismo entro i 50 m»): vicino fino a 60 m, più ricco; medio fino a 300 m
   // con 3 ciuffi semplici (~70 triangoli); lontano un ciuffo solo e un fusto a 3 lati (~26).
   const latMedio = (a, b, y) => unisci([
     fusto(0.4, 0.26, y - b * 0.6, 4, COL.corteccia),
-    ...chiomaAMasse({ y, a, b, masse: 3, ciuffi: 1, raggio: [1.5, 1.95], dettaglio: 0, scuro: F[0], chiaro: F[1], rnd }),
+    ...chiomaAMasse({ y, a, b, masse: 3, ciuffi: 1, raggio: [1.5, 1.95], dettaglio: 0, scuro: F[0], chiaro: F[1], rnd, schegge: 6 }),
   ]);
   M.latifoglia = [
     // Misura nel bosco fitto (UHD 730): ~135 latifoglie entro 60 m da ~2450 triangoli valevano gran parte dei 6 ms
@@ -467,9 +506,9 @@ function creaModelli() {
   M.riva = [
     { fino: 60, varianti: [unisci([fusto(0.38, 0.22, 5.5, 8, COL.cortecciaBetulla),
       ...ramificato({ fusto: 5.5, cima: 9.5, rami: 6, parte: [0.6, 1.0], inc: [55, 75], lungo: 3.2, r0: 0.3,
-        colRamo: COL.cortecciaBetulla, ciuffi: 2, rCiuffo: 0.8, raggio: [0.36, 0.56], dettaglio: 1, scuro: R[0], chiaro: R[1], rnd })])] },
+        colRamo: COL.cortecciaBetulla, ciuffi: 2, rCiuffo: 0.95, raggio: [0.45, 0.7], dettaglio: 1, scuro: R[0], chiaro: R[1], rnd })])] },
     { fino: 300, varianti: [unisci([fusto(0.34, 0.2, 6, 4, COL.cortecciaBetulla),
-      ...chiomaAMasse({ y: 10.3, a: 2.0, b: 5.2, masse: 5, ciuffi: 1, raggio: [1.0, 1.4], dettaglio: 0, scuro: R[0], chiaro: R[1], rnd })])] },
+      ...chiomaAMasse({ y: 10.3, a: 2.0, b: 5.2, masse: 5, ciuffi: 1, raggio: [1.0, 1.4], dettaglio: 0, scuro: R[0], chiaro: R[1], rnd, schegge: 5 })])] },
     { fino: Infinity, sagoma: [SAGOME.riva] },
   ];
 
@@ -500,7 +539,8 @@ function creaModelli() {
       const h = Math.max(r * 0.55, alt * (k === 0 ? 0.15 : 0.2 + 0.5 * rnd()));
       const x = Math.cos(an) * d, z = Math.sin(an) * d;
       parti.push(...chioma({ x, y: h, z, a: r, b: r * (0.7 + 0.3 * rnd()), ciuffi, raggio: [0.22, 0.36], dettaglio: det,
-        scuro: C[0], chiaro: C[1], rnd, sotto: 0.3, pieno: 0.3, morbido: 0.6 }));
+        scuro: C[0], chiaro: C[1], rnd, sotto: 0.3, pieno: 0.3, morbido: 0.6, schegge: det ? 10 : 4,
+        inviluppo: { x: 0, y: alt * 0.5, z: 0, a: larg + 0.3, b: alt * 0.7 + 0.2, c: larg + 0.3 } }));
       if (det) parti.push(ramoVerso(0, 0, 0, x * 0.85, h - r * 0.5, z * 0.85, 0.035, 0.015, COL.corteccia, 3));
     }
     return unisci(parti);
