@@ -1195,6 +1195,17 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
        da vertice a vertice), 2,5–7 m sotto il cortile secondo il terreno; scartate se toccano il borgo, un fiume o un
        versante troppo ripido. Cinta bassa (3,5 m) con torricelle sugli spigoli. Su 20 semi (60 rocche): 29 senza, 26
        con uno, 5 con due.
+     - *Più rocche* (richiesta dell'utente, per provare tempi di generazione e varietà): `LUOGHI.numero` 36 secondo
+       la densità del GDD (luoghi maggiori, 30–40 per mondo; per ora tutti rocche con borgo, con la milestone dei
+       luoghi una parte diventerà città e monasteri). Candidati su tutta la Carta (900 celle affinate, al più 8 per
+       tessera di 12 km), distanza minima a scalini 15/13/11/10 km; classi per punteggio: 15 % sedi maggiori, 35 %
+       castelli di casata, il resto rocche minori (la partenza resta un castello di casata di valle).
+       `VERSIONE_GENERATORE` `…m7-forme-5+luoghi-36…`. Misure (Node, 20 semi): **27–36 rocche**, verifica superata
+       20/20, scelta dei luoghi ≤ 1,3 s; nel browser la pagina è pronta in ~4 s senza cache. [Certo] Con il bordo di
+       8 km, il mare e le pareti, 30 e più rocche stanno a **~12,5 km dalla più vicina** (minimo 10), non ai ~18 km
+       del GDD: o si accetta, o se ne fanno ~20 a 15 km. Seme 12345 (34 rocche): dalla porta del borgo al cortile
+       della rocca **34 su 34**; rampe della rocca 30 lungo il muro e 4 dritte; terrazzi: 20 senza, 12 con uno, 2 con
+       due; al più ~22.000 triangoli tra rocca e borgo (sede maggiore).
      - *Misure* (Chromium headless): seguendo la via, dal fuori della porta del borgo al cortile della rocca in
        **24 rocche su 24** (8 semi, tre classi); 32 assalti al borgo e 32 alla rocca per 3 semi: si entra solo dalla
        porta, **nessuna compenetrazione**. Rocca 10
@@ -1249,7 +1260,8 @@ siti validi su 30 semi su 30 (verifica automatica). Con il passo 9: dal borgo si
 1. **File nuovi approvati:** `js/mondo/luoghi.js` (siti e terrapieno, senza grafica), `js/3d/borgo3d.js`
    (borgo ed edifici), addon `BufferGeometryUtils.js` di r187 in `lib/three/addons/`; poi `js/3d/rocca3d.js`
    (rocche irregolari del mondo generato; `castle3d.js` resta per Tavullia).
-2. **2–3 siti diversi** in M7, non uno solo.
+2. **2–3 siti diversi** in M7, non uno solo; poi (richiesta dell'utente) **tante rocche quante ne dice il GDD**
+   (30–40 luoghi maggiori), per provare tempi di generazione e varietà.
 3. **Partenza fuori dalla porta del borgo**: il garzone deve rendersi conto da fuori di dove si trova.
 4. **Carta del cronista segnaposto**: le azioni vere arrivano con la Veglia.
 5. **Grandezza variabile secondo l'importanza** del luogo: tre classi (da confermare guardando il risultato).

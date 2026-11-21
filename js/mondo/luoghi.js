@@ -31,7 +31,8 @@ export const LUOGHI = {
   fiume: { minimo: 0.9, minimoValle: 0.35, buono: [0.9, 4], fino: 6 },   // km dall'asse del tracciato della Carta
   valico: { buono: 8, fino: 15 },// km dal valico più vicino (il sito sta più in basso)
   riservati: 20,                  // per zona: celle affinate scelte tra quelle vicine a un valico
-  candidati: 260,                 // celle affinate (le migliori secondo la stima sulla Carta)
+  candidati: 900,                 // celle affinate (le migliori secondo la stima sulla Carta)
+  tessera: { km: 12, quanti: 8 }, // al più `quanti` celle affinate per tessera di km × km: candidati su tutta la Carta
   // Misure del sito (castello di casata, docs/ESPLORAZIONE_3D.md, M7): la classe ne cambierà la grandezza
   // dal passo 3; qui servono a giudicare il terreno.
   rocca: { semilato: 26, passo: 8.6667 },             // m: quadrato di 52 m attorno al punto più alto
@@ -42,8 +43,13 @@ export const LUOGHI = {
   pesi: { fiume: 70, valico: 60, rocca: 4, borgo: 1.5, pendenza: 3 },
   // Scelta: zona attorno al centro (km), poi distanza minima tra i siti (km), a scalini se non bastano.
   zona: [25, 35, 50, 80],
-  distanza: [15, 12, 8],
-  numero: 3,
+  // Numero (GDD §2, densità: luoghi maggiori a ~18 km, 30–40 per mondo): per ora tutti rocche con borgo; con la
+  // milestone dei luoghi una parte diventerà città e monasteri. Distanza minima a scalini finché non bastano.
+  distanza: [15, 13, 11, 10],
+  numero: 36,
+  // Classi degli altri siti (la partenza è un castello di casata), per punteggio: le quote di sedi maggiori e di
+  // castelli di casata, il resto rocche minori.
+  quoteClassi: { maggiore: 0.15, casata: 0.35 },
   // Castello di valle (deciso con l'utente): a ≤ entro km da un crinale almeno sopra m più alto, così di persona
   // in 15–20 minuti si sale dal castello al crinale per guardare oltre. La partenza è di valle, se c'è.
   crinale: { entro: 5, sopra: 800 },
@@ -891,13 +897,18 @@ export function scegliLuoghi(carta, L = LUOGHI) {
     return L.zona.length;
   };
   stime.sort((a, b) => b.s - a.s || a.r - b.r || a.c - b.c);
-  const perZona = Math.ceil(L.candidati / L.zona.length);
+  const perZona = Math.ceil(L.candidati / L.zona.length);   // (le zone esterne contengono le interne)
   const contaZona = new Array(L.zona.length + 1).fill(0), contaValico = new Array(L.zona.length + 1).fill(0);
   const contaValle = new Array(L.zona.length + 1).fill(0);
   const scelte = [];
+  const tessere = new Map();
   for (const st of stime) {
     const z = zonaDi(st.c, st.r);
     if (z >= L.zona.length) continue;
+    const kt = Math.floor(st.c / L.tessera.km) * 1000 + Math.floor(st.r / L.tessera.km);
+    const nt = tessere.get(kt) ?? 0;
+    if (nt >= L.tessera.quanti) continue;
+    tessere.set(kt, nt + 1);
     // Posti riservati ai siti vicino a un valico: con la sola stima entrerebbero di rado.
     if (st.bv >= 0.5 && contaValico[z] < L.riservati) { contaValico[z]++; scelte.push(st); continue; }
     if (st.bc && contaValle[z] < L.riservati) { contaValle[z]++; scelte.push(st); continue; }
@@ -914,21 +925,22 @@ export function scegliLuoghi(carta, L = LUOGHI) {
   }
   validi.sort((a, b) => b.punteggio - a.punteggio || a.z - b.z || a.x - b.x);
 
-  // ─── Scelta: 2–3 siti diversi e distanti, attorno al centro ───
+  // ─── Scelta: siti diversi e distanti (L.numero), dal centro verso fuori ───
   // Ripetuta finché ogni sito scelto ha i suoi piani (passo 2): un sito il cui terrapieno toccherebbe un fiume
   // o starebbe troppo basso sull'acqua si scarta e si sceglie di nuovo.
   const distanzaKm = (a, b) => Math.sqrt((a.x - b.x) * (a.x - b.x) + (a.z - b.z) * (a.z - b.z)) / carta.cella;
   const esclusi = new Set(), piani = new Map();
   let luoghi = [], scalino = null, giri = 0;
-  for (; giri < 12; giri++) {
+  for (; giri < 40; giri++) {
     const pool = validi.filter((s) => !esclusi.has(s));
     ({ luoghi, scalino } = scegli(pool));
-    // Classi: la partenza (il primo, di valle se c'è) è un castello di casata; degli altri, quello col punteggio
-    // più alto è la sede maggiore se i siti sono tre, gli altri rocche minori.
+    // Classi: la partenza (il primo, di valle se c'è) è un castello di casata; degli altri, per punteggio, le sedi
+    // maggiori (almeno una se i siti sono tre o più), poi i castelli di casata, il resto rocche minori.
     const altri = luoghi.slice(1).sort((a, b) => b.punteggio - a.punteggio);
-    const maggiore = luoghi.length === 3 ? altri[0] : null;
+    const nM = altri.length >= 2 ? Math.max(1, Math.round(altri.length * L.quoteClassi.maggiore)) : 0;
+    const nC = Math.round(altri.length * L.quoteClassi.casata);
     luoghi = luoghi.length ? [luoghi[0], ...altri] : [];
-    const classi = luoghi.map((s, k) => (k === 0 ? 'casata' : s === maggiore ? 'maggiore' : 'minore'));
+    const classi = luoghi.map((s, k) => (k === 0 ? 'casata' : k <= nM ? 'maggiore' : k <= nM + nC ? 'casata' : 'minore'));
     let tutti = true;
     luoghi.forEach((s, k) => {
       const chiave = classi[k];
@@ -946,8 +958,10 @@ export function scegliLuoghi(carta, L = LUOGHI) {
 
   function scegli(pool) {
     let luoghi = [], scalino = null;
-    for (let zi = 0; zi < L.zona.length && luoghi.length < 2; zi++) {
-      for (let di = 0; di < L.distanza.length && luoghi.length < 2; di++) {
+    // Dalla zona più stretta e dalla distanza più larga: il primo scalino che arriva a L.numero siti, altrimenti
+    // quello con più siti.
+    for (let zi = 0; zi < L.zona.length && luoghi.length < L.numero; zi++) {
+      for (let di = 0; di < L.distanza.length && luoghi.length < L.numero; di++) {
         const dmin = L.distanza[di];
         const inZona = pool.filter((s) => s.zona <= zi);
         if (!inZona.length) continue;
@@ -961,7 +975,7 @@ export function scegliLuoghi(carta, L = LUOGHI) {
           if (presi.length >= L.numero) break;
           if (!presi.includes(s) && lontano(s)) presi.push(s);
         }
-        if (presi.length >= 2) { luoghi = presi; scalino = { zona: L.zona[zi], distanza: dmin }; }
+        if (presi.length >= 2 && presi.length > luoghi.length) { luoghi = presi; scalino = { zona: L.zona[zi], distanza: dmin }; }
       }
     }
     if (!luoghi.length && pool.length) { luoghi = [pool[0]]; scalino = { zona: Infinity, distanza: Infinity }; }
