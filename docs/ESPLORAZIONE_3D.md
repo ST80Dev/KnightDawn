@@ -1611,6 +1611,17 @@ Carta e `VERSIONE_GENERATORE` invariate.
 9. **Bordo del blocco** (stacco tra gli ultimi alberi e il colore piatto dell'orizzonte): **non affrontato**, si
    vedrà più avanti.
 
+## Vista meno lunga dalle alture (novembre 2026)
+
+Segnalato dall'utente: da un'altura di 1500 m si vedeva quasi tutta la mappa (fisicamente possibile solo con aria
+tersa: l'orizzonte geometrico è a ~140 km). Tre interventi decisi con l'utente:
+1. **Foschia secondo il tempo** (sessione «M1 - grafica», `main.js`): di norma il paesaggio sbiadisce oltre 30–40 km,
+   nelle giornate limpide si vede fino a 80–100 km.
+2. **Curvatura** (`orizzonte.js`): raggio 2 volte quello vero invece di 4; a 50 km il terreno cala di ~90 m (prima
+   ~45), a 100 km di ~380 m (prima ~190; vero ~680 con la rifrazione).
+3. **Esagerazione lontana solo dei rilievi alti** (`orizzonte.js`, `esagera.soglia` 1000 m): si gonfia solo la parte
+   oltre 1000 m, fino a +40 % a 100 km; colline e pianure lontane restano vere.
+
 ## Meno mare (novembre 2026)
 
 Richiesto dall'utente: nel mondo di 120×90 km non c'è un «di là dal mare», il mare aperto ai bordi era spazio sprecato;

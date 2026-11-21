@@ -1,6 +1,6 @@
 // Knight Dawn — orizzonte attorno a una Scena del mondo generato (M6, passo 5).
 // Terreno lontano solo da guardare (non calpestabile), costruito dalla Carta già in memoria: dal bordo del
-// blocco di 2×2 km si vedono le montagne fino a ~110 km (per orientarsi: curvatura attenuata, foschia leggera).
+// blocco di 2×2 km si vedono le montagne fino a ~110 km (per orientarsi: curvatura attenuata; la foschia dipende dal tempo).
 //
 //   anello vicino:  dal bordo del blocco a 6 km, passo 62,5 m;
 //   anello medio:   da 6 a 18 km, passo 187,5 m;
@@ -33,12 +33,15 @@ export const ORIZZONTE = {
   // Distanza (m, dal centro, in quadrato come gli anelli) a cui si spegne ciascuna ottava del dettaglio,
   // dalla più ampia (1400 m) alla più fine (~44 m). Tutte piene al bordo del blocco (1 km).
   spegnimento: [[15000, 18000], [12000, 17000], [6000, 9000], [4000, 6000], [1500, 3500], [1200, 2500]],
-  // Curvatura attenuata per il gioco (richiesta dell'utente): raggio 4 volte quello vero, così una catena a
-  // 100 km si abbassa di ~200 m invece di ~680 m (con la rifrazione) e resta un riferimento per orientarsi.
-  curvatura: { da: 1500, raggioTerra: 6371000 * 4 },
+  // Curvatura attenuata per il gioco (richiesta dell'utente): una catena a 100 km resta un riferimento per orientarsi.
+  // [rivisto con l'utente, novembre 2026: da un'altura si vedeva quasi tutta la mappa] raggio 2 volte quello vero
+  // (prima 4): a 100 km il terreno cala di ~390 m (vero ~680 con la rifrazione); restano le catene alte.
+  curvatura: { da: 1500, raggioTerra: 6371000 * 2 },
   // Esagerazione verticale con la distanza (per il gioco): le montagne lontane un po' più alte del vero, per
-  // orientarsi. Nessuna fino a `da` m, × (1 + quanto) oltre `a` m; cresce piano, così avvicinandosi non si nota.
-  esagera: { da: 20000, a: 100000, quanto: 0.4 },
+  // orientarsi. Nessuna fino a `da` m, piena oltre `a` m; cresce piano, così avvicinandosi non si nota.
+  // Solo i rilievi alti: si esagera la parte oltre `soglia` m (colline e pianure lontane restano vere) [rivisto con
+  // l'utente, novembre 2026: prima tutto il terreno].
+  esagera: { da: 20000, a: 100000, quanto: 0.4, soglia: 1000 },
   passoAcqua: 1500,
   // Fiumi lontani: fino a `raggio` (m, in quadrato), e ciascun punto finché è largo almeno ~1 pixel
   // (vista = metri di distanza per metro di semilarghezza). Si posano sulla superficie degli anelli, più
@@ -46,6 +49,12 @@ export const ORIZZONTE = {
   // del blocco alla superficie è nei primi `raccordo` m.
   fiumi: { raggio: 18000, vista: 1800, sopra: [0.3, 0.0003], raccordo: 250 },
 };
+
+/** Quota h esagerata a distanza r (m): solo la parte oltre ORIZZONTE.esagera.soglia. */
+function esagerata(h, r) {
+  const E = ORIZZONTE.esagera;
+  return h > E.soglia ? h + (h - E.soglia) * E.quanto * smooth(E.da, E.a, r) : h;
+}
 
 /** Abbassamento (m) dovuto alla curvatura della Terra a distanza d (m) dal centro della Scena. */
 export function abbassamento(d) {
@@ -203,8 +212,8 @@ function acqueOrizzonte(carta, cx, cz, anelli, colore) {
           if (!Number.isNaN(livello)) break;
         }
         if (Number.isNaN(livello)) continue;
-        const v = (x, z) => { const r = Math.hypot(x, z), E = ORIZZONTE.esagera;   // come il terreno
-          return [x, livello * (1 + E.quanto * smooth(E.da, E.a, r)) - abbassamento(r), z]; };
+        const v = (x, z) => { const r = Math.hypot(x, z);   // come il terreno
+          return [x, esagerata(livello, r) - abbassamento(r), z]; };
         pos.push(...v(x0, z0), ...v(x0, z1), ...v(x1, z0), ...v(x1, z0), ...v(x0, z1), ...v(x1, z1));
       }
     }
@@ -255,8 +264,8 @@ export function creaOrizzonte(carta, cx, cz, terrain, coloreAcqua, stagione = 0)
     // e i terrapieni dei luoghi (M7): come quotaFinale, che però non ha il ramo «solo Carta» qui sopra.
     const h = spianaLuoghi(carta, cx + x, cz + z, scavaFiumi(carta, cx + x, cz + z, base));
     if (h < minimo) minimo = h;
-    const r = Math.hypot(x, z), E = O.esagera;
-    return (h > 0 ? h * (1 + E.quanto * smooth(E.da, E.a, r)) : h) - abbassamento(r);
+    const r = Math.hypot(x, z);
+    return esagerata(h, r) - abbassamento(r);
   };
   const cache = new Map();                   // quota dei vertici, calcolata una volta sola
   const P = (x, z) => {
