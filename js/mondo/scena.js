@@ -691,7 +691,23 @@ export function distanzaPiano(p, x, z) {
   const qx = (lu < 0 ? -lu : lu) - (p.a - p.r), qy = (lv < 0 ? -lv : lv) - (p.b - p.r);
   const ex = qx > 0 ? qx : 0, ey = qy > 0 ? qy : 0;
   const m = qx > qy ? qx : qy;
-  return Math.sqrt(ex * ex + ey * ey) + (m < 0 ? m : 0) - p.r;
+  const dr = Math.sqrt(ex * ex + ey * ey) + (m < 0 ? m : 0) - p.r;
+  const P = p.poligono;
+  // Contorno poligonale (rocche e borghi irregolari, M7): distanza con segno dal poligono. L'ingombro rettangolare
+  // lo contiene, quindi fuori dalla portata del terrapieno basta la sua distanza (più piccola o uguale).
+  if (!P || dr > p.s + TERRAPIENO.ritorno) return dr;
+  let d2 = Infinity, dentro = false;
+  for (let i = 0, j = P.length - 1; i < P.length; j = i++) {
+    const xi = P[i][0], zi = P[i][1], xj = P[j][0], zj = P[j][1];
+    if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / (zj - zi) + xi) dentro = !dentro;
+    const ex2 = xj - xi, ez2 = zj - zi, l2 = ex2 * ex2 + ez2 * ez2;
+    let t = l2 > 0 ? ((x - xi) * ex2 + (z - zi) * ez2) / l2 : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const fx = x - xi - ex2 * t, fz = z - zi - ez2 * t, q2 = fx * fx + fz * fz;
+    if (q2 < d2) d2 = q2;
+  }
+  const d = Math.sqrt(d2);
+  return dentro ? -d : d;
 }
 
 // Terrapieno come quelli veri: dal contorno di ogni piano il terreno può scostarsi dal piano al più di

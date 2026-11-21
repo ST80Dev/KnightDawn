@@ -29,7 +29,7 @@ export const CARTA_PREDEFINITA = { cols: 120, rows: 90, cella: 1000 };
 // Comprende i luoghi (M7, js/mondo/luoghi.js), che si aggiungono alla Carta nel Worker e stanno nella stessa cache.
 // regione-2: punti panoramici solo alture (verifiche in cache); m7-terrapieno: terrapieni di rocca e borgo;
 // strade: rete delle strade e dei sentieri (js/mondo/strade.js); strade-2: costo del rilievo dentro la cella.
-export const VERSIONE_GENERATORE = 'regione-2+m7-borgo-pendio-1+strade-2+mare-1';
+export const VERSIONE_GENERATORE = 'regione-2+m7-forme-5+strade-2+mare-1';
 
 // Parametri della forma (km dove non indicato). Valori di partenza, da tarare guardando le Carte.
 const FORMA = {

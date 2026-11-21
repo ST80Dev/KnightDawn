@@ -1167,7 +1167,38 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
      legno, strade, merli in istanza), 5 materiali più quello del ciottolato, ~8.200 triangoli (casata).
    - *Misure* (Chromium headless): dal fuori della porta del borgo al cortile della rocca in **12 borghi su 12** (4
      semi, tre classi), 32 assalti alle mura per 3 semi: si entra solo dalla porta, **nessuna compenetrazione**.
-   Limiti: borgo ancora vuoto (case ed edifici al passo 5, negli isolati tra le strade); contorno rettangolare.
+   Limiti: borgo ancora vuoto (case ed edifici al passo 5, negli isolati tra le strade).
+   - *Forme irregolari* (seconda prova dell'utente: rocca e borgo «troppo regolari», tutti uguali; porte «forzate
+     davanti nel mezzo del muro frontale» con rampe sproporzionate). `VERSIONE_GENERATORE` `…m7-forme-5…`; nuovo file
+     `js/3d/rocca3d.js` (approvato) per le rocche del mondo generato, `castle3d.js` resta per Tavullia.
+     - *Contorni* (`luoghi.js`, solo operazioni esatte): **rocca** = poligono di 5–8 vertici attorno alla cima, raggio
+       in ognuna delle 16 direzioni fin dove il terreno resta entro 5 m dalla cima (13–21 / 17–27 / 21–33 m secondo la
+       classe), lisciato e variato per castello. **Borgo** = dai due vertici anteriori della rocca (A, B) una catena
+       arrotondata e irregolare gira dall'altra parte; il contorno si chiude sui lati anteriori della rocca, le cui mura
+       chiudono anche il borgo. Ogni piano ha `poligono` (mondo) e l'ingombro rettangolare che lo contiene (controlli
+       veloci, griglia del pendio); `distanzaPiano` (`scena.js`) dà la distanza con segno dal poligono.
+     - *Porte sul lato col minor dislivello:* quella del **borgo** sul lato della catena dove il terreno fuori è più
+       vicino a quello dentro (lontano dalla rocca); quella della **rocca** sul lato anteriore col salto minore verso il
+       borgo, con spazio davanti (i lati agli estremi A e B danno sull'angolo stretto tra rocca e cinta: penalizzati).
+       Il borgo scende dalla rocca: una rampa in muratura dal cortile veniva lunga 26–40 m anche lungo il muro.
+       Ora davanti alla porta della rocca il terreno del borgo si rialza in uno **spalto** di terra (0,5 m sotto il
+       cortile, piatto per 8 m, poi al 16 %): la rampa in muratura è di **5–5,5 m**, lungo il muro o dritta (la più
+       corta che arriva a terra entro il 22 %, dentro il borgo e fuori dalle torri), con pianerottolo e parapetti.
+     - *Rocca 3D* (`rocca3d.js`): mura per lato con scarpa, una torre su ogni vertice (tonde o quadrate secondo il
+       castello), mastio verso il retro, torre-porta con torce e una sola luce. Collisioni: scatole orientate e cerchi
+       (le stesse funzioni servono il borgo). **Borgo 3D:** cinta a gradoni lungo la catena, torri quadrate sui suoi
+       vertici e ogni ~32–38 m, torre-porta e rampa orientate secondo il lato; anello delle strade sul contorno
+       rientrato di 10 m, via a tornanti adattati al contorno, vicoli di traverso alla via. La via arriva al piede
+       della rampa della rocca da fuori e nel suo verso (prima passava di fianco sopra la rampa lungo il muro e il
+       cavaliere ci urtava).
+     - *Terrazzi sotto la rocca* (per distinguere i castelli): 0–3 fasce su 1–2 lati del retro, larghe 8–15 m (diverse
+       da vertice a vertice), 2,5–7 m sotto il cortile secondo il terreno; scartate se toccano il borgo, un fiume o un
+       versante troppo ripido. Cinta bassa (3,5 m) con torricelle sugli spigoli. Su 20 semi (60 rocche): 29 senza, 26
+       con uno, 5 con due.
+     - *Misure* (Chromium headless): seguendo la via, dal fuori della porta del borgo al cortile della rocca in
+       **24 rocche su 24** (8 semi, tre classi); 32 assalti al borgo e 32 alla rocca per 3 semi: si entra solo dalla
+       porta, **nessuna compenetrazione**. Rocca 10
+       oggetti disegnati (4.400–7.400 triangoli), borgo 6 (7.800–8.400). 20 semi: verifica dei luoghi superata.
 5. **Edifici e case.** Edifici nominati, case per lotto secondo la classe, instancing, geometrie fuse,
    collisioni a griglia, texture da codice. *Prova:* le classi si distinguono a colpo d'occhio; FPS su PC
    medio nel borgo e nella rocca, anche nel borgo più grande; chiamate e triangoli in F3 entro il budget;
@@ -1216,7 +1247,8 @@ siti validi su 30 semi su 30 (verifica automatica). Con il passo 9: dal borgo si
 ### Decisioni prese con l'utente (novembre 2026)
 
 1. **File nuovi approvati:** `js/mondo/luoghi.js` (siti e terrapieno, senza grafica), `js/3d/borgo3d.js`
-   (borgo ed edifici), addon `BufferGeometryUtils.js` di r187 in `lib/three/addons/`.
+   (borgo ed edifici), addon `BufferGeometryUtils.js` di r187 in `lib/three/addons/`; poi `js/3d/rocca3d.js`
+   (rocche irregolari del mondo generato; `castle3d.js` resta per Tavullia).
 2. **2–3 siti diversi** in M7, non uno solo.
 3. **Partenza fuori dalla porta del borgo**: il garzone deve rendersi conto da fuori di dove si trova.
 4. **Carta del cronista segnaposto**: le azioni vere arrivano con la Veglia.
@@ -1229,6 +1261,8 @@ siti validi su 30 semi su 30 (verifica automatica). Con il passo 9: dal borgo si
 10. **Passo 9 in M7** (blocco che segue il cavaliere): approvato.
 11. **Vegetazione e oggetti sparsi in parallelo a M7** (deroga alla regola 4 decisa dall'utente): altra sessione,
     sezione a sé in questo documento; esclude i terrapieni dei luoghi (`carta.luoghi[].piani`).
+12. **Forme irregolari e porte sul lato col minor dislivello**, terrazzi sotto la rocca non sempre uguali (seconda
+    prova del passo 4); sforzo unico con il borgo in pendio, in una sola PR.
 
 ### Da decidere
 
