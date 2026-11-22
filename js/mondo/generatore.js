@@ -5,7 +5,7 @@
 import { generaCarta } from './carta.js';
 import { verificaFiumi, verificaPanorami, verificaVarieta, verificaLuoghi } from './verifica.js';
 import { aggiungiLuoghi } from './luoghi.js';
-import { aggiungiStrade } from './strade.js';
+import { aggiungiStrade, precalcolaStrade } from './strade.js';
 import { grigliaMondo, fiumiFini } from './scena.js';
 import { aggiungiSiti, completaSiti, verificaSiti } from './siti.js';
 
@@ -45,6 +45,7 @@ async function generaQui(seme, avanzamento) {
   avanzamento?.('Generazione del mondo', 0);
   await new Promise((r) => setTimeout(r, 30));      // lascia disegnare la schermata
   const carta = completaSiti(aggiungiStrade(aggiungiSiti(aggiungiLuoghi(fiumiFini(generaCarta(seme, { avanzamento }))))));
+  precalcolaStrade(carta);                          // tracciato fine di tutte le strade (G6), come nel Worker
   carta.griglia = grigliaMondo(carta);              // griglia fine (G1), come nel Worker
   carta.verifiche = { fiumi: verificaFiumi(carta), panorami: verificaPanorami(carta), varieta: verificaVarieta(carta),
     luoghi: verificaLuoghi(carta), siti: verificaSiti(carta) };

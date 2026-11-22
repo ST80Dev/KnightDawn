@@ -2848,6 +2848,13 @@ bacino 0,05 s. Prototipo: i corsi d'acqua che ne escono seguono le valli del ril
 - **G5 — Luoghi e siti** (sessioni M7 e M8) leggono la quota dalla griglia: da coordinare.
 - **G6 — Strade** (fase «A»): rete e tracciato fine sulla griglia, tutte in anticipo e salvate; la Carta mostra le
   strade vere e i blocchi non le cercano più (oggi 0,3–0,5 s per blocco).
+  **G6 fatto** (da provare; anticipato su G3 perché si vede subito): `precalcolaStrade` cerca nel Worker il tracciato
+  fine di tutti i tratti (dopo i siti, prima della griglia) e lo salva in `carta.stradeFini`; nella pagina `stradeScena`
+  lo rimette ai tratti e lo indicizza. Prima la ricerca di tutte le strade costava 48 s: metà era la distanza di ogni
+  cella da tutti i 135 piani dei luoghi; ora si guardano solo quelli vicini al tratto (stesso risultato, punto per
+  punto) e il totale è 8 s. Strade nel blocco: da 300–550 ms a ~40 ms. Carta zoomata: strade vere subito. Costo: la
+  generazione di una mappa nuova in headless passa da ~15 a ~22 s (si può scendere leggendo il terreno dalla griglia
+  nella ricerca, ~4 s, o con più Worker). `VERSIONE_GENERATORE` `+strade-fini-1`.
 - **G7 — Orizzonte** dalla griglia (oggi ~650 ms a ogni cambio di blocco): con la sessione M1.
 
 Budget: generazione ≤ ~15 s con l'avanzamento a schermo; `VERSIONE_GENERATORE` cambia a ogni passo che cambia le Carte.

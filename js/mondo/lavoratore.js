@@ -14,7 +14,7 @@
 import { generaCarta, VERSIONE_GENERATORE } from './carta.js';
 import { verificaFiumi, verificaPanorami, verificaVarieta, verificaLuoghi } from './verifica.js';
 import { aggiungiLuoghi } from './luoghi.js';
-import { aggiungiStrade } from './strade.js';
+import { aggiungiStrade, precalcolaStrade } from './strade.js';
 import { grigliaMondo, fiumiFini } from './scena.js';
 import { aggiungiSiti, completaSiti, verificaSiti } from './siti.js';
 
@@ -70,7 +70,8 @@ function trasferibili(carta) {
   const b = [];
   for (const v of Object.values(carta)) if (ArrayBuffer.isView(v)) b.push(v.buffer);
   for (const f of carta.fiumi) b.push(f.buffer);
-  if (carta.griglia) b.push(carta.griglia.h.buffer, carta.griglia.acqua.buffer);   // griglia fine (G1): ~22 MB, trasferita
+  if (carta.griglia) b.push(carta.griglia.h.buffer, carta.griglia.acqua.buffer);
+  for (const f of carta.stradeFini ?? []) if (f) b.push(f.x.buffer, f.z.buffer, f.h.buffer, f.tipo.buffer);   // griglia fine (G1): ~22 MB, trasferita
   return b;
 }
 
@@ -117,6 +118,9 @@ self.onmessage = async (e) => {
       avanzamento('Strade e sentieri', 0.97);
       aggiungiStrade(carta);
       completaSiti(carta);
+      // Tracciato fine di tutte le strade (passo G6), prima della griglia (che ne contiene i ripiani).
+      avanzamento('Tracciato delle strade', 0.965);
+      precalcolaStrade(carta);
       // Griglia del rilievo fine su tutta la mappa (piano «Mondo generato in anticipo», passo G1).
       carta.griglia = grigliaMondo(carta, (f) => avanzamento('Rilievo fine di tutta la mappa', 0.97 + 0.025 * f));
       const t0 = performance.now();
