@@ -353,6 +353,21 @@ export function raggioSito(s) {
   return RAGGI_SITI[s.tipo] ?? RAGGI_SITI.altro;
 }
 
+/**
+ * Clima di un luogo per lo stile delle case (richiesta dell'utente: villaggi, case isolate e borghi diversi secondo il
+ * clima): 'freddo', 'temperato' o 'caldo', dalla temperatura media annua (°C) e dal bioma della cella. Soglie tarate
+ * sui siti di tre semi (temperature dei luoghi: p10 ≈ −3,5 °C, mediana ≈ 4 °C, p90 ≈ 16 °C): ~30 % freddo, ~20 % caldo.
+ */
+export const CLIMI = { freddo: 0.5, caldo: 12 };
+export function climaDelLuogo(carta, x, z) {
+  const c = Math.min(carta.cols - 1, Math.max(0, Math.floor(x / carta.cella)));
+  const r = Math.min(carta.rows - 1, Math.max(0, Math.floor(z / carta.cella)));
+  const i = r * carta.cols + c, b = carta.bioma?.[i], t = carta.temperatura?.[i] ?? 8;
+  if (b === BIOMA.SABBIA || b === BIOMA.PIANURA_S || t >= CLIMI.caldo) return 'caldo';
+  if (b === BIOMA.NEVE || b === BIOMA.GHIACCIO || b === BIOMA.PIANURA_N || t <= CLIMI.freddo) return 'freddo';
+  return 'temperato';
+}
+
 /** Nome leggibile per la Carta e per F3. */
 export const NOMI_SITI = {
   villaggio: 'villaggio', rovina: 'rovine', abbandonato: 'luogo abbandonato', grotta: 'grotta', eremo: 'eremo',

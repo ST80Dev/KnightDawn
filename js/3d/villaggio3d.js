@@ -25,7 +25,7 @@ import { creaKit, completaPezzi, siToccano, PEZZO_MS } from './edifici3d.js';
 import { quotaFinale, livelloLago } from '../mondo/scena.js';
 import { distanzaStrada } from '../mondo/strade.js';
 import { hash2 } from '../mondo/rumore.js';
-import { raggioSito } from '../mondo/siti.js';
+import { raggioSito, climaDelLuogo } from '../mondo/siti.js';
 
 export const VILLAGGI = {
   frazione: { case: [6, 10], piazza: 7, pozzo: 0.6, vicoli: [0, 1] },
@@ -232,7 +232,8 @@ export function* createVillaggioAPezzi(suolo, sito, ox, oz, carta, cx, cz) {
   const seme = hash2(Math.floor(sito.x), Math.floor(sito.z), carta.seme ^ 0x7a11a6e) || 1;
   const ovile = sito.tipo === 'ovile';
   const kit = creaKit({ X: (u) => ox + u, Z: (u, v) => oz + v, terreno: (u, v) => suolo.getHeight(ox + u, oz + v),
-    seme, nome: ovile ? `ovile-${sito.id}` : `villaggio-${sito.id}`, contesto: 'campagna', zone: 1 });   // zone: 1 = dettagli in una zona sola (meno chiamate)
+    seme, nome: ovile ? `ovile-${sito.id}` : `villaggio-${sito.id}`, contesto: 'campagna', zone: 1,
+    clima: climaDelLuogo(carta, sito.x, sito.z) });   // stile delle case per clima (kit di M7)   // zone: 1 = dettagli in una zona sola (meno chiamate)
   const rnd = kit.rnd;
   const R = raggioSito(sito);
   const quota = (u, v) => suolo.getHeight(ox + u, oz + v);
