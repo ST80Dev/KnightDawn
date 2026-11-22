@@ -803,6 +803,46 @@ export function spianaPiani(P, x, z, h) {
 }
 
 /**
+ * Griglia del mondo generato (passo G1 del piano «Mondo generato in anticipo», docs/ESPLORAZIONE_3D.md): quota finale
+ * (`quotaFinale`, con i percorsi di tutti i fiumi già cercati) e livello dell'acqua (fiumi e laghi; NaN asciutto) su tutta
+ * la Carta, a `passo` m. Calcolata una volta nel Worker e salvata con la Carta: la Carta zoomata la legge invece di
+ * ricalcolare il rilievo a ogni zoom.
+ */
+export const GRIGLIA = { passo: 62.5 };
+export function grigliaMondo(carta, avanzamento = null, passo = GRIGLIA.passo) {
+  const t0 = performance.now();
+  raffinaZona(carta, carta.cols * carta.cella / 2, carta.rows * carta.cella / 2, Math.max(carta.cols, carta.rows) * carta.cella);
+  const nx = Math.round(carta.cols * carta.cella / passo) + 1, nz = Math.round(carta.rows * carta.cella / passo) + 1;
+  const h = new Float32Array(nx * nz), acqua = new Float32Array(nx * nz);
+  const seme = derivaSeme(carta.seme, 101), esito = { quota: 0, livello: NaN };
+  for (let r = 0; r < nz; r++) {
+    if (avanzamento && r % 64 === 0) avanzamento(r / nz);
+    for (let c = 0; c < nx; c++) {
+      const x = c * passo, z = r * passo, i = r * nx + c;
+      const q = quotaFinale(carta, x, z, seme, esito);
+      let w = esito.livello;
+      if (Number.isNaN(w)) { const l = livelloLago(carta, x, z); if (l > q) w = l; }
+      h[i] = q; acqua[i] = w;
+    }
+  }
+  return { passo, nx, nz, h, acqua, ms: performance.now() - t0 };
+}
+
+/** Quota e acqua dalla griglia, interpolate (bilineare) nel punto (x, z) del mondo; out = { quota, acqua }. */
+export function leggiGriglia(G, x, z, out = { quota: 0, acqua: NaN }) {
+  let fx = x / G.passo, fz = z / G.passo;
+  fx = fx < 0 ? 0 : fx > G.nx - 1.001 ? G.nx - 1.001 : fx;
+  fz = fz < 0 ? 0 : fz > G.nz - 1.001 ? G.nz - 1.001 : fz;
+  const c = Math.floor(fx), r = Math.floor(fz), u = fx - c, v = fz - r, i = r * G.nx + c, n = G.nx;
+  const H = G.h;
+  out.quota = (H[i] * (1 - u) + H[i + 1] * u) * (1 - v) + (H[i + n] * (1 - u) + H[i + n + 1] * u) * v;
+  // Acqua: la più vicina (i bordi di fiumi e laghi restano netti come nelle Scene).
+  const k = (v < 0.5 ? i : i + n) + (u < 0.5 ? 0 : 1);
+  out.acqua = G.acqua[k];
+  return out;
+}
+
+/**
  * Quota finale del mondo nel punto (x, z): rilievo (quotaMondo), fiumi e laghi (scavaFiumi), strade (spianaStrade,
  * solo dove il tracciato fine è già stato cercato), terrapieni dei luoghi (spianaLuoghi). Unico punto usato da blocco, orizzonte e Carta zoomata.
  */

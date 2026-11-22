@@ -15,6 +15,7 @@ import { generaCarta, VERSIONE_GENERATORE } from './carta.js';
 import { verificaFiumi, verificaPanorami, verificaVarieta, verificaLuoghi } from './verifica.js';
 import { aggiungiLuoghi } from './luoghi.js';
 import { aggiungiStrade } from './strade.js';
+import { grigliaMondo } from './scena.js';
 import { aggiungiSiti, completaSiti, verificaSiti } from './siti.js';
 
 const CACHE_MASSIMO = 3;
@@ -69,6 +70,7 @@ function trasferibili(carta) {
   const b = [];
   for (const v of Object.values(carta)) if (ArrayBuffer.isView(v)) b.push(v.buffer);
   for (const f of carta.fiumi) b.push(f.buffer);
+  if (carta.griglia) b.push(carta.griglia.h.buffer, carta.griglia.acqua.buffer);   // griglia fine (G1): ~22 MB, trasferita
   return b;
 }
 
@@ -113,6 +115,8 @@ self.onmessage = async (e) => {
       avanzamento('Strade e sentieri', 0.97);
       aggiungiStrade(carta);
       completaSiti(carta);
+      // Griglia del rilievo fine su tutta la mappa (piano «Mondo generato in anticipo», passo G1).
+      carta.griglia = grigliaMondo(carta, (f) => avanzamento('Rilievo fine di tutta la mappa', 0.97 + 0.025 * f));
       const t0 = performance.now();
       carta.verifiche = { fiumi: verificaFiumi(carta), panorami: verificaPanorami(carta), varieta: verificaVarieta(carta),
         luoghi: verificaLuoghi(carta), siti: verificaSiti(carta) };

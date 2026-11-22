@@ -13,7 +13,7 @@ import { ACQUA, BIOMA, NOMI_BIOMI, profiloMassicci } from '../mondo/carta.js';
 import { verificaFiumi, verificaPanorami, verificaVarieta, verificaLuoghi } from '../mondo/verifica.js';
 import { verificaSiti, NOMI_SITI } from '../mondo/siti.js';
 import { semeDaTesto, derivaSeme } from '../mondo/rumore.js';
-import { quotaFinale, livelloLago, raffinaZona, percorsiFiumi } from '../mondo/scena.js';
+import { quotaFinale, livelloLago, raffinaZona, percorsiFiumi, leggiGriglia } from '../mondo/scena.js';
 import { raffinaStrade, percorsiStrade, STRADE } from '../mondo/strade.js';
 import * as THREE from 'three';
 import { coloreMondo } from './terrain.js';
@@ -486,7 +486,19 @@ export function createCartaVista(contenitore, opzioni = {}) {
     const h = new Float32Array(nx * ny), acqua = new Float32Array(nx * ny);
     const seme = derivaSeme(c0.seme, 101), C = c0.cella, esito = { quota: 0, livello: NaN };
     let t = performance.now();
-    for (let r = 0; r < ny; r++) {
+    // Griglia fine già calcolata con la Carta (G1): finché un campione copre almeno ~¾ del suo passo il rilievo si legge
+    // da lì, subito (prima si ricalcolava a ogni zoom: 2–3 s di attesa, segnalato dall'utente).
+    const G = c0.griglia, daGriglia = G && k * C >= 0.75 * G.passo, lg = { quota: 0, acqua: NaN };
+    if (daGriglia) {
+      for (let r = 0; r < ny; r++) {
+        const Z = (y0 + (r + 0.5) * k) * C;
+        for (let c = 0; c < nx; c++) {
+          leggiGriglia(G, (x0 + (c + 0.5) * k) * C, Z, lg);
+          h[r * nx + c] = lg.quota; acqua[r * nx + c] = lg.acqua;
+        }
+      }
+    }
+    for (let r = 0; r < ny && !daGriglia; r++) {
       const Z = (y0 + (r + 0.5) * k) * C;
       for (let c = 0; c < nx; c++) {
         const X = (x0 + (c + 0.5) * k) * C, i = r * nx + c;

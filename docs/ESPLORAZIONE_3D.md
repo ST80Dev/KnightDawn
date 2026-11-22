@@ -2824,6 +2824,11 @@ bacino 0,05 s. Prototipo: i corsi d'acqua che ne escono seguono le valli del ril
 **Piano** (passi in ordine; ogni passo provato prima del successivo):
 - **G1 — Griglia del rilievo** (62,5 m, nel Worker, in cache con la Carta: ~11 MB per seme). La Carta zoomata e la
   Carta intera si disegnano dalla griglia: niente attesa allo zoom fino a 62,5 m, nessuno scatto tra i livelli.
+  **G1 fatto** (da provare): `grigliaMondo` in `scena.js` (quota finale e livello dell'acqua a 62,5 m, con i percorsi di
+  tutti i fiumi già cercati), nel Worker dopo strade e siti; `leggiGriglia` (bilineare; acqua dal punto più vicino). La
+  Carta zoomata legge la griglia finché un campione copre almeno ¾ del passo (sotto, come prima). Seme 570549: 5,2 s nel
+  Worker (headless), 22 MB in cache (quota e acqua; l'acqua si potrà comprimere). `VERSIONE_GENERATORE` `+griglia-1`.
+  Ancora lenti al primo zoom: la ricerca dei percorsi dei fiumi e delle strade nella finestra (G2 e G6).
 - **G2 — Idrografia sulla griglia**: deflusso (riempimento, direzioni, bacini) sul rilievo vero; i piccoli pozzetti si
   tagliano (l'acqua esce), le conche grandi diventano laghi; fiumi e torrenti come polilinee lisciate, con larghezza dal
   bacino. `carta.acque`/`carta.fiumi` a 1 km si ricavano da qui (compatibilità: clima, biomi, luoghi, verifiche).
