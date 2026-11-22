@@ -232,7 +232,7 @@ export function* createVillaggioAPezzi(suolo, sito, ox, oz, carta, cx, cz) {
   const seme = hash2(Math.floor(sito.x), Math.floor(sito.z), carta.seme ^ 0x7a11a6e) || 1;
   const ovile = sito.tipo === 'ovile';
   const kit = creaKit({ X: (u) => ox + u, Z: (u, v) => oz + v, terreno: (u, v) => suolo.getHeight(ox + u, oz + v),
-    seme, nome: ovile ? `ovile-${sito.id}` : `villaggio-${sito.id}`, contesto: 'campagna' });
+    seme, nome: ovile ? `ovile-${sito.id}` : `villaggio-${sito.id}`, contesto: 'campagna', zone: 1 });   // zone: 1 = dettagli in una zona sola (meno chiamate)
   const rnd = kit.rnd;
   const R = raggioSito(sito);
   const quota = (u, v) => suolo.getHeight(ox + u, oz + v);
