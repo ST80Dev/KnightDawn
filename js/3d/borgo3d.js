@@ -19,6 +19,7 @@ import * as THREE from 'three';
 import { prisma, unisci, dentroPoligono, distanzaContorno, areaPoligono, normaleLato, localeDelLuogo, creaSpinta,
   scatolaLato, geoTorrePorta, geoGhiera, materialeMuro, rifinisci, tonoDelLuogo } from './rocca3d.js';
 import { creaKit, siToccano, EDIFICI, PEZZO_MS, completaPezzi } from './edifici3d.js';
+import { RAMPA_PORTA } from '../mondo/luoghi.js';
 
 /** Misure secondo la classe del luogo. vicoli: quanti vicoli trasversali. */
 export const CLASSI_BORGO = {
@@ -34,7 +35,7 @@ export const CLASSI_BORGO = {
 // chiesa nella sede maggiore; torriCasa: quota di case-torre nella metà del borgo verso la rocca.
 
 const PORTA = { larghezza: 3.6, imposta: 3.0, torreLarghezza: 8, torreProfondita: 6, sporgenza: 1, sopraMura: 3.5 };
-const RAMPA_PORTA = { pendenza: 0.2, minima: 3, massima: 24, larghezza: 5, sopra: 0.5 };  // fuori dalla porta, fino al terreno
+// RAMPA_PORTA (fuori dalla porta, fino al terreno; anche la rampa lungo il muro) viene da js/mondo/luoghi.js.
 const TRATTO = 6;                          // m: lunghezza dei gradoni delle mura sul pendio
 const SCARPA = 0.15;                       // inclinazione della scarpa alla base delle mura (tangente)
 // Strade interne: larghezza (m), quota sopra il terreno (m; diverse, così agli incroci non sfarfallano).
@@ -364,7 +365,7 @@ export function* createBorgoAPezzi(suolo, luogo, ox, oz, rocca) {
       quotaRampaPorta(da, se * w) - terreno(...loc(se * w, da)), quotaRampaPorta(db, se * w) - terreno(...loc(se * w, db))]));
     const alti = [];
     for (let i = 0; i < n; i++) alti.push(sopraTratto(SPOR + lungaPorta * i / n, SPOR + lungaPorta * (i + 1) / n) >= RAMPA_PORTA.sopra);
-    rampaVera = alti.some(Boolean);
+    rampaVera = alti.some(Boolean) && !luogo.porta?.rampaMuro;   // con la rampa lungo il muro niente rampa dritta
     for (let i = 0; i < n && rampaVera; i++) {
       // Piano della rampa: un corpo pieno in pietra fino sotto il terreno, la cima in pendenza.
       const da = SPOR + lungaPorta * i / n, db = SPOR + lungaPorta * (i + 1) / n;
@@ -382,6 +383,62 @@ export function* createBorgoAPezzi(suolo, luogo, ox, oz, rocca) {
         parti.pietra.push(prisma(q4(pp), q4(pp), yBase, [ya, ya, yb, yb]));
       }
     }
+  }
+
+  // ─── Rampa d'accesso lungo il muro (luoghi.js, piani di tipo 'rampa'): pianerottolo, tratti, tornante ───
+  // Il terreno la segue già (è un piano del terrapieno); qui il lastricato, i parapetti sul lato esterno e il suolo.
+  const rampeMuro = [];                            // { tipo, c, au, av, A, B, q0, q1 } locali
+  const accesso = [];                              // dall'arrivo alla porta (locali): per le prove e la vista
+  if (luogo.porta?.rampaMuro) {
+    const lux = luogo.verso.x, luz = luogo.verso.z;
+    for (const p of luogo.piani) {
+      if (p.tipo !== 'rampa') continue;
+      const [c] = localeDelLuogo(luogo, [[p.cx, p.cz]]);
+      const au = p.ux * lux + p.uz * luz, av = -p.ux * luz + p.uz * lux;
+      const q0 = p.griglia ? p.griglia.h[0] : p.q, q1 = p.griglia ? p.griglia.h[1] : p.q;
+      rampeMuro.push({ parte: p.parte, c, au, av, A: p.a, B: p.parte === 'tratto' ? p.b - 0.5 : p.b, q0, q1 });
+    }
+    const tratti = rampeMuro.filter((r) => r.parte === 'tratto');
+    if (tratti.length) tratti.reduce((m2, r) => (r.q1 < m2.q1 ? r : m2)).ultimo = true;
+    const punto = (r, a, b) => [r.c[0] + r.au * a - r.av * b, r.c[1] + r.av * a + r.au * b];
+    const quotaIn = (r, a) => r.q0 + (r.q1 - r.q0) * clamp((a + r.A) / (2 * r.A), 0, 1);
+    const parapetto = (r, a0, b0, a1, b1) => {
+      const P0 = punto(r, a0, b0), P1 = punto(r, a1, b1), l = Math.hypot(P1[0] - P0[0], P1[1] - P0[1]);
+      if (l < 0.3) return;
+      const tu = (P1[0] - P0[0]) / l, tv = (P1[1] - P0[1]) / l, h = 0.22;
+      const pp = [[P0[0] - tv * h, P0[1] + tu * h], [P1[0] - tv * h, P1[1] + tu * h], [P1[0] + tv * h, P1[1] - tu * h], [P0[0] + tv * h, P0[1] - tu * h]];
+      const y0 = quotaIn(r, a0), y1 = quotaIn(r, a1);
+      const yb = Math.min(terreno(...P0), terreno(...P1), y0, y1) - 0.6;
+      parti.pietra.push(prisma(q4(pp), q4(pp), yb, [y0 + 0.95, y1 + 0.95, y1 + 0.95, y0 + 0.95]));
+      scatole.push({ cu: (P0[0] + P1[0]) / 2, cv: (P0[1] + P1[1]) / 2, au: tu, av: tv, hl: l / 2, hw: h + 0.05 });
+    };
+    // Lato esterno di un tratto: il più lontano dalla cinta; lato chiuso del tornante: il più lontano dalla porta.
+    const lontanoDalBorgo = (r, b) => { const [u, v] = punto(r, 0, b); return dentroPoligono(BL, u, v) ? -100 : distanzaContorno(BL, u, v); };
+    for (const r of rampeMuro) {
+      // Lastricato: lastre su tutto il rettangolo, alla quota della rampa (il terrapieno sta subito sotto).
+      const cc = [punto(r, -r.A, -r.B), punto(r, r.A, -r.B), punto(r, r.A, r.B), punto(r, -r.A, r.B)];
+      const yb = Math.min(r.q0, r.q1) - 0.6;
+      parti.pietra.push(prisma(q4(cc), q4(cc), yb, [r.q0 + 0.06, r.q1 + 0.06, r.q1 + 0.06, r.q0 + 0.06]));
+      if (r.parte === 'tratto') {
+        // Parapetto sul lato lontano dal muro.
+        const b = lontanoDalBorgo(r, r.B) > lontanoDalBorgo(r, -r.B) ? r.B + 0.25 : -r.B - 0.25;
+        parapetto(r, -r.A, b, r.A, b);
+      } else if (r.parte === 'pianerottolo') {
+        // Bordo esterno (lontano dalla porta) e il lato dove non parte la rampa.
+        parapetto(r, r.A, -r.B, r.A, r.B);
+        const tratto0 = rampeMuro.find((x) => x.parte === 'tratto');
+        const lato = tratto0 ? Math.sign((tratto0.c[0] - r.c[0]) * -r.av + (tratto0.c[1] - r.c[1]) * r.au) : 1;
+        parapetto(r, -r.A + 1.2, -lato * r.B, r.A, -lato * r.B);
+      }
+      // Ripiano d'angolo (r.parte === 'angolo'): solo il lastricato, raccorda due tratti allo spigolo della cinta.
+    }
+    // Percorso d'accesso: dall'arrivo (6 m oltre) a ritroso lungo la rampa fino al pianerottolo.
+    const RMW = luogo.porta.rampaMuro, ar = RMW.arrivo, [arU, arV] = localeDelLuogo(luogo, [[ar.x, ar.z]])[0];
+    const dau = ar.nx * lux + ar.nz * luz, dav = -ar.nx * luz + ar.nz * lux;
+    accesso.push([arU + dau * 6, arV + dav * 6]);
+    accesso.push(...localeDelLuogo(luogo, RMW.percorso.slice().reverse()));
+    const pian = rampeMuro.find((r) => r.parte === 'pianerottolo');
+    if (pian) accesso.push(pian.c);
   }
 
   yield;
@@ -768,6 +825,17 @@ export function* createBorgoAPezzi(suolo, luogo, ox, oz, rocca) {
   /** Quota del suolo costruito: solo la rampa fuori dalla porta (dentro il borgo si cammina sul pendio). */
   function quotaSuolo(x, z) {
     const [u, v] = inLocale(x, z);
+    for (const r of rampeMuro) {                   // rampa lungo il muro: la sua quota esatta
+      const du = u - r.c[0], dv = v - r.c[1], a = du * r.au + dv * r.av, b = -du * r.av + dv * r.au;
+      // Mai sotto il terreno: all'arrivo la griglia del blocco ammorbidisce il bordo e resterebbe un gradino.
+      if (Math.abs(a) <= r.A + 0.2 && Math.abs(b) <= r.B + 0.6) {
+        let q = r.q0 + (r.q1 - r.q0) * clamp((a + r.A) / (2 * r.A), 0, 1);
+        const h = terreno(u, v);
+        // Ultimi 3 m dell'ultimo tratto: raccordo sul terreno (la rampa arriva entro qualche decimetro, non a filo).
+        if (r.ultimo && a > r.A - 3) q += (h - q) * clamp((a - (r.A - 3)) / 3, 0, 1);
+        return Math.max(q, h);
+      }
+    }
     const du = u - gm[0], dv = v - gm[1], e = du * ge[0] + dv * ge[1], d = du * gn[0] + dv * gn[1];
     // Mai sotto il terreno (dove la rampa vi resta vicina il terreno può sporgere di poco).
     if (rampaVera && d > SPOR && d <= SPOR + lungaPorta && Math.abs(e) <= RAMPA_PORTA.larghezza / 2) return Math.max(quotaRampaPorta(d, 0), terreno(u, v));
@@ -794,6 +862,7 @@ export function* createBorgoAPezzi(suolo, luogo, ox, oz, rocca) {
     strade,                                       // polilinee locali (u, v): per gli edifici del passo 5
     poligono: BL,
     porta: { u: gm[0], v: gm[1], nu: gn[0], nv: gn[1], rampa: rampaVera ? lungaPorta : 0 },
+    accesso,                                      // rampa lungo il muro: punti locali dall'arrivo al pianerottolo ([] se non c'è)
     aggiornaLuci: edificiBorgo.aggiornaLuci,     // finestre e torce (t, buio, quota di finestre accese)
     sorgenti: edificiBorgo.sorgenti,              // per le PointLight più vicine (main.js)
     edifici: edificiBorgo.edifici,                // nominati: { tipo, nome, porta } (passo 6)

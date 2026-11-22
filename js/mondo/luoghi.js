@@ -18,8 +18,22 @@
 // forma del mondo (dal passo 2 il terrapieno), e deve essere identico in ogni browser.
 
 import { ACQUA, BIOMA } from './carta.js';
-import { quotaMondo, scavaFiumi, raffinaZona, quotaPiano } from './scena.js';
+import { quotaMondo, scavaFiumi, raffinaZona, quotaPiano, spianaPiani } from './scena.js';
 import { derivaSeme } from './rumore.js';
+
+/**
+ * Rampe fuori dalla porta del borgo (condivise con js/3d/borgo3d.js e js/mondo/strade.js).
+ * Dritta: dalla soglia al terreno lungo la normale della porta, `minima`–`massima` m, al più `pendenza`.
+ * Lungo il muro (`muro`, M7 passo 10): dove la discesa dritta supererebbe `pendenza` (rocche in cima a colli ripidi da
+ * ogni lato) un pianerottolo davanti alla porta e una rampa in terra e pietra lungo le mura, al `muro.pendenza`, fino
+ * a dove tocca il terreno (al più `muro.massima` m): diventa un piano del luogo (tipo 'rampa'), così il terrapieno la
+ * segue e taglia la scarpata del borgo.
+ */
+export const RAMPA_PORTA = {
+  pendenza: 0.2, minima: 3, massima: 24, larghezza: 5, sopra: 0.5, sporgenza: 1,
+  muro: { soglia: 0.28, pendenza: 0.18, larghezza: 5, massima: 120, minima: 8, pianerottolo: 7, spalla: 5, staccoMuro: 0.6,
+    margine: 1.5 },
+};
 
 export const LUOGHI = {
   quota: [120, 900],              // m, quota della cella: collina e pedemonte
@@ -68,7 +82,10 @@ export const LUOGHI = {
   // Arrivo alla porta del borgo: profilo del terreno fuori dalla porta (m), tratto più ripido su `finestra` m e pendenza
   // media; oltre `ripido` / `media` (tangenti, ~13% e 10%) il lato costa `peso` / `pesoMedia` m di salto per unità.
   // `pesoDirezione`: la stessa ripidezza conta anche nella scelta dell'orientamento del borgo (accanto al lavoro di terra).
-  portaArrivo: { da: 10, fino: 250, passo: 10, finestra: 40, ripido: 0.13, media: 0.1, peso: 60, pesoMedia: 30, pesoDirezione: 1 },
+  // `scesa`: pendenza della discesa dalla soglia al terreno fuori a `distanze` m; oltre `massima` (quella della rampa
+  // della porta, RAMPA_PORTA.pendenza in borgo3d.js e strade.js) il lato costa `peso` per unità.
+  portaArrivo: { da: 10, fino: 250, passo: 10, finestra: 40, ripido: 0.13, media: 0.1, peso: 60, pesoMedia: 30, pesoDirezione: 1,
+    scesa: { distanze: [15, 24, 35, 45], massima: 0.2, peso: 80 } },
   // Spalto davanti alla porta della rocca: il borgo scende dalla rocca, e una rampa in muratura dal cortile al pendio
   // verrebbe lunga 30–40 m. Il terreno del borgo si rialza in un dosso di terra fino a `sotto` m sotto il cortile, piatto
   // per `piano` m attorno al punto davanti alla porta e poi in discesa a `pendenza`: la rampa resta di pochi metri.
@@ -718,9 +735,14 @@ function pianiInDirezione(carta, sito, classe, dir, seed, L) {
     const fuoriQ = hq(m[0] + nu * 10, m[1] + nv * 10);
     const vicinoRocca = Math.sqrt(m[0] * m[0] + m[1] * m[1]) < hU + la * 0.6 ? 6 : 0;
     const ar = arrivo(m, nu, nv);
-    const ripidezza = P.peso * Math.max(0, ar.ripido - P.ripido) + P.pesoMedia * Math.max(0, ar.media - P.media);
+    // Discesa dalla soglia (piano del borgo, spesso rialzato dal terrapieno) al terreno fuori: la pendenza che servirebbe
+    // a una rampa per arrivarci entro `scesa.fino` m (sessione M6: soglie 8–12 m sopra il terreno a 24 m, rampe al 40–54%).
+    let scesa = 0;
+    for (const d of P.scesa.distanze) scesa = Math.max(scesa, (dentroQ - hq(m[0] + nu * d, m[1] + nv * d)) / d);
+    const ripidezza = P.peso * Math.max(0, ar.ripido - P.ripido) + P.pesoMedia * Math.max(0, ar.media - P.media)
+      + P.scesa.peso * Math.max(0, scesa - P.scesa.massima);
     const costo = Math.abs(dentroQ - fuoriQ) + vicinoRocca + ripidezza;
-    if (!porta || costo < porta.costo) porta = { costo, ripidezza, m, n: [nu, nv], salto: Math.abs(dentroQ - fuoriQ), arrivo: ar };
+    if (!porta || costo < porta.costo) porta = { costo, ripidezza, i, m, n: [nu, nv], salto: Math.abs(dentroQ - fuoriQ), arrivo: ar };
   }
   if (!porta) return null;
   // Rocca: sul lato anteriore col salto minore verso il borgo, con spazio davanti (i lati agli estremi A e B danno
@@ -821,13 +843,105 @@ function pianiInDirezione(carta, sito, classe, dir, seed, L) {
     }
   }
   const versoMondo = (nu, nv) => [ux * nu - uz * nv, uz * nu + ux * nv];
+  // ─── Rampa lungo il muro, se la discesa dritta dalla soglia al terreno è troppo ripida ───
+  let rampaMuro = null;
+  {
+    const RM = RAMPA_PORTA.muro, SPOR = RAMPA_PORTA.sporgenza, [nu, nv] = porta.n, m = porta.m;
+    const [xi, zi] = W(m[0] - nu * 6, m[1] - nv * 6), qS = quotaPiano(borgo, xi, zi);
+    let dritta = 0;
+    for (const d of [15, 24, 35, 45]) dritta = Math.max(dritta, (qS - hq(m[0] + nu * (SPOR + d), m[1] + nv * (SPOR + d))) / d);
+    if (dritta > RM.soglia) {
+      const i = porta.i, w = RM.larghezza, e0 = RM.spalla, NB = borgoL.length;
+      const dc = SPOR + RM.staccoMuro + w / 2;
+      const lontano = (u, v, PL) => {
+        let d2 = Infinity;
+        for (let k = 0; k < PL.length; k++) {
+          const p = PL[k], q2 = PL[(k + 1) % PL.length], du = q2[0] - p[0], dv = q2[1] - p[1], ll = du * du + dv * dv || 1;
+          const tt = Math.max(0, Math.min(1, ((u - p[0]) * du + (v - p[1]) * dv) / ll));
+          d2 = Math.min(d2, (u - p[0] - du * tt) ** 2 + (v - p[1] - dv * tt) ** 2);
+        }
+        return !dentroPoligono(PL, u, v) && Math.sqrt(d2) >= RM.margine;
+      };
+      // Terreno finale (coi terrapieni di rocca, borgo e terrazzi) dove arriva la rampa: lì le scarpate lo rialzano.
+      const pianiFissi = piani.slice();
+      const hFin = (u, v) => { const [x, z] = W(u, v), h = hq(u, v), r = spianaPiani(pianiFissi, x, z, h); return r === null ? h : r; };
+      const nLato = (k) => normaleEsterna(borgoL[k], borgoL[(k + 1) % NB], Cb);
+      // Percorso a `dc` m dalle mura, dalla porta nel verso sg, voltando agli spigoli della cinta (giro attorno al colle).
+      const percorso = (sg) => {
+        const [tu0, tv0] = [(borgoL[(i + 1) % NB][0] - borgoL[i][0]), (borgoL[(i + 1) % NB][1] - borgoL[i][1])];
+        const l0 = Math.hypot(tu0, tv0), t = [tu0 / l0 * sg, tv0 / l0 * sg];
+        const pts = [[m[0] + nu * dc + t[0] * e0, m[1] + nv * dc + t[1] * e0]];
+        let k = i;
+        for (let n = 0; n < NB - 2; n++) {
+          const kn = (k + sg + NB) % NB, V = borgoL[sg > 0 ? (k + 1) % NB : k];
+          const n1 = nLato(k), n2 = nLato(kn), dot = n1[0] * n2[0] + n1[1] * n2[1];
+          if (dot < 0.2) break;                              // spigolo troppo acuto: lì la rampa non gira
+          const f = dc / (1 + dot);
+          pts.push([V[0] + (n1[0] + n2[0]) * f, V[1] + (n1[1] + n2[1]) * f]);
+          k = kn;
+        }
+        return pts;
+      };
+      let migliore = null;
+      for (const sg of [1, -1]) {
+        const pts = percorso(sg), cammino = [pts[0]];
+        let L = 0, q = qS, tocca = false, fermo = false;
+        for (let j = 0; j + 1 < pts.length && !fermo; j++) {
+          const A = pts[j], B = pts[j + 1], lAB = Math.hypot(B[0] - A[0], B[1] - A[1]);
+          if (lAB < 0.5) continue;
+          const tx = (B[0] - A[0]) / lAB, tz = (B[1] - A[1]) / lAB;
+          for (let s2 = 1; s2 <= lAB; s2++) {
+            const u = A[0] + tx * s2, v = A[1] + tz * s2;
+            const fu = -tz * (w / 2), fv = tx * (w / 2);
+            if (!lontano(u + fu, v + fv, borgoL) || !lontano(u - fu, v - fv, borgoL) || !lontano(u, v, roccaL) || L + 1 > RM.massima) { fermo = true; break; }
+            L++; q = qS - RM.pendenza * L;
+            if (L >= RM.minima && q <= hFin(u, v) + 0.3) { cammino.push([u, v]); tocca = true; fermo = true; break; }
+            if (s2 + 1 > lAB) cammino.push([u, v]);
+          }
+        }
+        if (cammino.length < 2) continue;
+        const fine = cammino[cammino.length - 1];
+        const scarto = Math.abs(q - hFin(...fine));
+        const c = { sg, cammino, L, q1: q, scarto, tocca };
+        if (L >= RM.minima && (!migliore || scarto < migliore.scarto - 0.5 || (Math.abs(scarto - migliore.scarto) <= 0.5 && L < migliore.L))) migliore = c;
+      }
+      if (migliore) {
+        const [pnxw, pnzw] = versoMondo(nu, nv);
+        const pd = (RM.pianerottolo - 1) / 2, [pcx, pcz] = W(m[0] + nu * pd, m[1] + nv * pd);
+        piani.push({ tipo: 'rampa', parte: 'pianerottolo', cx: pcx, cz: pcz, ux: pnxw, uz: pnzw,
+          a: (RM.pianerottolo + 1) / 2, b: e0 + 0.5, r: 0, q: qS, s: Pc.scarpa.min });
+        const C = migliore.cammino, tratti = [];
+        let s0 = 0;
+        for (let j = 0; j + 1 < C.length; j++) {
+          const A = C[j], B = C[j + 1], lAB = Math.hypot(B[0] - A[0], B[1] - A[1]);
+          if (lAB < 0.5) continue;
+          const q0 = qS - RM.pendenza * s0, q1 = qS - RM.pendenza * (s0 + lAB);
+          const [dxw, dzw] = versoMondo((B[0] - A[0]) / lAB, (B[1] - A[1]) / lAB), [cx2, cz2] = W((A[0] + B[0]) / 2, (A[1] + B[1]) / 2);
+          piani.push({ tipo: 'rampa', parte: 'tratto', cx: cx2, cz: cz2, ux: dxw, uz: dzw, a: lAB / 2, b: w / 2 + 0.5,
+            r: 0, q: (q0 + q1) / 2, s: Pc.scarpa.min, griglia: { nu: 2, nv: 2, h: [q0, q1, q0, q1] } });
+          if (j > 0) {                                      // ripiano allo spigolo: raccorda due tratti
+            const [ax2, az2] = W(...A);
+            piani.push({ tipo: 'rampa', parte: 'angolo', cx: ax2, cz: az2, ux: dxw, uz: dzw, a: w / 2 + 0.5, b: w / 2 + 0.5,
+              r: 0, q: q0, s: Pc.scarpa.min });
+          }
+          tratti.push({ L: Math.round(lAB), q0, q1 });
+          s0 += lAB;
+        }
+        const B = C[C.length - 1], A = C[C.length - 2], lAB = Math.hypot(B[0] - A[0], B[1] - A[1]) || 1;
+        const [axw, azw] = W(...B), [dxw, dzw] = versoMondo((B[0] - A[0]) / lAB, (B[1] - A[1]) / lAB);
+        rampaMuro = { lato: migliore.sg, tratti, lunghezza: migliore.L, spalla: e0, scarto: +migliore.scarto.toFixed(1),
+          percorso: C.map((p) => W(...p)), arrivo: { x: axw, z: azw, quota: migliore.q1, nx: dxw, nz: dzw } };
+      }
+    }
+  }
   const [pnx, pnz] = versoMondo(...porta.n), [rnx, rnz] = versoMondo(...portaR.n);
   const [rex, rez] = versoMondo((portaR.b[0] - portaR.a[0]) / portaR.l, (portaR.b[1] - portaR.a[1]) / portaR.l);
   const [px, pz] = W(...porta.m), [rx, rz] = W(...portaR.m);
   return {
     piani, salto, pendenza, pelo: pelo > -Infinity ? pelo : null, alza: alza > 0 ? alza : 0, lavoro: nl ? lavoro / nl : 0,
     ripidezzaArrivo: porta.ripidezza,
-    porta: { x: px, z: pz, nx: pnx, nz: pnz, salto: porta.salto },
+    porta: { x: px, z: pz, nx: pnx, nz: pnz, salto: porta.salto,
+      ...(rampaMuro ? { rampaMuro, arrivo: rampaMuro.arrivo } : {}) },
     portaRocca: { x: rx, z: rz, nx: rnx, nz: rnz, ex: rex, ez: rez, lato: portaR.l, salto: portaR.salto },
   };
 }

@@ -17,6 +17,7 @@
 import { BIOMA, ACQUA } from './carta.js';
 import { quotaMondo, scavaFiumi, livelloLago, distanzaPiano, raffinaZona, quotaPiano, spianaLuoghi } from './scena.js';
 import { smoothstep, completa } from './rumore.js';
+import { RAMPA_PORTA } from './luoghi.js';   // import circolare (luoghi → scena → strade): usata solo dentro le funzioni
 
 export const STRADE = {
   // Classi [Ipotesi del piano, da tarare guardando]: pendenza comoda p0, massima pmax, semilarghezza (m).
@@ -575,9 +576,22 @@ function stradeScena(carta) {
 function portaIn(carta, x, z) {
   for (const l of carta.luoghi ?? []) {
     const P = l.porta;
-    if (P && P.nx !== undefined && Math.abs(P.x - x) < 1 && Math.abs(P.z - z) < 1) return { ...P, borgo: l.piani?.[1] };
+    if (!P || P.nx === undefined) continue;
+    if (Math.abs(P.x - x) < 1 && Math.abs(P.z - z) < 1) return { ...P, borgo: l.piani?.[1] };
+    // Borgo con la rampa lungo le mura (M7): la strada finisce dove la rampa tocca terra, `porta.arrivo`.
+    const A = P.arrivo;
+    if (A && Math.abs(A.x - x) < 1 && Math.abs(A.z - z) < 1) return { ...A, arrivo: true };
   }
   return null;
+}
+
+/** Estremo del tracciato fine: il punto della rete, o l'arrivo della rampa lungo le mura se la porta ne ha una. */
+function estremo(carta, x, z) {
+  for (const l of carta.luoghi ?? []) {
+    const P = l.porta;
+    if (P?.arrivo && Math.abs(P.x - x) < 1 && Math.abs(P.z - z) < 1) return [P.arrivo.x, P.arrivo.z];
+  }
+  return [x, z];
 }
 
 /**
@@ -586,8 +600,8 @@ function portaIn(carta, x, z) {
  * quota lì. La strada fa lo stesso tratto dritto e la stessa quota, così strada e rampa coincidono (segnalato
  * dall'utente: all'ingresso non combaciavano).
  */
-const RAMPA = { sporgenza: 1, minima: 3, massima: 24, pendenza: 0.2 };
 function rampaPorta(carta, P) {
+  const RAMPA = RAMPA_PORTA;
   const q = (d) => terrenoLuoghi(carta, P.x + P.nx * d, P.z + P.nz * d, { quota: 0, livello: NaN });
   const qs = q(RAMPA.sporgenza);
   let lunga = RAMPA.minima, migliore = Infinity;
@@ -615,7 +629,9 @@ function tracciaTratto(carta, tr, W) { return completa(tracciaTrattoAPezzi(carta
 /** tracciaTratto a pezzi: yield ogni PEZZO celle della griglia e ogni PEZZO passi della ricerca. */
 function* tracciaTrattoAPezzi(carta, tr, W = STRADE.scena.corridoio) {
   const S = STRADE.scena, K = STRADE.classi[tr.classe], g = S.cella;
-  const { px, pz } = tr, np = px.length;
+  const np = tr.px.length, px = Array.from(tr.px), pz = Array.from(tr.pz);
+  [px[0], pz[0]] = estremo(carta, px[0], pz[0]);
+  [px[np - 1], pz[np - 1]] = estremo(carta, px[np - 1], pz[np - 1]);
   // I fiumi attorno devono essere già cercati: la strada si appoggia sul terreno con i fiumi definitivi.
   const rx0 = Math.min(...px) - W, rz0 = Math.min(...pz) - W, rx1 = Math.max(...px) + W, rz1 = Math.max(...pz) + W;
   raffinaZona(carta, (rx0 + rx1) / 2, (rz0 + rz1) / 2, Math.max(rx1 - rx0, rz1 - rz0) / 2);
@@ -762,7 +778,7 @@ function* tracciaTrattoAPezzi(carta, tr, W = STRADE.scena.corridoio) {
     const ex = inizio ? fx[0] : fx[fx.length - 1], ez = inizio ? fz[0] : fz[fz.length - 1];
     const P = portaIn(carta, ex, ez);
     if (!P) continue;
-    const R = Math.max(S.portaDritta, rampaPorta(carta, P).fine + 4), X = [], Z = [];
+    const R = P.arrivo ? S.portaDritta : Math.max(S.portaDritta, rampaPorta(carta, P).fine + 4), X = [], Z = [];
     for (let t = 0; t < R - 1e-6; t += S.passo) { X.push(P.x + P.nx * t); Z.push(P.z + P.nz * t); }
     // Via tutti i punti fino all'ultimo (dalla porta) ancora vicino o non ancora davanti alla porta: se il
     // tracciato costeggiava le mura prima di arrivare, quel pezzo resterebbe come una seconda strada accanto.
@@ -798,8 +814,10 @@ function* tracciaTrattoAPezzi(carta, tr, W = STRADE.scena.corridoio) {
   hh = hh.slice();
   for (const inizio of [true, false]) {
     const k0 = inizio ? 0 : m - 1, P = portaIn(carta, fx[k0], fz[k0]);
-    if (!P || !P.borgo) continue;
-    const qs = quotaPiano(P.borgo, P.x - P.nx * 3, P.z - P.nz * 3), rampa = rampaPorta(carta, P), R = rampa.fine;
+    if (!P || !(P.borgo || P.arrivo)) continue;
+    // All'arrivo della rampa lungo le mura la strada parte dalla sua quota (la rampa di pietra fa il resto).
+    const qs = P.arrivo ? P.quota : quotaPiano(P.borgo, P.x - P.nx * 3, P.z - P.nz * 3);
+    const rampa = P.arrivo ? { fine: 0.01, quota: P.quota } : rampaPorta(carta, P), R = rampa.fine;
     let kR = k0;
     for (let i = 0; i < m; i++) {
       const k = inizio ? i : m - 1 - i;
@@ -839,8 +857,8 @@ function* tracciaTrattoAPezzi(carta, tr, W = STRADE.scena.corridoio) {
       if (i > 0) d0 += lung[i];
       let v = (F[i] + B[i]) / 2;
       v = Math.min(Math.max(v, base[i] - T), base[i] + T);
-      // Pieno entro la rampa della porta più lunga (RAMPA), poi sfuma in raccordoEstremi m.
-      const w = 1 - Math.min(1, Math.max(0, Math.min(d0, dFine[i]) - RAMPA.sporgenza - RAMPA.massima) / S.raccordoEstremi);
+      // Pieno entro la rampa della porta più lunga (RAMPA_PORTA), poi sfuma in raccordoEstremi m.
+      const w = 1 - Math.min(1, Math.max(0, Math.min(d0, dFine[i]) - RAMPA_PORTA.sporgenza - RAMPA_PORTA.massima) / S.raccordoEstremi);
       hh[i] = v + (base[i] - v) * w;
     }
   }
