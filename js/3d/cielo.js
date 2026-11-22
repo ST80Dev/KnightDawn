@@ -85,27 +85,36 @@ export function visibilitaDelGiorno(seme, giorni) {
 }
 
 // ─── Cupola del cielo ───
-// Sfera attorno alla camera, disegnata per prima, senza profondità né nebbia. In basso (direzione orizzontale e
+// Sfera attorno alla camera, senza nebbia, disegnata per ULTIMA tra gli opachi e con il test di profondità: lo
+// shader gira solo sui pixel di cielo rimasti scoperti (misura dell'utente sulla UHD 730 con la cupola disegnata per
+// prima su tutto lo schermo: 1,2 ms). Resta prima dei trasparenti (mare, acque), che la coprono. In basso (direzione orizzontale e
 // sotto) ha esattamente il colore della nebbia, così il terreno lontano, che nella nebbia sfuma in quel colore,
 // non lascia una riga all'orizzonte, anche dalle alture. Sopra: gradiente verso lo zenit, fascia calda dalla parte
 // del sole al crepuscolo, disco e alone del sole, disco della luna. Un solo calcolo leggero per pixel di cielo.
-const RAGGIO_CUPOLA = 5000;               // m: qualunque valore tra near e far va bene (niente profondità)
+// m: oltre il terreno disegnato (anelli dell'orizzonte e mare fino a ~110 km) e dentro il far della camera (130 km).
+// Con 48×24 segmenti le facce rientrano al più di ~0,5 km.
+const RAGGIO_CUPOLA = 125000;
 const RAGGIO_SOLE = 0.75 * _gradi;        // più grande del vero (0,27°): si deve vedere dalla vista di gioco
 const RAGGIO_LUNA = 0.6 * _gradi;
 
 const VERTICI_CUPOLA = /* glsl */ `
+  #include <common>
+  #include <logdepthbuf_pars_vertex>
   varying vec3 vDir;
   void main() {
     vDir = position;
     vec4 p = modelViewMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * p;
+    #include <logdepthbuf_vertex>
   }`;
 const FRAMMENTI_CUPOLA = /* glsl */ `
   uniform vec3 uOrizzonte, uZenit, uAlone, uColoreSole, uColoreLuna;
   uniform vec3 uDirSole, uDirLuna;
   uniform float uCrepuscolo, uSole, uLuna, uCosSole, uCosLuna;
   varying vec3 vDir;
+  #include <logdepthbuf_pars_fragment>
   void main() {
+    #include <logdepthbuf_fragment>
     vec3 d = normalize(vDir);
     float h = d.y;
     // Gradiente: nullo sotto e all'orizzonte (colore della nebbia), pieno verso lo zenit.
@@ -141,11 +150,11 @@ function creaCupola() {
       uCosSole: { value: Math.cos(RAGGIO_SOLE) }, uCosLuna: { value: Math.cos(RAGGIO_LUNA) },
     },
     vertexShader: VERTICI_CUPOLA, fragmentShader: FRAMMENTI_CUPOLA,
-    side: THREE.BackSide, depthWrite: false, depthTest: false, fog: false,
+    side: THREE.BackSide, depthWrite: false, depthTest: true, fog: false,
   });
   const cupola = new THREE.Mesh(new THREE.SphereGeometry(RAGGIO_CUPOLA, 48, 24), materiale);
   cupola.name = 'cielo-cupola';
-  cupola.renderOrder = -1000;              // prima di tutto: il resto la copre
+  cupola.renderOrder = 1000;               // ultima tra gli opachi (i trasparenti vengono comunque dopo)
   cupola.frustumCulled = false;
   // Segue la camera (qualunque camera la disegni: anche quella del percorso di prova).
   cupola.onBeforeRender = (_r, _s, cam) => { cupola.position.copy(cam.position); cupola.updateMatrixWorld(); };
