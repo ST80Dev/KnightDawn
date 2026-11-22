@@ -65,6 +65,7 @@ export const STRADE = {
     guado: 4,
     passo: 5,                   // m tra i punti del tracciato finale
     liscia: [3, 2],             // media mobile ±3 punti, 2 passate (toglie i gradini senza tagliare i tornanti)
+    rampaMargine: 6,            // m: distanza minima del tracciato dai piani della rampa lungo le mura
     portaDritta: 12,            // m: tratto dritto lungo la normale della porta di un borgo, fino alla porta
     lisciaTerreno: 2,           // passate di media 3×3 sulle quote della griglia prima di cercare il percorso
     lisciaVera: 1,              // passate dopo cui si prende anche la pendenza «vera» (la più ripida delle due conta)
@@ -670,9 +671,16 @@ function* tracciaTrattoAPezzi(carta, tr, W = STRADE.scena.corridoio) {
     // Terrapieni di rocca e borgo: niente strada sui piani (le scarpate sì: la porta sta sul bordo del borgo,
     // tra le scarpate dei terrazzi), tranne vicino agli estremi.
     const vicino = Math.hypot(x - A.x, z - A.z) < 40 || Math.hypot(x - B.x, z - B.z) < 40;
-    let dp = Infinity, sp = 0;
-    for (const p of piani) { const d = distanzaPiano(p, x, z); if (d < dp) { dp = d; sp = p.s; } }
+    let dp = Infinity, sp = 0, dRampa = Infinity;
+    for (const p of piani) {
+      const d = distanzaPiano(p, x, z);
+      if (p.tipo === 'rampa') { if (d < dRampa) dRampa = d; continue; }
+      if (d < dp) { dp = d; sp = p.s; }
+    }
     if (!vicino && dp < 0) continue;
+    // La rampa lungo le mura (M7) non è strada: mai sopra né rasente, nemmeno vicino all'arrivo (prima la strada le
+    // correva accanto per decine di metri e il terreno disegnato tra le due saliva a 37°).
+    if (dRampa < S.rampaMargine) continue;
     // Sulle scarpate dei terrapieni (rasente alle mura) costa di più, tranne vicino agli estremi: le strade di
     // passaggio girano al largo, alla porta si arriva per la diramazione.
     if (!vicino && dp < sp + S.mura.oltre) mura[k] = 1;
