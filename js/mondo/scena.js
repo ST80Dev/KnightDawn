@@ -311,6 +311,118 @@ const FIUMI_SCENA = {
   ripa: 0.6,                                             // pendenza massima del fianco vicino alla sorgente (~31°)
 };
 
+/**
+ * Fiumi sul rilievo fine (passo G2 del piano «Mondo generato in anticipo», docs/ESPLORAZIONE_3D.md). Sul rilievo
+ * `quotaMondo` a FIUMI_FINI.passo m si calcola il deflusso (conche riempite dal mare, dai laghi della Carta e dal bordo;
+ * direzioni; bacini); i corsi d'acqua sono le celle con bacino ≥ FIUMI_FINI.bacino km². Rete in tronchi: dalla foce si
+ * risale sempre il ramo col bacino maggiore; gli altri sono affluenti che finiscono esattamente su un punto del
+ * tronco. Stesso formato di `carta.fiumi` (Float32Array di x, y in km, bacino, letto = NaN), che sostituisce:
+ * i fiumi stanno sul fondo delle valli vere invece di essere scavati dopo lungo i tracciati della Carta a 1 km
+ * (radice di fiumi rialzati, canyon e strade di traverso segnalati dall'utente). `carta.fiumiFini` = true.
+ */
+export const FIUMI_FINI = { passo: 62.5, bacino: 20, minimo: 12, liscia: [2, 2] };
+export function fiumiFini(carta, avanzamento = null) {
+  const t0 = performance.now(), F = FIUMI_FINI, P = F.passo, C = carta.cella;
+  const nx = Math.round(carta.cols * C / P) + 1, nz = Math.round(carta.rows * C / P) + 1, n = nx * nz;
+  const g = new Float32Array(n), seme = derivaSeme(carta.seme, 101);
+  for (let r = 0; r < nz; r++) {
+    if (avanzamento && r % 64 === 0) avanzamento(0.6 * r / nz);
+    for (let q = 0; q < nx; q++) g[r * nx + q] = quotaMondo(carta, q * P, r * P, seme);
+  }
+  // Foci: mare e laghi della Carta, quota ≤ 0, bordo.
+  const foce = new Uint8Array(n);
+  for (let r = 0; r < nz; r++) for (let q = 0; q < nx; q++) {
+    const i = r * nx + q, c = Math.min(carta.cols - 1, Math.floor(q * P / C)), rr = Math.min(carta.rows - 1, Math.floor(r * P / C));
+    if (g[i] <= 0 || q === 0 || r === 0 || q === nx - 1 || r === nz - 1 || carta.acque[rr * carta.cols + c] !== ACQUA.TERRA) foce[i] = 1;
+  }
+  // Riempimento delle conche (priority flood, mucchio binario) e direzioni: ogni cella scende verso chi l'ha raggiunta.
+  const fill = new Float32Array(n), fatto = new Uint8Array(n), ric = new Int32Array(n).fill(-1), ordine = new Int32Array(n);
+  const hk = new Int32Array(n), hv = new Float32Array(n);
+  let hn = 0, no = 0;
+  const spingi = (k, v) => { let i = hn++; while (i > 0) { const p = (i - 1) >> 1; if (hv[p] <= v) break; hk[i] = hk[p]; hv[i] = hv[p]; i = p; } hk[i] = k; hv[i] = v; };
+  const togli = () => {
+    const k = hk[0], v = hv[--hn], kk = hk[hn];
+    let i = 0;
+    for (;;) { let a = 2 * i + 1; if (a >= hn) break; if (a + 1 < hn && hv[a + 1] < hv[a]) a++; if (hv[a] >= v) break; hk[i] = hk[a]; hv[i] = hv[a]; i = a; }
+    hk[i] = kk; hv[i] = v; return k;
+  };
+  for (let i = 0; i < n; i++) if (foce[i]) { fill[i] = g[i]; fatto[i] = 1; spingi(i, g[i]); }
+  const DQ = [1, -1, 0, 0, 1, 1, -1, -1], DR = [0, 0, 1, -1, 1, -1, 1, -1];
+  while (hn) {
+    const k = togli(); ordine[no++] = k;
+    const q = k % nx, r = (k - q) / nx;
+    for (let d = 0; d < 8; d++) {
+      const qq = q + DQ[d], rr = r + DR[d];
+      if (qq < 0 || rr < 0 || qq >= nx || rr >= nz) continue;
+      const j = rr * nx + qq;
+      if (fatto[j]) continue;
+      fatto[j] = 1; fill[j] = Math.max(g[j], fill[k] + 1e-3); ric[j] = k; spingi(j, fill[j]);
+    }
+  }
+  if (avanzamento) avanzamento(0.8);
+  const bacino = new Float32Array(n).fill(P * P / 1e6);
+  for (let a = no - 1; a >= 0; a--) { const k = ordine[a]; if (ric[k] >= 0) bacino[ric[k]] += bacino[k]; }
+  // Rete in tronchi: per ogni cella di fiume, il ramo a monte col bacino maggiore.
+  const fiume = (i) => !foce[i] && bacino[i] >= F.bacino;
+  const su = new Int32Array(n).fill(-1);
+  for (let i = 0; i < n; i++) {
+    if (!fiume(i)) continue;
+    const r = ric[i];
+    if (r >= 0 && fiume(r) && (su[r] < 0 || bacino[i] > bacino[su[r]])) su[r] = i;
+  }
+  const punto = new Map();                               // cella → [x, y] (km) già lisciati: le confluenze coincidono
+  const fiumi = [], coda = [];
+  for (let i = 0; i < n; i++) if (fiume(i) && (ric[i] < 0 || !fiume(ric[i]))) coda.push([i, ric[i] >= 0 ? ric[i] : -1]);
+  const L = (a, R, passate) => {                         // media mobile con estremi fermi
+    for (let it = 0; it < passate; it++) {
+      const b = a.slice();
+      for (let i = 1; i < a.length - 1; i++) {
+        const r = Math.min(R, i, a.length - 1 - i);
+        let somma = 0;
+        for (let j = i - r; j <= i + r; j++) somma += a[j];
+        b[i] = somma / (2 * r + 1);
+      }
+      a = b;
+    }
+    return a;
+  };
+  while (coda.length) {
+    const [bocca, valle] = coda.shift();
+    const celle = [];
+    for (let i = bocca; i >= 0; i = su[i]) celle.push(i);
+    celle.reverse();                                     // dalla sorgente alla bocca
+    if (celle.length < F.minimo) continue;
+    // Punti: le celle, poi (se c'è) il punto a valle: la foce (mare, lago) o il punto del fiume in cui si confluisce.
+    let xs = celle.map((i) => (i % nx) * P / C), ys = celle.map((i) => Math.floor(i / nx) * P / C);
+    const giu = valle >= 0 ? (punto.get(valle) ?? [(valle % nx) * P / C, Math.floor(valle / nx) * P / C]) : null;
+    if (giu) { xs.push(giu[0]); ys.push(giu[1]); }
+    xs = L(xs, ...F.liscia); ys = L(ys, ...F.liscia);
+    const m = xs.length, f = new Float32Array(m * 4);
+    for (let k = 0; k < m; k++) {
+      const cell = k < celle.length ? celle[k] : valle;
+      f[k * 4] = xs[k]; f[k * 4 + 1] = ys[k]; f[k * 4 + 2] = bacino[cell]; f[k * 4 + 3] = NaN;
+    }
+    // I punti come Float32 (le chiavi delle confluenze sono quelle dei valori salvati).
+    for (let k = 0; k < celle.length; k++) punto.set(celle[k], [f[k * 4], f[k * 4 + 1]]);
+    fiumi.push(f);
+    // Affluenti: le altre celle di fiume che scendono in questo tronco.
+    for (const c of celle) {
+      const q = c % nx, r = (c - q) / nx;
+      for (let d = 0; d < 8; d++) {
+        const qq = q + DQ[d], rr = r + DR[d];
+        if (qq < 0 || rr < 0 || qq >= nx || rr >= nz) continue;
+        const j = rr * nx + qq;
+        if (j !== su[c] && ric[j] === c && fiume(j)) coda.push([j, c]);
+      }
+    }
+  }
+  carta.fiumi = fiumi;
+  carta.fiumiFini = true;
+  carta.statistiche = { ...(carta.statistiche || {}), fiumiFini: { corsi: fiumi.length, ms: Math.round(performance.now() - t0) } };
+  if (avanzamento) avanzamento(1);
+  return carta;
+}
+
 const _fiumi = new WeakMap();
 
 /** Fiumi della Carta pronti per le Scene: punti in metri, letto, semilarghezza, profondità, indice. */
@@ -333,7 +445,7 @@ export function fiumiScena(carta) {
       prof[i] = F.profondita.base + F.profondita.perRadice * r;
       // Letto sotto la superficie liscia della Carta: pelo dell'acqua F.sponda.altezza sotto il terreno.
       // Vicino ai laghi conta la riva rialzata come nella Scena (scavaFiumi), dentro il livello del lago.
-      const suolo = conRiva(carta, x[i], z[i], quotaCarta(carta, x[i], z[i]));
+      const suolo = conRiva(carta, x[i], z[i], carta.fiumiFini ? quotaMondo(carta, x[i], z[i]) : quotaCarta(carta, x[i], z[i]));
       const grezzo = suolo - prof[i] - F.sponda.altezza;
       letto[i] = i === 0 ? grezzo : Math.min(grezzo, letto[i - 1] - F.scendi);
     }
@@ -415,7 +527,7 @@ function puntiFissi(carta, curve) {
       if (k === m - 1 && foce[ci]) {
         const f = fissi[foce[ci][0]].get(foce[ci][1]);
         if (f) { x = f.x; z = f.z; L = f.L; }
-      } else if (k > 0 && k < m - 1) {
+      } else if (k > 0 && k < m - 1 && !carta.fiumiFini) {   // fiumi fini: la confluenza è già sul fondo
         // Confluenza: il punto più basso attorno al tracciato (a parità, il più vicino).
         let hMin = Infinity;
         for (let b = -3; b <= 3; b++) {
@@ -534,6 +646,8 @@ function sulFondo(quota, px, pz, metri) {
 /** Cerca sul terreno il percorso di un tratto (una volta per Carta). */
 function raffina(carta, pronto, id) {
   if (pronto.raffinati.has(id)) return;
+  // Fiumi calcolati sul rilievo fine (G2): il tracciato è già sul fondo, niente ricerca.
+  if (carta.fiumiFini) { pronto.raffinati.set(id, polilinea(carta, pronto, id)); return; }
   const F = FIUMI_SCENA, tr = pronto.tratti[id], cv = pronto.curve[tr.ci];
   const seme = derivaSeme(carta.seme, 101);
   const quota = (x, z) => conRiva(carta, x, z, quotaMondo(carta, x, z, seme), false);

@@ -15,7 +15,7 @@ import { generaCarta, VERSIONE_GENERATORE } from './carta.js';
 import { verificaFiumi, verificaPanorami, verificaVarieta, verificaLuoghi } from './verifica.js';
 import { aggiungiLuoghi } from './luoghi.js';
 import { aggiungiStrade } from './strade.js';
-import { grigliaMondo } from './scena.js';
+import { grigliaMondo, fiumiFini } from './scena.js';
 import { aggiungiSiti, completaSiti, verificaSiti } from './siti.js';
 
 const CACHE_MASSIMO = 3;
@@ -80,7 +80,7 @@ function verificaSemi(id, semi) {
   semi.forEach((seme, k) => {
     self.postMessage({ id, tipo: 'avanzamento', testo: `seme ${seme} (${k + 1} di ${semi.length})`, frazione: k / semi.length });
     const t0 = performance.now();
-    const carta = completaSiti(aggiungiStrade(aggiungiSiti(aggiungiLuoghi(generaCarta(seme)))));
+    const carta = completaSiti(aggiungiStrade(aggiungiSiti(aggiungiLuoghi(fiumiFini(generaCarta(seme))))));
     const f = verificaFiumi(carta), p = verificaPanorami(carta), v = verificaVarieta(carta), l = verificaLuoghi(carta);
     const s = verificaSiti(carta);
     esiti.push({ seme, ms: performance.now() - t0, regole: [
@@ -108,6 +108,8 @@ self.onmessage = async (e) => {
       carta.daCache = true;
     } else {
       carta = generaCarta(seme, { avanzamento });
+      // Fiumi sul rilievo fine (piano «Mondo generato in anticipo», passo G2): prima di luoghi e strade.
+      fiumiFini(carta, (f) => avanzamento('Fiumi sul rilievo fine', 0.9 + 0.05 * f));
       avanzamento('Rocche e borghi', 0.95);
       aggiungiLuoghi(carta);
       avanzamento('Villaggi e luoghi', 0.96);
