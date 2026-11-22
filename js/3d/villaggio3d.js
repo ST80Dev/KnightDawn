@@ -69,7 +69,7 @@ function texturaSuolo(tipo) {
   let sm = [2718, 4711, 1618][tipo];
   const rnd = () => ((sm = (sm * 1103515245 + 12345) >>> 0) / 4294967296);
   // Terra battuta chiara e polverosa (richiesta dell'utente: la terra scura sembrava fango); carreggiata poco più bruna.
-  g.fillStyle = ['rgb(198,178,142)', 'rgb(158,144,124)', 'rgb(176,154,120)'][tipo];
+  g.fillStyle = ['rgb(198,178,142)', 'rgb(158,144,124)', 'rgb(150,126,96)'][tipo];
   g.fillRect(0, 0, N, N);
   for (let k = 0; k < 6000; k++) {                           // grana, impronte, ghiaia
     const v = 140 + Math.floor(rnd() * 90);
