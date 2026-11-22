@@ -1677,21 +1677,28 @@ segni e «Vai a…» in `cartaVista.js`; `VERSIONE_GENERATORE` + `siti-1`.
 ### Passo 2 — villaggi e ovili 3D (fatto, da provare)
 
 Codice: `js/3d/villaggio3d.js` (nuovo), agganci in `main.js` (`costruisciVillaggi` accanto a `costruisciRocche`, nel
-blocco che segue il cavaliere), `raggioSito` in `js/mondo/siti.js` (raggio d'ingombro: frazione 55 m, villaggio 85 m,
-ovile 22 m; nessun cambio alle Carte, `VERSIONE_GENERATORE` invariata).
-- **Villaggio:** slargo con il pozzo; case attorno rivolte allo slargo, o alla strada se passa entro 22 m (la strada
-  arriva fin dentro al villaggio, passo 1); mai sulla carreggiata, nell'acqua o dove il terreno sotto la casa sale più di
-  2,6 m. Frazione 6–10 case (rurali e basse), villaggio 12–20 con pieve (la chiesa del kit, 9 × 16 m), locanda e fabbro.
-- **Ovile:** stalla con recinto e pagliaio.
-- **Niente terrapieno** (deviazione dal piano): le case stanno sul terreno com'è con lo zoccolo del kit; i siti sono già
-  i punti più piani della cella. Un piano rotondo di 0,7 × raggio tiene fuori la vegetazione: terra battuta al centro,
-  erba tra le case di fuori, nessun albero nel villaggio.
-- **Misure** [Certo, Chromium headless, seme 570549]: frazione 21 chiamate e ~5.200 triangoli; villaggio 31 chiamate e
-  12–13.500 triangoli; ovile 10 chiamate e ~1.300 triangoli. **Sopra il budget del piano (≤ 20 chiamate)**: le zone dei
-  dettagli del kit (fino a 2 × 2) moltiplicano le istanze; il kit non ha ancora un'opzione per una zona sola (file di
-  M7). Restano sotto le 40 del borgo.
-- **Fuori dal passo:** persone nei villaggi, mulino, forno, orti e palizzata; differenze per clima delle case (proposta
-  a parte).
+blocco che segue il cavaliere; porte per «Entra», luci, F3), `raggioSito` in `js/mondo/siti.js` (raggio d'ingombro:
+frazione 55 m, villaggio 85 m, ovile 22 m; nessun cambio alle Carte, `VERSIONE_GENERATORE` invariata).
+- **Impianto** (richieste dell'utente: niente strada che muore in una piazza, sviluppo realistico):
+  - **via principale** che attraversa il villaggio: dritta nel tratto d'ingresso, dove coincide con la strada della
+    rete (passo 1, che arriva al centro del sito), poi serpeggia, esce dall'altra parte e continua per 35 m come
+    carrareccia nei campi;
+  - **vicoli** di traverso (0–1 nelle frazioni, 1–2 nei villaggi) e una **piazzetta** sulla via, con il pozzo;
+  - **case** lungo via e vicoli con la porta sulla strada, poi in seconda fila rivolte alla via più vicina. Frazione 6–10
+    case (rurali e basse), villaggio 12–20 con pieve sulla piazzetta (la chiesa del kit, 9 × 16 m), locanda sulla via e
+    fabbro verso l'ingresso. Mai sulle strade, nell'acqua o dove il terreno sotto la casa sale più di 2,6 m.
+- **Suolo:** terra battuta continua tra le case, attorno a ognuna (aia dietro le rurali) e per 3–7 m oltre il nucleo,
+  con il bordo frastagliato (griglia di 2,5 m, alpha per vertice e alphaTest); via e vicoli di terra più scura con i
+  solchi delle ruote; piazzetta selciata nei villaggi grandi. Al più 3 chiamate.
+- **Ovile:** stalla con recinto e pagliaio, terra calpestata attorno.
+- **Niente terrapieno** (deviazione dal piano): case sul terreno com'è con lo zoccolo del kit; i siti sono già i punti
+  più piani della cella. Un piano rotondo di 0,7 × raggio tiene fuori la vegetazione.
+- **Misure** [Certo, Chromium headless, seme 570549]: frazione ~25 chiamate e ~7.000 triangoli; villaggio 33–36
+  chiamate e 17–22.500 triangoli; ovile 11 chiamate e ~1.700 triangoli. **Sopra il budget del piano (≤ 20 chiamate)**:
+  le zone dei dettagli del kit (fino a 2 × 2) moltiplicano le istanze; il kit non ha un'opzione per una zona sola (file
+  di M7). Restano sotto le 40 del borgo; triangoli entro i 30.000.
+- **Fuori dal passo:** persone nei villaggi, mulino, forno, orti e palizzata; differenze per clima delle case e dei
+  borghi (proposta all'utente).
 
 ### Decisioni tecniche
 
