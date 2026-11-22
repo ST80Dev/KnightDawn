@@ -420,10 +420,17 @@ export function* creaOrizzonteAPezzi(carta, cx, cz, terrain, coloreAcqua, stagio
   for (const a of anelli) geometrie.push(yield* anello(a, colore, cx, cz));
   yield 'orizzonte: anelli';
 
-  const mat = materialeSuolo(cx, cz);   // colore per pixel come il blocco (terrain.js)
+  // Colore come il blocco (terrain.js), un materiale per anello: dopo il caricamento ciascuno si cuoce in una texture sua
+  // (cuociOrizzonteAPezzi, main.js) e diventa una lettura per pixel. Prestazioni: gli anelli si disegnano dopo gli
+  // altri oggetti opachi (renderOrder), così i pixel coperti da blocco, alberi ed edifici non si calcolano.
   const oggetto = new THREE.Group();
   oggetto.name = 'orizzonte';
-  for (const g of geometrie) oggetto.add(new THREE.Mesh(g, mat));
+  geometrie.forEach((g, i) => {
+    const m = new THREE.Mesh(g, materialeSuolo(cx, cz));
+    m.userData.raggio = anelli[i].raggio;
+    m.renderOrder = 1;
+    oggetto.add(m);
+  });
 
   // Mare: una griglia larga che scende con la curvatura (un piano dritto spunterebbe sopra le coste lontane).
   let acqua = null;

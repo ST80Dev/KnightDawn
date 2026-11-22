@@ -12,7 +12,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { loadTerrain, componiSuolo, createTerrainAPezzi, coloreMondo, cuociSuolo } from './terrain.js';
+import { loadTerrain, componiSuolo, createTerrainAPezzi, coloreMondo, cuociSuolo, cuociOrizzonteAPezzi } from './terrain.js';
 import { createKnight } from './knight3d.js';
 import { createCavallo } from './cavallo3d.js';
 import { createFollowCamera } from './camera.js';
@@ -634,6 +634,7 @@ function* preparaMondo(desc) {
   yield 'cottura';
   // Orizzonte: terreno lontano fino a ~110 km. Le pareti laterali del blocco si vedrebbero dall'esterno.
   const oriz = yield* creaOrizzonteAPezzi(carta, cx, cz, ter, COLORE_ACQUA, Calendar.stagione);
+  const msCotOriz = yield* cuociOrizzonteAPezzi(renderer, oriz, ter);   // colore degli anelli in texture (prestazioni)
   // Bosco lontano: sagome degli alberi negli anelli fino a ~4 km (niente stacco al bordo del blocco).
   yield 'orizzonte: luoghi';
   yield* veg.aggiungiLontanoAPezzi(carta, cx, cz, oriz.quota, Calendar.stagione, MS_PEZZO);
@@ -645,7 +646,7 @@ function* preparaMondo(desc) {
   yield* preparaScheda([ter.mesh, acque, pp.gruppo, ...roc.map((r) => r.object), veg.oggetto, camp?.object,
     oriz.oggetto, oriz.acqua]);
   return { desc: { ...desc, cx, cz }, scostamento: { x: desc.cx - cx, z: desc.cz - cz }, meta, dati, ter, acque, strade, pp, roc,
-    veg, camp, msCot, oriz };
+    veg, camp, msCot, msCotOriz, oriz };
 }
 
 /**
@@ -701,6 +702,7 @@ function applicaMondo(p) {
     occlusori.push(...campagna.solidi);
   }
   msCottura = p.msCot;
+  msCotturaOrizzonte = p.msCotOriz;
   vegetazione.oggetto.visible = vegetazioneVisibile;
   scene.add(vegetazione.oggetto);
   ostacoli.push(vegetazione);              // tronchi, massi, affioramenti e sassi grandi
@@ -1247,6 +1249,7 @@ function gruppoDi(o) {
 
 // ─── Percorso di prova (F9 con F3 aperto, o ?prova nell'indirizzo) ───────
 let msCottura = null;                    // ms della cottura del colore del blocco (F3)
+let msCotturaOrizzonte = null;           // ms della cottura degli anelli dell'orizzonte (F3)
 let msCambioBlocco = null, cambiBlocco = 0;   // M7, passo 9: fotogramma più lungo dell'ultimo cambio di blocco e quanti (F3)
 let msTotaleBlocco = null;                // ms dall'inizio della preparazione allo scambio (F3)
 let ultimoCambio = null;                  // dettagli dell'ultimo cambio (kd.cambiBlocco)
@@ -1485,6 +1488,7 @@ function aggiornaPannello(now) {
     + (qualita.adatta < 1 ? ` (adattiva ×${fmt(qualita.adatta, 2)})` : '');
   testo += `\nCPU: logica ${fmt(ri.msLogica, 1)} ms · invio comandi ${fmt(ri.msInvio, 1)} ms`;
   if (msCottura != null) testo += ` · suolo cotto in ${fmt(msCottura)} ms`;
+  if (msCotturaOrizzonte != null) testo += ` · orizzonte cotto in ${fmt(msCotturaOrizzonte)} ms`;
   if (msCambioBlocco != null) testo += ` · cambi di blocco ${cambiBlocco} (l'ultimo: fotogramma più lungo ${fmt(msCambioBlocco)} ms`
     + (ultimoCambio?.disegno != null ? `, disegno dopo lo scambio ${fmt(ultimoCambio.disegno)} ms` : '')
     + (msTotaleBlocco != null ? `, in tutto ${fmt(msTotaleBlocco / 1000, 1)} s)` : ')');

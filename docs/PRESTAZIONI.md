@@ -177,6 +177,18 @@ Nel codice di oggi [Probabile, da confermare con le misure del passo 1]:
 3. Sessione responsabile: «M1 - grafica».
 4. Scheda: Intel UHD Graphics 730 (ANGLE, Direct3D 11), 1920×1080 al 100%.
 
+### Novembre 2026, sera: terreno e cielo oltre il budget alla partenza
+
+Misura dell'utente (partenza, 23:37): GPU 13,4 ms; terreno 8,0 (blocco 3,7 · orizzonte 4,3) su 4,5; acqua, cielo ed
+effetti 2,1 su 1,5 (cielo 1,2). Rimedi:
+- **anelli dell'orizzonte cotti** come il blocco (`cuociOrizzonteAPezzi` in `terrain.js`): una texture per anello
+  (2048² fino a 6 km, 1024² oltre), con blocco e anelli interni disegnati nel foro (senza, il nero del foro sbavava nelle
+  mipmap: linee scure sulle giunture). Gli anelli si disegnano dopo gli altri opachi (`renderOrder` 1): i pixel coperti
+  da blocco, alberi ed edifici non si calcolano. Al caricamento un anello per passo (headless 628 ms in tutto; sulla
+  scheda vera molto meno). Il cotto si legge in coordinate dell'oggetto (`vLocCotto`), non in `vMondo` che si avvolge
+  ogni 8192 m;
+- **cupola del cielo** disegnata per ultima con il test di profondità (sessione Cielo e meteo).
+
 ## Risultati del percorso di prova
 
 Scheda Intel UHD 730 (il browser Brave nasconde il nome), 1920×935, seme 570549 (`?seme=570549&prova`).

@@ -353,13 +353,15 @@ varying vec4 vCampi;
 uniform vec2 uOrigine;
 varying vec3 vBase;
 varying vec4 vStrati;
-varying vec2 vMondo;`)
+varying vec2 vMondo;
+varying vec2 vLocCotto;`)
       .replace('#include <project_vertex>', `#include <project_vertex>
   vBase = base;
   vStrati = strati;
   vSuolo = aSuolo;
   vCampi = aCampi;
-  vMondo = (modelMatrix * vec4(transformed, 1.0)).xz + uOrigine;`);
+  vMondo = (modelMatrix * vec4(transformed, 1.0)).xz + uOrigine;
+  vLocCotto = transformed.xz;`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform vec3 uRoccia;
@@ -379,6 +381,7 @@ uniform sampler2D uCotto;
 varying vec3 vBase;
 varying vec4 vStrati;
 varying vec2 vMondo;
+varying vec2 vLocCotto;
 varying vec4 vSuolo;
 varying vec4 vCampi;
 uniform sampler2D uPermCampi;
@@ -423,9 +426,10 @@ float sogliaSuolo(float x) {
 #ifdef SUOLO_COTTO
   {
     // Colore cotto (cuociSuolo): una lettura. Alfa = 0,5 + 0,5·neve − 0,5·prato (servono al dettaglio della normale).
+    // Coordinate dell'oggetto (non vMondo, che si avvolge ogni ${P} m: gli anelli dell'orizzonte sono più larghi).
+    vec4 cotto = texture2D(uCotto, vec2(vLocCotto.x / (2.0 * uMezzo) + 0.5, 0.5 - vLocCotto.y / (2.0 * uMezzo)));
     vec2 dB = vMondo - uCentro;
     dB -= ${P.toFixed(1)} * floor(dB / ${P.toFixed(1)} + 0.5);
-    vec4 cotto = texture2D(uCotto, vec2(dB.x / (2.0 * uMezzo) + 0.5, 0.5 - dB.y / (2.0 * uMezzo)));
     vec3 c = pow(cotto.rgb, vec3(2.2));
     kdNeve = clamp((cotto.a - 0.5) * 2.0, 0.0, 1.0);
     kdPrato = clamp((0.5 - cotto.a) * 2.0, 0.0, 1.0);
@@ -663,42 +667,61 @@ const LATO_COTTO = 2048;
  */
 export function cuociSuolo(renderer, terrain) {
   const sup = terrain?.mesh?.getObjectByName('terreno-superficie');
+  return sup ? cuociMesh(renderer, sup, terrain.half, LATO_COTTO) : null;
+}
+
+/**
+ * Cuoce il colore di una mesh con materialeSuolo (blocco o anello dell'orizzonte) in una texture quadrata di `lato` px
+ * che copre ±half (coordinate dell'oggetto), poi il materiale passa a SUOLO_COTTO. Restituisce i ms.
+ */
+function cuociMesh(renderer, sup, half, lato, dentro = []) {
   const mat = sup?.material;
   if (!mat?.userData?.uniformi?.uCotto) return null;
   const t0 = performance.now();
-  const half = terrain.half;
-  const rt = new THREE.WebGLRenderTarget(LATO_COTTO, LATO_COTTO, {
+  const rt = new THREE.WebGLRenderTarget(lato, lato, {
     generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter,
     depthBuffer: false,
   });
   rt.texture.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
   // Materiale di cottura: lo stesso shader con SUOLO_CUOCI (dettaglio pieno, colore senza luce, niente nebbia).
   // (un materiale nuovo, non mat.clone(): clone copierebbe userData via JSON, texture comprese)
-  const cuoci = new THREE.MeshLambertMaterial();
-  cuoci.onBeforeCompile = mat.onBeforeCompile;   // stesse uniformi (chiusura di materialeSuolo)
-  cuoci.customProgramCacheKey = () => 'suolo-mondo-cuoci';
-  cuoci.defines = { ...(mat.defines || {}), SUOLO_CUOCI: '' };
-  cuoci.fog = false;
-  cuoci.depthTest = false;
-  cuoci.depthWrite = false;
-  const scena = new THREE.Scene();
-  const copia = new THREE.Mesh(sup.geometry, cuoci);
-  sup.updateWorldMatrix(true, false);
-  copia.matrixAutoUpdate = false;
-  copia.matrix.copy(sup.matrixWorld);
-  scena.add(copia);
+  const materialeCottura = (m) => {
+    const c = new THREE.MeshLambertMaterial();
+    c.onBeforeCompile = m.onBeforeCompile;     // stesse uniformi (chiusura di materialeSuolo)
+    c.customProgramCacheKey = () => 'suolo-mondo-cuoci';
+    c.defines = { ...(m.defines || {}), SUOLO_CUOCI: '' };
+    c.fog = false;
+    c.depthTest = false;
+    c.depthWrite = false;
+    return c;
+  };
+  const scena = new THREE.Scene(), usati = [];
+  // Stessa matrice del mondo (vMondo come nel gioco); la camera inquadra ±half attorno all'origine dell'oggetto, che è
+  // quella delle coordinate di vLocCotto. `dentro`: le mesh nel foro (anelli interni, blocco), disegnate prima, così
+  // al bordo interno dell'anello le mipmap non mescolano il nero del foro (linee scure lungo le giunture).
+  for (const m of [...dentro, sup]) {
+    if (!m?.material?.onBeforeCompile) continue;
+    const c = materialeCottura(m.material);
+    usati.push(c);
+    m.updateWorldMatrix(true, false);
+    const copia = new THREE.Mesh(m.geometry, c);
+    copia.matrixAutoUpdate = false;
+    copia.matrix.copy(m.matrixWorld);
+    scena.add(copia);
+  }
+  const ox = sup.matrixWorld.elements[12], oz = sup.matrixWorld.elements[14];
   // Vista dall'alto: destra = +x, alto = −z (quindi v = 0,5 − z / lato, come legge SUOLO_COTTO).
-  const cam = new THREE.OrthographicCamera(-half, half, half, -half, 1, 40000);
-  cam.position.set(0, 20000, 0);
+  const cam = new THREE.OrthographicCamera(-half, half, half, -half, 1, 2e6);
+  cam.position.set(ox, 1e6, oz);
   cam.up.set(0, 0, -1);
-  cam.lookAt(0, 0, 0);
+  cam.lookAt(ox, 0, oz);
   const prima = renderer.getRenderTarget(), autoClear = renderer.autoClear;
   renderer.autoClear = true;
   renderer.setRenderTarget(rt);
   renderer.render(scena, cam);
   renderer.setRenderTarget(prima);
   renderer.autoClear = autoClear;
-  cuoci.dispose();
+  usati.forEach((c) => c.dispose());
   // La texture appartiene al materiale del suo blocco: si libera con lui (dispose del materiale) o se lo stesso blocco
   // si ricuoce. Non al blocco successivo: con il blocco che segue il cavaliere (M7 passo 9) il nuovo si cuoce mentre
   // il vecchio è ancora in vista.
@@ -706,9 +729,28 @@ export function cuociSuolo(renderer, terrain) {
   else mat.addEventListener('dispose', () => mat.userData.rtCotto?.dispose());
   mat.userData.rtCotto = rt;
   mat.userData.uniformi.uCotto.value = rt.texture;
+  mat.userData.uniformi.uMezzo.value = half;
   mat.defines = { ...(mat.defines || {}), SUOLO_COTTO: '' };
   mat.needsUpdate = true;
   return performance.now() - t0;
+}
+
+/**
+ * Prestazioni (misura dell'utente alla partenza in montagna: anelli 4,3 ms di GPU, terreno in tutto 8,0 su 4,5): il
+ * colore degli anelli dell'orizzonte si cuoce come quello del blocco, una texture per anello (mesh con
+ * userData.raggio, ciascuna col suo materiale). Un anello per passo (generatore). Restituisce i ms totali.
+ */
+export function* cuociOrizzonteAPezzi(renderer, orizzonte, terrain = null) {
+  let ms = 0;
+  const dentro = [terrain?.mesh?.getObjectByName('terreno-superficie')].filter(Boolean);
+  const anelli = (orizzonte?.oggetto?.children ?? []).filter((m) => m.userData?.raggio)
+    .sort((a, b) => a.userData.raggio - b.userData.raggio);
+  for (const m of anelli) {
+    ms += cuociMesh(renderer, m, m.userData.raggio, m.userData.raggio <= 6000 ? LATO_COTTO : LATO_COTTO / 2, dentro) || 0;
+    dentro.push(m);
+    yield 'cottura orizzonte';
+  }
+  return ms;
 }
 
 /** Contenitore degli strati di coloreMondo (da riusare). */
