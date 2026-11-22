@@ -2808,6 +2808,41 @@ dello schermo per capire cosa ho nei dintorni o (solo per il test) spostarmi sen
 - Limiti noti: niente edifici disegnati (solo i segni di luoghi e siti), niente case di campagna; la minimappa non ruota
   con la camera.
 
+## Mondo generato in anticipo su una griglia fine (novembre 2026) — approvato dall'utente, in corso
+
+> Decisione dell'utente: il tempo di generazione non conta più (anche ~10 s vanno bene); tutto ciò che si può
+> calcolare prima va calcolato prima. Motivo: la mappa «a due livelli» (Carta a celle di 1 km che decide fiumi,
+> valichi e strade; rilievo fine aggiunto dopo, zona per zona) è la radice di quasi tutti i difetti di integrazione
+> segnalati (valichi su cucuzzoli, fiumi rialzati o in canyon, strade su pendii impossibili, tracciati che dipendono
+> da dove si è già passati) e dello scatto di dettaglio della Carta zoomata (2–3 s di attesa a ogni zoom).
+
+**Misure di partenza** (Node, seme 570549): Carta di oggi 3,8 s; tracciato fine di tutti i fiumi 0,8 s; di tutte le
+strade 50 s (230 tratti, ~1360 km: troppo, va rifatto sulla griglia); rilievo `quotaMondo` su una griglia di 62,5 m di
+tutta la mappa (1921 × 1441, 2,8 milioni di punti) 1,6 s; riempimento delle conche + direzioni del deflusso 0,8 s;
+bacino 0,05 s. Prototipo: i corsi d'acqua che ne escono seguono le valli del rilievo fine (soglie da tarare).
+
+**Piano** (passi in ordine; ogni passo provato prima del successivo):
+- **G1 — Griglia del rilievo** (62,5 m, nel Worker, in cache con la Carta: ~11 MB per seme). La Carta zoomata e la
+  Carta intera si disegnano dalla griglia: niente attesa allo zoom fino a 62,5 m, nessuno scatto tra i livelli.
+  **G1 fatto** (da provare): `grigliaMondo` in `scena.js` (quota finale e livello dell'acqua a 62,5 m, con i percorsi di
+  tutti i fiumi già cercati), nel Worker dopo strade e siti; `leggiGriglia` (bilineare; acqua dal punto più vicino). La
+  Carta zoomata legge la griglia finché un campione copre almeno ¾ del passo (sotto, come prima). Seme 570549: 5,2 s nel
+  Worker (headless), 22 MB in cache (quota e acqua; l'acqua si potrà comprimere). `VERSIONE_GENERATORE` `+griglia-1`.
+  Ancora lenti al primo zoom: la ricerca dei percorsi dei fiumi e delle strade nella finestra (G2 e G6).
+- **G2 — Idrografia sulla griglia**: deflusso (riempimento, direzioni, bacini) sul rilievo vero; i piccoli pozzetti si
+  tagliano (l'acqua esce), le conche grandi diventano laghi; fiumi e torrenti come polilinee lisciate, con larghezza dal
+  bacino. `carta.acque`/`carta.fiumi` a 1 km si ricavano da qui (compatibilità: clima, biomi, luoghi, verifiche).
+- **G3 — Valli e alvei scavati nella griglia**: niente più `scavaFiumi` a posteriori; nella Scena `quotaFinale` =
+  griglia interpolata + solo le ottave più fini (sotto ~250 m), smorzate negli alvei.
+- **G4 — Valichi** sulle selle vere della griglia (spartiacque tra i bacini).
+- **G5 — Luoghi e siti** (sessioni M7 e M8) leggono la quota dalla griglia: da coordinare.
+- **G6 — Strade** (fase «A»): rete e tracciato fine sulla griglia, tutte in anticipo e salvate; la Carta mostra le
+  strade vere e i blocchi non le cercano più (oggi 0,3–0,5 s per blocco).
+- **G7 — Orizzonte** dalla griglia (oggi ~650 ms a ogni cambio di blocco): con la sessione M1.
+
+Budget: generazione ≤ ~15 s con l'avanzamento a schermo; `VERSIONE_GENERATORE` cambia a ogni passo che cambia le Carte.
+Le mesh 3D restano per blocco (tutta la mappa a 7,8 m sarebbe centinaia di milioni di vertici).
+
 ## Fuori dal prototipo (non farlo ora)
 
 Multiplayer, server/VPS, NPC con IA, mobile/touch, modelli esterni, combattimento in 3D, ombre di
