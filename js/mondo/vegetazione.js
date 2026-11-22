@@ -272,36 +272,40 @@ export const CAMPI_COLTIVATI = {
 };
 
 /**
- * Appezzamenti, siepi e filari. Lo stesso disegno lo calcolano lo shader del suolo (colore, strisce scure delle siepi
- * viste da lontano) e `posizionaVegetazione` (le siepi come oggetti): per questo niente rumori della scheda video.
- * Coordinate dei campi `q` per vertice (attributo aCampi: lungo e di traverso al verso del borgo, piegate da un
- * rumore su `piega.lunghezza` m; terza componente: vicinanza della casa isolata) e una permutazione di 256 interi uguale per
- * tutti e due (PERM_CAMPI, texture R8 nello shader). Strisce larghe banda / (2 + 0…extra), appezzamenti lunghi
- * lungo[0] + lungo[1]·caso. Siepi sul lato lungo di una parte degli appezzamenti (`siepi.lungo`), su quello corto di
- * meno (`siepi.traverso`); una parte delle siepi è un filare d'alberi (`siepi.filari`). Negli orti niente siepi.
+ * Campi: fondi, strisce, carrarecce, siepi (richiesta dell'utente: «più organizzato visto dall'alto», e confini che
+ * abbiano un senso, cioè una stradina o siepi e muretti). Come nella campagna medievale l'unità è il fondo: un blocco
+ * largo una banda (`banda` m di traverso al verso del luogo) e lungo `fondo` m, diviso per il lungo in `strisce`
+ * strisce di colture diverse. Tra le strisce niente erba, solo il cambio di coltura e un solco (`solco`); in testa al
+ * fondo una capezzagna erbosa (`capezzagna`); sul bordo di una parte delle bande (`carrareccia.quota`) una strada
+ * campestre di terra, la rete che porta alle strade e alle case (CASE_CAMPAGNA: accanto a una carrareccia). Ogni fondo
+ * è campo, orto (pochi, vicino al luogo, chiusi da muretti) o incolto (pascolo con cespugli): macchie intere e nette,
+ * mai sfumate. Siepi, filari e muretti solo sui bordi dei fondi; vicino al luogo e alle case muretti.
+ * Lo stesso disegno lo calcolano lo shader del suolo (js/3d/terrain.js: colore, strisce scure di siepi e muretti visti
+ * da lontano) e `posizionaVegetazione` (siepi, muretti, cespugli degli incolti): niente rumori della scheda video e una
+ * permutazione di 256 interi uguale per tutti e due (PERM_CAMPI, texture R8 nello shader). Coordinate dei campi `q` per
+ * vertice (attributo aCampi): lungo e di traverso al verso del luogo, piegate da un rumore su `piega.lunghezza` m.
  */
 export const PARCELLE = {
-  banda: 110, extra: 3, lungo: [70, 120], spostamento: 500,
+  banda: 110, strisce: [2, 4], fondo: [130, 220], spostamento: 500,
   piega: { lunghezza: 128, ampiezza: 25 },
-  // Orti e campi chiusi (richiesta dell'utente: orti e campi grandi «si devono mischiare», prima un cerchio di orti su
-  // una griglia sua che tagliava i campi a metà): ogni appezzamento sceglie (per il suo centro, distanza dal luogo in
-  // raggi degli orti R) se restare intero, dividersi in due (campo chiuso) o in orti di ~larghezza × lunghezza m.
-  // Probabilità 1 fino a misto[0]·R e 0 da misto[1]·R (orti), idem `chiusi` per i campi divisi: i confini seguono gli
-  // appezzamenti e le misure si mescolano. Muretti fino a muretti.oltreOrti m oltre R (centro dell'appezzamento).
-  orti: { larghezza: 14, lunghezzaOrto: 24, misto: [0.6, 1.7], chiusi: [0.9, 2.8] },
-  // Zone incolte (richiesta dell'utente: «ogni tanto una zona non coltivata, altrimenti sembra una pianura tutta
-  // agricola»): pascoli e incolti a chiazze di qualche centinaio di metri nella campagna, più rari vicino al luogo;
-  // lì niente campi e tornano alberi isolati e cespugli. Soglia sul rumore: `soglia[0]` lontano, `soglia[1]` vicino.
-  incolti: { lunghezza: 420, soglia: [0.12, 0.5], sfuma: 0.08, cespugli: 1.0 },
-  // Strade (richiesta dell'utente: i campi non tagliati a metà dalle strade, al più fino al margine): ogni lato di una
-  // strada ha appezzamenti suoi (righe spostate di `lato` m) e i campi finiscono a `margine` m dal bordo, con erba.
-  strada: { lato: 1000, margine: [0.6, 2.2], lontano: 25, fascia: 40 },
-  siepi: { lungo: 0.4, traverso: 0.2, filari: 0.25, passo: 1.7, passoFilare: 9, dentro: 0.9, striscia: [1.6, 2.4],
+  capezzagna: 1.1,                              // m d'erba in testa a ogni fondo (e sui bordi di banda senza strada)
+  solco: 0.35,                                  // m: riga scura tra le strisce
+  carrareccia: { quota: 0.6, mezza: 1.7 },      // bordi di banda con la strada campestre; mezza larghezza (m)
+  // Orti (richiesta dell'utente: non una corona fitta e irreale attorno al castello): qualche fondo intero vicino al
+  // luogo, in aiuole di ~aiuola m (lungo × traverso) con vialetti di terra, chiuso da muretti. Probabilità `quota` fino
+  // a vicino[0]·R, nessuno oltre vicino[1]·R (R: raggio degli orti, `campi.orti`; centro del fondo).
+  orti: { quota: 0.6, vicino: [0.5, 1.4], aiuola: [24, 16], vialetto: 0.55 },
+  // Incolti (richiesta dell'utente: «ogni tanto una zona non coltivata»): fondi interi a pascolo, anche a gruppi di
+  // 2 × 2 (`gruppi`: parte della quota), da quota[0] entro vicino[0]·R a quota[1] oltre vicino[1]·R.
+  incolti: { quota: [0.04, 0.16], vicino: [2, 6], gruppi: 0.6, cespugli: 1.0 },
+  // Strade: i campi (e le carrarecce) finiscono a `margine` m dal bordo della carreggiata, con erba.
+  strada: { margine: [0.6, 2.2], lontano: 25 },
+  siepi: { lungo: 0.45, traverso: 0.3, filari: 0.25, passo: 1.7, passoFilare: 9, dentro: 0.9, striscia: [1.0, 1.7],
     // Aperture naturali (richiesta dell'utente: «più di un punto per lato, una cosa naturale»): ogni tratto di `cella` m
     // ha un'apertura con probabilità `quota`, in un punto a caso, larga 2·(larghezza) m.
     aperture: { cella: 28, quota: 0.6, larghezza: [1.3, 3.0] } },
-  // Muretti a secco: vicino al luogo (fino a `oltreOrti` m oltre il limite degli orti) una parte (`quota`) dei confini
-  // con la siepe è un muretto; su ogni lato un varco largo 2·`varco` m per passare.
+  // Muretti a secco: vicino al luogo (centro del fondo entro `oltreOrti` m oltre il raggio degli orti) e alle case una
+  // parte (`quota`) dei bordi con la siepe è un muretto; attorno agli orti sempre. Su ogni lato un varco di 2·`varco` m.
   muretti: { oltreOrti: 150, quota: 0.6, varco: 2.5, dentro: 0.6, striscia: [0.5, 1.0] },
 };
 export const PERM_CAMPI = (() => {
@@ -312,39 +316,89 @@ export const PERM_CAMPI = (() => {
 const permC = (x) => PERM_CAMPI[((x % 256) + 256) % 256];
 /** Intero 0–255 da due interi (come hashC nello shader). */
 export const hashCampi = (a, b) => permC(permC(b) + a);
-/** Appezzamento del punto (qx, qy) dei campi; `orto` 0/1. Scrive i, j, W, L, fu, fv in `o`. */
+/**
+ * Fondo e striscia del punto (qx, qy) dei campi. Scrive in `o`: i, jb (fondo), j (striscia), W (larghezza della
+ * striscia), L (lunghezza del fondo), u0 (inizio del fondo in qx), fu (m dall'inizio del fondo), fb (m dal bordo basso
+ * della banda), fv (m dal bordo basso della striscia).
+ */
 export function parcella(qx, qy, o) {
-  const P = PARCELLE, banda = P.banda;
-  const W = banda / (2 + Math.floor(hashCampi(Math.floor(qy / banda), 7) * P.extra / 256));
-  const j = Math.floor(qy / W), hj = hashCampi(j, 3) / 255;
-  const L = P.lungo[0] + P.lungo[1] * hj, u = qx + hj * P.spostamento, i = Math.floor(u / L);
-  o.i = i; o.j = j; o.W = W; o.L = L; o.fu = u - i * L; o.fv = qy - j * W; o.u0 = i * L - hj * P.spostamento;
+  const P = PARCELLE, jb = Math.floor(qy / P.banda), fb = qy - jb * P.banda;
+  const n = P.strisce[0] + Math.floor(hashCampi(jb, 7) * (P.strisce[1] - P.strisce[0] + 1) / 256), W = P.banda / n;
+  const hb = hashCampi(jb, 3) / 255, L = P.fondo[0] + (P.fondo[1] - P.fondo[0]) * hb, off = hb * P.spostamento;
+  const i = Math.floor((qx + off) / L), s = Math.min(n - 1, Math.floor(fb / W));
+  o.i = i; o.jb = jb; o.j = jb * 8 + s; o.W = W; o.L = L; o.u0 = i * L - off; o.fu = qx - o.u0; o.fb = fb; o.fv = fb - s * W;
   return o;
 }
+/** Il bordo basso della banda jb ha la carrareccia? */
+export const carrareccia = (jb) => hashCampi(jb, 9) < PARCELLE.carrareccia.quota * 256;
 /**
- * Come si divide l'appezzamento (i, j) largo W e lungo L che comincia a u0 (spazio q, lato della strada `ls`), con
- * raggio degli orti R: 0 intero, 1 diviso in due (campo chiuso), 2 orti. Come `divisione` nello shader.
+ * Che fondo è (i, jb), lungo L e che comincia a u0, con raggio degli orti R: 0 campo, 1 orto, 2 incolto.
+ * Come `tipoFondo` nello shader.
  */
-export function divisione(i, j, W, L, u0, ls, R) {
+export function tipoFondo(i, jb, L, u0, R) {
   if (!(R > 0)) return 0;
-  const O = PARCELLE.orti, d = Math.hypot(u0 + L / 2, j * W + W / 2 - ls * PARCELLE.strada.lato) / R;
-  if (hashCampi(i, j + 151) / 255 < 1 - smoothstep(O.misto[0], O.misto[1], d)) return 2;
-  if (hashCampi(i, j + 163) / 255 < 1 - smoothstep(O.chiusi[0], O.chiusi[1], d)) return 1;
+  const P = PARCELLE, O = P.orti, I = P.incolti, d = Math.hypot(u0 + L / 2, (jb + 0.5) * P.banda) / R;
+  if (hashCampi(i, jb + 151) < O.quota * 256 * (1 - smoothstep(O.vicino[0], O.vicino[1], d))) return 1;
+  const p = (I.quota[0] + (I.quota[1] - I.quota[0]) * smoothstep(I.vicino[0], I.vicino[1], d)) * 256;
+  if (hashCampi(i, jb + 171) < p * (1 - I.gruppi) || hashCampi(Math.floor(i / 2) + 61, Math.floor(jb / 2) + 173) < p * I.gruppi) return 2;
   return 0;
 }
-const siepeLunga = (i, j) => hashCampi(i, j + 59) < PARCELLE.siepi.lungo * 256;
-const siepeCorta = (i, j) => hashCampi(i, j + 83) < PARCELLE.siepi.traverso * 256;
-const filare = (i, j, lato) => hashCampi(i, j + 97 + lato) < PARCELLE.siepi.filari * 256;
-const muro = (i, j, lato) => hashCampi(i, j + 113 + lato) < PARCELLE.muretti.quota * 256;
+/** Da quanta campagna (campo, terza componente di aSuolo) comincia il fondo: fondi interi dove la campagna finisce. */
+export const sogliaFondo = (i, jb) => 0.12 + 0.6 * hashCampi(i, jb + 41) / 255;
+/** Lato (fondi) della tabella dei fondi coltivati del blocco (texture uFondi nello shader). */
+export const LATO_FONDI = 64;
+/** Il fondo (i, jb) è coltivato secondo la tabella del blocco `T` ({ dati, i0, j0 })? Come `fondoC` nello shader. */
+export function fondoColtivato(T, i, jb) {
+  const a = i - T.i0, b = jb - T.j0;
+  return a >= 0 && b >= 0 && a < LATO_FONDI && b < LATO_FONDI && T.dati[b * LATO_FONDI + a] > 0;
+}
+const siepeLunga = (i, jb) => hashCampi(i, jb + 59) < PARCELLE.siepi.lungo * 256;
+const siepeCorta = (i, jb) => hashCampi(i, jb + 83) < PARCELLE.siepi.traverso * 256;
+const filare = (i, jb, lato) => hashCampi(i, jb + 97 + lato) < PARCELLE.siepi.filari * 256;
+const muro = (i, jb, lato) => hashCampi(i, jb + 113 + lato) < PARCELLE.muretti.quota * 256;
 /** La siepe ha un'apertura in questo punto del lato (`lungo`: m dall'inizio del lato)? Come `apertura` nello shader. */
-function aperturaSiepe(i, j, lato, lungo) {
-  const A = PARCELLE.siepi.aperture, c = Math.floor(lungo / A.cella), b = hashCampi(i, j + 141 + 7 * lato);
+function aperturaSiepe(i, jb, lato, lungo) {
+  const A = PARCELLE.siepi.aperture, c = Math.floor(lungo / A.cella), b = hashCampi(i, jb + 141 + 7 * lato);
   if (hashCampi(c, b) >= A.quota * 256) return false;
   const centro = (c + 0.2 + 0.6 * hashCampi(c, b + 1) / 255) * A.cella;
   return Math.abs(lungo - centro) < A.larghezza[0] + (A.larghezza[1] - A.larghezza[0]) * hashCampi(c, b + 2) / 255;
 }
-/** Centro del varco del muretto lungo il lato (m dall'inizio del lato lungo `lunghezza`). */
-const varco = (i, j, lato, lunghezza) => lunghezza * (0.15 + 0.7 * hashCampi(i, j + 127 + 4 * lato) / 255);
+/** Centro del varco del muretto lungo il lato (m dall'inizio del lato lungo `lunghezza`). Lati 0 basso, 1 sinistra, 2 alto, 3 destra. */
+const varco = (i, jb, lato, lunghezza) => lunghezza * (0.15 + 0.7 * hashCampi(i, jb + 127 + 4 * lato) / 255);
+/** Orientamento dei campi attorno al luogo `l` (verso del suo primo piano) e raggio degli orti. */
+function campiDelLuogo(l, R) {
+  const pr = l.piani?.[0];
+  const ux = pr?.ux ?? 1, uz = pr?.uz ?? 0, k = Math.hypot(ux, uz) || 1;
+  return { x: l.x, z: l.z, ux: ux / k, uz: uz / k, orti: R[0] * 0.2 };
+}
+/** Mondo → q dei campi (con la piega). */
+function qCampi(campi, x, z, sP1, sP2, out) {
+  const dx = x - campi.x, dz = z - campi.z, P = PARCELLE.piega;
+  out.x = dx * campi.ux + dz * campi.uz + P.ampiezza * fbm(x, z, sP1, P.lunghezza, 1);
+  out.y = -dx * campi.uz + dz * campi.ux + P.ampiezza * fbm(x, z, sP2, P.lunghezza, 1);
+  return out;
+}
+/** q → mondo: q = R·d + piega(X); tre passi bastano (la piega cambia su 128 m). */
+function campiAlMondo(campi, qx, qy, sP1, sP2, out) {
+  const P = PARCELLE.piega;
+  let wx = 0, wy = 0;
+  for (let k = 0; k < 3; k++) {
+    const a = qx - wx, b = qy - wy;
+    out.x = campi.x + a * campi.ux - b * campi.uz; out.z = campi.z + a * campi.uz + b * campi.ux;
+    wx = P.ampiezza * fbm(out.x, out.z, sP1, P.lunghezza, 1);
+    wy = P.ampiezza * fbm(out.x, out.z, sP2, P.lunghezza, 1);
+  }
+  return out;
+}
+/** Distanza (in q, di traverso) dalla mezzeria della carrareccia più vicina; out.y = quella mezzeria. */
+function carrarecciaVicina(qy, out) {
+  const B = PARCELLE.banda, k0 = Math.round(qy / B);
+  let best = Infinity;
+  for (let k = k0 - 2; k <= k0 + 2; k++) {
+    if (carrareccia(k) && Math.abs(k * B - qy) < best) { best = Math.abs(k * B - qy); out.y = k * B; }
+  }
+  return best;
+}
 
 /**
  * Case fuori dal borgo (richiesta dell'utente: «ogni tanto, in mezzo o a lato dei campi, una casa isolata o un
@@ -352,6 +406,9 @@ const varco = (i, j, lato, lunghezza) => lunghezza * (0.15 + 0.7 * hashCampi(i, 
  * orti (+ `daOrti` m) e `fino` del raggio pieno, in piano, all'asciutto, lontano dai terrapieni e tra loro. Qui solo
  * dove stanno (e la loro aia di terra battuta, con qualche orticello): le case le disegna chi fa gli edifici (M7, passo 5).
  * Lontano dalle strade fini: un sito con la carreggiata entro `strada` m si scarta nel blocco (`casaSullaStrada`).
+ * Ogni casa ha il suo accesso (richiesta dell'utente: confini dei campi senza una stradina per arrivare alle case non
+ * sono credibili): il sito si sposta di traverso (al più `sposta` m) a `lato` m dalla mezzeria della carrareccia più
+ * vicina (PARCELLE.carrareccia), che passa così sul bordo dell'aia; le altre case del gruppo restano dallo stesso lato.
  */
 export const CASE_CAMPAGNA = {
   gruppi: { minore: 4, casata: 6, maggiore: 9 }, villaggio: 3,
@@ -365,6 +422,7 @@ export const CASE_CAMPAGNA = {
   // entro `muretti` m dalla casa (come attorno al luogo).
   orti: 12, muretti: 176, vicino: 200,
   strada: 9,
+  lato: 15, sposta: 160,
 };
 const _caseCache = new WeakMap();
 /** Siti delle case della Carta: [{ x, z, verso (rad), gruppo, luogo }]. */
@@ -376,6 +434,7 @@ export function caseCampagna(carta) {
     return Number.isNaN(es.livello) && h > 0.5 && Number.isNaN(livelloLago(carta, x, z)) ? h : NaN;
   };
   const pianiTutti = (carta.luoghi || []).flatMap((l) => l.piani || []);
+  const sP1 = derivaSeme(carta.seme, 403), sP2 = derivaSeme(carta.seme, 404);   // piega dei campi, come nel blocco
   const lontanoDaiPiani = (x, z) => pianiTutti.every((p) => distanzaPiano(p, x, z) - p.s > K.piani);
   const buono = (x, z) => {
     const h = asciutto(x, z);
@@ -394,11 +453,19 @@ export function caseCampagna(carta) {
     const sm = derivaSeme(carta.seme, 470 + li), r = mulberry32(sm);
     const pr = l.piani?.[0], ang0 = Math.atan2(pr?.uz ?? 0, pr?.ux ?? 1);
     const r0 = R[0] * 0.2 + K.daOrti, r1 = R[0] * K.fino;
+    const campi = campiDelLuogo(l, R), Q = { x: 0, y: 0 }, M = { y: 0 }, W = { x: 0, z: 0 };
+    const mezza = PARCELLE.carrareccia.mezza;
     let presi = 0;
     for (let c = 0; c < K.candidati && presi < n; c++) {
       const a = r() * Math.PI * 2, d = Math.sqrt(r0 * r0 + r() * (r1 * r1 - r0 * r0));
-      const x = l.x + Math.cos(a) * d, z = l.z + Math.sin(a) * d;
+      let x = l.x + Math.cos(a) * d, z = l.z + Math.sin(a) * d;
       const q = r(), verso = ang0 + (r() < 0.5 ? 0 : Math.PI / 2) + (r() - 0.5) * 0.15;
+      // Accanto alla carrareccia più vicina, dal lato dove sta già.
+      qCampi(campi, x, z, sP1, sP2, Q);
+      if (carrarecciaVicina(Q.y, M) > K.sposta) continue;
+      const lato = Q.y >= M.y ? 1 : -1;
+      campiAlMondo(campi, Q.x, M.y + lato * K.lato, sP1, sP2, W);
+      x = W.x; z = W.z;
       if (out.some((o) => Math.hypot(o.x - x, o.z - z) < K.distanza) || !buono(x, z)) continue;
       const nCase = q < K.quante[0] ? 1 : q < K.quante[1] ? 2 : 3, gruppo = `${li}-${presi}`;
       out.push({ x, z, verso, gruppo, luogo: li });
@@ -406,6 +473,8 @@ export function caseCampagna(carta) {
         for (let t = 0; t < 6; t++) {
           const b = r() * Math.PI * 2, e = K.passo[0] + r() * (K.passo[1] - K.passo[0]);
           const xx = x + Math.cos(b) * e, zz = z + Math.sin(b) * e;
+          qCampi(campi, xx, zz, sP1, sP2, Q);
+          if ((Q.y - M.y) * lato < mezza + 9) continue;                     // non sulla carrareccia né oltre
           if (out.some((o) => o.gruppo === gruppo && Math.hypot(o.x - xx, o.z - zz) < K.passo[0]) || !buono(xx, zz)) continue;
           out.push({ x: xx, z: zz, verso: verso + (r() < 0.3 ? Math.PI / 2 : 0), gruppo, luogo: li });
           break;
@@ -533,15 +602,6 @@ function densitaVertice(cp, pend, pf, distAcqua, x, z, semeBordo, D, i, coltivat
     ? smoothstep(K.coltivato[0], K.coltivato[1], coltivato) * (1 - smoothstep(K.pendenza[0], K.pendenza[1], pf))
       * prato * (1 - cp.neve) * (1 - sabbia) * (1 - palude)
     : 0;
-  if (campo > 0) {
-    // Zone incolte (PARCELLE.incolti): pascolo con cespugli e alberi isolati (questi già dalla campagna).
-    const I = PARCELLE.incolti, sI = I.soglia[0] + (I.soglia[1] - I.soglia[0]) * smoothstep(0.8, 1, coltivato);
-    const inc = smoothstep(sI, sI + I.sfuma, fbm(x, z, semeBordo ^ 0x1c6f3a95, I.lunghezza, 2));
-    if (inc > 0) {
-      D.cespuglio[i] *= 1 + I.cespugli * inc * campo; D.alto[i] *= 1 + I.cespugli * inc * campo;
-      campo *= 1 - inc;
-    }
-  }
   D.campo[i] = campo;
   if (campo > 0) {
     // Netto: lo shader disegna un appezzamento già da campo ≈ 0,12–0,7 (soglia per appezzamento).
@@ -753,6 +813,103 @@ export function* posizionaVegetazioneAPezzi(o, budget = 2.5) {
     }
   }
 
+  if (stanco()) yield* pausa();
+  // Orientamento dei campi: lungo il verso del luogo più vicino con campagna (i solchi seguono il borgo).
+  let campi = null, dMin = Infinity;
+  for (const l of luoghi || []) {
+    const R = raggiCampagna(l), d = Math.hypot(l.x - cx, l.z - cz);
+    if (!R || d > R[1] * (1 + CAMPAGNA.bordo.ampiezza) + half * 1.5 || d >= dMin) continue;
+    dMin = d;
+    campi = campiDelLuogo(l, R);
+  }
+  // Coordinate dei campi per vertice (PARCELLE): q lungo e di traverso al verso del borgo, piegate; terza
+  // componente: vicinanza della casa isolata (CASE_CAMPAGNA.vicino − distanza, ≥ 0); quarta: metri oltre il margine
+  // della strada più vicina (al più `strada.lontano`). Lo shader le interpola sui triangoli come qui sotto `triangolo`,
+  // così siepi e muretti oggetto stanno sui bordi che lo shader dipinge. Prima degli oggetti: servono agli incolti.
+  const PC = PARCELLE;
+  const sP1 = derivaSeme(seme, 403), sP2 = derivaSeme(seme, 404);
+  let aCampi = null, fondi = null;
+  if (campi) {
+    // Fondi coltivati (richiesta dell'utente: niente campi tagliati a casaccio dove la campagna finisce): un fondo è
+    // coltivato per intero o per niente, se in 4 × 3 punti dentro di lui la campagna (CAMPI_COLTIVATI: quanta, in
+    // piano, all'asciutto) c'è sempre e in media supera la sua soglia (sogliaFondo). Solo funzioni del mondo: blocchi vicini uguali. Lo
+    // shader legge la stessa tabella (texture uFondi); il campo per vertice toglie solo acqua, rive e terrapieni.
+    const B = PC.banda, Q = { x: 0, y: 0 }, W = { x: 0, z: 0 }, K = CAMPI_COLTIVATI;
+    let qx0 = Infinity, qx1 = -Infinity, qy0 = Infinity, qy1 = -Infinity;
+    for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      qCampi(campi, cx + sx * half, cz + sz * half, sP1, sP2, Q);
+      qx0 = Math.min(qx0, Q.x); qx1 = Math.max(qx1, Q.x); qy0 = Math.min(qy0, Q.y); qy1 = Math.max(qy1, Q.y);
+    }
+    const m = PC.piega.ampiezza + 5;
+    fondi = { dati: new Uint8Array(LATO_FONDI * LATO_FONDI), i0: Math.floor((qx0 - m) / PC.fondo[0]) - 1, j0: Math.floor((qy0 - m) / B) };
+    const es = { quota: 0, livello: NaN }, dP = 12;
+    const adatto = (x, z) => {
+      const c = smoothstep(K.coltivato[0], K.coltivato[1], coltivatoIn(luoghi, x, z, semeCampagna));
+      if (c <= 0) return 0;
+      const h = quotaFinale(o.carta, x, z, undefined, es);
+      if (!Number.isNaN(es.livello) || h < 0.5 || !Number.isNaN(livelloLago(o.carta, x, z))) return 0;
+      const gx = (quotaFinale(o.carta, x + dP, z) - quotaFinale(o.carta, x - dP, z)) / (2 * dP);
+      const gz = (quotaFinale(o.carta, x, z + dP) - quotaFinale(o.carta, x, z - dP)) / (2 * dP);
+      const pend = Math.atan(Math.hypot(gx, gz)) * 180 / Math.PI;
+      return c * (1 - smoothstep(K.pendenza[0], K.pendenza[1], pend));
+    };
+    for (let jb = fondi.j0; jb < fondi.j0 + LATO_FONDI && jb * B <= qy1 + m; jb++) {
+      if (stanco()) yield* pausa();
+      const hb = hashCampi(jb, 3) / 255, L = PC.fondo[0] + (PC.fondo[1] - PC.fondo[0]) * hb, off = hb * PC.spostamento;
+      for (let i = Math.max(fondi.i0, Math.floor((qx0 - m + off) / L)); i < fondi.i0 + LATO_FONDI && i * L - off <= qx1 + m; i++) {
+        const u0 = i * L - off, soglia = sogliaFondo(i, jb);
+        let somma = 0, ok = true;
+        for (let a = 0; a < 4 && ok; a++) for (let b = 0; b < 3 && ok; b++) {
+          campiAlMondo(campi, u0 + L * (0.12 + 0.253 * a), (jb + 0.2 + 0.3 * b) * B, sP1, sP2, W);
+          const v = adatto(W.x, W.z);
+          somma += v; ok = v > 0;
+        }
+        if (ok && somma / 12 > soglia) fondi.dati[(jb - fondi.j0) * LATO_FONDI + (i - fondi.i0)] = 255;
+      }
+    }
+    aCampi = new Float32Array(n * 4);
+    for (let i = 0; i < n; i++) {
+      const r = (i / cols) | 0, c = i - r * cols, x = cx - half + c * cell, z = cz - half + r * cell;
+      if ((c & 63) === 0 && stanco()) yield* pausa();
+      // Il vertice e gli 8 vicini: ogni triangolo che tocca un campo ha tutti i vertici calcolati.
+      let serve = false;
+      for (let dr = -1; dr <= 1 && !serve; dr++) for (let dc = -1; dc <= 1; dc++) {
+        const rr = r + dr, cc = c + dc;
+        if (rr >= 0 && rr < cols && cc >= 0 && cc < cols && D.campo[rr * cols + cc] > 0) { serve = true; break; }
+      }
+      const dK = caseQui.length ? dCasa(x, z) : Infinity;
+      if (!serve && dK > KC.vicino + cell) continue;
+      qCampi(campi, x, z, sP1, sP2, Q);
+      aCampi[i * 4] = Q.x;
+      aCampi[i * 4 + 1] = Q.y;
+      aCampi[i * 4 + 2] = Math.max(0, KC.vicino - dK);
+      // Strada: i campi finiscono al margine, da tutti e due i lati con lo stesso disegno (prima ogni lato aveva
+      // appezzamenti suoi e restava una seconda riga parallela alla strada: richiesta dell'utente). Dipende solo dal
+      // punto: blocchi vicini uguali.
+      let w = PC.strada.lontano;
+      if (o.carta?.strade) {
+        distanzaStrada(o.carta, x, z, _st);
+        if (_st.d < Infinity) w = Math.min(PC.strada.lontano, Math.max(0.01, _st.d - _st.semi));
+      }
+      aCampi[i * 4 + 3] = w;
+    }
+    // Fondi non coltivati e incolti (PARCELLE.incolti, pascolo): i campi toglievano alberi, arbusti, sassi ed erba
+    // (densitaVertice): qui tornano; negli incolti i cespugli sono di più.
+    const I = PC.incolti, F = {};
+    for (let i = 0; i < n; i++) {
+      const cv = D.campo[i];
+      if (cv <= 0) continue;
+      parcella(aCampi[i * 4], aCampi[i * 4 + 1], F);
+      const coltivato = fondoColtivato(fondi, F.i, F.jb), incolto = coltivato && tipoFondo(F.i, F.jb, F.L, F.u0, campi.orti) === 2;
+      if (coltivato && !incolto) continue;
+      const via = Math.max(0.05, 1 - K.oggetti * smoothstep(0.05, 0.35, cv));
+      for (const k of ['alberi', 'cespuglio', 'alto', 'sterpo', 'sasso', 'masso', 'affioramento', 'tronco', 'ramo', 'ciottolo']) D[k][i] /= via;
+      D.erba[i] /= Math.max(0.05, 1 - K.erba * cv);
+      if (incolto) { D.cespuglio[i] *= 1 + I.cespugli * cv; D.alto[i] *= 1 + I.cespugli * cv; }
+      if ((i & 1023) === 1023 && stanco()) yield* pausa();
+    }
+  }
+
   const T = Object.fromEntries(TIPI.map((t) => [t.nome, t]));
   // Alberi: una griglia sola; la specie si sceglie per peso con un altro hash.
   const sA = derivaSeme(seme, 410);
@@ -802,16 +959,6 @@ export function* posizionaVegetazioneAPezzi(o, budget = 2.5) {
   }
 
   if (stanco()) yield* pausa();
-  // Orientamento dei campi: lungo il verso del luogo più vicino con campagna (i solchi seguono il borgo).
-  let campi = null, dMin = Infinity;
-  for (const l of luoghi || []) {
-    const R = raggiCampagna(l), d = Math.hypot(l.x - cx, l.z - cz);
-    if (!R || d > R[1] * (1 + CAMPAGNA.bordo.ampiezza) + half * 1.5 || d >= dMin) continue;
-    dMin = d;
-    const pr = l.piani?.[0];
-    const ux = pr?.ux ?? 1, uz = pr?.uz ?? 0, k = Math.hypot(ux, uz) || 1;
-    campi = { x: l.x, z: l.z, ux: ux / k, uz: uz / k, orti: R[0] * 0.2 };
-  }
   // Suolo per lo shader del terreno: per vertice [bosco sopra, vicinanza dell'acqua (1 nell'acqua, 0 oltre 4 celle)].
   // Niente lettiera nella spianata attorno a rocca e borgo (lì non ci sono alberi): sfuma in 30 m.
   // La lettiera segue gli alberi davvero piantati (chiome sfocate su 3×3 vertici, ~23 m), non solo la copertura:
@@ -848,47 +995,6 @@ export function* posizionaVegetazioneAPezzi(o, budget = 2.5) {
     if ((c & 63) === 63 && stanco()) yield* pausa();
   }
 
-  // Coordinate dei campi per vertice (PARCELLE): q lungo e di traverso al verso del borgo, piegate; terza
-  // componente: vicinanza della casa isolata (CASE_CAMPAGNA.vicino − distanza, ≥ 0). Lo shader le interpola sui triangoli
-  // come qui sotto `attrCampi`, così le siepi oggetto stanno sulle strisce che lo shader dipinge.
-  const PC = PARCELLE;
-  let aCampi = null;
-  if (campi) {
-    aCampi = new Float32Array(n * 4);
-    const sP1 = derivaSeme(seme, 403), sP2 = derivaSeme(seme, 404);
-    const vx = -campi.uz, vz = campi.ux;
-    for (let i = 0; i < n; i++) {
-      const r = (i / cols) | 0, c = i - r * cols, x = cx - half + c * cell, z = cz - half + r * cell;
-      if ((c & 63) === 0 && stanco()) yield* pausa();
-      // Il vertice e gli 8 vicini: ogni triangolo che tocca un campo ha tutti i vertici calcolati.
-      let serve = false;
-      for (let dr = -1; dr <= 1 && !serve; dr++) for (let dc = -1; dc <= 1; dc++) {
-        const rr = r + dr, cc = c + dc;
-        if (rr >= 0 && rr < cols && cc >= 0 && cc < cols && suolo[(rr * cols + cc) * 4 + 2] > 0) { serve = true; break; }
-      }
-      const dK = caseQui.length ? dCasa(x, z) : Infinity;
-      if (!serve && dK > KC.vicino + cell) continue;
-      const dx = x - campi.x, dz = z - campi.z;
-      aCampi[i * 4] = dx * campi.ux + dz * campi.uz + PC.piega.ampiezza * fbm(x, z, sP1, PC.piega.lunghezza, 1);
-      aCampi[i * 4 + 1] = dx * vx + dz * vz + PC.piega.ampiezza * fbm(x, z, sP2, PC.piega.lunghezza, 1);
-      // Vicinanza della casa isolata più vicina (aia e orticelli nello shader); gli orti del luogo e la zona dei
-      // muretti si decidono per appezzamento (`divisione`, centro dell'appezzamento).
-      aCampi[i * 4 + 2] = Math.max(0, KC.vicino - dK);
-      // Quarta componente: lato della strada e margine. Dal lato positivo w = metri oltre il margine; dal lato
-      // negativo w < 0 fino a `fascia` m (campi propri lungo la strada), poi torna positivo di colpo: |w| piccolo =
-      // capezzagna solo lungo il margine della strada. (Prima |w| tornava piccolo anche in fondo alla fascia: richiesta
-      // dell'utente, «un corridoio verde parallelo alla strada, come una copia del percorso».) Il salto da −fascia a
-      // +lontano attraversa lo zero dentro un triangolo: resta una riga sottile, come il confine tra due campi.
-      // Dipende solo dal punto: blocchi vicini uguali.
-      let w = PC.strada.lontano;
-      if (o.carta?.strade) {
-        distanzaStrada(o.carta, x, z, _st);
-        const m = Math.max(0.01, _st.d - _st.semi), F = PC.strada.fascia;
-        if (_st.d < Infinity) w = _st.lato < 0 && m < F ? -m : Math.min(PC.strada.lontano, m);
-      }
-      aCampi[i * 4 + 3] = w;
-    }
-  }
   // Valore di un attributo per vertice nel punto trovato (`trova`), interpolato sul triangolo come la scheda video.
   const triangolo = (A, stride, k) => {
     const i = _r * cols + _c, a = A[i * stride + k], b = A[(i + 1) * stride + k];
@@ -896,9 +1002,11 @@ export function* posizionaVegetazioneAPezzi(o, budget = 2.5) {
     return _u + _v <= 1 ? a + (b - a) * _u + (d - a) * _v : e + (d - e) * (1 - _u) + (b - e) * (1 - _v);
   };
 
-  // Siepi e filari sui confini dei campi (richiesta dell'utente). Si cammina sui confini nello spazio q a passo fisso
-  // (reticolo del mondo: blocchi vicini trovano gli stessi punti), si torna al mondo invertendo la piega e si tiene
-  // il punto solo se lo shader lo vede davvero su quel confine, dentro un campo dipinto.
+  // Siepi, filari e muretti sui bordi dei fondi (richiesta dell'utente; mai tra le strisce di un fondo). Si cammina sui
+  // bordi nello spazio q a passo fisso (reticolo del mondo: blocchi vicini trovano gli stessi punti), si torna al mondo
+  // invertendo la piega e si tiene il punto solo se lo shader lo vede davvero su quel bordo, dentro la campagna dipinta.
+  // Lati del fondo: 0 basso (lungo, dopo la carrareccia se c'è), 1 sinistra (in testa), 2 alto e 3 destra (solo gli
+  // orti, chiusi tutt'attorno da muretti; gli altri fondi hanno lì il lato 0 o 1 del vicino).
   if (aCampi) {
     let qx0 = Infinity, qx1 = -Infinity, qy0 = Infinity, qy1 = -Infinity;
     for (let i = 0; i < n; i++) {
@@ -906,87 +1014,78 @@ export function* posizionaVegetazioneAPezzi(o, budget = 2.5) {
       const qx = aCampi[i * 4], qy = aCampi[i * 4 + 1];
       if (qx < qx0) qx0 = qx; if (qx > qx1) qx1 = qx; if (qy < qy0) qy0 = qy; if (qy > qy1) qy1 = qy;
     }
-    const S = PC.siepi, par = {}, ver = {};
-    const sP1 = derivaSeme(seme, 403), sP2 = derivaSeme(seme, 404);
+    const S = PC.siepi, M = PC.muretti, B = PC.banda, mezza = PC.carrareccia.mezza, ver = {};
     const sS = derivaSeme(seme, 406);
-    const vx = -campi.uz, vz = campi.ux;
-    // q → mondo: q = R·d + piega(X); tre passi bastano (la piega cambia su 128 m).
-    const alMondo = (qx, qy, out) => {
-      let wx = 0, wy = 0;
-      for (let k = 0; k < 3; k++) {
-        const a = qx - wx, b = qy - wy;
-        out.x = campi.x + a * campi.ux + b * vx; out.z = campi.z + a * campi.uz + b * vz;
-        wx = PC.piega.ampiezza * fbm(out.x, out.z, sP1, PC.piega.lunghezza, 1);
-        wy = PC.piega.ampiezza * fbm(out.x, out.z, sP2, PC.piega.lunghezza, 1);
-      }
-      return out;
-    };
     const P = {};
-    // Un oggetto della siepe nel punto q (sul lato `lato`: 0 lungo, 1 corto, dell'appezzamento i, j).
-    const pianta = (qx, qy, i, j, lato, albero, ix, iz, ls) => {
-      alMondo(qx, qy - ls * PC.strada.lato, P);
+    const alMondo = (qx, qy, out) => campiAlMondo(campi, qx, qy, sP1, sP2, out);
+    // Un oggetto sul lato `lato` del fondo (i, jb) nel punto q; `linea`: dove sta il bordo (fb o fu); `eMuro`, `albero`.
+    const pianta = (qx, qy, i, jb, lato, linea, F, albero, ix, iz) => {
+      alMondo(qx, qy, P);
       const lx = P.x - cx, lz = P.z - cz;
       if (lx < -half || lx > half || lz < -half || lz > half) return;
       trova(lx, lz);
       if (!asciutta() || pendenzaFine() > 28) return;
-      const w = triangolo(aCampi, 4, 3);                                             // lato e margine della strada
-      if ((w < 0 ? 1 : 0) !== ls || Math.abs(w) < PC.strada.margine[1]) return;
-      parcella(triangolo(aCampi, 4, 0), triangolo(aCampi, 4, 1) + ls * PC.strada.lato, ver);
-      if (ver.i !== i || ver.j !== j || (lato ? ver.fu : ver.fv) > S.striscia[0]) return;
-      if (triangolo(suolo, 4, 2) < 0.12 + 0.6 * hashCampi(i, j + 41) / 255 + 0.04) return;   // campo non dipinto
+      if (triangolo(aCampi, 4, 3) < PC.strada.margine[1]) return;                     // margine della strada
+      parcella(triangolo(aCampi, 4, 0), triangolo(aCampi, 4, 1), ver);
+      if (ver.i !== i || ver.jb !== jb || Math.abs((lato & 1 ? ver.fu : ver.fb) - linea) > S.striscia[0]) return;
+      if (triangolo(suolo, 4, 2) < 0.1) return;                                         // acqua, rive, terrapieni
       if (oltreScarpata(P.x, P.z) < 3 || oltreStrada(P.x, P.z) < V.strada.libero) return;
       if (dCasa(P.x, P.z) < KC.aia[1] + 2) return;
-      const h = hash2(ix, iz, sS);
-      if (albero) { emetti(h & 1 ? T.riva : T.latifoglia, ix, iz, sS, lx, lz, quota(), 0.9); return; }
-      // Muretto: vicino al luogo e sui lati scelti, fuori dal varco; orientato lungo il confine (direzione misurata
-      // invertendo la piega mezzo metro prima e dopo).
-      // Siepi e muretti non si attraversano (richiesta dell'utente): su ogni lato un varco dove cessano e si passa.
-      const M = PC.muretti, y = quota();
-      const lungo = lato ? ver.W : ver.L, lungoQui = lato ? ver.fv : ver.fu;
-      const eMuro = (Math.hypot(ver.u0 + ver.L / 2, j * ver.W + ver.W / 2 - ls * PC.strada.lato) < campi.orti + M.oltreOrti
-        || triangolo(aCampi, 4, 2) > KC.vicino - KC.muretti) && muro(i, j, lato);
-      if (eMuro ? Math.abs(lungoQui - varco(i, j, lato, lungo)) < M.varco : aperturaSiepe(i, j, lato, lungoQui)) return;
+      // Muretti: attorno agli orti; vicino al luogo e alle case una parte dei lati con la siepe.
+      const eMuro = F.tipo === 1 || (F.zona || triangolo(aCampi, 4, 2) > KC.vicino - KC.muretti) && muro(i, jb, lato);
+      const lungo = lato & 1 ? B : F.L, lungoQui = lato & 1 ? ver.fb : ver.fu;
+      if (eMuro ? Math.abs(lungoQui - varco(i, jb, lato, lungo)) < M.varco : aperturaSiepe(i, jb, lato, lungoQui)) return;
+      const h = hash2(ix, iz, sS), y = quota();
       if (eMuro) {
-        // Diritto: sulla linea a M.dentro dal confine, senza lo spostamento di traverso delle siepi.
-        const qxS = lato ? ver.u0 + M.dentro : qx, qyS = (lato ? qy : j * ver.W + M.dentro) - ls * PC.strada.lato;
+        // Diritto: sulla linea del muretto, senza lo spostamento di traverso delle siepi; orientato lungo il bordo
+        // (direzione misurata invertendo la piega mezzo metro prima e dopo).
+        const dentro = lato === 0 || lato === 1 ? M.dentro : -M.dentro;
+        const qxS = lato & 1 ? F.u0 + (lato === 1 ? 0 : F.L) + dentro : qx;
+        const qyS = lato & 1 ? qy : (lato === 0 ? F.y0 : F.y1) + dentro;
         alMondo(qxS, qyS, P);
         const ax = P.x, az = P.z;
-        alMondo(lato ? qxS : qxS + 0.5, lato ? qyS + 0.5 : qyS, P);
+        alMondo(lato & 1 ? qxS : qxS + 0.5, lato & 1 ? qyS + 0.5 : qyS, P);
         const bx = P.x, bz = P.z;
-        alMondo(lato ? qxS : qxS - 0.5, lato ? qyS - 0.5 : qyS, P);
+        alMondo(lato & 1 ? qxS : qxS - 0.5, lato & 1 ? qyS - 0.5 : qyS, P);
         const rot = Math.atan2(-(bz - P.z), bx - P.x);
         const hm = hash2(ix, iz, sS ^ 0x6c62272e);
         buffer.muretto.push(ax - cx, y, az - cz, 0.95 + 0.15 * (hm & 0xff) / 255, rot, (hm >>> 26) / 64);
         return;
       }
+      if (albero) { emetti(h & 1 ? T.riva : T.latifoglia, ix, iz, sS, lx, lz, y, 0.9); return; }
       emetti(T.siepe, ix, iz, sS, lx, lz, y, 1);
     };
-    const passoL = S.passo;
-    for (let ls = 0; ls < 2; ls++)
-    for (let jb = Math.floor((qy0 + ls * PC.strada.lato) / PC.banda); jb * PC.banda <= qy1 + ls * PC.strada.lato; jb++) {
-      const W = PC.banda / (2 + Math.floor(hashCampi(jb, 7) * PC.extra / 256));
-      for (let j = Math.round(jb * PC.banda / W), jn = j + Math.round(PC.banda / W); j < jn; j++) {
-        if (stanco()) yield* pausa();
-        const hj = hashCampi(j, 3) / 255, L = PC.lungo[0] + PC.lungo[1] * hj, off = hj * PC.spostamento;
-        for (let i = Math.floor((qx0 + off) / L); i * L - off <= qx1; i++) {
-          const u0 = i * L - off;
-          if (divisione(i, j, W, L, u0, ls, campi.orti) === 2) continue;           // negli orti niente siepi
-          // Lato lungo (in basso, fv = dentro): cespugli ogni passo o alberi ogni passoFilare.
-          if (siepeLunga(i, j)) {
-            const alb = filare(i, j, 0), ps = alb ? S.passoFilare : passoL;
-            for (let k = Math.ceil((u0 + 1) / ps); k * ps < u0 + L - 1; k++) {
-              const jit = hash2(k, j, sS ^ 0x51ed270b);
-              pianta(k * ps + ((jit & 0xff) / 255 - 0.5) * 0.35 * ps, j * W + S.dentro + (((jit >>> 8) & 0xff) / 255 - 0.5) * 0.5,
-                i, j, 0, alb, k, j * 2, ls);
+    const F = {};
+    for (let jb = Math.floor(qy0 / B); jb * B <= qy1; jb++) {
+      if (stanco()) yield* pausa();
+      const hb = hashCampi(jb, 3) / 255, L = PC.fondo[0] + (PC.fondo[1] - PC.fondo[0]) * hb, off = hb * PC.spostamento;
+      F.L = L; F.y0 = jb * B + (carrareccia(jb) ? mezza : 0); F.y1 = (jb + 1) * B - (carrareccia(jb + 1) ? mezza : 0);
+      for (let i = Math.floor((qx0 + off) / L); i * L - off <= qx1; i++) {
+        const u0 = i * L - off;
+        if (!fondoColtivato(fondi, i, jb)) continue;
+        F.u0 = u0; F.tipo = tipoFondo(i, jb, L, u0, campi.orti);
+        F.zona = Math.hypot(u0 + L / 2, (jb + 0.5) * B) < campi.orti + M.oltreOrti;
+        const orto = F.tipo === 1;
+        for (let lato = 0; lato < 4; lato++) {
+          if (lato >= 2 && !orto) break;
+          if (!orto && !(lato ? siepeCorta(i, jb) : siepeLunga(i, jb))) continue;
+          const alb = !orto && filare(i, jb, lato), ps = alb ? S.passoFilare : S.passo;
+          const d = orto ? M.dentro : S.dentro;
+          if (lato & 1) {
+            // Lato corto: di traverso, tra le carrarecce.
+            const ul = lato === 1 ? u0 + d : u0 + L - d;
+            for (let k = Math.ceil((F.y0 + 2.5) / ps); k * ps < F.y1 - 1; k++) {
+              const jit = hash2(i * 2 + (lato >> 1), k, sS ^ 0x2f8b1c3d);
+              pianta(ul + (orto ? 0 : ((jit & 0xff) / 255 - 0.5) * 0.5), k * ps + (((jit >>> 8) & 0xff) / 255 - 0.5) * 0.35 * ps,
+                i, jb, lato, ul - u0, F, alb, i * 2 + (lato >> 1), k * 2 + 1);
             }
-          }
-          // Lato corto (a sinistra, fu = dentro).
-          if (siepeCorta(i, j)) {
-            const alb = filare(i, j, 1), ps = alb ? S.passoFilare : passoL;
-            for (let k = Math.ceil((j * W + 2.5) / ps); k * ps < (j + 1) * W - 0.5; k++) {
-              const jit = hash2(i, k, sS ^ 0x2f8b1c3d);
-              pianta(u0 + S.dentro + ((jit & 0xff) / 255 - 0.5) * 0.5, k * ps + (((jit >>> 8) & 0xff) / 255 - 0.5) * 0.35 * ps,
-                i, j, 1, alb, i, k * 2 + 1, ls);
+          } else {
+            // Lato lungo: lungo il fondo, oltre le capezzagne.
+            const yl = lato === 0 ? F.y0 + d : F.y1 - d;
+            for (let k = Math.ceil((u0 + 1) / ps); k * ps < u0 + L - 1; k++) {
+              const jit = hash2(k, jb * 2 + (lato >> 1), sS ^ 0x51ed270b);
+              pianta(k * ps + ((jit & 0xff) / 255 - 0.5) * 0.35 * ps, yl + (orto ? 0 : (((jit >>> 8) & 0xff) / 255 - 0.5) * 0.5),
+                i, jb, lato, yl - jb * B, F, alb, k, (jb * 2 + (lato >> 1)) * 2);
             }
           }
         }
@@ -1103,7 +1202,7 @@ export function* posizionaVegetazioneAPezzi(o, budget = 2.5) {
     return esito;
   }
 
-  return { tipi, ms: performance.now() - t0 - attesa, msCampi, suolo, campi, aCampi, case: caseQui, erbaAttorno };
+  return { tipi, ms: performance.now() - t0 - attesa, msCampi, suolo, campi, aCampi, fondi, case: caseQui, erbaAttorno };
 }
 
 // ─── Bosco lontano (sagome negli anelli dell'orizzonte) ──────────────────

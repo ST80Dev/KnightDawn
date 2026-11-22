@@ -8,7 +8,7 @@
 // deformate a codice, colori per vertice, un materiale per livello; nessun asset esterno (regola 6).
 
 import * as THREE from 'three';
-import { STRIDE, SAGOME, boscoLontanoAPezzi, finisci } from '../mondo/vegetazione.js';
+import { STRIDE, SAGOME, boscoLontanoAPezzi, finisci, LATO_FONDI } from '../mondo/vegetazione.js';
 
 // ─── Costruzione delle geometrie ─────────────────────────────────────────
 
@@ -1295,7 +1295,22 @@ export function* creaVegetazioneAPezzi(pos, terrain = null, renderer = null, bud
     // Campi coltivati: coordinate degli appezzamenti per vertice (PARCELLE, vegetazione.js).
     if (pos.aCampi) superficie.geometry.setAttribute('aCampi', new THREE.BufferAttribute(pos.aCampi, 4));
     const uOrti = superficie.material?.userData?.uniformi?.uOrti;
-    if (uOrti) uOrti.value = pos.campi?.orti || 0;     // raggio degli orti (PARCELLE.orti, divisione)
+    if (uOrti) uOrti.value = pos.campi?.orti || 0;     // raggio degli orti (PARCELLE.orti, tipoFondo)
+    // Fondi coltivati del blocco (vegetazione.js, fondoColtivato): una texture R8 LATO_FONDI².
+    const uni = superficie.material?.userData?.uniformi;
+    if (uni?.uFondi && pos.fondi) {
+      const t = new THREE.DataTexture(pos.fondi.dati, LATO_FONDI, LATO_FONDI, THREE.RedFormat, THREE.UnsignedByteType);
+      t.magFilter = t.minFilter = THREE.NearestFilter;
+      t.needsUpdate = true;
+      t.userData.fondi = true;
+      if (uni.uFondi.value?.userData?.fondi) uni.uFondi.value.dispose();   // non la texture nera condivisa
+      uni.uFondi.value = t;
+      uni.uFondi0.value.set(pos.fondi.i0, pos.fondi.j0);
+      if (!superficie.material.userData.liberaFondi) {
+        superficie.material.userData.liberaFondi = true;
+        superficie.material.addEventListener('dispose', () => { if (uni.uFondi.value?.userData?.fondi) uni.uFondi.value.dispose(); });
+      }
+    }
     coloriTerreno = superficie.geometry.attributes.color?.array || null;
   }
 
