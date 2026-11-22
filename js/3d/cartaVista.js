@@ -144,6 +144,16 @@ export const LUCE = (() => {             // luce da nord-ovest, alta 45°
   return [x / l, y / l, z / l];
 })();
 
+/** true se nel punto (x, y in km) c'è acqua (mare, lago, fiume): dalla griglia fine se c'è, altrimenti dalla cella. */
+const _lg = { quota: 0, acqua: NaN };
+export function acquaNelPunto(carta, x, y) {
+  if (carta.griglia) {
+    leggiGriglia(carta.griglia, x * carta.cella, y * carta.cella, _lg);
+    return _lg.quota <= 0 || !Number.isNaN(_lg.acqua);
+  }
+  return !!carta.mare[Math.floor(y) * carta.cols + Math.floor(x)];
+}
+
 export function tinta(scala, t) {
   for (let i = 1; i < scala.length; i++) {
     if (t <= scala[i][0]) {
@@ -1032,7 +1042,9 @@ export function createCartaVista(contenitore, opzioni = {}) {
     // Clic senza trascinamento: entra nella Scena centrata nel punto esatto (km, non il centro della cella).
     const [x, y] = inKm(e);
     if (x < 0 || y < 0 || x >= carta.cols || y >= carta.rows) return;
-    if (carta.mare[Math.floor(y) * carta.cols + Math.floor(x)]) { elCursore.textContent = 'È mare: scegli un punto di terra.'; return; }
+    // Acqua o terra dal rilievo fine (griglia G1), lo stesso disegnato e delle Scene: prima la cella di 1 km diceva «mare»
+    // anche dove la Carta zoomata mostrava terra (segnalato dall'utente).
+    if (acquaNelPunto(carta, x, y)) { elCursore.textContent = 'È acqua: scegli un punto di terra.'; return; }
     opzioni.onScegli(carta, x, y);
   };
   canvas.addEventListener('pointerup', fine);

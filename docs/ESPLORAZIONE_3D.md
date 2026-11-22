@@ -2842,6 +2842,13 @@ bacino 0,05 s. Prototipo: i corsi d'acqua che ne escono seguono le valli del ril
   oltre 3 m ~1,5 % dei punti (resta un affluente parallelo al fiume principale a 90 m, 20 m più in alto). Restano a
   1 km: laghi, `ricevente`/`bacino` della Carta (strade e luoghi), statistiche dei fiumi nella riga della Carta.
   `VERSIONE_GENERATORE` `+fiumi-fini-1`.
+  **Foci corrette** (segnalato dall'utente: fiumi che arrivano al lago su un terrapieno dritto, o finiscono centinaia di
+  metri prima a un'altra quota): le foci del deflusso fine erano le celle di 1 km di mare e laghi, anche dove il terreno
+  fine era ancora terra alta (fiumi finiti a 20–70 m sopra il mare) o, attorno ai laghi, conche sotto il livello che si
+  colmavano in piani attraversati dritti e sopraelevati (fino a 19 m). Ora la foce è dove il terreno fine arriva al livello
+  dell'acqua: ≤ 0 per mare e lagune, ≤ livello del lago vicino ai laghi. Pelo finale al mare tra −9 e 0 m (prima fino a
+  +70); il caso a 19 m sparito. `+foci-1`. **Clic sulla Carta**: acqua o terra dalla griglia fine (`acquaNelPunto`), non
+  più dalla cella di 1 km (prima «è mare» dove la Carta zoomata mostrava terra).
 - **G3 — Valli e alvei scavati nella griglia**: niente più `scavaFiumi` a posteriori; nella Scena `quotaFinale` =
   griglia interpolata + solo le ottave più fini (sotto ~250 m), smorzate negli alvei.
 - **G4 — Valichi** sulle selle vere della griglia (spartiacque tra i bacini).

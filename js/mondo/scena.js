@@ -329,11 +329,28 @@ export function fiumiFini(carta, avanzamento = null) {
     if (avanzamento && r % 64 === 0) avanzamento(0.6 * r / nz);
     for (let q = 0; q < nx; q++) g[r * nx + q] = quotaMondo(carta, q * P, r * P, seme);
   }
-  // Foci: mare e laghi della Carta, quota ≤ 0, bordo.
+  // Foci: dove il terreno fine arriva davvero al livello dell'acqua (≤ 0 per mare e lagune, ≤ livello del lago vicino
+  // ai laghi della Carta), e il bordo. Prima valeva la cella di 1 km: il fiume finiva decine di metri sopra il mare dove
+  // la cella era già «mare», e attorno ai laghi le conche sotto il livello si colmavano in piani su cui il fiume correva
+  // dritto e sopraelevato fino al lago (segnalato dall'utente).
+  const vicinoLago = new Uint8Array(carta.cols * carta.rows);
+  for (let i = 0; i < vicinoLago.length; i++) {
+    if (carta.acque[i] !== ACQUA.LAGO) continue;
+    const c0 = i % carta.cols, r0 = (i - c0) / carta.cols;
+    for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) {
+      const cc = c0 + a, rr = r0 + b;
+      if (cc >= 0 && rr >= 0 && cc < carta.cols && rr < carta.rows) vicinoLago[rr * carta.cols + cc] = 1;
+    }
+  }
   const foce = new Uint8Array(n);
   for (let r = 0; r < nz; r++) for (let q = 0; q < nx; q++) {
-    const i = r * nx + q, c = Math.min(carta.cols - 1, Math.floor(q * P / C)), rr = Math.min(carta.rows - 1, Math.floor(r * P / C));
-    if (g[i] <= 0 || q === 0 || r === 0 || q === nx - 1 || r === nz - 1 || carta.acque[rr * carta.cols + c] !== ACQUA.TERRA) foce[i] = 1;
+    const i = r * nx + q;
+    if (g[i] <= 0 || q === 0 || r === 0 || q === nx - 1 || r === nz - 1) { foce[i] = 1; continue; }
+    const c = Math.min(carta.cols - 1, Math.floor(q * P / C)), rr = Math.min(carta.rows - 1, Math.floor(r * P / C));
+    if (vicinoLago[rr * carta.cols + c]) {
+      const L = livelloLago(carta, q * P, r * P);
+      if (!Number.isNaN(L) && g[i] <= L + 0.5) foce[i] = 1;
+    }
   }
   // Riempimento delle conche (priority flood, mucchio binario) e direzioni: ogni cella scende verso chi l'ha raggiunta.
   const fill = new Float32Array(n), fatto = new Uint8Array(n), ric = new Int32Array(n).fill(-1), ordine = new Int32Array(n);
