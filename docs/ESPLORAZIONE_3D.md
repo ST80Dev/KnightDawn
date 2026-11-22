@@ -1018,6 +1018,16 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
      cucuzzolo, 14 su 24 selle simmetriche (scende da due lati opposti e sale dagli altri due); gli altri sono
      colli asimmetrici sul fianco di un massiccio o varchi dove si toccano tre valli. Strade: ogni valico è
      collegato alle sue valli; regole del generatore tutte superate, tempi invariati.
+   - *Canyon vicino alle sorgenti* (segnalato dall'utente: sopra una valle larga appena scavata, un taglio stretto
+     e profondo con pareti verticali). Misurato (seme 395728, 60 corsi d'acqua): 46 punti con pareti di 5–21 m entro
+     8 m dalla sponda, tutti su torrenti a 200–1300 m dalla sorgente. Cause: il letto sempre in discesa non risale dopo
+     il punto più basso incontrato, quindi una sorgente in un avvallamento con una gobba a valle restava 20–30 m sotto il
+     rilievo; e vicino alla sorgente i versanti sono attenuati (contro la conca a ferro di cavallo), quindi l'alveo era
+     un taglio. Ora (`FIUMI_SCENA.secco`, `ripa`): se nei primi 1500 m il letto sta più di 4 m sotto il rilievo, la
+     sorgente scende dopo l'ultimo punto così (`inizio` della polilinea; più a monte asciutto, anche nei tracciati e
+     nella Carta zoomata), e il fianco vicino all'alveo sale al più di 0,6 m per metro. Punti a canyon: 46 → 0 (e 0
+     sul seme 570549); fiumi rialzati (terreno di lato più di 3 m sotto il pelo) 66 → 31 e 256 → 48. `VERSIONE_GENERATORE`
+     `+sorgenti-1`.
    - *Valli più alte e torrenti* (richiesta dell'utente: fondovalle a 400 m sotto montagne di 2000 m sono rari;
      le sorgenti partono quasi dalle cime). Misurato: le «sorgenti» visibili erano solo i punti dove il bacino
      arriva a 150 km² (già un fiume); i torrenti esistevano nel drenaggio ma non si disegnavano. Due cambi
