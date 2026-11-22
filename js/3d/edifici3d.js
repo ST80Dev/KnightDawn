@@ -88,6 +88,12 @@ export const EDIFICI = {
   cappella:  { nome: 'Cappella', largo: 6, fondo: 10, piani: 2, intonaco: false, campanile: 1.8, copertura: 'lastre' },
   salaArmi:  { nome: "Sala d'armi", largo: 16, fondo: 9, piani: 2, intonaco: false, copertura: 'lastre' },
   armeria:   { nome: 'Armeria', largo: 8, fondo: 6, piani: 1, intonaco: false },
+  // Dimora dei signori nella corte del signore (M7, passo 10b): piano nobile con bifore, cornici, stemma, scala esterna.
+  // Più grandi delle case del borgo, in proporzione alla casata (richiesta dell'utente: «ben più maestoso»).
+  palazzetto:      { nome: 'Palazzo del signore', largo: 15, fondo: 10, piani: 2, intonaco: false, palazzo: true, copertura: 'lastre' },
+  palazzoMinore:   { nome: 'Palazzo del signore', largo: 20, fondo: 11, piani: 3, intonaco: false, palazzo: true, copertura: 'lastre' },
+  palazzo:         { nome: 'Palazzo del signore', largo: 26, fondo: 13, piani: 3, intonaco: false, palazzo: true, copertura: 'lastre' },
+  palazzoMaggiore: { nome: 'Palazzo del signore', largo: 32, fondo: 14, piani: 4, intonaco: false, palazzo: true, copertura: 'lastre' },
 };
 
 // ─── Texture (una volta) ──────────────────────────────────────────────────
@@ -587,6 +593,74 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
   }
 
   /** Tettoia su quattro pali (fienile, fabbro). */
+  /**
+   * Palazzo dei signori: corpo in pietra senza le finestre del kit; piano terra con finestrelle e portone, piano nobile
+   * con bifore (due luci alte affiancate), ultimo piano con finestre medie; cornici di pietra tra i piani, stemma sopra il
+   * portone; se è abbastanza largo, scala esterna in pietra con pianerottolo e porta al piano nobile.
+   */
+  function palazzo(c, f, E, quota) {
+    const s = [-f[1], f[0]], a = E.largo / 2, b = E.fondo / 2;
+    const r = corpo({ c, f, largo: E.largo, fondo: E.fondo, piani: E.piani, intonaco: false, quota, porta: true, finestre: false,
+      retro: false, legno: false, copertura: E.copertura });
+    const pav = r.pavimento, fr = [c[0] + f[0] * b, c[1] + f[1] * b];
+    const su = (t, o = 0.04) => [fr[0] + s[0] * t + f[0] * o, fr[1] + s[1] * t + f[1] * o];
+    const conScala = 2 * a >= 18;
+    const Ls = PIANO / 0.62, tAlto = a - 1 - Ls, tPian = tAlto - 1;          // scala: dal capo verso il centro
+    // Finestre.
+    const k = Math.max(2, Math.floor((2 * a - 2) / 3.4));
+    for (let p = 0; p < E.piani; p++) {
+      for (let i = 0; i < k; i++) {
+        const t = -a + 2 * a * (i + 0.5) / k;
+        if (p === 0 && Math.abs(t) < 2) continue;                          // portone
+        if (conScala && p <= 1 && t > tPian - 1.6) continue;                // dietro la scala e la porta del piano nobile
+        const nobile = p === 1, y = pav + p * PIANO + (p === 0 ? 1.6 : nobile ? 1.25 : 1.5);
+        for (const o of nobile ? [-0.42, 0.42] : [0]) {
+          const [u, v] = su(t + o);
+          dettagli.push({ tipo: 'finestra', u, v, y, fu: f[0], fv: f[1], sx: p === 0 ? 0.75 : nobile ? 0.66 : 0.95, sy: p === 0 ? 0.8 : nobile ? 2.1 : 1.2 });
+        }
+        if (nobile) {                                                      // davanzale sotto la bifora
+          const [u, v] = su(t, 0.12), R2 = rett([u, v], s, f, 0.9, 0.1);
+          parti.pietra.push(prisma(q4(R2), q4(R2), y - 0.12, y - 0.02));
+        }
+      }
+    }
+    // Cornici (marcapiani) tra i piani, lungo la facciata.
+    for (let p = 1; p < E.piani; p++) {
+      const y = pav + p * PIANO, [u, v] = su(0, 0.1), R2 = rett([u, v], s, f, a + 0.1, 0.14);
+      parti.pietra.push(prisma(q4(R2), q4(R2), y - 0.14, y + 0.1));
+    }
+    // Stemma della casata sopra il portone: scudo di legno dipinto in una cornice di pietra.
+    {
+      const [u, v] = su(0, 0.1), Rc = rett([u, v], s, f, 0.62, 0.08), [u2, v2] = su(0, 0.17), Rs = rett([u2, v2], s, f, 0.48, 0.06);
+      parti.pietra.push(prisma(q4(Rc), q4(Rc), pav + 2.75, pav + 4.05));
+      parti.legno.push(prisma(q4(Rs), q4(Rs), pav + 2.85, [pav + 3.95, pav + 3.95, pav + 3.95, pav + 3.95]));
+    }
+    if (conScala) {
+      // Scala esterna lungo la facciata: sale dal capo (t = a − 1) verso il centro fino al pianerottolo del piano nobile.
+      const w = 1.4, off = b + w / 2 + 0.05, yT = pav + PIANO;
+      const P4 = (t0, t1) => [[t0, off - w / 2], [t1, off - w / 2], [t1, off + w / 2], [t0, off + w / 2]]
+        .map(([t, d]) => [c[0] + s[0] * t + f[0] * d, c[1] + s[1] * t + f[1] * d]);
+      const gr = P4(a - 1, tAlto), pi = P4(tAlto, tPian - 1.2);
+      parti.pietra.push(prisma(q4(gr), q4(gr), pav - 0.5, [pav + 0.05, yT, yT, pav + 0.05]));
+      parti.pietra.push(prisma(q4(pi), q4(pi), pav - 0.5, yT));
+      // Parapetto sul lato esterno della scala e del pianerottolo.
+      const par = (t0, t1, y0, y1) => {
+        const pp = [[t0, off + w / 2], [t1, off + w / 2], [t1, off + w / 2 + 0.25], [t0, off + w / 2 + 0.25]]
+          .map(([t, d]) => [c[0] + s[0] * t + f[0] * d, c[1] + s[1] * t + f[1] * d]);
+        parti.pietra.push(prisma(q4(pp), q4(pp), pav - 0.3, [y0 + 0.9, y1 + 0.9, y1 + 0.9, y0 + 0.9]));
+      };
+      par(a - 1, tAlto, pav + 0.05, yT);
+      par(tAlto, tPian - 1.2, yT, yT);
+      // Porta del piano nobile sul pianerottolo.
+      const [u, v] = su(tPian - 0.1, 0.05);
+      dettagli.push({ tipo: 'porta', u, v, y: yT, fu: f[0], fv: f[1], sx: 0.95, sy: 1.05 });
+      const cs = [c[0] + s[0] * ((a - 1 + tPian - 1.2) / 2) + f[0] * off, c[1] + s[1] * ((a - 1 + tPian - 1.2) / 2) + f[1] * off];
+      scatole.push({ cu: cs[0], cv: cs[1], au: s[0], av: s[1], hl: (a - 1 - (tPian - 1.2)) / 2, hw: w / 2 + 0.3 });
+      sagome.push(prisma(q4(gr), q4(gr), pav - 0.5, yT));
+    }
+    return r;
+  }
+
   function tettoia(c, f, largo, fondo, gronda) {
     const s = [-f[1], f[0]], a = largo / 2, b = fondo / 2;
     for (const i of [-1, 1]) for (const j of [-1, 1]) {
@@ -640,10 +714,12 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
   /**
    * Edificio nominato (EDIFICI). Restituisce le misure occupate (largo, fondo con gli annessi) per i lotti.
    */
-  function edificio(tipo, { u, v, fu, fv, quota = null }) {
-    const E = EDIFICI[tipo], f = [fu, fv], s = [-fv, fu], c = [u, v];
+  function edificio(tipo, { u, v, fu, fv, quota = null, misure = null }) {
+    // `misure` ({ largo, fondo, piani }): al posto di quelle di EDIFICI (il palazzo si restringe dove la cinta è stretta).
+    const E = misure ? { ...EDIFICI[tipo], ...misure } : EDIFICI[tipo], f = [fu, fv], s = [-fv, fu], c = [u, v];
     let r;
     if (E.loggia) r = loggia(c, f, E.largo, E.fondo, quota);
+    else if (E.palazzo) r = palazzo(c, f, E, quota);
     else r = corpo({ c, f, largo: E.largo, fondo: E.fondo, piani: E.piani, intonaco: E.intonaco, quota, bottega: tipo === 'stalla' || tipo === 'fabbro',
       comignolo: tipo !== 'chiesa' && tipo !== 'cappella', legno: E.graticcio ?? false, copertura: E.copertura });
     if (tipo === 'taverna') { botte(u + s[0] * (E.largo / 2 - 1.5) + f[0] * (E.fondo / 2 + 0.55), v + s[1] * (E.largo / 2 - 1.5) + f[1] * (E.fondo / 2 + 0.55)); }
@@ -692,7 +768,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
       parti.legno.push(prisma(q4(R2), q4(R2), y + 0.1, y + 0.22));
     }
     const porta = { u: u + f[0] * (E.fondo / 2 + 0.6), v: v + f[1] * (E.fondo / 2 + 0.6), fu, fv };
-    edifici.push({ tipo, nome: E.nome, porta });
+    edifici.push({ tipo, nome: E.nome, porta, largo: E.largo, fondo: E.fondo, piani: E.piani });
     const largo = E.largo + (E.recinto ? E.recinto + 1 : 0) * 2 + (E.tettoia ? E.tettoia + 0.4 : 0) * 2;
     return { largo, fondo: E.fondo };
   }

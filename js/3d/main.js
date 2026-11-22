@@ -390,6 +390,10 @@ const RIGHE_CRONISTA = {
   cappella: 'Una cappella piccola e spoglia: una lampada accesa davanti all\'altare.',
   salaArmi: "Rastrelliere di lance e scudi; un maestro d'armi osserva chi entra.",
   armeria: 'Lame, maglie e corazze in fila: tutto ha un prezzo.',
+  palazzetto: "Una casa-forte di pietra: il signore vive qui, tra le carte e le armi di famiglia.",
+  palazzoMinore: "Un servo vi ferma sulla soglia: il signore riceve solo chi è annunciato.",
+  palazzo: "Arazzi, un camino acceso e un lungo tavolo: la sala grande della casata.",
+  palazzoMaggiore: "Scale di pietra, stemmi alle pareti e un brusio di cortigiani: qui si decide la sorte della regione.",
   pozzo: "L'acqua è fredda e profonda; la corda è consumata dalle mani.",
 };
 let cronista = null;                       // la Carta del cronista aperta (elemento), o null
