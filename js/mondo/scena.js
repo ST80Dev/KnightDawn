@@ -304,6 +304,11 @@ const FIUMI_SCENA = {
   // Alla sorgente la valle nasce piano: i versanti scavano in proporzione alla distanza dalla sorgente lungo il
   // corso (pieni da `sorgente` m). Senza, attorno alla sorgente c'era una conca chiusa a ferro di cavallo.
   sorgente: 1500,
+  // Il torrente nasce dove il terreno glielo permette: se nei primi `sorgente` m il letto (sempre in discesa) resta
+  // più di `secco` m sotto il rilievo, la sorgente scende dopo l'ultimo punto così (prima scavava un canyon stretto
+  // attraverso la gobba, con i versanti attenuati vicino alla sorgente; segnalato dall'utente). Più a monte, asciutto.
+  secco: 4,
+  ripa: 0.6,                                             // pendenza massima del fianco vicino alla sorgente (~31°)
 };
 
 const _fiumi = new WeakMap();
@@ -473,9 +478,24 @@ function polilinea(carta, pronto, id) {
       y[j] = conRiva(carta, p.x[j], p.z[j], quotaMondo(carta, p.x[j], p.z[j], seme), false) - p.prof[j] - FIUMI_SCENA.sponda.altezza;
     }
     p.letto = lettoMonotono(y, tr.A.L, tr.B.L);
-    tr.grezzo = conRiquadro(p);
+    tr.grezzo = conRiquadro(inizioSorgente(p, y, tr));
   }
   return tr.grezzo;
+}
+
+/** Primo punto bagnato di un tratto che parte da una sorgente (FIUMI_SCENA.secco): `p.inizio`. */
+function inizioSorgente(p, y, tr) {
+  p.inizio = 0;
+  if (tr.ka !== 0) return p;
+  const F = FIUMI_SCENA;
+  let d = 0, ultimo = -1;
+  for (let i = 0; i < p.x.length; i++) {
+    if (i > 0) d += Math.hypot(p.x[i] - p.x[i - 1], p.z[i] - p.z[i - 1]);
+    if (d > F.sorgente) break;
+    if (y[i] - p.letto[i] > F.secco) ultimo = i;
+  }
+  if (ultimo >= 0 && ultimo < p.x.length - 4) p.inizio = ultimo + 1;
+  return p;
 }
 
 /** Riquadro della polilinea e indice dei suoi segmenti per cella (F.cellaIndice), allargati del raggio. */
@@ -541,7 +561,7 @@ function raffina(carta, pronto, id) {
     y[i] = via.h[i] - p.prof[i] - F.sponda.altezza;
   }
   p.letto = lettoMonotono(y, tr.A.L, tr.B.L);
-  pronto.raffinati.set(id, conRiquadro(p));
+  pronto.raffinati.set(id, conRiquadro(inizioSorgente(p, y, tr)));
 }
 
 /**
@@ -573,8 +593,8 @@ export function percorsiFiumi(carta, x0, z0, x1, z1) {
   pronto.tratti.forEach((tr, id) => {
     const [a0, b0, a1, b1] = tr.riquadro;
     if (a1 < x0 || a0 > x1 || b1 < z0 || b0 > z1) return;
-    const p = polilinea(carta, pronto, id);
-    out.push({ x: p.x, z: p.z, w: p.w });
+    const p = polilinea(carta, pronto, id), i0 = p.inizio ?? 0;
+    out.push({ x: p.x.slice(i0), z: p.z.slice(i0), w: p.w.slice(i0) });
   });
   return out;
 }
@@ -606,12 +626,14 @@ export function scavaFiumi(carta, x, z, h0, esito = _esito) {
     const segmenti = cv.celle.get(chiaveCella);
     if (!segmenti) continue;
     // Primo tratto di un corso d'acqua: distanza dalla sorgente lungo il percorso (per la valle che nasce piano).
+    const i0 = cv.inizio ?? 0;                     // prima della sorgente vera: asciutto
     if (pronto.tratti[lista[k]].ka === 0 && !cv.daSorgente) {
       cv.daSorgente = new Float64Array(cv.x.length);
-      for (let i = 1; i < cv.x.length; i++) cv.daSorgente[i] = cv.daSorgente[i - 1] + Math.hypot(cv.x[i] - cv.x[i - 1], cv.z[i] - cv.z[i - 1]);
+      for (let i = i0 + 1; i < cv.x.length; i++) cv.daSorgente[i] = cv.daSorgente[i - 1] + Math.hypot(cv.x[i] - cv.x[i - 1], cv.z[i] - cv.z[i - 1]);
     }
     const sorgente = pronto.tratti[lista[k]].ka === 0;
     for (const i of segmenti) {
+    if (i < i0) continue;
     const ax = cv.x[i], az = cv.z[i], bx = cv.x[i + 1], bz = cv.z[i + 1];
     if ((ax < x - R && bx < x - R) || (ax > x + R && bx > x + R) || (az < z - R && bz < z - R) || (az > z + R && bz > z + R)) continue;
     const vx = bx - ax, vz = bz - az, l2 = vx * vx + vz * vz;
@@ -619,7 +641,7 @@ export function scavaFiumi(carta, x, z, h0, esito = _esito) {
     // Punto a monte dell'inizio del segmento: lo copre il segmento prima (o il tratto a monte). Contato anche lui
     // per i versanti, un torrente più ripido dei versanti scavava accanto a sé una fossa alla quota del letto più a
     // valle, e l'alveo restava in cima a un muro (segnalato dall'utente). Resta solo all'inizio di una sorgente.
-    const aMonte = t < 0 && !(i === 0 && sorgente);
+    const aMonte = t < 0 && !(i === i0 && sorgente);
     t = t < 0 ? 0 : t > 1 ? 1 : t;
     const dx = x - ax - vx * t, dz = z - az - vz * t;
     const d = Math.sqrt(dx * dx + dz * dz);
@@ -642,6 +664,9 @@ export function scavaFiumi(carta, x, z, h0, esito = _esito) {
       if (cv.daSorgente && c < h0) {
         const ds = cv.daSorgente[i] + (cv.daSorgente[i + 1] - cv.daSorgente[i]) * t;
         if (ds < F.sorgente) c = h0 - (h0 - c) * smoothstep(0, F.sorgente, ds);
+        // Mai pareti: anche vicino alla sorgente il fianco sale al più di `ripa` m per metro dalla sponda (prima, con
+        // l'alveo profondo e i versanti attenuati, restava un canyon con pareti verticali; segnalato dall'utente).
+        c = Math.min(c, pelo + F.sponda.altezza + fuori * F.ripa);
       }
       if (c < cap) cap = c;
       if (fuori < fuoriMin) { fuoriMin = fuori; peloArgine = pelo; Rargine = Rv; }
@@ -867,7 +892,7 @@ export function tracciatiFiumi(carta, cx, cz, half, dentro, raggio = Infinity, v
     const punti = [];
     lista.forEach((id, j) => {
       const cv = polilinea(carta, pronto, id);
-      for (let i = j === 0 ? 0 : 1; i < cv.x.length; i++) {
+      for (let i = j === 0 ? (cv.inizio ?? 0) : 1; i < cv.x.length; i++) {
         // Dentro un lago in quota il nastro non serve (resterebbe visibile sotto la superficie).
         const pelo = cv.letto[i] + cv.prof[i], lago = livelloLago(carta, cv.x[i], cv.z[i]);
         punti.push(lago >= pelo ? null : [cv.x[i] - cx, cv.z[i] - cz, pelo, cv.w[i]]);
