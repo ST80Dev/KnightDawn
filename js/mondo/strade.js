@@ -570,6 +570,10 @@ function stradeScena(carta) {
   }
   s = { tratti, indice: new Map(), raggio: Math.max(...Object.values(STRADE.classi).map((k) => k.semi + k.banchina)) + S.raccordo + S.ritorno };
   _scena.set(carta, s);
+  // Tracciati fini già calcolati nel Worker (precalcolaStrade): si rimettono ai tratti e si indicizzano.
+  if (carta.stradeFini?.length === tratti.length) {
+    tratti.forEach((t, id) => { if (carta.stradeFini[id]) { t.fine = carta.stradeFini[id]; indicizza(s, id); } });
+  }
   return s;
 }
 
@@ -659,8 +663,13 @@ function* tracciaTrattoAPezzi(carta, tr, W = STRADE.scena.corridoio) {
   const hq = new Float64Array(N).fill(NaN), acqua = new Float32Array(N);   // 0 asciutto, >0 metri d'acqua
   const mura = new Uint8Array(N);                                       // 1: scarpata di un terrapieno
   const esito = { quota: 0, livello: NaN };
+  // Solo i piani dei luoghi vicini al tratto (prima tutti, per ogni cella: metà del tempo delle strade).
   const piani = [];
-  for (const l of carta.luoghi ?? []) for (const p of l.piani ?? []) piani.push(p);
+  for (const l of carta.luoghi ?? []) {
+    const m = (l.raggioPiani ?? 300) + 100;
+    if (l.x < rx0 - m || l.x > rx1 + m || l.z < rz0 - m || l.z > rz1 + m) continue;
+    for (const p of l.piani ?? []) piani.push(p);
+  }
   for (let k = 0; k < N; k++) {
     if (d2[k] > W * W) continue;
     if (k % PEZZO === 0) yield;
@@ -940,11 +949,43 @@ function innestaAllaPorta(carta, tratti, tr) {
   }
 }
 
+/** Indice per celle (cellaIndice) dei segmenti del tracciato fine del tratto `id` (distanzaStrada, spianaStrade). */
+function indicizza(s, id) {
+  const Ci = STRADE.scena.cellaIndice, R = s.raggio, f = s.tratti[id].fine;
+  for (let i = 0; i < f.x.length - 1; i++) {
+    const a0 = Math.floor((Math.min(f.x[i], f.x[i + 1]) - R) / Ci), a1 = Math.floor((Math.max(f.x[i], f.x[i + 1]) + R) / Ci);
+    const b0 = Math.floor((Math.min(f.z[i], f.z[i + 1]) - R) / Ci), b1 = Math.floor((Math.max(f.z[i], f.z[i + 1]) + R) / Ci);
+    for (let b = b0; b <= b1; b++) for (let a = a0; a <= a1; a++) {
+      const k = a * 1000003 + b;
+      let l = s.indice.get(k);
+      if (!l) s.indice.set(k, (l = []));
+      l.push(id, i);
+    }
+  }
+}
+
+/**
+ * Tracciato fine di tutte le strade della Carta, calcolato una volta nel Worker e salvato con lei (piano «Mondo generato
+ * in anticipo», passo G6): `carta.stradeFini`, uno per tratto (null se il tratto non ne ha). Nella pagina stradeScena li
+ * rimette ai tratti: la Carta mostra subito le strade vere e i blocchi non le cercano più.
+ */
+export function precalcolaStrade(carta) {
+  if (!carta.strade) return carta;
+  const t0 = performance.now(), C = carta.cella;
+  raffinaStrade(carta, carta.cols * C / 2, carta.rows * C / 2, Math.max(carta.cols, carta.rows) * C);
+  carta.stradeFini = stradeScena(carta).tratti.map((t) => t.fine && {
+    x: Float64Array.from(t.fine.x), z: Float64Array.from(t.fine.z), h: Float64Array.from(t.fine.h), tipo: Uint8Array.from(t.fine.tipo),
+    attraversamenti: t.fine.attraversamenti, semi: t.fine.semi, ok: t.fine.ok,
+  });
+  carta.strade.info.msFini = Math.round(performance.now() - t0);
+  return carta;
+}
+
 /** raffinaStrade a pezzi (blocco che segue il cavaliere): yield dentro la ricerca di ogni tratto. */
 export function* raffinaStradeAPezzi(carta, cx, cz, raggio = STRADE.scena.zona) {
   if (!carta.strade) return 0;
   const t0 = performance.now();
-  const s = stradeScena(carta), Ci = STRADE.scena.cellaIndice, R = s.raggio;
+  const s = stradeScena(carta);
   for (let id = 0; id < s.tratti.length; id++) {
     const tr = s.tratti[id];
     if (tr.fine) continue;
@@ -958,17 +999,7 @@ export function* raffinaStradeAPezzi(carta, cx, cz, raggio = STRADE.scena.zona) 
       if (largo.ok) tr.fine = largo;
     }
     innestaAllaPorta(carta, s.tratti, tr);
-    const f = tr.fine;
-    for (let i = 0; i < f.x.length - 1; i++) {
-      const a0 = Math.floor((Math.min(f.x[i], f.x[i + 1]) - R) / Ci), a1 = Math.floor((Math.max(f.x[i], f.x[i + 1]) + R) / Ci);
-      const b0 = Math.floor((Math.min(f.z[i], f.z[i + 1]) - R) / Ci), b1 = Math.floor((Math.max(f.z[i], f.z[i + 1]) + R) / Ci);
-      for (let b = b0; b <= b1; b++) for (let a = a0; a <= a1; a++) {
-        const k = a * 1000003 + b;
-        let l = s.indice.get(k);
-        if (!l) s.indice.set(k, (l = []));
-        l.push(id, i);
-      }
-    }
+    indicizza(s, id);
     yield;
   }
   return performance.now() - t0;
