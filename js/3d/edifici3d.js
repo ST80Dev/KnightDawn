@@ -54,7 +54,7 @@ const CLIMA = {
     coperture: { lastre: 0.5, scandole: 0.5 }, sostituisci: { paglia: 'scandole', coppi: 'lastre' },
     tetti: { lastre: { falda: [0.26, 0.38], sporto: 0.95 }, scandole: { falda: [0.85, 1.1], sporto: 0.85 } },
     legno: 0.75, intonaco: 0.1, finestre: { salta: 0.2, scala: 0.75, alza: 0 }, comignolo: { p: 0.95, scala: 1.45 },
-    cataste: 0.6, ballatoio: 0.35, campanile: 'tozzo', colori: { legno: '#3b2818' },
+    cataste: 0.6, ballatoio: 0.35, campanile: 'tozzo',
   },
   caldo: {
     coperture: { terrazza: 0.65, coppi: 0.35 }, sostituisci: { paglia: null, scandole: null, lastre: null },
@@ -530,7 +530,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
       parti.pietra.push(segna(prisma(q4(storto(R)), q4(storto(R)), pavimento + 0.5, pavimento + PIANO), { edera: umido }));
       const j = 0.22, Rj = rett(c, s, f, a + j, b + j), tn = 0.85 + rnd() * 0.3;
       bT = b + j;
-      parti.legno.push(segna(prisma(q4(storto(Rj)), q4(storto(Rj)), pavimento + PIANO - 0.1, gronda), { tinta: [tn * 1.15, tn * 1.05, tn] }));
+      parti.legno.push(segna(prisma(q4(storto(Rj)), q4(storto(Rj)), pavimento + PIANO - 0.1, gronda), { tinta: [tn * 1.75, tn * 1.5, tn * 1.25] }));
       facciata([c[0] + f[0] * bT, c[1] + f[1] * bT], s, f, a, piani, pavimento, { finestre, daPiano: 1 });
       if (retro) facciata([c[0] - f[0] * bT, c[1] - f[1] * bT], s, [-f[0], -f[1]], a, piani, pavimento, { finestre, daPiano: 1 });
       facciata(fr, s, f, a, 1, pavimento, { porta, finestre, bottega });
