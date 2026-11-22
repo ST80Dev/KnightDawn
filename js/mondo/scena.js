@@ -951,7 +951,8 @@ function spianaSottoStrade(carta, cx, cz, heights, fiume, lago, n, cell, half, s
   const vicini = (carta.luoghi || []).filter((l) => Math.abs(l.x - cx) < half + 2000 && Math.abs(l.z - cz) < half + 2000);
   const piani = vicini.flatMap((l) => l.piani || []);
   // Davanti alle porte la rampa di pietra (js/3d/borgo3d.js) scende fino al terreno: abbassarlo la lascerebbe sospesa.
-  const porte = vicini.flatMap((l) => [l.porta, l.portaRocca]).filter(Boolean);
+  // Con la rampa lungo le mura (porta.arrivo) la rampa è un piano del luogo: niente striscia davanti alla porta.
+  const porte = vicini.flatMap((l) => [l.porta?.arrivo ? null : l.porta, l.portaRocca]).filter(Boolean);
   for (let i = 0; i < n * n; i++) {
     if (meglio[i] === Infinity || !Number.isNaN(fiume[i]) || !Number.isNaN(lago[i])) continue;
     if (Math.abs(val[i] - heights[i]) > S.salto) continue;
