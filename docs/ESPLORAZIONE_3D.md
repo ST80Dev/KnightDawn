@@ -1515,7 +1515,19 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
       esterno, suolo alla quota della rampa raccordato al terreno negli ultimi 3 m; niente rampa dritta dove c'è questa.
       Prima prova (scartata): due tratti con tornante, ma il secondo, 7 m sotto il primo, finiva sepolto nella sua
       scarpata. Rampe da 8 a 36 m su 11–16 borghi per seme, scarto all'arrivo ≤ 0,6 m. `VERSIONE_GENERATORE` `+rampa-4`.
-      Prove: siti validi 30/30; cammino dall'arrivo della rampa al cortile della corte del signore 31/31, 35/35, 34/34. *Prova:* cammino porta del borgo →
+      Prove: siti validi 30/30; cammino dall'arrivo della rampa al cortile della corte del signore 31/31, 35/35, 34/34.
+    - **Muro interno tolto** (richiesta dell'utente: «puoi togliere quelle mura a metà zona della rocca con una ulteriore
+      porta»): `CORTI.muro = false`. Le due corti restano come disposizione (armi davanti, signore dietro, confine
+      elastico di 6 m); il mastio si appoggia alla cinta sulla linea tra le due, come torrione d'angolo.
+    - **Stato del passo (b), palazzo: fatto, da provare dall'utente.** `edifici3d.js`, `palazzo()`: corpo in pietra, piano
+      terra con finestrelle e portone, piano nobile con bifore e davanzali, ultimo piano con finestre medie, marcapiani,
+      stemma della casata sopra il portone, scala esterna con pianerottolo e porta al piano nobile se largo ≥ 18 m; porta
+      con la Carta del cronista («Palazzo del signore»). Misure (richiesta dell'utente: «ben più maestoso delle case del
+      borgo», «ce ne deve sempre essere una»): minore 20×11 m a 3 piani, casata 26×13 a 3, maggiore 32×14 a 4; dove non
+      ci sta si restringe a passi (−2 m di largo, −1 di fondo, un piano in meno sotto i 16 m) fino a 10×8: c'è in tutte
+      le rocche (seme 12345: casata per lo più 26×13, maggiore 20–32, minore 16–20). Si piazza per primo, in tutta la
+      cinta dal fondo verso l'ingresso, prima rivolto verso il centro poi in 16 direzioni, lasciando libero il passaggio.
+      Prove: cammino 35/35 e 31/31; porte 10/10 (palazzo compreso). *Prova:* cammino porta del borgo →
       corte d'armi → corte del signore su tutte le rocche di due semi; porte e udienza raggiungibili; FPS sul percorso
       di prova.
 

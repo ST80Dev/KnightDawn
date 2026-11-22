@@ -22,7 +22,9 @@ export const MISURE_ROCCA = {
 const PORTA = { larghezza: 3.4, imposta: 3.0, torreLarghezza: 8, sporgenza: 3.5, profondita: 6, sopraMura: 3 };
 // Corte del signore (M7, passo 10): il muro interno taglia la cinta di traverso; dietro (lontano dal borgo) `dietro` della
 // profondità è la corte del signore, davanti la corte d'armi. Mastio a cavallo del muro, porta ad arco in linea con la porta della rocca.
-const CORTI = { dietro: 0.46, altezza: 5.5, spessore: 1.3, porta: 3.2, imposta: 3.4 };
+// `muro`: false su richiesta dell'utente (niente muro interno né seconda porta): le due corti restano come disposizione
+// degli edifici (armi davanti, signore dietro), il mastio si appoggia alla cinta sulla linea tra le due.
+const CORTI = { dietro: 0.46, muro: false, altezza: 5.5, spessore: 1.3, porta: 3.2, imposta: 3.4 };
 // stacco: m tra la torre-porta e la rampa lungo il muro (così passa fuori dalle torri dei vertici).
 const RAMPA = { larghezza: 4.4, stacco: 2.5, pendenza: 0.22, minima: 3, massima: 40, parapetto: 0.5, muretto: 0.45 };
 const SCARPA = 0.18;                      // inclinazione della scarpa alla base (tangente: ~10°)
@@ -771,10 +773,20 @@ export function* createRoccaAPezzi(suolo, luogo, ox, oz) {
       const lungoSotto = vg - v0 > v1 - vg;
       const [ta, tb] = lungoSotto ? [v0, vg - CORTI.porta / 2 - 1] : [vg + CORTI.porta / 2 + 1, v1];
       let vm = null;
-      for (let k = 0; k <= 10 && vm === null; k++) {        // dal centro del tratto verso i capi
-        for (const sg of [1, -1]) {
-          const v = (ta + tb) / 2 + sg * k * (tb - ta) / 22;
-          if (v - h < ta || v + h > tb || vm !== null) continue;
+      if (CORTI.muro) {
+        for (let k = 0; k <= 10 && vm === null; k++) {      // dal centro del tratto verso i capi
+          for (const sg of [1, -1]) {
+            const v = (ta + tb) / 2 + sg * k * (tb - ta) / 22;
+            if (v - h < ta || v + h > tb || vm !== null) continue;
+            if (dentroPoligono(P, uC, v) && distanzaContorno(P, uC, v) >= serve * Math.SQRT1_2 + 1) vm = v;
+          }
+        }
+      } else {
+        // Senza muro interno il mastio si appoggia alla cinta, dal capo del tratto più lungo verso l'interno.
+        const capo = lungoSotto ? ta : tb, verso = lungoSotto ? 1 : -1;
+        for (let k = 0; k <= 40 && vm === null; k++) {
+          const v = capo + verso * (h + k * 0.5);
+          if ((verso > 0 && v + h > tb) || (verso < 0 && v - h < ta)) break;
           if (dentroPoligono(P, uC, v) && distanzaContorno(P, uC, v) >= serve * Math.SQRT1_2 + 1) vm = v;
         }
       }
@@ -809,7 +821,7 @@ export function* createRoccaAPezzi(suolo, luogo, ox, oz) {
     }
     scatole.push({ cu: cm[0], cv: cm[1], au: 1, av: 0, hl: h + off * 0.6, hw: h + off * 0.6 });
 
-    if (corti) {
+    if (corti && CORTI.muro) {
       // Tratti del muro: dal capo al mastio, dal mastio alla porta, dalla porta all'altro capo.
       const { uC, v0, v1, vm, vg } = corti, t = CORTI.spessore / 2, yT = piano + CORTI.altezza, pw = CORTI.porta / 2;
       const buchi = [[vm - h, vm + h], [vg - pw, vg + pw]].sort((a, b) => a[0] - b[0]);
@@ -1041,9 +1053,12 @@ export function* createRoccaAPezzi(suolo, luogo, ox, oz) {
       return Math.hypot(u - a[0] - du * t, v - a[1] - dv * t) < 2.5;
     });
     const nellaZona = (u, v) => {
-      if (!corti || !zona) return true;
+      if (!corti) return true;
       if (Math.hypot(u - corti.uC, v - corti.vg) < 4 || nelCorridoio(u, v)) return false;   // varco e corridoi liberi
-      return zona === 'armi' ? u > corti.uC + CORTI.spessore / 2 + 0.6 : u < corti.uC - CORTI.spessore / 2 - 0.6;
+      if (!zona) return true;
+      // Senza muro interno il confine tra le corti è elastico (6 m oltre la linea): gli edifici si separano coi lotti.
+      const m2 = CORTI.muro ? CORTI.spessore / 2 + 0.6 : -6;
+      return zona === 'armi' ? u > corti.uC + m2 : u < corti.uC - m2;
     };
     const libero = (L) => {
       // Campioni ogni ~2 m sul lotto (bordi compresi): un corridoio non passa tra un campione e l'altro.
@@ -1057,8 +1072,50 @@ export function* createRoccaAPezzi(suolo, luogo, ox, oz) {
       }
       return !lotti.some((A) => siToccano(A, L, 0.8));
     };
+    // Il palazzo per primo (è il più grande e la corte del signore è sua), poi gli altri.
+    const palazzo = luogo.classe === 'minore' ? 'palazzoMinore' : luogo.classe === 'maggiore' ? 'palazzoMaggiore' : 'palazzo';
     const tipi = luogo.classe === 'minore' ? ['cappella'] : ['salaArmi', 'cappella', 'armeria'];
     const edificiFatti = new Set();
+    // Palazzo: ricerca dedicata nella corte del signore, dal fondo verso il muro interno, prima rivolto verso la porta
+    // interna e poi in 16 direzioni; se non ci sta, la taglia più piccola (la casa dei signori c'è sempre).
+    if (corti) {
+      // Senza muro interno il palazzo può stare ovunque nella cinta (dal fondo verso l'ingresso, il primo posto buono).
+      zona = CORTI.muro ? 'signore' : null;
+      // Dalla misura della classe in giù, a passi (−2 m di larghezza, −1 m di profondità, un piano in meno sotto i 16 m):
+      // il palazzo c'è sempre, più piccolo dove la cinta è stretta.
+      const E0 = EDIFICI[palazzo], taglie = [];
+      for (let k = 0; ; k++) {
+        const largo = E0.largo - 2 * k, fondo = Math.max(8, E0.fondo - k);
+        if (largo < 10) break;
+        taglie.push({ largo, fondo, piani: largo < 16 ? 2 : largo < 22 ? Math.min(3, E0.piani) : E0.piani });
+      }
+      const uMin = Math.min(...P.map((p) => p[0]));
+      for (const M of taglie) {
+        let fatto = null;
+        const uMax = CORTI.muro ? corti.uC - 2 : Math.max(...P.map((p) => p[0])) - M.fondo / 2;
+        const vMin = Math.min(...P.map((p) => p[1])), vMax = Math.max(...P.map((p) => p[1]));
+        for (let u = uMin + M.fondo / 2; u < uMax && !fatto; u += 1.5) {
+          for (let v = vMin; v <= vMax && !fatto; v += 1.5) {
+            const dg = Math.hypot(corti.uC - u, corti.vg - v) || 1, verso = [(corti.uC - u) / dg, (corti.vg - v) / dg];
+            const direzioni = [verso, ...Array.from({ length: 16 }, (_, k) => [Math.cos(k * Math.PI / 8), Math.sin(k * Math.PI / 8)])];
+            for (const f of direzioni) {
+              const L = { c: [u, v], f, s: [-f[1], f[0]], a: M.largo / 2, b: M.fondo / 2 + (M.largo >= 18 ? 2 : 0.5) };  // + scala
+              if (!libero(L)) continue;
+              fatto = { L, f };
+              break;
+            }
+          }
+        }
+        if (fatto) {
+          lotti.push(fatto.L);
+          // Il lotto comprende la scala davanti: il corpo sta nella sua metà posteriore.
+          const sp = fatto.L.b - M.fondo / 2, c = [fatto.L.c[0] - fatto.f[0] * sp, fatto.L.c[1] - fatto.f[1] * sp];
+          kit.edificio(palazzo, { u: c[0], v: c[1], fu: fatto.f[0], fv: fatto.f[1], quota: piano - 0.15, misure: M });
+          edificiFatti.add('palazzo');
+          break;
+        }
+      }
+    }
     for (const tipo of tipi) for (const z of tipo === 'cappella' ? ['signore', 'armi'] : ['armi']) {
       const E = EDIFICI[tipo];
       zona = z;                                           // la cappella nella corte del signore, se c'è posto
