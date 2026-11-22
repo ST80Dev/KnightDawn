@@ -1645,7 +1645,7 @@ di luoghi generici.
 Le porte degli edifici nominati (locanda, pieve, chiostro…) avranno il punto «porta» come nel borgo, per il passo 6
 di M7 (Carta del cronista).
 
-### Passo 1 — siti sulla Carta (fatto, da provare)
+### Passo 1 — siti sulla Carta (fatto, provato dall'utente e unito: PR #167)
 
 Codice: `js/mondo/siti.js` (nuovo), agganci in `lavoratore.js` e `generatore.js`, villaggi nella rete in `strade.js`,
 segni e «Vai a…» in `cartaVista.js`; `VERSIONE_GENERATORE` + `siti-1`.
@@ -1673,6 +1673,25 @@ segni e «Vai a…» in `cartaVista.js`; `VERSIONE_GENERATORE` + `siti-1`.
 - **Da provare** (vista della Carta, tasto M): distribuzione credibile dei segni; «Vai a…» porta a ogni tipo (le
   Scene dei siti sono ancora vuote: il 3D arriva dal passo 2; monasteri e città mostrano ancora rocca e borgo fino
   ai passi 3 e 8); tempo di generazione nel browser.
+
+### Passo 2 — villaggi e ovili 3D (fatto, da provare)
+
+Codice: `js/3d/villaggio3d.js` (nuovo), agganci in `main.js` (`costruisciVillaggi` accanto a `costruisciRocche`, nel
+blocco che segue il cavaliere), `raggioSito` in `js/mondo/siti.js` (raggio d'ingombro: frazione 55 m, villaggio 85 m,
+ovile 22 m; nessun cambio alle Carte, `VERSIONE_GENERATORE` invariata).
+- **Villaggio:** slargo con il pozzo; case attorno rivolte allo slargo, o alla strada se passa entro 22 m (la strada
+  arriva fin dentro al villaggio, passo 1); mai sulla carreggiata, nell'acqua o dove il terreno sotto la casa sale più di
+  2,6 m. Frazione 6–10 case (rurali e basse), villaggio 12–20 con pieve (la chiesa del kit, 9 × 16 m), locanda e fabbro.
+- **Ovile:** stalla con recinto e pagliaio.
+- **Niente terrapieno** (deviazione dal piano): le case stanno sul terreno com'è con lo zoccolo del kit; i siti sono già
+  i punti più piani della cella. Un piano rotondo di 0,7 × raggio tiene fuori la vegetazione: terra battuta al centro,
+  erba tra le case di fuori, nessun albero nel villaggio.
+- **Misure** [Certo, Chromium headless, seme 570549]: frazione 21 chiamate e ~5.200 triangoli; villaggio 31 chiamate e
+  12–13.500 triangoli; ovile 10 chiamate e ~1.300 triangoli. **Sopra il budget del piano (≤ 20 chiamate)**: le zone dei
+  dettagli del kit (fino a 2 × 2) moltiplicano le istanze; il kit non ha ancora un'opzione per una zona sola (file di
+  M7). Restano sotto le 40 del borgo.
+- **Fuori dal passo:** persone nei villaggi, mulino, forno, orti e palizzata; differenze per clima delle case (proposta
+  a parte).
 
 ### Decisioni tecniche
 

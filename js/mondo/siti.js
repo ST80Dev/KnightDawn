@@ -343,6 +343,16 @@ export function completaSiti(carta) {
   return carta;
 }
 
+/**
+ * Raggio d'ingombro (m) di un sito attorno al suo centro: quanto spazio occupano le sue costruzioni (M8, passo 2). Serve
+ * per decidere in quale blocco costruirlo (main.js) e per tenere fuori gli alberi (villaggio3d.js, pianoDelSito).
+ */
+export const RAGGI_SITI = { frazione: 55, villaggio: 85, ovile: 22, altro: 30 };
+export function raggioSito(s) {
+  if (s.tipo === 'villaggio') return s.dimensione === 'villaggio' ? RAGGI_SITI.villaggio : RAGGI_SITI.frazione;
+  return RAGGI_SITI[s.tipo] ?? RAGGI_SITI.altro;
+}
+
 /** Nome leggibile per la Carta e per F3. */
 export const NOMI_SITI = {
   villaggio: 'villaggio', rovina: 'rovine', abbandonato: 'luogo abbandonato', grotta: 'grotta', eremo: 'eremo',
