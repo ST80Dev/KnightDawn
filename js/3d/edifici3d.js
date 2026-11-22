@@ -300,7 +300,7 @@ export function completaPezzi(gen) {
  * @param {object} [o.luogo]  per il tono di fondo della pietra (tonoDelLuogo)
  * @param {number} [o.seme]
  */
-export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1, nome = 'edifici', contesto = 'borgo', zone = 2 }) {
+export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1, nome = 'edifici', contesto = 'borgo', zone: quanteZone = 2 }) {
   let s0 = (seme >>> 0) || 1;
   const rnd = () => ((s0 = (s0 * 1103515245 + 12345) >>> 0) / 4294967296);
   const tono = (c) => (luogo ? tonoDelLuogo(luogo, c) : new THREE.Color(c));
@@ -928,7 +928,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     // DETTAGLIO.zona m. Con zone = 1 (luoghi piccoli) una zona sola: le chiamate scendono a 1 × tipi di dettaglio.
     let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
     for (const d of dettagli) { u0 = Math.min(u0, d.u); u1 = Math.max(u1, d.u); v0 = Math.min(v0, d.v); v1 = Math.max(v1, d.v); }
-    const lato = zone <= 1 ? Infinity : Math.max(DETTAGLIO.zona, (u1 - u0) / 2 + 0.01, (v1 - v0) / 2 + 0.01);
+    const lato = quanteZone <= 1 ? Infinity : Math.max(DETTAGLIO.zona, (u1 - u0) / 2 + 0.01, (v1 - v0) / 2 + 0.01);
     const zone = new Map();
     for (const d of dettagli) {
       const k = `${Math.floor((d.u - u0) / lato)},${Math.floor((d.v - v0) / lato)}`;
