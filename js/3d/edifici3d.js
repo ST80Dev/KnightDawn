@@ -38,6 +38,34 @@ const COPERTURE = {
   campagna: { coppi: 0.08, scandole: 0.25, lastre: 0.12, paglia: 0.55 },
   rocca:    { coppi: 0.3, scandole: 0.25, lastre: 0.45, paglia: 0 },
 };
+/**
+ * Clima del luogo (M8, scelta dell'utente): case diverse al freddo, al temperato (come prima) e al caldo arido.
+ * coperture: probabilità per ogni contesto, al posto di COPERTURE; sostituisci: la copertura data da un edificio (stalla
+ * in paglia, chiesa in lastre…) diventa questa (null: una a caso tra le coperture del clima); tetti: modifiche a TETTI;
+ * legno: quota di case a 2+ piani coi piani alti in tronchi (al posto del graticcio); graticcio: probabilità al posto di
+ * GRATICCIO; intonaco: probabilità per le case (al posto di quella del tipo); tinte: tinte dell'intonaco, una per casa;
+ * finestre: probabilità in più di saltarne una, scala, alzata (m), imposte (probabilità); porta: scala dell'altezza;
+ * comignolo: probabilità e scala; cataste: catasta in più accanto alla porta; ballatoio: probabilità (case a 2+ piani);
+ * forno: forno a cupola accanto alle case basse e rurali; campanile: 'tozzo' | 'vela'; colori: al posto di COL.
+ */
+const CLIMA = {
+  temperato: {},
+  freddo: {
+    coperture: { lastre: 0.5, scandole: 0.5 }, sostituisci: { paglia: 'scandole', coppi: 'lastre' },
+    tetti: { lastre: { falda: [0.26, 0.38], sporto: 0.95 }, scandole: { falda: [0.85, 1.1], sporto: 0.85 } },
+    legno: 0.75, intonaco: 0.1, finestre: { salta: 0.2, scala: 0.75, alza: 0 }, comignolo: { p: 0.95, scala: 1.45 },
+    cataste: 0.6, ballatoio: 0.35, campanile: 'tozzo', colori: { legno: '#3b2818' },
+  },
+  caldo: {
+    coperture: { terrazza: 0.65, coppi: 0.35 }, sostituisci: { paglia: null, scandole: null, lastre: null },
+    tetti: { coppi: { falda: [0.16, 0.26], sporto: 0.3 } },
+    graticcio: 0, intonaco: 0.9, tinte: [[1.08, 1.07, 1.04], [1.05, 0.93, 0.75], [1.02, 0.97, 0.88]],
+    finestre: { salta: 0.2, scala: 0.6, alza: 0.45, imposte: 0.12 }, porta: 0.86, comignolo: { p: 0, scala: 1 },
+    forno: 0.2, campanile: 'vela', colori: { intonaco: '#e4d8bd', pietra: '#b8a688' },
+  },
+};
+// Tetto piatto a terrazza (clima caldo): solaio e parapetto basso nel materiale delle pareti.
+const TERRAZZA = { sporto: 0.12, solaio: 0.25, parapetto: [0.5, 0.8], spessore: 0.22 };
 const GRATICCIO = { borgo: 0.5, campagna: 0.2, rocca: 0.15, sporto: 0.45, passo: 1.4 };   // probabilità, m
 const LUCE_RIFLESSA = 0.2;
 const PIANO = 3.0;                         // m: altezza di un piano
@@ -300,16 +328,18 @@ export function completaPezzi(gen) {
  * @param {object} [o.luogo]  per il tono di fondo della pietra (tonoDelLuogo)
  * @param {number} [o.seme]
  */
-export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1, nome = 'edifici', contesto = 'borgo', zone = 2 }) {
+export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1, nome = 'edifici', contesto = 'borgo', zone = 2, clima = 'temperato' }) {
   let s0 = (seme >>> 0) || 1;
   const rnd = () => ((s0 = (s0 * 1103515245 + 12345) >>> 0) / 4294967296);
   const tono = (c) => (luogo ? tonoDelLuogo(luogo, c) : new THREE.Color(c));
+  const CL = CLIMA[clima] ?? CLIMA.temperato, col = { ...COL, ...CL.colori };
+  const TT = Object.fromEntries(Object.entries(TETTI).map(([k, t]) => [k, { ...t, ...CL.tetti?.[k] }]));
   const mat = {
-    pietra: materialeMuro(tono(COL.pietra), LUCE_RIFLESSA),
-    intonaco: materialeMuro(tono(COL.intonaco), LUCE_RIFLESSA, texturaIntonaco()),
+    pietra: materialeMuro(tono(col.pietra), LUCE_RIFLESSA),
+    intonaco: materialeMuro(tono(col.intonaco), LUCE_RIFLESSA, texturaIntonaco()),
     tetto: materialeMuro(new THREE.Color(COL.tetto), LUCE_RIFLESSA * 0.6, texturaTetto()),
     paglia: materialeMuro(new THREE.Color(COL.paglia), LUCE_RIFLESSA, texturaPaglia()),
-    legno: new THREE.MeshLambertMaterial({ color: COL.legno, flatShading: true }),
+    legno: new THREE.MeshLambertMaterial({ color: col.legno, flatShading: true }),
     finestra: new THREE.MeshLambertMaterial({ color: COL.finestra }),
   };
   // Finestre accese: colore per istanza r = soglia (0–1); accesa se r < uQuota, quando è buio (uAccese).
@@ -325,7 +355,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
   mat.finestra.customProgramCacheKey = () => 'finestra-accesa';
   const torce = [];                                    // { u, v, y, fu, fv }
   const sorgenti = [];                                 // { x, y, z, colore, intensita, distanza } nel blocco
-  mat.legno.emissive.set(COL.legno).multiplyScalar(LUCE_RIFLESSA * 0.5);
+  mat.legno.emissive.set(col.legno).multiplyScalar(LUCE_RIFLESSA * 0.5);
   const parti = { pietra: [], intonaco: [], tetto: [], paglia: [], legno: [] };
   const scegli = (tabella) => { let x = rnd(); for (const [k, p] of Object.entries(tabella)) { if ((x -= p) < 0) return k; } return Object.keys(tabella)[0]; };
   /** Segna una geometria con tinta (moltiplica il colore), muschio (verde verso il basso) ed edera (verde al piede). */
@@ -356,8 +386,10 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
    * Tetto a due falde con colmo lungo s, da quota `gronda`, nello stile `stile` (TETTI): pendenza a caso nel suo
    * intervallo, colmo che si incurva un poco a metà, gronde non dritte, muschio; timpani nel materiale delle pareti.
    */
-  function tetto(c, s, f, a, b, gronda, materialeTimpano, stile = scegli(COPERTURE[contesto])) {
-    const T = TETTI[stile], falda = T.falda[0] + rnd() * (T.falda[1] - T.falda[0]);
+  function tetto(c, s, f, a, b, gronda, materialeTimpano, stile = scegli(CL.coperture ?? COPERTURE[contesto])) {
+    if (CL.sostituisci && stile in CL.sostituisci) stile = CL.sostituisci[stile] ?? scegli(CL.coperture);
+    if (stile === 'terrazza') return terrazza(c, s, f, a, b, gronda, materialeTimpano);
+    const T = TT[stile], falda = T.falda[0] + rnd() * (T.falda[1] - T.falda[0]);
     const SP = T.sporto * (0.8 + rnd() * 0.4), A = a + SP * 0.8, Bf = b + SP;
     const colmo = gronda + b * falda, basso = gronda - SP * falda, cala = (0.05 + rnd() * 0.12) * a;
     const n = Math.max(2, Math.round(2 * A / 1.6));
@@ -387,6 +419,23 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     return { colmo, falda };
   }
 
+  /**
+   * Tetto piatto a terrazza (clima caldo): solaio che sporge appena e parapetto basso tutt'attorno, nel materiale delle
+   * pareti; su una tettoia (pali di legno) solo il piano di legno, come un pergolato coperto.
+   */
+  function terrazza(c, s, f, a, b, gronda, materiale) {
+    const T = TERRAZZA, A = a + T.sporto, B = b + T.sporto, Rs = rett(c, s, f, A, B), top = gronda + T.solaio;
+    materiale.push(segna(prisma(q4(Rs), q4(Rs), gronda - 0.05, top), { muschio: 0.15 }));
+    if (materiale === parti.legno) return { colmo: top, falda: 0 };
+    const h = T.parapetto[0] + rnd() * (T.parapetto[1] - T.parapetto[0]), w = T.spessore;
+    for (const j of [-1, 1]) {
+      const Rf = rett([c[0] + f[0] * j * (B - w / 2), c[1] + f[1] * j * (B - w / 2)], s, f, A, w / 2);
+      const Rl = rett([c[0] + s[0] * j * (A - w / 2), c[1] + s[1] * j * (A - w / 2)], s, f, w / 2, B - w);
+      materiale.push(prisma(q4(Rf), q4(Rf), top, top + h), prisma(q4(Rl), q4(Rl), top, top + h));
+    }
+    return { colmo: top + h, falda: 0 };
+  }
+
   /** Finestre e porte su una facciata (lungo s, normale `n`), `piani` piani da `pavimento`. */
   function facciata(c, s, n, a, piani, pavimento, { porta = 0, finestre = true, bottega = false, daPiano = 0, posti = null } = {}) {
     // Finestre piccole e poche, non allineate al millimetro; qualcuna con le imposte di legno aperte.
@@ -396,11 +445,13 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
       for (const t0 of slot) {
         const t = t0 + (rnd() - 0.5) * 0.4;
         if (p === 0 && porta && Math.abs(t) < (bottega ? 1.8 : 1.1)) continue;
-        if (!finestre || rnd() < (p === 0 ? 0.6 : 0.4)) continue;
-        const y = pavimento + p * PIANO + (p === 0 ? 1.5 : 1.55) + (rnd() - 0.5) * 0.25;
+        const FI = CL.finestre;
+        if (!finestre || rnd() < (p === 0 ? 0.6 : 0.4) + (FI?.salta ?? 0)) continue;
+        const y = pavimento + p * PIANO + (p === 0 ? 1.5 : 1.55) + (rnd() - 0.5) * 0.25 + (FI?.alza ?? 0);
+        const sc = FI?.scala ?? 1;
         dettagli.push({ tipo: 'finestra', u: c[0] + s[0] * t + n[0] * 0.04, v: c[1] + s[1] * t + n[1] * 0.04, y, fu: n[0], fv: n[1],
-          sx: 0.85 + rnd() * 0.35, sy: 0.85 + rnd() * 0.3 });
-        if (rnd() < 0.45) {                                // imposte aperte contro il muro
+          sx: (0.85 + rnd() * 0.35) * sc, sy: (0.85 + rnd() * 0.3) * sc });
+        if (rnd() < (FI?.imposte ?? 0.45)) {                                // imposte aperte contro il muro
           for (const lato of [-1, 1]) {
             const tt = t + lato * 0.55;
             dettagli.push({ tipo: 'imposta', u: c[0] + s[0] * tt + n[0] * 0.07, v: c[1] + s[1] * tt + n[1] * 0.07, y, fu: n[0], fv: n[1] });
@@ -410,7 +461,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     }
     if (porta) {
       dettagli.push({ tipo: 'porta', u: c[0] + n[0] * 0.05, v: c[1] + n[1] * 0.05, y: pavimento, fu: n[0], fv: n[1],
-        ...(bottega ? { sx: 2.17, sy: 1.18 } : { sx: 0.9 + rnd() * 0.2, sy: 0.92 + rnd() * 0.12 }) });   // portone: la stessa porta più grande
+        ...(bottega ? { sx: 2.17, sy: 1.18 } : { sx: 0.9 + rnd() * 0.2, sy: (0.92 + rnd() * 0.12) * (CL.porta ?? 1) }) });   // portone: la stessa porta più grande
     }
   }
 
@@ -440,7 +491,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
    * c: centro; f: fronte (verso la via); largo lungo la via, fondo di traverso; quota: pavimento dato (rocca).
    * I piani alti possono essere a graticcio e sporgere (GRATICCIO); muschio ed edera al piede di alcune case.
    */
-  function corpo({ c, f, largo, fondo, piani, intonaco, quota = null, porta = true, bottega = false, comignolo = true, finestre = true, retro = true, legno = null, copertura }) {
+  function corpo({ c, f, largo, fondo, piani, intonaco, quota = null, porta = true, bottega = false, comignolo = true, finestre = true, retro = true, legno = null, copertura, tinta = null }) {
     const s = [-f[1], f[0]], a = largo / 2, b = fondo / 2;
     const { mn, mx } = quote(c, s, f, a, b);
     const pavimento = (quota ?? mx) + 0.15;
@@ -452,7 +503,10 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     // Pareti un po' fuori squadra (richiesta dell'utente: niente spigoli tutti lineari): ogni angolo spostato di
     // qualche cm, diverso alla base e in cima; il tetto sporge e copre la differenza.
     const storto = (RR) => RR.map(([u, v]) => [u + (rnd() - 0.5) * 2 * IRREGOLARE.fuoriSquadra, v + (rnd() - 0.5) * 2 * IRREGOLARE.fuoriSquadra]);
-    const aGraticcio = legno ?? (piani >= 2 && rnd() < GRATICCIO[contesto]);
+    let aGraticcio = legno ?? (piani >= 2 && rnd() < (CL.graticcio ?? GRATICCIO[contesto]));
+    // Clima freddo: piani alti in tronchi al posto del graticcio (anche dove l'edificio lo chiede, come la taverna).
+    const aTronchi = !!CL.legno && legno !== false && piani >= 2 && (aGraticcio || rnd() < CL.legno);
+    if (aTronchi || CL.graticcio === 0) aGraticcio = false;
     let bT = b;                                               // mezza profondità del tetto (sporto del graticcio)
     const fr = [c[0] + f[0] * b, c[1] + f[1] * b], rt = [c[0] - f[0] * b, c[1] - f[1] * b];
     if (aGraticcio) {
@@ -471,17 +525,36 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
         if (retro) facciata([c[0] - f[0] * bT, c[1] - f[1] * bT], s, [-f[0], -f[1]], a, p + 1, pavimento, { finestre, daPiano: p, posti: pr });
       }
       facciata(fr, s, f, a, 1, pavimento, { porta, finestre, bottega });
+    } else if (aTronchi) {
+      // Piano terra in pietra, piani alti in tronchi scuri che sporgono un poco; a volte un ballatoio sul davanti.
+      parti.pietra.push(segna(prisma(q4(storto(R)), q4(storto(R)), pavimento + 0.5, pavimento + PIANO), { edera: umido }));
+      const j = 0.22, Rj = rett(c, s, f, a + j, b + j), tn = 0.85 + rnd() * 0.3;
+      bT = b + j;
+      parti.legno.push(segna(prisma(q4(storto(Rj)), q4(storto(Rj)), pavimento + PIANO - 0.1, gronda), { tinta: [tn * 1.15, tn * 1.05, tn] }));
+      facciata([c[0] + f[0] * bT, c[1] + f[1] * bT], s, f, a, piani, pavimento, { finestre, daPiano: 1 });
+      if (retro) facciata([c[0] - f[0] * bT, c[1] - f[1] * bT], s, [-f[0], -f[1]], a, piani, pavimento, { finestre, daPiano: 1 });
+      facciata(fr, s, f, a, 1, pavimento, { porta, finestre, bottega });
+      if (rnd() < (CL.ballatoio ?? 0)) {
+        const y = pavimento + PIANO, L = a * (0.55 + rnd() * 0.3), t0 = (rnd() - 0.5) * (a - L), d = 1.0;
+        const cb = [c[0] + s[0] * t0 + f[0] * (bT + d / 2), c[1] + s[1] * t0 + f[1] * (bT + d / 2)];
+        const Rb = rett(cb, s, f, L, d / 2), Rp = rett([cb[0] + f[0] * (d / 2 - 0.04), cb[1] + f[1] * (d / 2 - 0.04)], s, f, L, 0.04);
+        parti.legno.push(prisma(q4(Rb), q4(Rb), y - 0.16, y), prisma(q4(Rp), q4(Rp), y, y + 0.95));
+        for (const k of [-1, 1]) {                            // mensole sotto il ballatoio
+          const Rm = rett([cb[0] + s[0] * k * (L - 0.2), cb[1] + s[1] * k * (L - 0.2)], s, f, 0.08, d / 2);
+          parti.legno.push(prisma(q4(Rm), q4(Rm), y - 0.6, y - 0.16));
+        }
+      }
     } else {
-      (intonaco ? parti.intonaco : parti.pietra).push(segna(prisma(q4(storto(R)), q4(storto(R)), pavimento + 0.5, gronda), { edera: intonaco ? 0 : umido }));
+      (intonaco ? parti.intonaco : parti.pietra).push(segna(prisma(q4(storto(R)), q4(storto(R)), pavimento + 0.5, gronda), intonaco ? { edera: 0, tinta } : { edera: umido }));
       cantonali(c, s, f, a, b, pavimento + 0.5, gronda);
       facciata(fr, s, f, a, piani, pavimento, { porta, finestre, bottega });
       if (retro) facciata(rt, s, [-f[0], -f[1]], a, piani, pavimento, { finestre });
     }
-    const { colmo, falda } = tetto(c, s, f, a, bT, gronda, aGraticcio || intonaco ? parti.intonaco : parti.pietra, copertura);
-    if (comignolo && rnd() < 0.7) {
-      const t = (rnd() - 0.5) * a, dq = -bT * (0.2 + rnd() * 0.4);
+    const { colmo, falda } = tetto(c, s, f, a, bT, gronda, aTronchi ? parti.legno : aGraticcio || intonaco ? parti.intonaco : parti.pietra, copertura);
+    if (comignolo && rnd() < (CL.comignolo?.p ?? 0.7)) {
+      const t = (rnd() - 0.5) * a, dq = -bT * (0.2 + rnd() * 0.4), k = CL.comignolo?.scala ?? 1;
       dettagli.push({ tipo: 'comignolo', u: c[0] + s[0] * t + f[0] * dq, v: c[1] + s[1] * t + f[1] * dq,
-        y: gronda + (bT + dq) * falda - 0.3, fu: f[0], fv: f[1], sx: 0.8 + rnd() * 0.5, sy: 0.7 + rnd() * 0.8, sz: 0.8 + rnd() * 0.4 });
+        y: gronda + (bT + dq) * falda - 0.3, fu: f[0], fv: f[1], sx: (0.8 + rnd() * 0.5) * k, sy: (0.7 + rnd() * 0.8) * k, sz: (0.8 + rnd() * 0.4) * k });
     }
     // Sagoma per la camera e collisione.
     sagome.push(prisma(q4(R), q4(R), Math.min(mn, pavimento) - 0.5, colmo));
@@ -543,7 +616,16 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     const L = largo ?? T.largo[0] + rnd() * (T.largo[1] - T.largo[0]);
     const F = fondo ?? T.fondo[0] + rnd() * (T.fondo[1] - T.fondo[0]);
     const piani = T.piani[0] + Math.floor(rnd() * (T.piani[1] - T.piani[0] + 1));
-    const r = corpo({ c: [u, v], f: [fu, fv], largo: L, fondo: F, piani, intonaco: rnd() < T.intonaco, quota, bottega: tipo === 'bottega' });
+    const tinte = CL.tinte, tinta = tinte ? tinte[Math.floor(rnd() * tinte.length)] : null;
+    const r = corpo({ c: [u, v], f: [fu, fv], largo: L, fondo: F, piani, intonaco: rnd() < (CL.intonaco ?? T.intonaco), quota, bottega: tipo === 'bottega', tinta });
+    if ((tipo === 'rurale' || tipo === 'bassa') && rnd() < (CL.forno ?? 0)) {   // caldo: forno a cupola accanto alla casa
+      const lato = rnd() < 0.5 ? -1 : 1, d = r.a + 1.5;
+      forno(u + r.s[0] * lato * d + fu * r.b * 0.3, v + r.s[1] * lato * d + fv * r.b * 0.3, tinta);
+    }
+    if (rnd() < (CL.cataste ?? 0)) {                       // freddo: legna accatastata accanto alla porta
+      const lato = rnd() < 0.5 ? -1 : 1, t = r.a * 0.62;
+      catasta(u + r.s[0] * lato * t + fu * (r.b + 0.45), v + r.s[1] * lato * t + fv * (r.b + 0.45), fu, fv, 0.85);
+    }
     if (tipo === 'rurale') {
       const lato = rnd() < 0.5 ? -1 : 1;
       if (rnd() < 0.6) {                                 // fienile: tettoia su pali accanto alla casa
@@ -564,6 +646,17 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     return r;
   }
 
+  /** Forno a cupola (clima caldo): base tonda e cupola d'intonaco, una bocca scura. */
+  function forno(u, v, tinta = null) {
+    const h0 = terreno(u, v), r0 = 0.85 + rnd() * 0.25;
+    const b0 = new THREE.CylinderGeometry(r0, r0 * 1.05, 0.7, 10); b0.translate(X(u, v), h0 + 0.3, Z(u, v));
+    const cu = new THREE.SphereGeometry(r0 * 0.95, 10, 4, 0, Math.PI * 2, 0, Math.PI / 2); cu.translate(X(u, v), h0 + 0.65, Z(u, v));
+    parti.intonaco.push(segna(b0, { tinta, sporco: 1 }), segna(cu, { tinta }));
+    const ang = rnd() * Math.PI * 2, fu = Math.cos(ang), fv = Math.sin(ang);
+    dettagli.push({ tipo: 'finestra', u: u + fu * (r0 * 0.9), v: v + fv * (r0 * 0.9), y: h0 + 0.55, fu, fv, sx: 0.7, sy: 0.5 });
+    scatole.push({ cu: u, cv: v, au: 1, av: 0, hl: r0, hw: r0, cima: h0 + 0.65 + r0 });
+    sagome.push(prisma(q4(rett([u, v], [1, 0], [0, 1], r0, r0)), q4(rett([u, v], [1, 0], [0, 1], r0, r0)), h0, h0 + 0.6 + r0));
+  }
   /** Pagliaio: covone tondo di paglia attorno a un palo. */
   function pagliaio(u, v) {
     const h0 = terreno(u, v), r0 = 1.4 + rnd() * 0.5, h = 1.2 + rnd() * 0.6;
@@ -693,12 +786,27 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     return { pavimento: pav };
   }
 
-  /** Campanile (quadrato, tetto a piramide). */
-  function campanile(c, lato, base, alto) {
+  /**
+   * Campanile a vela (clima caldo): un muro alto sopra la facciata, largo poco più del campanile, con due luci per le
+   * campane e un coronamento; s, f: assi dell'edificio.
+   */
+  function vela(c, s, f, lato, base, alto) {
+    const a = lato * 0.75, R = rett(c, s, f, a, 0.4), Rc = rett(c, s, f, a + 0.15, 0.5);
+    parti.pietra.push(prisma(q4(R), q4(R), base, alto), prisma(q4(Rc), q4(Rc), alto, alto + 0.3));
+    for (const n of [-1, 1]) for (const t of [-a * 0.45, a * 0.45]) {
+      dettagli.push({ tipo: 'finestra', u: c[0] + s[0] * t + f[0] * n * 0.43, v: c[1] + s[1] * t + f[1] * n * 0.43, y: alto - 1.6,
+        fu: f[0] * n, fv: f[1] * n, sx: lato * 0.4, sy: 1.7 });
+    }
+    sagome.push(prisma(q4(R), q4(R), base, alto + 0.3));
+    scatole.push({ cu: c[0], cv: c[1], au: s[0], av: s[1], hl: a, hw: 0.4 });
+  }
+
+  /** Campanile (quadrato, tetto a piramide; tozzo al freddo: la piramide più bassa). */
+  function campanile(c, lato, base, alto, tozzo = false) {
     const h = lato / 2, R = [[-h, -h], [h, -h], [h, h], [-h, h]].map(([i, j]) => [c[0] + i, c[1] + j]);
     parti.pietra.push(prisma(q4(R), q4(R), base, alto));
     cantonali(c, [1, 0], [0, 1], h, h, base, alto, true);
-    const cima = P(c[0], c[1], alto + lato * 0.9), Rs = R.map(([u, v]) => P(u + Math.sign(u - c[0]) * 0.25, v + Math.sign(v - c[1]) * 0.25, alto));
+    const cima = P(c[0], c[1], alto + lato * (tozzo ? 0.55 : 0.9)), Rs = R.map(([u, v]) => P(u + Math.sign(u - c[0]) * 0.25, v + Math.sign(v - c[1]) * 0.25, alto));
     for (let k = 0; k < 4; k++) {
       const A = Rs[k], B = Rs[(k + 1) % 4];
       parti.tetto.push(segna(esaedro([A, B, cima, cima], [A, B, cima, cima].map(([x, y, z]) => [x, y - 0.15, z])), { tinta: TETTI.lastre.tinta, muschio: 0.3 }));
@@ -707,7 +815,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     for (const [nu, nv] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       dettagli.push({ tipo: 'finestra', u: c[0] + nu * (h + 0.03), v: c[1] + nv * (h + 0.03), y: alto - 2.4, fu: nu, fv: nv, sx: lato * 0.72, sy: 1.9 });
     }
-    sagome.push(prisma(q4(R), q4(R), base, alto + lato * 0.9));
+    sagome.push(prisma(q4(R), q4(R), base, alto + lato * (tozzo ? 0.55 : 0.9)));
     scatole.push({ cu: c[0], cv: c[1], au: 1, av: 0, hl: h, hw: h });
   }
 
@@ -726,7 +834,11 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     if (tipo === 'fabbro') catasta(u - s[0] * (E.largo / 2 - 1.6) + f[0] * (E.fondo / 2 + 0.5), v - s[1] * (E.largo / 2 - 1.6) + f[1] * (E.fondo / 2 + 0.5), f[0], f[1], 0.8);
     if (E.campanile) {
       const l = E.campanile, cc = [u + s[0] * (E.largo / 2 - l / 2) + f[0] * (E.fondo / 2 - l / 2), v + s[1] * (E.largo / 2 - l / 2) + f[1] * (E.fondo / 2 - l / 2)];
-      campanile(cc, l, r.gronda - 0.5, r.colmo + (tipo === 'chiesa' ? 9 : 2.2));
+      const sopra = (tipo === 'chiesa' ? 9 : 2.2) * (CL.campanile === 'tozzo' ? 0.5 : 1);
+      if (CL.campanile === 'vela') {                    // sulla facciata, al centro
+        const cv = [u + f[0] * (E.fondo / 2 - 0.4), v + f[1] * (E.fondo / 2 - 0.4)];
+        vela(cv, s, f, l, r.gronda - 0.5, Math.max(r.colmo, r.gronda) + (tipo === 'chiesa' ? 5 : 2.5));
+      } else campanile(cc, l, r.gronda - 0.5, r.colmo + sopra, CL.campanile === 'tozzo');
     }
     if (E.tettoia) tettoia([u + s[0] * (E.largo / 2 + E.tettoia / 2 + 0.2), v + s[1] * (E.largo / 2 + E.tettoia / 2 + 0.2)], f, E.tettoia, E.fondo * 0.9, r.pavimento + 3);
     if (E.recinto) {                                    // recinto di pali e due traverse, accanto alla stalla
@@ -1046,8 +1158,8 @@ export function siToccano(A, B, margine = 0) {
  * Case di campagna (siti da js/mondo/vegetazione.js, caseCampagna / posizionaVegetazione().case, coordinate del mondo)
  * nel blocco centrato in (cx, cz). Interfaccia come rocca e borgo per le collisioni e la camera.
  */
-export function creaCaseCampagna(suolo, siti, cx, cz, seme = 7) {
-  const kit = creaKit({ X: (u) => u, Z: (u, v) => v, terreno: (u, v) => suolo.getHeight(u, v), seme, nome: 'campagna', contesto: 'campagna' });
+export function creaCaseCampagna(suolo, siti, cx, cz, seme = 7, clima = 'temperato') {
+  const kit = creaKit({ X: (u) => u, Z: (u, v) => v, terreno: (u, v) => suolo.getHeight(u, v), seme, nome: 'campagna', contesto: 'campagna', clima });
   for (const k of siti) {
     const fu = Math.cos(k.verso), fv = Math.sin(k.verso);
     kit.casa({ u: k.x - cx, v: k.z - cz, fu, fv, tipo: kit.rnd() < 0.75 ? 'rurale' : 'bassa' });

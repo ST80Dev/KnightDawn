@@ -160,8 +160,8 @@ function ricampiona(p, passo) {
 // ─── Borgo ──────────────────────────────────────────────────────────────
 
 /** Versione sincrona: costruisce il borgo in un colpo (stesso risultato di createBorgoAPezzi). */
-export function createBorgo(suolo, luogo, ox, oz, rocca) {
-  return completaPezzi(createBorgoAPezzi(suolo, luogo, ox, oz, rocca));
+export function createBorgo(suolo, luogo, ox, oz, rocca, clima = 'temperato') {
+  return completaPezzi(createBorgoAPezzi(suolo, luogo, ox, oz, rocca, clima));
 }
 
 /**
@@ -172,7 +172,7 @@ export function createBorgo(suolo, luogo, ox, oz, rocca) {
  * @param {number} oz
  * @param {{ piede:number[], poligono:number[][] }} rocca  la rocca (rocca3d.js): piede della sua rampa, contorno (locali)
  */
-export function* createBorgoAPezzi(suolo, luogo, ox, oz, rocca) {
+export function* createBorgoAPezzi(suolo, luogo, ox, oz, rocca, clima = 'temperato') {
   const K = CLASSI_BORGO[luogo.classe] ?? CLASSI_BORGO.casata;
   const ux = luogo.verso.x, uz = luogo.verso.z;
   const B = luogo.piani[1];
@@ -584,7 +584,7 @@ export function* createBorgoAPezzi(suolo, luogo, ox, oz, rocca) {
   // fascia lasciata dall'anello. Prima gli edifici nominati lungo la via principale dalla porta, poi la piazza, poi
   // le case finché c'è posto. Un lotto è libero se sta nel borgo, fuori dalle strade, dalle torri, dalla porta, dalla
   // rampa della rocca, dalla piazza e dagli altri lotti.
-  const kit = creaKit({ X, Z, ux, uz, terreno, luogo, seme: (Math.floor(luogo.x) * 73856093) ^ (Math.floor(luogo.z) * 19349663), nome: 'borgo-edifici' });
+  const kit = creaKit({ X, Z, ux, uz, terreno, luogo, seme: (Math.floor(luogo.x) * 73856093) ^ (Math.floor(luogo.z) * 19349663), nome: 'borgo-edifici', clima });
   // Torce ai lati della porta del borgo (passo 7), sulla faccia esterna; una sola sorgente di luce tra le due.
   {
     const yT = terreno(...loc(0, SPOR)) + 2.7;

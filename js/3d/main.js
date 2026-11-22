@@ -38,6 +38,10 @@ import { creaProfilatore, creaPercorso, GRUPPI, FAMIGLIE, BUDGET_GPU, budgetDi, 
 const LONTANO = 130000;                   // m: distanza massima disegnata dalla camera
 const PARAMETRI = new URL(window.location.href).searchParams;
 const TAVULLIA = PARAMETRI.get('terreno') === 'tavullia';
+// Clima delle case (freddo | temperato | caldo). `?clima=` lo forza ovunque, per provare gli stili; senza, per ora
+// temperato: il clima del luogo (climaDelLuogo, M8) si collega qui.
+const CLIMA_FORZATO = ['freddo', 'temperato', 'caldo'].includes(PARAMETRI.get('clima')) ? PARAMETRI.get('clima') : null;
+const climaDi = (x, z) => CLIMA_FORZATO ?? 'temperato';
 const PROVA_PRESTAZIONI = PARAMETRI.has('prova');             // percorso di prova: niente salvataggi (vedi init)
 const CENTRO_PROVA = (() => {                                   // ?centro=x,z (m del mondo) per il percorso di prova
   const v = (PARAMETRI.get('centro') || '').split(',').map(Number);
@@ -565,10 +569,11 @@ function* costruisciRocche(cx, cz, ter) {
     if (Math.abs(x) > half + m || Math.abs(z) > half + m) continue;
     // Carte di prima delle forme irregolari (senza poligoni): niente rocca (la cache si rigenera con la versione).
     if (!l.piani[0].poligono) continue;
-    const rocca = yield* createRoccaAPezzi(suoloMondo, l, x, z);         // cinta poligonale, porta verso il borgo (M7)
+    const clima = climaDi(l.x, l.z);
+    const rocca = yield* createRoccaAPezzi(suoloMondo, l, x, z, clima);         // cinta poligonale, porta verso il borgo (M7)
     out.push(rocca);
     // M7, passo 4: il borgo murato in pendio, addossato alla rocca.
-    if (l.piani.length > 1) out.push(yield* createBorgoAPezzi(suoloMondo, l, x, z, rocca));
+    if (l.piani.length > 1) out.push(yield* createBorgoAPezzi(suoloMondo, l, x, z, rocca, clima));
   }
   return out;
 }
@@ -627,7 +632,7 @@ function* preparaMondo(desc) {
   if (posVeg.case?.length) {
     const half = ter.size / 2;
     const suoloC = { getHeight: (x, z) => (Math.abs(x) <= half && Math.abs(z) <= half ? ter.getHeight(x, z) : quotaFinale(carta, x + cx, z + cz)) };
-    camp = creaCaseCampagna(suoloC, posVeg.case, cx, cz, carta.seme);
+    camp = creaCaseCampagna(suoloC, posVeg.case, cx, cz, carta.seme, climaDi(cx, cz));
     yield 'case';
   }
   // Colore del blocco in una texture (docs/PRESTAZIONI.md, passo 3): dopo la vegetazione, che aggiunge al terreno
