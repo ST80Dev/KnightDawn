@@ -281,8 +281,18 @@ export const CAMPI_COLTIVATI = {
  * meno (`siepi.traverso`); una parte delle siepi è un filare d'alberi (`siepi.filari`). Negli orti niente siepi.
  */
 export const PARCELLE = {
-  banda: [110, 36], extra: [3, 2], lungo: [[70, 120], [18, 22]], spostamento: 500,
-  piega: { lunghezza: 128, ampiezza: 25 }, orti: { bordo: 30, lunghezza: 64 },
+  banda: 110, extra: 3, lungo: [70, 120], spostamento: 500,
+  piega: { lunghezza: 128, ampiezza: 25 },
+  // Orti e campi chiusi (richiesta dell'utente: orti e campi grandi «si devono mischiare», prima un cerchio di orti su
+  // una griglia sua che tagliava i campi a metà): ogni appezzamento sceglie (per il suo centro, distanza dal luogo in
+  // raggi degli orti R) se restare intero, dividersi in due (campo chiuso) o in orti di ~larghezza × lunghezza m.
+  // Probabilità 1 fino a misto[0]·R e 0 da misto[1]·R (orti), idem `chiusi` per i campi divisi: i confini seguono gli
+  // appezzamenti e le misure si mescolano. `bordo`/`lunghezza`: rumore del limite che decide i muretti (oltreOrti).
+  orti: { bordo: 30, lunghezza: 64, larghezza: 14, lunghezzaOrto: 24, misto: [0.6, 1.7], chiusi: [0.9, 2.8] },
+  // Zone incolte (richiesta dell'utente: «ogni tanto una zona non coltivata, altrimenti sembra una pianura tutta
+  // agricola»): pascoli e incolti a chiazze di qualche centinaio di metri nella campagna, più rari vicino al luogo;
+  // lì niente campi e tornano alberi isolati e cespugli. Soglia sul rumore: `soglia[0]` lontano, `soglia[1]` vicino.
+  incolti: { lunghezza: 420, soglia: [0.12, 0.5], sfuma: 0.08, cespugli: 1.0 },
   // Strade (richiesta dell'utente: i campi non tagliati a metà dalle strade, al più fino al margine): ogni lato di una
   // strada ha appezzamenti suoi (righe spostate di `lato` m) e i campi finiscono a `margine` m dal bordo, con erba.
   strada: { lato: 1000, margine: [0.6, 2.2], lontano: 25, fascia: 20 },
@@ -303,13 +313,24 @@ const permC = (x) => PERM_CAMPI[((x % 256) + 256) % 256];
 /** Intero 0–255 da due interi (come hashC nello shader). */
 export const hashCampi = (a, b) => permC(permC(b) + a);
 /** Appezzamento del punto (qx, qy) dei campi; `orto` 0/1. Scrive i, j, W, L, fu, fv in `o`. */
-export function parcella(qx, qy, orto, o) {
-  const P = PARCELLE, k = orto ? 1 : 0, banda = P.banda[k];
-  const W = banda / (2 + Math.floor(hashCampi(Math.floor(qy / banda), 7 + k) * P.extra[k] / 256));
-  const j = Math.floor(qy / W), hj = hashCampi(j, 3 + k) / 255;
-  const L = P.lungo[k][0] + P.lungo[k][1] * hj, u = qx + hj * P.spostamento, i = Math.floor(u / L);
+export function parcella(qx, qy, o) {
+  const P = PARCELLE, banda = P.banda;
+  const W = banda / (2 + Math.floor(hashCampi(Math.floor(qy / banda), 7) * P.extra / 256));
+  const j = Math.floor(qy / W), hj = hashCampi(j, 3) / 255;
+  const L = P.lungo[0] + P.lungo[1] * hj, u = qx + hj * P.spostamento, i = Math.floor(u / L);
   o.i = i; o.j = j; o.W = W; o.L = L; o.fu = u - i * L; o.fv = qy - j * W; o.u0 = i * L - hj * P.spostamento;
   return o;
+}
+/**
+ * Come si divide l'appezzamento (i, j) largo W e lungo L che comincia a u0 (spazio q, lato della strada `ls`), con
+ * raggio degli orti R: 0 intero, 1 diviso in due (campo chiuso), 2 orti. Come `divisione` nello shader.
+ */
+export function divisione(i, j, W, L, u0, ls, R) {
+  if (!(R > 0)) return 0;
+  const O = PARCELLE.orti, d = Math.hypot(u0 + L / 2, j * W + W / 2 - ls * PARCELLE.strada.lato) / R;
+  if (hashCampi(i, j + 151) / 255 < 1 - smoothstep(O.misto[0], O.misto[1], d)) return 2;
+  if (hashCampi(i, j + 163) / 255 < 1 - smoothstep(O.chiusi[0], O.chiusi[1], d)) return 1;
+  return 0;
 }
 const siepeLunga = (i, j) => hashCampi(i, j + 59) < PARCELLE.siepi.lungo * 256;
 const siepeCorta = (i, j) => hashCampi(i, j + 83) < PARCELLE.siepi.traverso * 256;
@@ -504,10 +525,19 @@ function densitaVertice(cp, pend, pf, distAcqua, x, z, semeBordo, D, i, coltivat
   D.felce[i] = asciutto * neve * foresta * limite * smoothstep(0.3, 0.55, cp.umidita) * V.vicino.felce;
   // Campi coltivati: in piano, all'asciutto (non sulle rive), senza roccia, neve, ghiaia, sabbia né palude.
   const K = CAMPI_COLTIVATI;
-  const campo = coltivato > 0 && distAcqua >= 3
+  let campo = coltivato > 0 && distAcqua >= 3
     ? smoothstep(K.coltivato[0], K.coltivato[1], coltivato) * (1 - smoothstep(K.pendenza[0], K.pendenza[1], pf))
       * prato * (1 - cp.neve) * (1 - sabbia) * (1 - palude)
     : 0;
+  if (campo > 0) {
+    // Zone incolte (PARCELLE.incolti): pascolo con cespugli e alberi isolati (questi già dalla campagna).
+    const I = PARCELLE.incolti, sI = I.soglia[0] + (I.soglia[1] - I.soglia[0]) * smoothstep(0.8, 1, coltivato);
+    const inc = smoothstep(sI, sI + I.sfuma, fbm(x, z, semeBordo ^ 0x1c6f3a95, I.lunghezza, 2));
+    if (inc > 0) {
+      D.cespuglio[i] *= 1 + I.cespugli * inc * campo; D.alto[i] *= 1 + I.cespugli * inc * campo;
+      campo *= 1 - inc;
+    }
+  }
   D.campo[i] = campo;
   if (campo > 0) {
     // Netto: lo shader disegna un appezzamento già da campo ≈ 0,12–0,7 (soglia per appezzamento).
@@ -837,8 +867,9 @@ export function* posizionaVegetazioneAPezzi(o, budget = 2.5) {
       aCampi[i * 4] = dx * campi.ux + dz * campi.uz + PC.piega.ampiezza * fbm(x, z, sP1, PC.piega.lunghezza, 1);
       aCampi[i * 4 + 1] = dx * vx + dz * vz + PC.piega.ampiezza * fbm(x, z, sP2, PC.piega.lunghezza, 1);
       const rumoreOrti = fbm(x, z, sP3, PC.orti.lunghezza, 1);
+      // (non decide più gli orti, che sono per appezzamento: `divisione`; solo la zona dei muretti)
       aCampi[i * 4 + 2] = Math.min(Math.hypot(dx, dz) + PC.orti.bordo * rumoreOrti - campi.orti,
-        dCasa(x, z) + 8 * rumoreOrti - KC.orto);                                   // orti anche attorno alle case
+        dCasa(x, z) + 8 * rumoreOrti - KC.orto);
       // Quarta componente: lato della strada e margine. Dal lato positivo w = metri oltre il margine; dal lato
       // negativo w < 0 fino a `fascia` m (campi propri lungo la strada), poi torna positivo: |w| piccolo = capezzagna
       // (lungo il margine della strada e in fondo alla fascia). Dipende solo dal punto: blocchi vicini uguali.
@@ -892,10 +923,9 @@ export function* posizionaVegetazioneAPezzi(o, budget = 2.5) {
       if (lx < -half || lx > half || lz < -half || lz > half) return;
       trova(lx, lz);
       if (!asciutta() || pendenzaFine() > 28) return;
-      if (triangolo(aCampi, 4, 2) < 0) return;                                       // orto
       const w = triangolo(aCampi, 4, 3);                                             // lato e margine della strada
       if ((w < 0 ? 1 : 0) !== ls || Math.abs(w) < PC.strada.margine[1]) return;
-      parcella(triangolo(aCampi, 4, 0), triangolo(aCampi, 4, 1) + ls * PC.strada.lato, 0, ver);
+      parcella(triangolo(aCampi, 4, 0), triangolo(aCampi, 4, 1) + ls * PC.strada.lato, ver);
       if (ver.i !== i || ver.j !== j || (lato ? ver.fu : ver.fv) > S.striscia[0]) return;
       if (triangolo(suolo, 4, 2) < 0.12 + 0.6 * hashCampi(i, j + 41) / 255 + 0.04) return;   // campo non dipinto
       if (oltreScarpata(P.x, P.z) < 3 || oltreStrada(P.x, P.z) < V.strada.libero) return;
@@ -926,13 +956,14 @@ export function* posizionaVegetazioneAPezzi(o, budget = 2.5) {
     };
     const passoL = S.passo;
     for (let ls = 0; ls < 2; ls++)
-    for (let jb = Math.floor((qy0 + ls * PC.strada.lato) / PC.banda[0]); jb * PC.banda[0] <= qy1 + ls * PC.strada.lato; jb++) {
-      const W = PC.banda[0] / (2 + Math.floor(hashCampi(jb, 7) * PC.extra[0] / 256));
-      for (let j = Math.round(jb * PC.banda[0] / W), jn = j + Math.round(PC.banda[0] / W); j < jn; j++) {
+    for (let jb = Math.floor((qy0 + ls * PC.strada.lato) / PC.banda); jb * PC.banda <= qy1 + ls * PC.strada.lato; jb++) {
+      const W = PC.banda / (2 + Math.floor(hashCampi(jb, 7) * PC.extra / 256));
+      for (let j = Math.round(jb * PC.banda / W), jn = j + Math.round(PC.banda / W); j < jn; j++) {
         if (stanco()) yield* pausa();
-        const hj = hashCampi(j, 3) / 255, L = PC.lungo[0][0] + PC.lungo[0][1] * hj, off = hj * PC.spostamento;
+        const hj = hashCampi(j, 3) / 255, L = PC.lungo[0] + PC.lungo[1] * hj, off = hj * PC.spostamento;
         for (let i = Math.floor((qx0 + off) / L); i * L - off <= qx1; i++) {
           const u0 = i * L - off;
+          if (divisione(i, j, W, L, u0, ls, campi.orti) === 2) continue;           // negli orti niente siepi
           // Lato lungo (in basso, fv = dentro): cespugli ogni passo o alberi ogni passoFilare.
           if (siepeLunga(i, j)) {
             const alb = filare(i, j, 0), ps = alb ? S.passoFilare : passoL;

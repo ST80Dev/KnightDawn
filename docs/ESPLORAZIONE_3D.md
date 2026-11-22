@@ -2104,6 +2104,15 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      secondo solo entro 18 m, punta) con l'ultimo ciuffo centrato un po' sotto la punta; cime più corte (faggio 5,2 m,
      pioppo 3 m). Bosco fitto: 568 000 triangoli contro 553 000.
      Bosco fitto in headless: ~550 000 triangoli (prima delle chiome nuove 458 000): da misurare sulla scheda.
+     *Orti mescolati e zone incolte* (richiesta dell'utente: campi più grandi e più piccoli che «stonano», e «ogni
+     tanto una zona non coltivata, altrimenti sembra una pianura tutta agricola»): prima gli orti erano un cerchio con
+     una griglia sua che tagliava a metà i campi grandi. Ora ogni appezzamento sceglie per il suo centro (`divisione`,
+     uguale in `vegetazione.js` e nello shader, raggio degli orti nell'uniforme `uOrti`) se restare intero, dividersi
+     in due (campo chiuso) o in orti di ~14 × 24 m, con probabilità che scendono con la distanza (PARCELLE.orti.misto,
+     chiusi): i confini seguono gli appezzamenti, le misure si mescolano; niente siepi attorno agli orti; non ci sono
+     più orti attorno alle case isolate. Zone incolte (PARCELLE.incolti): chiazze di qualche centinaio di metri (rumore
+     a 420 m) senza campi, più rare vicino al luogo, con alberi isolati e più cespugli (+6–10 % di oggetti nei blocchi
+     con campagna in headless).
      *Case fuori dal borgo* (richiesta dell'utente: case isolate o a gruppetti di 2–3 in mezzo o a lato dei campi):
      `CASE_CAMPAGNA` / `caseCampagna(carta)`, siti deterministici per Carta (4–9 gruppi per rocca secondo la classe,
      tra gli orti e il limite dei campi pieni, in piano, all'asciutto, lontano dai terrapieni e tra loro, orientati

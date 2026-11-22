@@ -338,6 +338,7 @@ export function materialeSuolo(cx, cz, mezzo = 1e9) {
     // Campi coltivati (vegetazione.js, PARCELLE): permutazione condivisa. La maschera è la terza componente di aSuolo,
     // le coordinate dei campi l'attributo aCampi (li aggiunge vegetazione3d.js).
     uPermCampi: { value: TEXTURE_PERM_CAMPI },
+    uOrti: { value: 0 },          // raggio degli orti del luogo dei campi (m; 0 = niente orti): PARCELLE.orti
   };
   mat.userData.uniformi = uniformi;
   mat.onBeforeCompile = (sh) => {
@@ -382,6 +383,7 @@ varying vec2 vMondo;
 varying vec4 vSuolo;
 varying vec4 vCampi;
 uniform sampler2D uPermCampi;
+uniform float uOrti;
 // Permutazione dei campi (PERM_CAMPI): interi esatti, uguali a quelli di vegetazione.js.
 float permC(float x) { return floor(texture2D(uPermCampi, vec2((mod(x, 256.0) + 0.5) / 256.0, 0.5)).r * 255.0 + 0.5); }
 float hashC(float a, float b) { return permC(permC(b) + a); }
@@ -496,26 +498,40 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
         if (vSuolo.z > 0.01) {
           // Campi coltivati attorno ai luoghi (niente stagioni; disegno in PARCELLE, js/mondo/vegetazione.js, che lo
           // calcola uguale per mettere le siepi): strisce lungo il verso del borgo larghe 20–55 m e lunghe 70–190 m;
-          // vicino al luogo orti più piccoli. Ogni appezzamento sceglie arato, seminato, grano, fieno o maggese; tra uno
+          // vicino al luogo appezzamenti divisi in due o in orti (divisione). Ogni appezzamento sceglie arato, seminato, grano, fieno o maggese; tra uno
           // e l'altro una capezzagna erbosa; sui lati con la siepe una striscia scura (da lontano la siepe si legge
           // anche dove i cespugli non si disegnano più). Dove la campagna finisce si fermano appezzamenti interi.
           // Strade: ogni lato ha appezzamenti suoi (righe spostate) e i campi finiscono al margine, con erba.
           float latoS = vCampi.w < 0.0 ? 1.0 : 0.0, margineS = abs(vCampi.w);
           vec2 q = vCampi.xy + vec2(0.0, latoS * ${PARCELLE.strada.lato.toFixed(1)});
-          float orto = vCampi.z < 0.0 ? 1.0 : 0.0;
-          float banda = mix(${PARCELLE.banda[0].toFixed(1)}, ${PARCELLE.banda[1].toFixed(1)}, orto);
-          float extra = mix(${PARCELLE.extra[0].toFixed(1)}, ${PARCELLE.extra[1].toFixed(1)}, orto);
-          float W = banda / (2.0 + floor(hashC(floor(q.y / banda), 7.0 + orto) * extra / 256.0));
+          float W = ${PARCELLE.banda.toFixed(1)} / (2.0 + floor(hashC(floor(q.y / ${PARCELLE.banda.toFixed(1)}), 7.0) * ${PARCELLE.extra.toFixed(1)} / 256.0));
           float j = floor(q.y / W);
-          float hj = hashC(j, 3.0 + orto) / 255.0;
-          float L = orto > 0.5 ? ${PARCELLE.lungo[1][0].toFixed(1)} + ${PARCELLE.lungo[1][1].toFixed(1)} * hj
-            : ${PARCELLE.lungo[0][0].toFixed(1)} + ${PARCELLE.lungo[0][1].toFixed(1)} * hj;
+          float hj = hashC(j, 3.0) / 255.0;
+          float L = ${PARCELLE.lungo[0].toFixed(1)} + ${PARCELLE.lungo[1].toFixed(1)} * hj;
           float u = q.x + hj * ${PARCELLE.spostamento.toFixed(1)};
           float i = floor(u / L);
           float h = hashC(i, j + 17.0) / 255.0, h2 = hashC(i, j + 41.0) / 255.0;
           float fu = u - i * L, fv = q.y - j * W;
-          float bordoC = min(min(min(fu, L - fu), min(fv, W - fv)), margineS - ${PARCELLE.strada.margine[0].toFixed(1)});
-          float solchi = 0.5 + 0.5 * sin(fv * 6.2832 / mix(2.4, 1.3, orto));
+          // Divisione dell'appezzamento (come divisione() in vegetazione.js): intero, in due (campo chiuso) o in orti,
+          // secondo la distanza del suo centro dal luogo: orti e campi si mescolano, i confini seguono gli appezzamenti.
+          float divi = 0.0;
+          if (uOrti > 0.0) {
+            float dC = length(vec2(i * L - hj * ${PARCELLE.spostamento.toFixed(1)} + 0.5 * L, j * W + 0.5 * W - latoS * ${PARCELLE.strada.lato.toFixed(1)})) / uOrti;
+            if (hashC(i, j + 151.0) / 255.0 < 1.0 - smoothstep(${PARCELLE.orti.misto[0].toFixed(2)}, ${PARCELLE.orti.misto[1].toFixed(2)}, dC)) divi = 2.0;
+            else if (hashC(i, j + 163.0) / 255.0 < 1.0 - smoothstep(${PARCELLE.orti.chiusi[0].toFixed(2)}, ${PARCELLE.orti.chiusi[1].toFixed(2)}, dC)) divi = 1.0;
+          }
+          float orto = divi > 1.5 ? 1.0 : 0.0;
+          float Lp = L, Wp = W, fup = fu, fvp = fv;
+          if (divi > 0.5) {
+            float nU = orto > 0.5 ? max(2.0, floor(L / ${PARCELLE.orti.lunghezzaOrto.toFixed(1)} + 0.5)) : 2.0;
+            float nV = orto > 0.5 ? max(2.0, floor(W / ${PARCELLE.orti.larghezza.toFixed(1)} + 0.5)) : 1.0;
+            Lp = L / nU; Wp = W / nV;
+            float su = floor(fu / Lp), sv = floor(fv / Wp);
+            fup = fu - su * Lp; fvp = fv - sv * Wp;
+            h = hashC(i + su * 37.0, j + sv * 53.0 + 17.0) / 255.0;
+          }
+          float bordoC = min(min(min(fup, Lp - fup), min(fvp, Wp - fvp)), margineS - ${PARCELLE.strada.margine[0].toFixed(1)});
+          float solchi = 0.5 + 0.5 * sin(fvp * 6.2832 / mix(2.4, 1.3, orto));
           vec3 cC;
           if (orto > 0.5) cC = h < 0.35 ? vec3(0.15, 0.095, 0.05) * (0.85 + 0.2 * solchi)
             : mix(vec3(0.12, 0.08, 0.04), vec3(0.05, 0.12, 0.03), 0.35 + 0.4 * smoothstep(0.3, 0.7, solchi));

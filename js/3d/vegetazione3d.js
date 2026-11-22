@@ -1294,6 +1294,8 @@ export function* creaVegetazioneAPezzi(pos, terrain = null, renderer = null, bud
     superficie.geometry.setAttribute('aSuolo', new THREE.BufferAttribute(pos.suolo, 4));
     // Campi coltivati: coordinate degli appezzamenti per vertice (PARCELLE, vegetazione.js).
     if (pos.aCampi) superficie.geometry.setAttribute('aCampi', new THREE.BufferAttribute(pos.aCampi, 4));
+    const uOrti = superficie.material?.userData?.uniformi?.uOrti;
+    if (uOrti) uOrti.value = pos.campi?.orti || 0;     // raggio degli orti (PARCELLE.orti, divisione)
     coloriTerreno = superficie.geometry.attributes.color?.array || null;
   }
 
