@@ -1494,7 +1494,18 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
       porta passa sul lato ovest-nord-ovest: tratto più ripido 5% invece del 44%. Anche: la via del borgo resta dritta
       per ~8 m dopo la porta (prima curvava già nel passaggio) e la porta del muro interno si sposta verso il centro
       se accanto al capo del muro l'altra corte è troppo stretta. Prove: siti validi 30/30; cammino fino alla corte del
-      signore 35/35, 34/34, 31/31 (semi 12345, 570549, 395728). *Prova:* cammino porta del borgo →
+      signore 35/35, 34/34, 31/31 (semi 12345, 570549, 395728).
+    - **Rampa d'accesso lungo le mura** (decisione dell'utente via sessione M6: rocche su colli ripidi da ogni lato, soglia
+      8–12 m sopra il terreno a 24 m). `luoghi.js`: se la discesa dritta dalla soglia supera il 28% (`RAMPA_PORTA.muro`),
+      pianerottolo davanti alla porta e rampa al 18% che segue il giro delle mura a ~4 m (voltando agli spigoli della
+      cinta) fino a dove incontra il terreno finale; diventano piani del luogo (tipo 'rampa': 'pianerottolo', 'tratto',
+      'angolo'), così il terrapieno li segue (`scena.js`, `spianaPiani`: dentro una rampa il terreno è la rampa).
+      `porta.rampaMuro` (tratti, percorso, scarto) e `porta.arrivo = { x, z, quota, nx, nz }` per le strade (sessione M6);
+      `RAMPA_PORTA` esportata da `luoghi.js` (anche per `strade.js`). `borgo3d.js`: lastricato, parapetti sul lato
+      esterno, suolo alla quota della rampa raccordato al terreno negli ultimi 3 m; niente rampa dritta dove c'è questa.
+      Prima prova (scartata): due tratti con tornante, ma il secondo, 7 m sotto il primo, finiva sepolto nella sua
+      scarpata. Rampe da 8 a 36 m su 11–16 borghi per seme, scarto all'arrivo ≤ 0,6 m. `VERSIONE_GENERATORE` `+rampa-4`.
+      Prove: siti validi 30/30; cammino dall'arrivo della rampa al cortile della corte del signore 31/31, 35/35, 34/34. *Prova:* cammino porta del borgo →
       corte d'armi → corte del signore su tutte le rocche di due semi; porte e udienza raggiungibili; FPS sul percorso
       di prova.
 

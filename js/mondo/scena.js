@@ -735,31 +735,46 @@ export const TERRAPIENO = { pendenza: 0.4663076581549986, ritorno: 30 };
 export function spianaLuoghi(carta, x, z, h) {
   const L = carta.luoghi;
   if (!L) return h;
-  const T = TERRAPIENO.pendenza;
   for (let k = 0; k < L.length; k++) {
     const l = L[k], P = l.piani;
     if (!P) continue;
     const ex = x - l.x, ez = z - l.z;
     if (ex * ex + ez * ez > l.raggioPiani * l.raggioPiani) continue;
-    let lo = -Infinity, hi = Infinity, ritorno = 0;
-    for (let j = 0; j < P.length; j++) {
-      const p = P[j];
-      let d = distanzaPiano(p, x, z);
-      // Peso del piano: 1 fino alla sua scarpata, poi scende fino a zero in TERRAPIENO.ritorno m.
-      const f = 1 - smoothstep(p.s, p.s + TERRAPIENO.ritorno, d);
-      if (f > ritorno) ritorno = f;
-      if (f <= 0) continue;
-      if (d < 0) d = 0;
-      const q = p.griglia ? quotaPiano(p, x, z) : p.q;
-      const a = q - d * T, b = q + d * T;
-      if (a > lo) lo = a;
-      if (b < hi) hi = b;
-    }
-    if (ritorno <= 0) continue;
-    const c = lo <= hi ? (h < lo ? lo : h > hi ? hi : h) : hi;
-    return h + ritorno * (c - h);                    // i siti distano chilometri: al più uno tocca il punto
+    const r = spianaPiani(P, x, z, h);
+    if (r !== null) return r;                         // i siti distano chilometri: al più uno tocca il punto
   }
   return h;
+}
+
+/**
+ * Quota h del punto coi terrapieni di un solo luogo (i suoi piani), o null se nessun piano lo tocca. La usa anche il
+ * generatore dei luoghi (luoghi.js) per conoscere il terreno finale attorno al borgo mentre ne disegna la rampa.
+ */
+export function spianaPiani(P, x, z, h) {
+  const T = TERRAPIENO.pendenza;
+  let lo = -Infinity, hi = Infinity, ritorno = 0;
+  // Rampe d'accesso lungo le mura (luoghi.js, tipo 'rampa'): dentro la loro impronta il terreno è la rampa, prima di
+  // combinare gli altri piani (un tratto più basso a pochi metri, o il pianoro del borgo, la tirerebbero su o giù).
+  for (let j = 0; j < P.length; j++) {
+    const p = P[j];
+    if (p.tipo === 'rampa' && distanzaPiano(p, x, z) <= 0) return p.griglia ? quotaPiano(p, x, z) : p.q;
+  }
+  for (let j = 0; j < P.length; j++) {
+    const p = P[j];
+    let d = distanzaPiano(p, x, z);
+    // Peso del piano: 1 fino alla sua scarpata, poi scende fino a zero in TERRAPIENO.ritorno m.
+    const f = 1 - smoothstep(p.s, p.s + TERRAPIENO.ritorno, d);
+    if (f > ritorno) ritorno = f;
+    if (f <= 0) continue;
+    if (d < 0) d = 0;
+    const q = p.griglia ? quotaPiano(p, x, z) : p.q;
+    const a = q - d * T, b = q + d * T;
+    if (a > lo) lo = a;
+    if (b < hi) hi = b;
+  }
+  if (ritorno <= 0) return null;
+  const c = lo <= hi ? (h < lo ? lo : h > hi ? hi : h) : hi;
+  return h + ritorno * (c - h);
 }
 
 /**
