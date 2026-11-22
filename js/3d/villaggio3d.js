@@ -68,10 +68,11 @@ function texturaSuolo(tipo) {
   const g = c.getContext('2d');
   let sm = [2718, 4711, 1618][tipo];
   const rnd = () => ((sm = (sm * 1103515245 + 12345) >>> 0) / 4294967296);
-  g.fillStyle = ['rgb(128,108,82)', 'rgb(118,104,86)', 'rgb(104,86,64)'][tipo];
+  // Terra battuta chiara e polverosa (richiesta dell'utente: la terra scura sembrava fango); carreggiata poco più bruna.
+  g.fillStyle = ['rgb(198,178,142)', 'rgb(158,144,124)', 'rgb(176,154,120)'][tipo];
   g.fillRect(0, 0, N, N);
   for (let k = 0; k < 6000; k++) {                           // grana, impronte, ghiaia
-    const v = 85 + Math.floor(rnd() * 80);
+    const v = 140 + Math.floor(rnd() * 90);
     g.fillStyle = `rgba(${v + 22},${v + 10},${v - 8},0.45)`;
     g.fillRect(rnd() * N, rnd() * N, 1 + rnd() * 3, 1 + rnd() * 3);
   }
@@ -79,7 +80,7 @@ function texturaSuolo(tipo) {
     for (const x0 of [0.3, 0.7]) {
       for (let y = 0; y < N; y += 2) {
         const x = x0 * N + 6 * Math.sin(y * 0.03) + (rnd() - 0.5) * 3;
-        g.fillStyle = 'rgba(55,42,30,0.35)'; g.fillRect(x - 9, y, 18, 2);
+        g.fillStyle = 'rgba(95,78,58,0.3)'; g.fillRect(x - 9, y, 18, 2);
       }
     }
   }
@@ -96,7 +97,7 @@ function texturaSuolo(tipo) {
     const x = rnd() * N, y = rnd() * N, r = 20 + rnd() * 80, t = rnd();
     for (const dx of [-N, 0, N]) for (const dy of [-N, 0, N]) {
       const gr = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
-      gr.addColorStop(0, t < 0.3 ? 'rgba(70,55,40,0.35)' : t < 0.75 ? 'rgba(170,150,120,0.3)' : 'rgba(80,100,50,0.3)');
+      gr.addColorStop(0, t < 0.12 ? 'rgba(105,85,62,0.25)' : t < 0.8 ? `rgba(${222 + Math.floor(rnd() * 20)},${208 + Math.floor(rnd() * 20)},${178 + Math.floor(rnd() * 20)},${0.3 + rnd() * 0.3})` : 'rgba(110,125,70,0.25)');   // polvere chiara, poco fango, qualche ciuffo
       gr.addColorStop(1, 'rgba(0,0,0,0)');
       g.fillStyle = gr; g.fillRect(x + dx - r, y + dy - r, 2 * r, 2 * r);
     }
