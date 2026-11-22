@@ -2849,6 +2849,11 @@ bacino 0,05 s. Prototipo: i corsi d'acqua che ne escono seguono le valli del ril
   dell'acqua: ≤ 0 per mare e lagune, ≤ livello del lago vicino ai laghi. Pelo finale al mare tra −9 e 0 m (prima fino a
   +70); il caso a 19 m sparito. `+foci-1`. **Clic sulla Carta**: acqua o terra dalla griglia fine (`acquaNelPunto`), non
   più dalla cella di 1 km (prima «è mare» dove la Carta zoomata mostrava terra).
+  **Foce a imbuto** (deciso con l'utente): misurato che negli ultimi 10 km i fiumi si allargavano solo del 5–30 % e i
+  ruscelli costieri arrivavano al mare larghi 4–6 m. Ora negli ultimi metri (40 × la larghezza, tra 400 e 3000 m) il
+  letto si allarga fino a 1,8–4 volte al mare (estuario) e 1,3–1,8 volte al lago (delta basso), di più per i fiumi
+  grandi, e diventa più basso (profondità / √fattore). Esempi: 46 → 185 m, 24 → 103 m, ruscelli 4 → 7–10 m. Quarto
+  valore dei punti di `carta.fiumi`. `+imbuto-1`.
 - **G3 — Valli e alvei scavati nella griglia**: niente più `scavaFiumi` a posteriori; nella Scena `quotaFinale` =
   griglia interpolata + solo le ottave più fini (sotto ~250 m), smorzate negli alvei.
 - **G4 — Valichi** sulle selle vere della griglia (spartiacque tra i bacini).
