@@ -275,7 +275,7 @@ export const CAMPI_COLTIVATI = {
  * Appezzamenti, siepi e filari. Lo stesso disegno lo calcolano lo shader del suolo (colore, strisce scure delle siepi
  * viste da lontano) e `posizionaVegetazione` (le siepi come oggetti): per questo niente rumori della scheda video.
  * Coordinate dei campi `q` per vertice (attributo aCampi: lungo e di traverso al verso del borgo, piegate da un
- * rumore su `piega.lunghezza` m; terza componente < 0 negli orti) e una permutazione di 256 interi uguale per
+ * rumore su `piega.lunghezza` m; terza componente: vicinanza della casa isolata) e una permutazione di 256 interi uguale per
  * tutti e due (PERM_CAMPI, texture R8 nello shader). Strisce larghe banda / (2 + 0…extra), appezzamenti lunghi
  * lungo[0] + lungo[1]·caso. Siepi sul lato lungo di una parte degli appezzamenti (`siepi.lungo`), su quello corto di
  * meno (`siepi.traverso`); una parte delle siepi è un filare d'alberi (`siepi.filari`). Negli orti niente siepi.
@@ -287,15 +287,15 @@ export const PARCELLE = {
   // una griglia sua che tagliava i campi a metà): ogni appezzamento sceglie (per il suo centro, distanza dal luogo in
   // raggi degli orti R) se restare intero, dividersi in due (campo chiuso) o in orti di ~larghezza × lunghezza m.
   // Probabilità 1 fino a misto[0]·R e 0 da misto[1]·R (orti), idem `chiusi` per i campi divisi: i confini seguono gli
-  // appezzamenti e le misure si mescolano. `bordo`/`lunghezza`: rumore del limite che decide i muretti (oltreOrti).
-  orti: { bordo: 30, lunghezza: 64, larghezza: 14, lunghezzaOrto: 24, misto: [0.6, 1.7], chiusi: [0.9, 2.8] },
+  // appezzamenti e le misure si mescolano. Muretti fino a muretti.oltreOrti m oltre R (centro dell'appezzamento).
+  orti: { larghezza: 14, lunghezzaOrto: 24, misto: [0.6, 1.7], chiusi: [0.9, 2.8] },
   // Zone incolte (richiesta dell'utente: «ogni tanto una zona non coltivata, altrimenti sembra una pianura tutta
   // agricola»): pascoli e incolti a chiazze di qualche centinaio di metri nella campagna, più rari vicino al luogo;
   // lì niente campi e tornano alberi isolati e cespugli. Soglia sul rumore: `soglia[0]` lontano, `soglia[1]` vicino.
   incolti: { lunghezza: 420, soglia: [0.12, 0.5], sfuma: 0.08, cespugli: 1.0 },
   // Strade (richiesta dell'utente: i campi non tagliati a metà dalle strade, al più fino al margine): ogni lato di una
   // strada ha appezzamenti suoi (righe spostate di `lato` m) e i campi finiscono a `margine` m dal bordo, con erba.
-  strada: { lato: 1000, margine: [0.6, 2.2], lontano: 25, fascia: 20 },
+  strada: { lato: 1000, margine: [0.6, 2.2], lontano: 25, fascia: 40 },
   siepi: { lungo: 0.4, traverso: 0.2, filari: 0.25, passo: 1.7, passoFilare: 9, dentro: 0.9, striscia: [1.6, 2.4],
     // Aperture naturali (richiesta dell'utente: «più di un punto per lato, una cosa naturale»): ogni tratto di `cella` m
     // ha un'apertura con probabilità `quota`, in un punto a caso, larga 2·(larghezza) m.
@@ -350,7 +350,7 @@ const varco = (i, j, lato, lunghezza) => lunghezza * (0.15 + 0.7 * hashCampi(i, 
  * Case fuori dal borgo (richiesta dell'utente: «ogni tanto, in mezzo o a lato dei campi, una casa isolata o un
  * gruppetto di 2–3»). Siti deterministici per Carta: per ogni luogo `gruppi` gruppi nella campagna, tra il limite degli
  * orti (+ `daOrti` m) e `fino` del raggio pieno, in piano, all'asciutto, lontano dai terrapieni e tra loro. Qui solo
- * dove stanno (e la loro aia libera, con un orto attorno): le case le disegna chi fa gli edifici (M7, passo 5).
+ * dove stanno (e la loro aia di terra battuta, con qualche orticello): le case le disegna chi fa gli edifici (M7, passo 5).
  * Lontano dalle strade fini: un sito con la carreggiata entro `strada` m si scarta nel blocco (`casaSullaStrada`).
  */
 export const CASE_CAMPAGNA = {
@@ -359,7 +359,11 @@ export const CASE_CAMPAGNA = {
   quante: [0.4, 0.75],              // soglie: 1 casa sotto la prima, 2 sotto la seconda, altrimenti 3
   passo: [14, 22],                  // m tra le case di un gruppo
   aia: [12, 20],                    // m: niente oggetti entro il primo, pieni oltre il secondo
-  orto: 26,                         // m: orto attorno alla casa
+  // Attorno alla casa (richiesta dell'utente: «l'intorno dovrebbe essere terra battuta, qualche orto solo un po' nelle
+  // vicinanze»): aia di terra battuta fin quasi a aia[1], poi qualche orticello (celle della griglia dei campi) entro
+  // `orti` m. Lo shader lo sa da aCampi.z = max(0, vicino − distanza dalla casa). Muretti a secco sui confini dei campi
+  // entro `muretti` m dalla casa (come attorno al luogo).
+  orti: 12, muretti: 176, vicino: 200,
   strada: 9,
 };
 const _caseCache = new WeakMap();
@@ -845,13 +849,13 @@ export function* posizionaVegetazioneAPezzi(o, budget = 2.5) {
   }
 
   // Coordinate dei campi per vertice (PARCELLE): q lungo e di traverso al verso del borgo, piegate; terza
-  // componente: distanza dal luogo meno il raggio degli orti (< 0 negli orti). Lo shader le interpola sui triangoli
+  // componente: vicinanza della casa isolata (CASE_CAMPAGNA.vicino − distanza, ≥ 0). Lo shader le interpola sui triangoli
   // come qui sotto `attrCampi`, così le siepi oggetto stanno sulle strisce che lo shader dipinge.
   const PC = PARCELLE;
   let aCampi = null;
   if (campi) {
     aCampi = new Float32Array(n * 4);
-    const sP1 = derivaSeme(seme, 403), sP2 = derivaSeme(seme, 404), sP3 = derivaSeme(seme, 405);
+    const sP1 = derivaSeme(seme, 403), sP2 = derivaSeme(seme, 404);
     const vx = -campi.uz, vz = campi.ux;
     for (let i = 0; i < n; i++) {
       const r = (i / cols) | 0, c = i - r * cols, x = cx - half + c * cell, z = cz - half + r * cell;
@@ -862,23 +866,25 @@ export function* posizionaVegetazioneAPezzi(o, budget = 2.5) {
         const rr = r + dr, cc = c + dc;
         if (rr >= 0 && rr < cols && cc >= 0 && cc < cols && suolo[(rr * cols + cc) * 4 + 2] > 0) { serve = true; break; }
       }
-      if (!serve) continue;
+      const dK = caseQui.length ? dCasa(x, z) : Infinity;
+      if (!serve && dK > KC.vicino + cell) continue;
       const dx = x - campi.x, dz = z - campi.z;
       aCampi[i * 4] = dx * campi.ux + dz * campi.uz + PC.piega.ampiezza * fbm(x, z, sP1, PC.piega.lunghezza, 1);
       aCampi[i * 4 + 1] = dx * vx + dz * vz + PC.piega.ampiezza * fbm(x, z, sP2, PC.piega.lunghezza, 1);
-      const rumoreOrti = fbm(x, z, sP3, PC.orti.lunghezza, 1);
-      // (non decide più gli orti, che sono per appezzamento: `divisione`; solo la zona dei muretti)
-      aCampi[i * 4 + 2] = Math.min(Math.hypot(dx, dz) + PC.orti.bordo * rumoreOrti - campi.orti,
-        dCasa(x, z) + 8 * rumoreOrti - KC.orto);
+      // Vicinanza della casa isolata più vicina (aia e orticelli nello shader); gli orti del luogo e la zona dei
+      // muretti si decidono per appezzamento (`divisione`, centro dell'appezzamento).
+      aCampi[i * 4 + 2] = Math.max(0, KC.vicino - dK);
       // Quarta componente: lato della strada e margine. Dal lato positivo w = metri oltre il margine; dal lato
-      // negativo w < 0 fino a `fascia` m (campi propri lungo la strada), poi torna positivo: |w| piccolo = capezzagna
-      // (lungo il margine della strada e in fondo alla fascia). Dipende solo dal punto: blocchi vicini uguali.
+      // negativo w < 0 fino a `fascia` m (campi propri lungo la strada), poi torna positivo di colpo: |w| piccolo =
+      // capezzagna solo lungo il margine della strada. (Prima |w| tornava piccolo anche in fondo alla fascia: richiesta
+      // dell'utente, «un corridoio verde parallelo alla strada, come una copia del percorso».) Il salto da −fascia a
+      // +lontano attraversa lo zero dentro un triangolo: resta una riga sottile, come il confine tra due campi.
+      // Dipende solo dal punto: blocchi vicini uguali.
       let w = PC.strada.lontano;
       if (o.carta?.strade) {
         distanzaStrada(o.carta, x, z, _st);
         const m = Math.max(0.01, _st.d - _st.semi), F = PC.strada.fascia;
-        if (_st.d < Infinity) w = _st.lato >= 0 || m >= F ? Math.min(PC.strada.lontano, _st.lato >= 0 ? m : m - F)
-          : -Math.min(m, F - m);
+        if (_st.d < Infinity) w = _st.lato < 0 && m < F ? -m : Math.min(PC.strada.lontano, m);
       }
       aCampi[i * 4 + 3] = w;
     }
@@ -937,7 +943,8 @@ export function* posizionaVegetazioneAPezzi(o, budget = 2.5) {
       // Siepi e muretti non si attraversano (richiesta dell'utente): su ogni lato un varco dove cessano e si passa.
       const M = PC.muretti, y = quota();
       const lungo = lato ? ver.W : ver.L, lungoQui = lato ? ver.fv : ver.fu;
-      const eMuro = triangolo(aCampi, 4, 2) < M.oltreOrti && muro(i, j, lato);
+      const eMuro = (Math.hypot(ver.u0 + ver.L / 2, j * ver.W + ver.W / 2 - ls * PC.strada.lato) < campi.orti + M.oltreOrti
+        || triangolo(aCampi, 4, 2) > KC.vicino - KC.muretti) && muro(i, j, lato);
       if (eMuro ? Math.abs(lungoQui - varco(i, j, lato, lungo)) < M.varco : aperturaSiepe(i, j, lato, lungoQui)) return;
       if (eMuro) {
         // Diritto: sulla linea a M.dentro dal confine, senza lo spostamento di traverso delle siepi.

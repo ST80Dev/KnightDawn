@@ -17,7 +17,7 @@
 import * as THREE from 'three';
 import { BIOMA, CLIMA } from '../mondo/carta.js';
 import { smoothstep, completa } from '../mondo/rumore.js';
-import { COPERTURA, coperturaMondo, nuovaCopertura, campagnaMondo, PARCELLE, PERM_CAMPI } from '../mondo/vegetazione.js';
+import { COPERTURA, coperturaMondo, nuovaCopertura, campagnaMondo, PARCELLE, PERM_CAMPI, CASE_CAMPAGNA } from '../mondo/vegetazione.js';
 
 const PAL = (typeof PALETTE !== 'undefined') ? PALETTE : {};
 
@@ -515,8 +515,9 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
           // Divisione dell'appezzamento (come divisione() in vegetazione.js): intero, in due (campo chiuso) o in orti,
           // secondo la distanza del suo centro dal luogo: orti e campi si mescolano, i confini seguono gli appezzamenti.
           float divi = 0.0;
+          float dCm = length(vec2(i * L - hj * ${PARCELLE.spostamento.toFixed(1)} + 0.5 * L, j * W + 0.5 * W - latoS * ${PARCELLE.strada.lato.toFixed(1)}));
           if (uOrti > 0.0) {
-            float dC = length(vec2(i * L - hj * ${PARCELLE.spostamento.toFixed(1)} + 0.5 * L, j * W + 0.5 * W - latoS * ${PARCELLE.strada.lato.toFixed(1)})) / uOrti;
+            float dC = dCm / uOrti;
             if (hashC(i, j + 151.0) / 255.0 < 1.0 - smoothstep(${PARCELLE.orti.misto[0].toFixed(2)}, ${PARCELLE.orti.misto[1].toFixed(2)}, dC)) divi = 2.0;
             else if (hashC(i, j + 163.0) / 255.0 < 1.0 - smoothstep(${PARCELLE.orti.chiusi[0].toFixed(2)}, ${PARCELLE.orti.chiusi[1].toFixed(2)}, dC)) divi = 1.0;
           }
@@ -545,7 +546,7 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
           if (orto < 0.5) {
             // Siepi (non i filari d'alberi: quelli hanno le loro ombre finte) e, vicino al luogo, muretti a secco con
             // un varco per lato: come in posizionaVegetazione.
-            float zonaMuri = vCampi.z < ${PARCELLE.muretti.oltreOrti.toFixed(1)} ? 1.0 : 0.0;
+            float zonaMuri = uOrti > 0.0 && dCm < uOrti + ${PARCELLE.muretti.oltreOrti.toFixed(1)} || vCampi.z > ${(CASE_CAMPAGNA.vicino - CASE_CAMPAGNA.muretti).toFixed(1)} ? 1.0 : 0.0;
             float noFilL = hashC(i, j + 97.0) >= ${(PARCELLE.siepi.filari * 256).toFixed(1)} ? 1.0 : 0.0;
             float noFilC = hashC(i, j + 98.0) >= ${(PARCELLE.siepi.filari * 256).toFixed(1)} ? 1.0 : 0.0;
             float hasL = hashC(i, j + 59.0) < ${(PARCELLE.siepi.lungo * 256).toFixed(1)} ? noFilL : 0.0;
@@ -565,6 +566,26 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
           }
           float dentro = smoothstep(0.0, 0.06, vSuolo.z - (0.12 + 0.6 * h2)) * step(0.3, margineS);
           cPrato = mix(cPrato, cC, dentro * blocco);
+        }
+        if (vCampi.z > 0.01) {
+          // Case isolate (CASE_CAMPAGNA; richiesta dell'utente: «l'intorno dovrebbe essere terra battuta chiara o scura,
+          // qualche orto solo un po' nelle vicinanze»): qualche orticello (celle 12 × 9 m della griglia dei campi, meno
+          // della metà) a ridosso dell'aia, poi l'aia di terra battuta a chiazze. vCampi.z = vicino − distanza.
+          float dK = ${CASE_CAMPAGNA.vicino.toFixed(1)} - vCampi.z + 5.0 * (r2 - 0.5);
+          if (dK < ${(CASE_CAMPAGNA.aia[1] + CASE_CAMPAGNA.orti).toFixed(1)}) {
+            vec2 qo = vCampi.xy;
+            float oi = floor(qo.x / 12.0), oj = floor(qo.y / 9.0), ou = qo.x - oi * 12.0, ov = qo.y - oj * 9.0;
+            float ho = hashC(oi, oj + 201.0) / 255.0;
+            if (ho < 0.45) {
+              float so = 0.5 + 0.5 * sin(ov * 6.2832 / 1.3);
+              vec3 cO = ho < 0.18 ? vec3(0.15, 0.095, 0.05) * (0.85 + 0.2 * so)
+                : mix(vec3(0.12, 0.08, 0.04), vec3(0.05, 0.12, 0.03), 0.35 + 0.4 * smoothstep(0.3, 0.7, so));
+              cO = mix(cO, cPrato * 0.85, 1.0 - smoothstep(0.5, 1.2, min(min(ou, 12.0 - ou), min(ov, 9.0 - ov))));
+              cPrato = mix(cPrato, cO, blocco);
+            }
+          }
+          vec3 cT = mix(vec3(0.27, 0.20, 0.12), vec3(0.15, 0.10, 0.06), smoothstep(0.3, 0.7, r2)) * (0.88 + 0.24 * r3);
+          cPrato = mix(cPrato, cT, (1.0 - smoothstep(${CASE_CAMPAGNA.aia[0].toFixed(1)}, ${(CASE_CAMPAGNA.aia[1] - 2).toFixed(1)}, dK)) * blocco);
         }
         // Colori vari e chiaroscuri da vicino (richiesta dell'utente: «colorazione varia e chiaroscuri marcati nel
         // breve anche senza pendenze, senza sprecare FPS in oggetti»): chiazze secche (ocra) e cupe (verde scuro) su

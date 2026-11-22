@@ -2109,8 +2109,13 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      una griglia sua che tagliava a metà i campi grandi. Ora ogni appezzamento sceglie per il suo centro (`divisione`,
      uguale in `vegetazione.js` e nello shader, raggio degli orti nell'uniforme `uOrti`) se restare intero, dividersi
      in due (campo chiuso) o in orti di ~14 × 24 m, con probabilità che scendono con la distanza (PARCELLE.orti.misto,
-     chiusi): i confini seguono gli appezzamenti, le misure si mescolano; niente siepi attorno agli orti; non ci sono
-     più orti attorno alle case isolate. Zone incolte (PARCELLE.incolti): chiazze di qualche centinaio di metri (rumore
+     chiusi): i confini seguono gli appezzamenti, le misure si mescolano; niente siepi attorno agli orti. Case isolate
+     (richiesta dell'utente: «l'intorno dovrebbe essere terra battuta, qualche orto solo un po' nelle vicinanze»):
+     aia di terra battuta marrone a chiazze (fino a ~18 m), qualche orticello di 12 × 9 m a ridosso, poi i campi;
+     aCampi.z ora è la vicinanza della casa (CASE_CAMPAGNA.vicino − distanza), la zona dei muretti si decide per
+     appezzamento attorno al luogo e entro CASE_CAMPAGNA.muretti m dalle case. Strade: niente più capezzagna in fondo
+     alla fascia dei campi propri lungo la strada («corridoio verde parallelo alla strada»): il valore salta da
+     −fascia a +lontano (resta una riga sottile come tra due campi); fascia 40 m invece di 20. Zone incolte (PARCELLE.incolti): chiazze di qualche centinaio di metri (rumore
      a 420 m) senza campi, più rare vicino al luogo, con alberi isolati e più cespugli (+6–10 % di oggetti nei blocchi
      con campagna in headless).
      *Case fuori dal borgo* (richiesta dell'utente: case isolate o a gruppetti di 2–3 in mezzo o a lato dei campi):
