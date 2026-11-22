@@ -6,7 +6,7 @@ import { generaCarta } from './carta.js';
 import { verificaFiumi, verificaPanorami, verificaVarieta, verificaLuoghi } from './verifica.js';
 import { aggiungiLuoghi } from './luoghi.js';
 import { aggiungiStrade } from './strade.js';
-import { grigliaMondo } from './scena.js';
+import { grigliaMondo, fiumiFini } from './scena.js';
 import { aggiungiSiti, completaSiti, verificaSiti } from './siti.js';
 
 let lavoratore = null;
@@ -44,7 +44,7 @@ function avviaLavoratore() {
 async function generaQui(seme, avanzamento) {
   avanzamento?.('Generazione del mondo', 0);
   await new Promise((r) => setTimeout(r, 30));      // lascia disegnare la schermata
-  const carta = completaSiti(aggiungiStrade(aggiungiSiti(aggiungiLuoghi(generaCarta(seme, { avanzamento })))));
+  const carta = completaSiti(aggiungiStrade(aggiungiSiti(aggiungiLuoghi(fiumiFini(generaCarta(seme, { avanzamento }))))));
   carta.griglia = grigliaMondo(carta);              // griglia fine (G1), come nel Worker
   carta.verifiche = { fiumi: verificaFiumi(carta), panorami: verificaPanorami(carta), varieta: verificaVarieta(carta),
     luoghi: verificaLuoghi(carta), siti: verificaSiti(carta) };

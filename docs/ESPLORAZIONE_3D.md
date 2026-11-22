@@ -2832,6 +2832,16 @@ bacino 0,05 s. Prototipo: i corsi d'acqua che ne escono seguono le valli del ril
 - **G2 — Idrografia sulla griglia**: deflusso (riempimento, direzioni, bacini) sul rilievo vero; i piccoli pozzetti si
   tagliano (l'acqua esce), le conche grandi diventano laghi; fiumi e torrenti come polilinee lisciate, con larghezza dal
   bacino. `carta.acque`/`carta.fiumi` a 1 km si ricavano da qui (compatibilità: clima, biomi, luoghi, verifiche).
+  **G2, prima parte fatta** (da provare): `fiumiFini` in `scena.js`, nel Worker subito dopo la Carta (prima di luoghi,
+  siti e strade): deflusso su `quotaMondo` a 62,5 m (conche riempite da mare, laghi della Carta e bordo; direzioni;
+  bacini), corsi d'acqua da 20 km² di bacino, rete in tronchi (dalla foce si risale il ramo col bacino maggiore; gli
+  affluenti finiscono esattamente su un punto del tronco), media mobile con gli estremi fermi. Sostituisce
+  `carta.fiumi` nello stesso formato (`carta.fiumiFini`): Scene, scavo, Carta e strade li usano senza altre modifiche;
+  niente più ricerca del percorso (`raffina`) né spostamento delle confluenze. Seme 570549: 97 corsi (prima 101 tronchi),
+  2,1 s; regole del generatore superate; punti a canyon 0 su 395728 e 570549; fiumi più alti del terreno accanto di
+  oltre 3 m ~1,5 % dei punti (resta un affluente parallelo al fiume principale a 90 m, 20 m più in alto). Restano a
+  1 km: laghi, `ricevente`/`bacino` della Carta (strade e luoghi), statistiche dei fiumi nella riga della Carta.
+  `VERSIONE_GENERATORE` `+fiumi-fini-1`.
 - **G3 — Valli e alvei scavati nella griglia**: niente più `scavaFiumi` a posteriori; nella Scena `quotaFinale` =
   griglia interpolata + solo le ottave più fini (sotto ~250 m), smorzate negli alvei.
 - **G4 — Valichi** sulle selle vere della griglia (spartiacque tra i bacini).
