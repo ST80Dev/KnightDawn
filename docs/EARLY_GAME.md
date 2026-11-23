@@ -219,6 +219,7 @@ lavorando.
 3. Si comincia dalla Veglia, ma resta sempre una **modalità libera** senza storia, per provare la grafica
    e il resto senza ripassare dall'inizio.
 4. La **scelta del tipo di partita viene prima della generazione del mondo** (menu d'avvio).
+5. **Niente stagioni per ora**: il mondo resta in Primavera (`docs/GDD.md` §2 *Scoperta*, stagioni).
 
 **Obiettivo.** Da una partita nuova in modalità Storia si gioca la Veglia dall'inizio all'investitura:
 lavori nel borgo per i primi oro, mercato, maestro d'armi, un incarico fuori porta con il primo

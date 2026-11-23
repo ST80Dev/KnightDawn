@@ -297,7 +297,10 @@ In più:
    imprecise (§3 *Propagazione delle informazioni*).
 3. **Il fantastico**: creature, maledizioni e luoghi leggendari.
 
-Il mondo ha **stagioni** che influenzano il gameplay:
+Il mondo ha **stagioni** che influenzano il gameplay. **Rinviate** [deciso con l'utente, novembre 2026]:
+nelle prime milestone di gioco (G1–G2 e oltre, finché non si riprendono) il mondo resta in **Primavera**
+(colori, limite delle nevi, costi di viaggio, eventi); il calendario continua a contare Diari e Stagioni.
+Quando si riprendono:
 - Primavera: viaggio facile, commercio attivo
 - Estate: siccità possibili, ribellioni contadine
 - Autunno: raccolto, feste, diplomazia
