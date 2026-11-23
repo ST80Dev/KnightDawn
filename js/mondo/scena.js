@@ -455,6 +455,7 @@ export function fiumiFini(carta, avanzamento = null) {
   }
   carta.fiumi = fiumi;
   carta.fiumiFini = true;
+  mappaAcqua(carta);                       // distanza dall'acqua, per chi sceglie dove stanno gli insediamenti
   carta.statistiche = { ...(carta.statistiche || {}), fiumiFini: { corsi: fiumi.length, ms: Math.round(performance.now() - t0) } };
   if (avanzamento) avanzamento(1);
   return carta;
@@ -953,6 +954,70 @@ export function spianaPiani(P, x, z, h) {
   if (ritorno <= 0) return null;
   const c = lo <= hi ? (h < lo ? lo : h > hi ? hi : h) : hi;
   return h + ritorno * (c - h);
+}
+
+/**
+ * Distanza dall'acqua corrente (m) su tutta la Carta, a `passo` m: fiumi, torrenti, laghi e mare. Calcolata una volta
+ * con i fiumi fini (onda su griglia, 8 direzioni) e salvata nella Carta: serve a chi sceglie dove stanno insediamenti e
+ * campi [richiesta dell'utente, novembre 2026: «villaggi e borghi stavano per necessità vicino a un fiume»], senza
+ * ricalcolare niente. `distanzaAcqua(carta, x, z)` la legge (bilineare).
+ */
+export const ACQUA_VICINA = { passo: 125, massimo: 20000 };
+export function mappaAcqua(carta) {
+  const P = ACQUA_VICINA.passo, C = carta.cella;
+  const nx = Math.round(carta.cols * C / P) + 1, nz = Math.round(carta.rows * C / P) + 1, n = nx * nz;
+  const d = new Float32Array(n).fill(Infinity);
+  const metti = (q, r) => { if (q >= 0 && r >= 0 && q < nx && r < nz) d[r * nx + q] = 0; };
+  for (const f of carta.fiumi ?? []) {                      // punti dei corsi d'acqua (x, y in km)
+    const m = f.length / 4;
+    for (let k = 0; k < m; k++) metti(Math.round(f[k * 4] * C / P), Math.round(f[k * 4 + 1] * C / P));
+  }
+  for (let r = 0; r < nz; r++) for (let q = 0; q < nx; q++) {   // laghi e mare, dalle celle della Carta
+    const c = Math.min(carta.cols - 1, Math.floor(q * P / C)), rr = Math.min(carta.rows - 1, Math.floor(r * P / C));
+    if (carta.acque[rr * carta.cols + c] !== ACQUA.TERRA) metti(q, r);
+  }
+  // Trasformata di distanza a due passate (chamfer 3×3, pesi 1 e √2): errore di qualche per cento, basta per scegliere
+  // dove sta un insediamento, e costa una sola scansione avanti e una indietro.
+  const Dr = P, Dd = P * Math.SQRT2;
+  const tocca = (i, j, w) => { const v = d[j] + w; if (v < d[i]) d[i] = v; };
+  for (let r = 0; r < nz; r++) {
+    for (let q = 0; q < nx; q++) {
+      const i = r * nx + q;
+      if (d[i] === 0) continue;
+      if (q > 0) tocca(i, i - 1, Dr);
+      if (r > 0) {
+        tocca(i, i - nx, Dr);
+        if (q > 0) tocca(i, i - nx - 1, Dd);
+        if (q < nx - 1) tocca(i, i - nx + 1, Dd);
+      }
+    }
+  }
+  for (let r = nz - 1; r >= 0; r--) {
+    for (let q = nx - 1; q >= 0; q--) {
+      const i = r * nx + q;
+      if (d[i] === 0) continue;
+      if (q < nx - 1) tocca(i, i + 1, Dr);
+      if (r < nz - 1) {
+        tocca(i, i + nx, Dr);
+        if (q > 0) tocca(i, i + nx - 1, Dd);
+        if (q < nx - 1) tocca(i, i + nx + 1, Dd);
+      }
+    }
+  }
+  for (let i = 0; i < n; i++) if (d[i] > ACQUA_VICINA.massimo) d[i] = ACQUA_VICINA.massimo;
+  carta.acquaVicina = { passo: P, nx, nz, d };
+  return carta.acquaVicina;
+}
+
+/** Distanza (m) dall'acqua corrente nel punto (x, z) del mondo, dalla mappa della Carta (bilineare). */
+export function distanzaAcqua(carta, x, z) {
+  const A = carta.acquaVicina;
+  if (!A) return NaN;
+  let fx = x / A.passo, fz = z / A.passo;
+  fx = fx < 0 ? 0 : fx > A.nx - 1.001 ? A.nx - 1.001 : fx;
+  fz = fz < 0 ? 0 : fz > A.nz - 1.001 ? A.nz - 1.001 : fz;
+  const c = Math.floor(fx), r = Math.floor(fz), u = fx - c, v = fz - r, i = r * A.nx + c, D = A.d;
+  return (D[i] * (1 - u) + D[i + 1] * u) * (1 - v) + (D[i + A.nx] * (1 - u) + D[i + A.nx + 1] * u) * v;
 }
 
 /**
