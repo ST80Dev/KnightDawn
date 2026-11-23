@@ -247,6 +247,32 @@ export function coloreMondo(carta, stagione = 0) {
 // Il rumore è in coordinate del mondo e periodico su 8192 m (scale potenze di 2): blocchi diversi danno lo
 // stesso disegno nello stesso punto. La copertura (coperturaMondo) resta l'unica fonte: la vegetazione la legge
 // uguale; la roccia dipinta piena è dove il peso di roccia supera ~0,5 (± il rumore).
+/**
+ * Colore della terra battuta nel punto (x, z, quota h), dal clima del luogo [deciso con l'utente, novembre 2026: polvere
+ * nel secco, più scura fino al fango nell'umido, fango chiaro al freddo come neve sciolta su terra; nessuna stagione,
+ * «i biomi le rappresentano già»]. Temperatura e umidità vengono da `coperturaMondo`, interpolate: il colore cambia con
+ * continuità, senza stacchi tra una cella e l'altra della Carta.
+ */
+export const STRADA_CLIMA = {
+  polvereCalda: '#cdb98f', polvere: '#bba376', umida: '#8a7250', fango: '#9d9179',
+  caldo: [12, 25], umidita: [0.32, 0.68], freddo: [8, -2], quantoFango: 0.6,
+};
+export function coloreStrada(carta) {
+  const K = STRADA_CLIMA;
+  const copertura = coperturaMondo(carta), cp = nuovaCopertura();
+  const calda = new THREE.Color(K.polvereCalda), asciutta = new THREE.Color(K.polvere);
+  const umida = new THREE.Color(K.umida), fango = new THREE.Color(K.fango);
+  const secca = new THREE.Color();
+  return (out, x, z, h) => {
+    copertura(cp, x, z, h, 0);
+    secca.copy(asciutta).lerp(calda, smoothstep(K.caldo[0], K.caldo[1], cp.T));
+    out.copy(secca).lerp(umida, smoothstep(K.umidita[0], K.umidita[1], cp.umidita));
+    const gelo = smoothstep(K.freddo[0], K.freddo[1], cp.T);
+    if (gelo > 0) out.lerp(fango, gelo * K.quantoFango);
+    return out;
+  };
+}
+
 export const SUOLO = {
   periodo: 8192,
   // Bordo di roccia e neve: [scala (m), ampiezza]. Somma delle ampiezze ~0,6: con peso 0,2–0,8 decide il rumore.

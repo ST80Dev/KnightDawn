@@ -26,9 +26,12 @@ export const STRADE = {
     // [richiesto dall'utente: «la strada scavi un piano nel rilievo», niente carreggiata inclinata di traverso]. Con
     // la griglia del blocco a 7,8 m, carreggiata + banchina ≥ ~7 m per le strade da carro: almeno una fila di
     // vertici piana per lato. Stretta per mulattiere e sentieri (non scavano terrazze).
-    maestra: { p0: 0.05, pmax: 0.10, semi: 2.25, banchina: 5, nome: 'strada maestra' },
-    carrareccia: { p0: 0.07, pmax: 0.14, semi: 1.5, banchina: 5, nome: 'carrareccia' },
-    mulattiera: { p0: 0.12, pmax: 0.25, semi: 1.0, banchina: 2.5, nome: 'mulattiera' },
+    // Larghezze [decise con l'utente, novembre 2026]: sulla maestra due carri si incrociano e una colonna marcia in
+    // 6 di fronte (7 m), sulla carrareccia due carri passano con attenzione (4,5 m); sentieri invariati. La banchina
+    // della maestra scende a 4 m, così il ripiano scavato nel pendio resta largo come prima (15 m) ma è più carreggiata.
+    maestra: { p0: 0.05, pmax: 0.10, semi: 3.5, banchina: 4, nome: 'strada maestra' },
+    carrareccia: { p0: 0.07, pmax: 0.14, semi: 2.25, banchina: 4.5, nome: 'carrareccia' },
+    mulattiera: { p0: 0.12, pmax: 0.25, semi: 1.4, banchina: 2.5, nome: 'mulattiera' },
     sentiero: { p0: 0.20, pmax: 0.45, semi: 0.6, banchina: 1.2, nome: 'sentiero' },
   },
   carta: {
