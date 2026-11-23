@@ -781,7 +781,10 @@ export function* createMonasteroAPezzi(suolo, luogo, ox, oz, carta) {
     r.misure.triangoli += geoMuro.attributes.position.count / 3;
   }
   // ─── Suolo: terra battuta dentro la cinta, sentiero dalla porta alla chiesa, aiuole degli orti ───
-  const quotaS = (u, v) => Math.max(terreno(u, v), dentroPoligono(P, u, v) ? piano - M.muro.dentro : -Infinity);
+  // Il suolo segue il terreno, mai sopra: `quotaSuolo` qui è null (come nei villaggi) e il cavaliere cammina sul
+  // terreno, quindi un suolo disegnato più in alto lo farebbe sprofondare. Il terrapieno del generatore ha già
+  // spianato il piano, perciò dentro la cinta il terreno è già alla quota del chiostro.
+  const quotaS = (u, v) => terreno(u, v);
   const distForme = (u, v) => {
     let m = Infinity;
     for (const L of forme) m = Math.min(m, distRett(L, u, v));
