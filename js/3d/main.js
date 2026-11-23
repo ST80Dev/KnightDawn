@@ -20,7 +20,7 @@ import { createCastle } from './castle3d.js';
 import { createRoccaAPezzi } from './rocca3d.js';
 import { creaCaseCampagna, quotaFinestre } from './edifici3d.js';
 import { createBorgoAPezzi } from './borgo3d.js';
-import { createVillaggioAPezzi, pianoDelSito } from './villaggio3d.js';
+import { createVillaggioAPezzi, createMonasteroAPezzi, createEremoAPezzi, pianoDelSito } from './villaggio3d.js';
 import { raggioSito, climaDelLuogo } from '../mondo/siti.js';
 import { createCartaVista } from './cartaVista.js';
 import { creaMinimappa } from './minimappa.js';
@@ -234,7 +234,7 @@ let carta = null;                         // Carta del mondo generato (null a Ta
 let scenaAttuale = null;                  // { tipo: 'tavullia' } | { tipo: 'mondo', cx, cz } (centro, m del mondo)
 let statPendenze = '';                    // percentili della pendenza della Scena (F3)
 let vegetazione = null;                   // alberi, arbusti, rocce della Scena (vegetazione3d.js)
-let villaggi = [];                        // M8, passo 2: villaggi e ovili del blocco (villaggio3d.js)
+let villaggi = [];                        // M8: villaggi, ovili, monasteri ed eremi del blocco (villaggio3d.js)
 let campagna = null;                      // M7, passo 5: case di campagna del blocco (edifici3d.js)
 let abitanti = null;                      // M7, passo 7: persone di rocche e borghi (abitanti3d.js)
 let vegetazioneVisibile = true;           // tasto V
@@ -570,6 +570,7 @@ function* costruisciRocche(cx, cz, ter) {
   };
   for (const l of carta?.luoghi ?? []) {
     if (!l.piani) continue;
+    if (l.tipo === 'monastero') continue;        // M8, passo 3: qui si costruisce il monastero (costruisciVillaggi)
     const x = l.x - cx, z = l.z - cz, m = (l.raggioPiani ?? 300) + 50;
     if (Math.abs(x) > half + m || Math.abs(z) > half + m) continue;
     // Carte di prima delle forme irregolari (senza poligoni): niente rocca (la cache si rigenera con la versione).
@@ -584,8 +585,9 @@ function* costruisciRocche(cx, cz, ter) {
 }
 
 /**
- * M8, passo 2: villaggi e ovili (carta.siti) il cui ingombro tocca il blocco o gli sta a meno di 50 m, costruiti interi
- * in coordinate del blocco (fuori dal blocco il terreno viene da quotaFinale, come per le rocche).
+ * M8, passi 2 e 3: villaggi, ovili ed eremi (carta.siti) e monasteri (carta.luoghi) il cui ingombro tocca il blocco o
+ * gli sta a meno di 50 m, costruiti interi in coordinate del blocco (fuori dal blocco il terreno viene da quotaFinale,
+ * come per le rocche).
  */
 function* costruisciVillaggi(cx, cz, ter) {
   const half = ter.size / 2, out = [];
@@ -593,10 +595,20 @@ function* costruisciVillaggi(cx, cz, ter) {
     getHeight: (x, z) => (Math.abs(x) <= half && Math.abs(z) <= half ? ter.getHeight(x, z) : quotaFinale(carta, x + cx, z + cz)),
   };
   for (const s of carta?.siti ?? []) {
-    if (s.tipo !== 'villaggio' && s.tipo !== 'ovile') continue;
+    const eremo = s.tipo === 'eremo';
+    if (s.tipo !== 'villaggio' && s.tipo !== 'ovile' && !eremo) continue;
     const x = s.x - cx, z = s.z - cz, m = raggioSito(s) + 50;
     if (Math.abs(x) > half + m || Math.abs(z) > half + m) continue;
-    out.push(yield* createVillaggioAPezzi(suoloMondo, s, x, z, carta, cx, cz));
+    out.push(eremo ? yield* createEremoAPezzi(suoloMondo, s, x, z, carta)
+      : yield* createVillaggioAPezzi(suoloMondo, s, x, z, carta, cx, cz));
+  }
+  // M8, passo 3: i monasteri sono rocche che hanno cambiato tipo, quindi hanno già il terrapieno e il poligono del
+  // piano; `costruisciRocche` li salta e li costruiamo qui, con la stessa regola di inclusione delle rocche.
+  for (const l of carta?.luoghi ?? []) {
+    if (l.tipo !== 'monastero' || !l.piani?.[0]?.poligono) continue;
+    const x = l.x - cx, z = l.z - cz, m = (l.raggioPiani ?? 300) + 50;
+    if (Math.abs(x) > half + m || Math.abs(z) > half + m) continue;
+    out.push(yield* createMonasteroAPezzi(suoloMondo, l, x, z, carta));
   }
   return out;
 }
@@ -649,7 +661,7 @@ function* preparaMondo(desc) {
     heights, cols: meta.cols, cell: meta.cellSize, cx, cz, acqua: dati,
     copertura: coperturaMondo(carta, Calendar.stagione), seme: carta.seme, carta,
     piani: [...(carta.luoghi || []).flatMap((l) => l.piani || []),
-      ...(carta.siti || []).filter((s) => s.tipo === 'villaggio' || s.tipo === 'ovile').map(pianoDelSito)], mare: true,
+      ...(carta.siti || []).filter((s) => s.tipo === 'villaggio' || s.tipo === 'ovile' || s.tipo === 'eremo').map(pianoDelSito)], mare: true,
   }, MS_PEZZO);
   yield 'posizione vegetazione';
   const veg = yield* creaVegetazioneAPezzi(posVeg, ter, renderer, MS_PEZZO);   // il terreno nuovo, mai quello in scena
@@ -1585,8 +1597,10 @@ function aggiornaPannello(now) {
           + ` ${r.misure.edifici} edifici, ${r.misure.oggetti} oggetti, ${fmt(r.misure.triangoli)} triangoli`;
       }
       for (const r of villaggi) {
-        const d = Math.hypot(r.sito.x - (scenaAttuale.cx + k.x), r.sito.z - (scenaAttuale.cz + k.z));
-        testo += `\n${r.tipo === 'ovile' ? 'ovile' : r.sito.dimensione === 'villaggio' ? 'villaggio' : 'frazione'} ${r.sito.id + 1} a ${fmt(d)} m:`
+        const o = r.sito ?? r.luogo;
+        const d = Math.hypot(o.x - (scenaAttuale.cx + k.x), o.z - (scenaAttuale.cz + k.z));
+        const nome = r.tipo === 'villaggio' ? (r.sito.dimensione === 'villaggio' ? 'villaggio' : 'frazione') : r.tipo;
+        testo += `\n${nome} ${o.id + 1} a ${fmt(d)} m:`
           + ` ${r.misure.case} case, ${r.misure.edifici} edifici, ${r.misure.chiamate} chiamate, ${fmt(r.misure.triangoli)} triangoli`;
       }
       if (campagna) testo += `\ncase di campagna: ${campagna.misure.case}, ${campagna.misure.chiamate} oggetti, ${fmt(campagna.misure.triangoli)} triangoli`;

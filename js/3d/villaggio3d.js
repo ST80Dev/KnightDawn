@@ -22,6 +22,8 @@
 
 import * as THREE from 'three';
 import { creaKit, completaPezzi, siToccano, PEZZO_MS } from './edifici3d.js';
+// Geometrie e utilità comuni di M7 (sola lettura: rocca3d.js non si tocca).
+import { localeDelLuogo, dentroPoligono, distanzaContorno, prisma, unisci, materialeMuro, tonoDelLuogo } from './rocca3d.js';
 import { quotaFinale, livelloLago } from '../mondo/scena.js';
 import { distanzaStrada } from '../mondo/strade.js';
 import { hash2 } from '../mondo/rumore.js';
@@ -60,16 +62,17 @@ export function pianoDelSito(s) {
 // terra più scura. Piazzetta selciata (villaggi grandi). Al più 3 chiamate, qualche cm sopra il terreno.
 const SUOLO = { sopra: 0.06, passo: 2.5, tessera: 4, margine: [3, 7], aia: 6 };
 const _tex = {};
-/** 0 terra battuta, 1 selciato rustico, 2 carreggiata (terra scura con solchi): 512 px = SUOLO.tessera m. */
+/** 0 terra battuta, 1 selciato rustico, 2 carreggiata (solchi delle ruote), 3 orto arato: 512 px = SUOLO.tessera m. */
 function texturaSuolo(tipo) {
   if (_tex[tipo]) return _tex[tipo];
   const N = 512, c = document.createElement('canvas');
   c.width = c.height = N;
   const g = c.getContext('2d');
-  let sm = [2718, 4711, 1618][tipo];
+  let sm = [2718, 4711, 1618, 3141][tipo];
   const rnd = () => ((sm = (sm * 1103515245 + 12345) >>> 0) / 4294967296);
-  // Terra battuta chiara e polverosa (richiesta dell'utente: la terra scura sembrava fango); carreggiata poco più bruna.
-  g.fillStyle = ['rgb(198,178,142)', 'rgb(158,144,124)', 'rgb(150,126,96)'][tipo];
+  // Terra battuta chiara e polverosa (richiesta dell'utente: la terra scura sembrava fango); carreggiata poco più bruna;
+  // l'orto è terra rivoltata, scura e umida.
+  g.fillStyle = ['rgb(198,178,142)', 'rgb(158,144,124)', 'rgb(150,126,96)', 'rgb(104,84,58)'][tipo];
   g.fillRect(0, 0, N, N);
   for (let k = 0; k < 6000; k++) {                           // grana, impronte, ghiaia
     const v = 140 + Math.floor(rnd() * 90);
@@ -84,7 +87,17 @@ function texturaSuolo(tipo) {
       }
     }
   }
-  const nP = tipo === 1 ? 520 : tipo === 0 ? 70 : 40;        // pietre piatte (selciato) o sassi sparsi
+  if (tipo === 3) {                                          // porche dell'orto: solchi regolari lungo v
+    for (let k = 0; k < 9; k++) {
+      const x = (k + 0.5) / 9 * N;
+      for (let y = 0; y < N; y += 2) {
+        const w = 10 + 2 * Math.sin(y * 0.05 + k);
+        g.fillStyle = 'rgba(72,56,38,0.40)'; g.fillRect(x - w / 2, y, w, 2);
+        g.fillStyle = 'rgba(138,114,82,0.30)'; g.fillRect(x + w / 2, y, 7, 2);
+      }
+    }
+  }
+  const nP = tipo === 1 ? 520 : tipo === 0 ? 70 : tipo === 3 ? 20 : 40;   // pietre piatte (selciato) o sassi sparsi
   for (let k = 0; k < nP; k++) {
     const x = rnd() * N, y = rnd() * N, r = tipo === 1 ? 10 + rnd() * 14 : 3 + rnd() * 6, v = 120 + Math.floor(rnd() * 70);
     for (const dx of [-N, 0, N]) for (const dy of [-N, 0, N]) {
@@ -97,7 +110,9 @@ function texturaSuolo(tipo) {
     const x = rnd() * N, y = rnd() * N, r = 20 + rnd() * 80, t = rnd();
     for (const dx of [-N, 0, N]) for (const dy of [-N, 0, N]) {
       const gr = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, r);
-      gr.addColorStop(0, t < 0.12 ? 'rgba(105,85,62,0.25)' : t < 0.8 ? `rgba(${222 + Math.floor(rnd() * 20)},${208 + Math.floor(rnd() * 20)},${178 + Math.floor(rnd() * 20)},${0.3 + rnd() * 0.3})` : 'rgba(110,125,70,0.25)');   // polvere chiara, poco fango, qualche ciuffo
+      // Orto: chiazze umide e qualche ciuffo verde, mai polvere chiara. Altrove: polvere chiara, poco fango, ciuffi.
+      gr.addColorStop(0, tipo === 3 ? (t < 0.6 ? 'rgba(78,60,40,0.30)' : 'rgba(104,126,66,0.30)')
+        : t < 0.12 ? 'rgba(105,85,62,0.25)' : t < 0.8 ? `rgba(${222 + Math.floor(rnd() * 20)},${208 + Math.floor(rnd() * 20)},${178 + Math.floor(rnd() * 20)},${0.3 + rnd() * 0.3})` : 'rgba(110,125,70,0.25)');
       gr.addColorStop(1, 'rgba(0,0,0,0)');
       g.fillStyle = gr; g.fillRect(x + dx - r, y + dy - r, 2 * r, 2 * r);
     }
@@ -175,8 +190,8 @@ function geoChiazza(c, r, ox, oz, quota, sopra, rnd) {
  * dalla forma più vicina, 0 oltre; si tengono solo le celle con almeno un vertice dentro. `dist(u, v)` dà la distanza
  * dalla forma più vicina (case con aia, strade, piazzetta).
  */
-function geoTerra(L, dist, ox, oz, quota, seme) {
-  const P = SUOLO.passo, n = Math.ceil(2 * L / P) + 1, T = SUOLO.tessera, M = SUOLO.margine;
+function geoTerra(L, dist, ox, oz, quota, seme, M = SUOLO.margine) {
+  const P = SUOLO.passo, n = Math.ceil(2 * L / P) + 1, T = SUOLO.tessera;
   const alfa = new Float32Array(n * n), id = new Int32Array(n * n).fill(-1);
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
     const u = -L + i * P, v = -L + j * P;
@@ -201,6 +216,68 @@ function geoTerra(L, dist, ox, oz, quota, seme) {
     idx.push(a, c, b, b, c, d);
   }
   return chiudiGeo(pos, uv, idx, col);
+}
+
+/**
+ * Attacca all'oggetto i pezzi di suolo: `[nome, geometria, tipo di textura]`. Le strade e le chiazze stanno sopra la
+ * terra battuta (polygonOffset crescente), la terra sola ha l'alpha per vertice.
+ */
+function attaccaSuolo(r, pezzi) {
+  pezzi.forEach(([nome, geo, tipo], k) => {
+    if (!geo) return;
+    const m = new THREE.MeshLambertMaterial({ map: texturaSuolo(tipo), vertexColors: nome === 'terra', alphaTest: nome === 'terra' ? 0.5 : 0 });
+    m.polygonOffset = true; m.polygonOffsetFactor = -2 - k; m.polygonOffsetUnits = -2 - k;
+    const mesh = new THREE.Mesh(geo, m);
+    mesh.name = `${r.object.name}-suolo-${nome}`;
+    mesh.renderOrder = k;
+    r.object.add(mesh);
+    r.misure.chiamate++;
+    r.misure.triangoli += geo.index.count / 3;
+  });
+}
+
+/**
+ * Collisioni dalle scatole orientate locali (u, v) = (x − ox, z − oz), con una griglia di 16 m per cercare solo le
+ * vicine. Restituisce `spingiFuori(x, z, raggio, yPiedi, superabile)`: null se non ha spostato nulla.
+ */
+function spintaDaScatole(scatole, ox, oz, limite) {
+  const griglia = new Map(), G = 16;
+  scatole.forEach((s, i) => {
+    const e = Math.max(s.hl, s.hw) + 1;
+    for (let a = Math.floor((s.cu - e) / G); a <= Math.floor((s.cu + e) / G); a++) {
+      for (let b = Math.floor((s.cv - e) / G); b <= Math.floor((s.cv + e) / G); b++) {
+        const k = a * 100003 + b;
+        if (!griglia.has(k)) griglia.set(k, []);
+        griglia.get(k).push(i);
+      }
+    }
+  });
+  return function spingiFuori(x, z, raggio, yPiedi = -Infinity, superabile = 0) {
+    let u = x - ox, v = z - oz;
+    if (Math.abs(u) > limite || Math.abs(v) > limite) return null;
+    const L = griglia.get(Math.floor(u / G) * 100003 + Math.floor(v / G));
+    if (!L) return null;
+    let mosso = false;
+    for (let it = 0; it < 4; it++) {
+      let qui = false;
+      for (const i of L) {
+        const s = scatole[i], du = u - s.cu, dv = v - s.cv;
+        if (s.cima !== undefined && s.cima <= yPiedi + superabile) continue;   // basso: si supera
+        const a = du * s.au + dv * s.av, b = -du * s.av + dv * s.au;
+        const qa = clamp(a, -s.hl, s.hl), qb = clamp(b, -s.hw, s.hw), ea = a - qa, eb = b - qb, d2 = ea * ea + eb * eb;
+        if (d2 >= raggio * raggio) continue;
+        let na = a, nb = b;
+        if (d2 > 1e-10) { const d = Math.sqrt(d2); na = qa + ea / d * raggio; nb = qb + eb / d * raggio; } else {
+          const vie = [a + s.hl, s.hl - a, b + s.hw, s.hw - b], m = vie.indexOf(Math.min(...vie));
+          if (m === 0) na = -s.hl - raggio; else if (m === 1) na = s.hl + raggio; else if (m === 2) nb = -s.hw - raggio; else nb = s.hw + raggio;
+        }
+        u = s.cu + na * s.au - nb * s.av; v = s.cv + na * s.av + nb * s.au;
+        qui = mosso = true;
+      }
+      if (!qui) break;
+    }
+    return mosso ? { x: u + ox, z: v + oz } : null;
+  };
 }
 
 /** Distanza (m) di (u, v) dal rettangolo orientato { c, s, f, a, b } (0 dentro). */
@@ -425,57 +502,389 @@ export function* createVillaggioAPezzi(suolo, sito, ox, oz, carta, cx, cz) {
     ['strade', geoNastri(vie, ox, oz, quota, SUOLO.sopra + 0.02), 2],
     ['piazza', sito.dimensione === 'villaggio' && piazze[0] ? geoChiazza(piazze[0].c, piazze[0].r, ox, oz, quota, SUOLO.sopra + 0.04, rnd) : null, 1],
   ];
-  pezzi.forEach(([nome, geo, tipo], k) => {
-    if (!geo) return;
-    const m = new THREE.MeshLambertMaterial({ map: texturaSuolo(tipo), vertexColors: nome === 'terra', alphaTest: nome === 'terra' ? 0.5 : 0 });
-    m.polygonOffset = true; m.polygonOffsetFactor = -2 - k; m.polygonOffsetUnits = -2 - k;   // strade e piazza sopra la terra
-    const mesh = new THREE.Mesh(geo, m);
-    mesh.name = `${r.object.name}-suolo-${nome}`;
-    mesh.renderOrder = k;
+  attaccaSuolo(r, pezzi);
+  yield;
+  return { tipo: ovile ? 'ovile' : 'villaggio', sito, object: r.object, solidi: r.solidi,
+    spingiFuori: spintaDaScatole(r.scatole, ox, oz, R + 20), quotaSuolo: () => null,
+    dentro: () => false, aggiornaLuci: r.aggiornaLuci, sorgenti: r.sorgenti, misure: r.misure, edifici: r.edifici, raggio: R };
+}
+
+// ─── Monastero ed eremo (M8, passo 3) ──────────────────────────────────────
+// Un monastero è una rocca che ha cambiato tipo nel generatore (`luogo.tipo === 'monastero'`, 4–6 per mondo, decisione
+// dell'utente: ricavati dalle rocche), quindi ha già il suo terrapieno, il poligono del piano e la porta scelti da
+// `luoghi.js`. Al posto delle mura e del mastio: un muro di cinta basso, la chiesa, il chiostro con il portico, le ali
+// (dormitorio, biblioteca, refettorio), la foresteria, l'infermeria e gli orti.
+//
+// Impianto: la chiesa chiude il lato opposto alla porta; il chiostro le sta davanti, quadrato, con il portico sui
+// quattro lati e il pozzo nella corte; le ali stanno addossate al portico sui due lati lunghi; foresteria e infermeria
+// verso la porta, dove il pellegrino arriva. Il terrazzo che sarebbe stato del borgo (il generatore lo ha già spianato)
+// diventa l'orto grande: così non resta una terrazza vuota sotto il monastero.
+//
+// Un eremo è un sito di `carta.siti` (6–10 per mondo, in alto e isolati): una cappella, una cella, una croce di pietra
+// e un orticello.
+
+// Misure tarate sul piano della rocca, che è largo 50–65 m (mezze misure 25–34 m sui semi provati): tutto deve stare
+// dentro la cinta, chiesa in fondo, chiostro al centro, foresteria e infermeria verso la porta.
+export const MONASTERI = {
+  corte: 13,                       // m: lato della corte del chiostro
+  portico: 3,                      // m: profondità del portico attorno alla corte
+  chiesa: { largo: 9.5, fondo: 17, piani: 3 },
+  ala: { fondo: 7.5, piani: 2 },   // ali addossate al portico: dormitorio, biblioteca, refettorio
+  foresteria: { largo: 11, fondo: 7.5, piani: 2 },
+  infermeria: { largo: 8, fondo: 6.5, piani: 1 },
+  muro: { alto: 2.3, spessore: 0.75, dentro: 1.2, porta: 3.4, pilastro: 0.5 },
+  orto: { lato: [5, 8], quanti: [3, 6], margine: 1.6 },
+  terrazzo: { aiuola: [9, 6], passo: 2.2, file: 2 },   // orto grande sul terrazzo: aiuole con i passaggi in mezzo
+  margine: 2.2,                    // m tra due edifici
+  dislivello: 2.8,
+};
+
+export const EREMI = {
+  cappella: { largo: 6, fondo: 10, piani: 2 },
+  cella: { largo: 5, fondo: 5, piani: 1 },
+  raggio: 16,                      // m: entro cui si cerca posto
+  orto: 5,
+  margine: [1.5, 4],               // m: la terra calpestata attorno, più stretta che in un villaggio
+};
+
+/** Rettangoli di suolo (orti, spiazzi) appoggiati sul terreno: griglia di ~2 m per lotto. */
+function geoRettangoli(lotti, ox, oz, quota, sopra) {
+  const pos = [], uv = [], idx = [], T = SUOLO.tessera;
+  for (const { c, s, f, a, b } of lotti) {
+    const na = Math.max(1, Math.round(2 * a / 2)), nb = Math.max(1, Math.round(2 * b / 2)), base = pos.length / 3;
+    for (let j = 0; j <= nb; j++) for (let i = 0; i <= na; i++) {
+      const ti = -a + 2 * a * i / na, tj = -b + 2 * b * j / nb;
+      const u = c[0] + s[0] * ti + f[0] * tj, v = c[1] + s[1] * ti + f[1] * tj;
+      pos.push(ox + u, quota(u, v) + sopra, oz + v);
+      uv.push((ti + a) / T, (tj + b) / T);
+    }
+    for (let j = 0; j < nb; j++) for (let i = 0; i < na; i++) {
+      const p = base + j * (na + 1) + i;
+      idx.push(p, p + na + 1, p + 1, p + 1, p + na + 1, p + na + 2);
+    }
+  }
+  return chiudiGeo(pos, uv, idx);
+}
+
+/**
+ * Monastero in coordinate del blocco: il luogo (rocca che è diventata monastero) ha il centro in (ox, oz) e il verso in
+ * `luogo.verso`, come per la rocca di M7. `suolo.getHeight(x, z)` vale anche fuori dal blocco (quotaFinale).
+ */
+export function createMonastero(suolo, luogo, ox, oz, carta) {
+  return completaPezzi(createMonasteroAPezzi(suolo, luogo, ox, oz, carta));
+}
+
+export function* createMonasteroAPezzi(suolo, luogo, ox, oz, carta) {
+  const M = MONASTERI;
+  const ux = luogo.verso.x, uz = luogo.verso.z;
+  const X = (u, v) => ox + ux * u - uz * v, Z = (u, v) => oz + uz * u + ux * v;
+  const terreno = (u, v) => suolo.getHeight(X(u, v), Z(u, v));
+  const seme = hash2(Math.floor(luogo.x), Math.floor(luogo.z), (carta.seme ?? 1) ^ 0x3b05e21) || 1;
+  const kit = creaKit({ X, Z, ux, uz, terreno, luogo, seme, nome: `monastero-${luogo.id}`, contesto: 'rocca', zone: 1,
+    clima: climaDelLuogo(carta, luogo.x, luogo.z) });
+  const rnd = kit.rnd;
+  const P = localeDelLuogo(luogo, luogo.piani[0].poligono);
+  const terrazzo = luogo.piani.find((p) => p.tipo === 'borgo' || p.tipo === 'terrazzo') ?? null;
+  // Quota del piano del chiostro: il terrapieno del generatore, alzato al punto più alto che tocca.
+  let piano = luogo.piani[0].q;
+  for (const [u, v] of P) piano = Math.max(piano, terreno(u * 0.6, v * 0.6));
+  piano += 0.15;
+  const lotti = [], forme = [], orti = [];
+  let t0 = performance.now();
+  const forse = function* () { if (performance.now() - t0 > PEZZO_MS) { yield; t0 = performance.now(); } };
+
+  // ─── Porta nel muro di cinta: il lato più vicino al punto scelto dal generatore ───
+  const pr = luogo.portaRocca;
+  const [pu, pv] = pr ? localeDelLuogo(luogo, [[pr.x, pr.z]])[0] : [P[0][0], P[0][1]];
+  let latoPorta = 0, dPorta = Infinity;
+  for (let i = 0; i < P.length; i++) {
+    const a = P[i], b = P[(i + 1) % P.length], m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+    const d = Math.hypot(m[0] - pu, m[1] - pv);
+    if (d < dPorta) { dPorta = d; latoPorta = i; }
+  }
+  const a0 = P[latoPorta], b0 = P[(latoPorta + 1) % P.length];
+  const mPorta = [(a0[0] + b0[0]) / 2, (a0[1] + b0[1]) / 2];
+  const lp = Math.hypot(mPorta[0], mPorta[1]) || 1;
+  const dentroDir = [-mPorta[0] / lp, -mPorta[1] / lp];          // dalla porta verso il centro
+  const croce = [-dentroDir[1], dentroDir[0]];
+
+  // ─── Muro di cinta basso lungo il poligono, con il varco della porta ───
+  const pezziMuro = [];
+  const muroScatole = [];
+  for (let i = 0; i < P.length; i++) {
+    const a = P[i], b = P[(i + 1) % P.length];
+    const l = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (l < 0.5) continue;
+    const t = [(b[0] - a[0]) / l, (b[1] - a[1]) / l], n = [-t[1], t[0]];
+    const dentro = dentroPoligono(P, a[0] + t[0] * l / 2 + n[0], a[1] + t[1] * l / 2 + n[1]) ? 1 : -1;
+    const nn = [n[0] * dentro, n[1] * dentro];                   // verso l'interno
+    // Tratti da costruire lungo il lato (m): tutto il lato, meno il varco della porta, esattamente largo quanto serve.
+    const varco = i === latoPorta ? [(l - M.muro.porta) / 2, (l + M.muro.porta) / 2] : null;
+    const tratti = varco ? [[0, varco[0]], [varco[1], l]] : [[0, l]];
+    const pezzi = [];
+    for (const [d0, d1] of tratti) {
+      const n = Math.max(1, Math.round((d1 - d0) / 2.5));
+      for (let k = 0; k < n; k++) pezzi.push([d0 + (d1 - d0) * k / n, d0 + (d1 - d0) * (k + 1) / n]);
+    }
+    for (const [d0, d1] of pezzi) {
+      const q0 = [a[0] + t[0] * d0, a[1] + t[1] * d0], q1 = [a[0] + t[0] * d1, a[1] + t[1] * d1];
+      const R = [q0, q1, [q1[0] + nn[0] * M.muro.spessore, q1[1] + nn[1] * M.muro.spessore],
+        [q0[0] + nn[0] * M.muro.spessore, q0[1] + nn[1] * M.muro.spessore]];
+      const Q = R.map(([u, v]) => [X(u, v), Z(u, v)]);
+      const base = Math.min(terreno(q0[0], q0[1]), terreno(q1[0], q1[1]), piano) - 0.8;
+      const cima = Math.max(terreno(q0[0], q0[1]), terreno(q1[0], q1[1]), piano - M.muro.dentro) + M.muro.alto;
+      pezziMuro.push(prisma(Q, Q, base, cima));
+      const cu = (q0[0] + q1[0]) / 2 + nn[0] * M.muro.spessore / 2, cv = (q0[1] + q1[1]) / 2 + nn[1] * M.muro.spessore / 2;
+      muroScatole.push({ cu, cv, au: t[0], av: t[1], hl: Math.hypot(q1[0] - q0[0], q1[1] - q0[1]) / 2, hw: M.muro.spessore / 2 });
+    }
+    if (varco) {                                                 // pilastri ai lati del varco
+      for (const s of varco) {
+        const q = [a[0] + t[0] * s, a[1] + t[1] * s];
+        const c = [q[0] + nn[0] * M.muro.spessore / 2, q[1] + nn[1] * M.muro.spessore / 2];
+        const R = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([si, sj]) =>
+          [X(c[0] + t[0] * si * M.muro.pilastro + nn[0] * sj * (M.muro.spessore / 2 + 0.12),
+            c[1] + t[1] * si * M.muro.pilastro + nn[1] * sj * (M.muro.spessore / 2 + 0.12)),
+          Z(c[0] + t[0] * si * M.muro.pilastro + nn[0] * sj * (M.muro.spessore / 2 + 0.12),
+            c[1] + t[1] * si * M.muro.pilastro + nn[1] * sj * (M.muro.spessore / 2 + 0.12))]);
+        pezziMuro.push(prisma(R, R, terreno(q[0], q[1]) - 0.8, Math.max(terreno(q[0], q[1]), piano) + M.muro.alto + 0.6));
+        muroScatole.push({ cu: c[0], cv: c[1], au: t[0], av: t[1], hl: M.muro.pilastro, hw: M.muro.spessore / 2 + 0.12 });
+      }
+    }
+    yield* forse();
+  }
+  yield;
+
+  /** Il rettangolo (centro c, fronte f, mezze misure a lungo s, b lungo f) ci sta? */
+  function libero(c, f, a, b, dentroMuro = true) {
+    const s = [-f[1], f[0]], L = { c, s, f, a, b };
+    if (lotti.some((o) => siToccano(o, L, M.margine))) return false;
+    for (const i of [-1, 0, 1]) for (const j of [-1, 0, 1]) {
+      const u = c[0] + s[0] * a * i + f[0] * b * j, v = c[1] + s[1] * a * i + f[1] * b * j;
+      if (dentroMuro && (!dentroPoligono(P, u, v) || distanzaContorno(P, u, v) < M.muro.spessore + 0.6)) return false;
+    }
+    return true;
+  }
+  /** Registra il lotto e la fascia di terra battuta attorno. */
+  function segnaLotto(c, f, largo, fondo, attorno = 2.5) {
+    const L = { c, s: [-f[1], f[0]], f, a: largo / 2, b: fondo / 2 };
+    lotti.push(L);
+    forme.push({ ...L, a: largo / 2 + attorno, b: fondo / 2 + attorno });
+    return L;
+  }
+
+  // ─── Chiesa: chiude il lato opposto alla porta, facciata verso il chiostro ───
+  const C = M.chiesa;
+  const dCorte = M.corte / 2 + M.portico;
+  const cChiesa = [dentroDir[0] * (dCorte + C.fondo / 2 + 0.6), dentroDir[1] * (dCorte + C.fondo / 2 + 0.6)];
+  let chiesa = null;
+  for (let k = 0; k < 10 && !chiesa; k++) {
+    // Se non ci sta, prima un poco di sbieco lungo la cinta, poi più vicina al chiostro.
+    const sposta = (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 2.5, arretra = Math.floor(k / 4) * 2;
+    const c = [cChiesa[0] - dentroDir[0] * arretra + croce[0] * sposta, cChiesa[1] - dentroDir[1] * arretra + croce[1] * sposta];
+    const f = [-dentroDir[0], -dentroDir[1]];
+    if (!libero(c, f, C.largo / 2, C.fondo / 2)) continue;
+    kit.edificio('chiesa', { u: c[0], v: c[1], fu: f[0], fv: f[1], quota: piano, misure: C });
+    chiesa = segnaLotto(c, f, C.largo, C.fondo, 3);
+  }
+  yield* forse();
+
+  // ─── Ali addossate al portico sui due lati: dormitorio, biblioteca, refettorio ───
+  // Prima del chiostro, perché gli stanno attaccate: il test di sovrapposizione vale solo con la chiesa e fra loro.
+  const A = M.ala;
+  let nAli = 0;
+  for (const lato of [1, -1]) {
+    for (const avanti of [0.5, -0.5]) {
+      if (nAli >= 3) break;
+      const largo = M.corte * 0.56;
+      const c = [croce[0] * lato * (dCorte + A.fondo / 2) + dentroDir[0] * avanti * largo,
+        croce[1] * lato * (dCorte + A.fondo / 2) + dentroDir[1] * avanti * largo];
+      const f = [-croce[0] * lato, -croce[1] * lato];
+      if (!libero(c, f, largo / 2, A.fondo / 2)) continue;
+      kit.corpo({ c, f, largo, fondo: A.fondo, piani: A.piani, intonaco: false, quota: piano, porta: true,
+        comignolo: nAli === 2, legno: false, copertura: 'lastre' });
+      segnaLotto(c, f, largo, A.fondo, 2);
+      nAli++;
+      yield* forse();
+    }
+  }
+
+  // ─── Chiostro: corte quadrata col portico sui quattro lati, pozzo nel mezzo ───
+  for (const [du, dv] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const d = [dentroDir[0] * du + croce[0] * dv, dentroDir[1] * du + croce[1] * dv];
+    const c = [d[0] * (M.corte / 2 + M.portico / 2), d[1] * (M.corte / 2 + M.portico / 2)];
+    kit.loggia(c, [-d[0], -d[1]], M.corte + 2 * M.portico, M.portico, piano);
+    yield* forse();
+  }
+  lotti.push({ c: [0, 0], s: dentroDir, f: croce, a: dCorte, b: dCorte });
+  forme.push({ c: [0, 0], s: dentroDir, f: croce, a: dCorte + 1, b: dCorte + 1 });
+  kit.pozzo(croce[0] * 2.5, croce[1] * 2.5, piano);
+
+  // ─── Foresteria e infermeria verso la porta, dove arriva il pellegrino ───
+  for (const [E, lato] of [[M.foresteria, 1], [M.infermeria, -1]]) {
+    for (let k = 0; k < 10; k++) {
+      const d = dCorte + 3 + k * 1.2;
+      const c = [-dentroDir[0] * d + croce[0] * lato * (dCorte * 0.55), -dentroDir[1] * d + croce[1] * lato * (dCorte * 0.55)];
+      const f = [dentroDir[0], dentroDir[1]];
+      if (!libero(c, f, E.largo / 2, E.fondo / 2)) continue;
+      kit.corpo({ c, f, largo: E.largo, fondo: E.fondo, piani: E.piani, intonaco: true, quota: null,
+        comignolo: true, legno: false });
+      segnaLotto(c, f, E.largo, E.fondo, 2.5);
+      break;
+    }
+    yield* forse();
+  }
+
+  // ─── Orti: aiuole dentro la cinta dove è rimasto posto, e l'orto grande sul terrazzo del generatore ───
+  const nOrti = M.orto.quanti[0] + Math.floor(rnd() * (M.orto.quanti[1] - M.orto.quanti[0] + 1));
+  for (let k = 0; k < 90 && orti.length < nOrti; k++) {
+    const lato = M.orto.lato[0] + rnd() * (M.orto.lato[1] - M.orto.lato[0]);
+    const a = rnd() * Math.PI * 2, d = (dCorte + 4) + rnd() * 18;
+    const c = [Math.cos(a) * d, Math.sin(a) * d], f = [Math.cos(a), Math.sin(a)];
+    if (!libero(c, f, lato / 2, lato / 2 * 0.7)) continue;
+    const L = { c, s: [-f[1], f[0]], f, a: lato / 2, b: lato / 2 * 0.7 };
+    lotti.push(L);
+    orti.push(L);
+  }
+  if (terrazzo) {
+    // Il terrazzo che sarebbe stato del borgo (il generatore lo ha già spianato): l'orto grande dell'abbazia, ad
+    // aiuole separate dai passaggi, con la stalla e il pagliaio in fondo. Così non resta una terrazza vuota.
+    const T = localeDelLuogo(luogo, [[terrazzo.cx, terrazzo.cz]])[0];
+    const tf = localeDelLuogo(luogo, [[luogo.x + terrazzo.ux, luogo.z + terrazzo.uz]])[0];
+    const f = [tf[0], tf[1]], s = [-f[1], f[0]];             // f: asse lungo del terrazzo
+    const [la, lb] = M.terrazzo.aiuola, passo = M.terrazzo.passo;
+    const ta = Math.max(4, Math.min(20, terrazzo.a - 3)), tb = Math.max(4, Math.min(14, terrazzo.b - 3));
+    const nA = Math.max(1, Math.floor((2 * ta + passo) / (la + passo)));   // aiuole lungo l'asse del terrazzo
+    const nB = Math.max(1, Math.min(M.terrazzo.file, Math.floor((2 * tb + passo) / (lb + passo))));
+    for (let i = 0; i < nA; i++) for (let j = 0; j < nB; j++) {
+      const du = -ta + la / 2 + i * (la + passo), dv = -((nB - 1) * (lb + passo)) / 2 + j * (lb + passo);
+      const c = [T[0] + f[0] * du + s[0] * dv, T[1] + f[1] * du + s[1] * dv];
+      if (Math.abs(terreno(c[0], c[1]) - terrazzo.q) > 2.5) continue;      // solo sul ripiano, non sulla scarpata
+      orti.push({ c, s: f, f: s, a: la / 2, b: lb / 2 });
+    }
+    const cs = [T[0] + f[0] * (ta + 7), T[1] + f[1] * (ta + 7)];
+    if (libero(cs, s, 8, 4, false) && Math.abs(terreno(cs[0], cs[1]) - terrazzo.q) < 2.5) {
+      kit.edificio('stalla', { u: cs[0], v: cs[1], fu: s[0], fv: s[1] });
+      segnaLotto(cs, s, 14, 7, 3);
+      kit.pagliaio(cs[0] - s[0] * 10, cs[1] - s[1] * 10);
+    }
+  }
+  yield;
+
+  const r = yield* kit.chiudiAPezzi();
+  // Muro di cinta: una sola chiamata, nella pietra del luogo.
+  const geoMuro = unisci(pezziMuro);
+  if (geoMuro) {
+    const mesh = new THREE.Mesh(geoMuro, materialeMuro(tonoDelLuogo(luogo, 0x9c968a), 0.18));
+    mesh.name = `monastero-${luogo.id}-cinta`;
     r.object.add(mesh);
     r.misure.chiamate++;
-    r.misure.triangoli += geo.index.count / 3;
-  });
-  yield;
-  const scatole = r.scatole;
-  // Collisioni: scatole orientate locali (u, v) = (x − ox, z − oz); griglia di 16 m per cercare solo le vicine.
-  const griglia = new Map(), G = 16;
-  scatole.forEach((s, i) => {
-    const e = Math.max(s.hl, s.hw) + 1;
-    for (let a = Math.floor((s.cu - e) / G); a <= Math.floor((s.cu + e) / G); a++) {
-      for (let b = Math.floor((s.cv - e) / G); b <= Math.floor((s.cv + e) / G); b++) {
-        const k = a * 100003 + b;
-        if (!griglia.has(k)) griglia.set(k, []);
-        griglia.get(k).push(i);
-      }
-    }
-  });
-  function spingiFuori(x, z, raggio, yPiedi = -Infinity, superabile = 0) {
-    let u = x - ox, v = z - oz;
-    if (Math.abs(u) > R + 20 || Math.abs(v) > R + 20) return null;
-    const L = griglia.get(Math.floor(u / G) * 100003 + Math.floor(v / G));
-    if (!L) return null;
-    let mosso = false;
-    for (let it = 0; it < 4; it++) {
-      let qui = false;
-      for (const i of L) {
-        const s = scatole[i], du = u - s.cu, dv = v - s.cv;
-        if (s.cima !== undefined && s.cima <= yPiedi + superabile) continue;   // basso: si supera
-        const a = du * s.au + dv * s.av, b = -du * s.av + dv * s.au;
-        const qa = clamp(a, -s.hl, s.hl), qb = clamp(b, -s.hw, s.hw), ea = a - qa, eb = b - qb, d2 = ea * ea + eb * eb;
-        if (d2 >= raggio * raggio) continue;
-        let na = a, nb = b;
-        if (d2 > 1e-10) { const d = Math.sqrt(d2); na = qa + ea / d * raggio; nb = qb + eb / d * raggio; } else {
-          const vie = [a + s.hl, s.hl - a, b + s.hw, s.hw - b], m = vie.indexOf(Math.min(...vie));
-          if (m === 0) na = -s.hl - raggio; else if (m === 1) na = s.hl + raggio; else if (m === 2) nb = -s.hw - raggio; else nb = s.hw + raggio;
-        }
-        u = s.cu + na * s.au - nb * s.av; v = s.cv + na * s.av + nb * s.au;
-        qui = mosso = true;
-      }
-      if (!qui) break;
-    }
-    return mosso ? { x: u + ox, z: v + oz } : null;
+    r.misure.triangoli += geoMuro.attributes.position.count / 3;
   }
-  return { tipo: ovile ? 'ovile' : 'villaggio', sito, object: r.object, solidi: r.solidi, spingiFuori, quotaSuolo: () => null,
-    dentro: () => false, aggiornaLuci: r.aggiornaLuci, sorgenti: r.sorgenti, misure: r.misure, edifici: r.edifici, raggio: R };
+  // ─── Suolo: terra battuta dentro la cinta, sentiero dalla porta alla chiesa, aiuole degli orti ───
+  const quotaS = (u, v) => Math.max(terreno(u, v), dentroPoligono(P, u, v) ? piano - M.muro.dentro : -Infinity);
+  const distForme = (u, v) => {
+    let m = Infinity;
+    for (const L of forme) m = Math.min(m, distRett(L, u, v));
+    return m;
+  };
+  // Sentiero dalla porta alla facciata della chiesa, che esce di 14 m dalla cinta (di là arriva la strada della rete).
+  const sentiero = { punti: [], largo: 3 };
+  const dPortaC = Math.hypot(mPorta[0], mPorta[1]);
+  for (let t = 0; t <= 1.001; t += 0.08) {
+    const d = (1 - t) * (dPortaC + 14) + t * (dCorte + 1);
+    sentiero.punti.push([-dentroDir[0] * d, -dentroDir[1] * d]);
+  }
+  const Lm = Math.max(...P.map(([u, v]) => Math.max(Math.abs(u), Math.abs(v)))) + 6;
+  // Terra battuta: tutta dentro la cinta, e fuori attorno alle forme e al sentiero che esce dalla porta.
+  const dentroCinta = (u, v) => (dentroPoligono(P, u, v) ? 0
+    : Math.min(distForme(u, v), vicinoPolilinea(sentiero.punti, u, v).d - sentiero.largo / 2));
+  attaccaSuolo(r, [
+    // Fuori dalla cinta la fascia di terra è stretta (dentro è tutta terra battuta): il monastero non spiana il monte.
+    ['terra', geoTerra(Lm, dentroCinta, ox, oz, quotaS, seme, [1.5, 4]), 0],
+    ['sentiero', geoNastri([sentiero], ox, oz, quotaS, SUOLO.sopra + 0.02), 1],
+    ['orti', geoRettangoli(orti, ox, oz, quotaS, SUOLO.sopra + 0.03), 3],
+  ]);
+  yield;
+  const raggio = Lm;
+  return { tipo: 'monastero', luogo, object: r.object, solidi: r.solidi,
+    spingiFuori: spintaDaScatole([...r.scatole, ...muroScatole], ox, oz, raggio + 20), quotaSuolo: () => null,
+    dentro: () => false, aggiornaLuci: r.aggiornaLuci, sorgenti: r.sorgenti, misure: r.misure, edifici: r.edifici, raggio };
+}
+
+/** Eremo: cappella, cella, croce di pietra e orticello, su un sito di `carta.siti`. */
+export function createEremo(suolo, sito, ox, oz, carta) {
+  return completaPezzi(createEremoAPezzi(suolo, sito, ox, oz, carta));
+}
+
+export function* createEremoAPezzi(suolo, sito, ox, oz, carta) {
+  const E = EREMI;
+  const seme = hash2(Math.floor(sito.x), Math.floor(sito.z), (carta.seme ?? 1) ^ 0x51e3401) || 1;
+  const kit = creaKit({ X: (u) => ox + u, Z: (u, v) => oz + v, terreno: (u, v) => suolo.getHeight(ox + u, oz + v),
+    seme, nome: `eremo-${sito.id}`, contesto: 'campagna', zone: 1, clima: climaDelLuogo(carta, sito.x, sito.z) });
+  const rnd = kit.rnd;
+  const quota = (u, v) => suolo.getHeight(ox + u, oz + v);
+  const lotti = [], forme = [], orti = [];
+  const dislivello = (c, f, a, b) => {
+    const s = [-f[1], f[0]];
+    let mn = Infinity, mx = -Infinity;
+    for (const i of [-1, 0, 1]) for (const j of [-1, 0, 1]) {
+      const h = quota(c[0] + s[0] * a * i + f[0] * b * j, c[1] + s[1] * a * i + f[1] * b * j);
+      if (h < mn) mn = h; if (h > mx) mx = h;
+    }
+    return mx - mn;
+  };
+  const libero = (c, f, a, b) => {
+    const L = { c, s: [-f[1], f[0]], f, a, b };
+    return !lotti.some((o) => siToccano(o, L, 2)) && dislivello(c, f, a, b) <= 2.6;
+  };
+  // Cappella: al centro, verso a caso (sui monti non c'è una strada da seguire).
+  const af = rnd() * Math.PI * 2, f0 = [Math.cos(af), Math.sin(af)];
+  let cap = null;
+  for (let k = 0; k < 14 && !cap; k++) {
+    const a = rnd() * Math.PI * 2, d = k ? 2 + rnd() * (E.raggio - 4) : 0;
+    const c = [Math.cos(a) * d, Math.sin(a) * d];
+    if (!libero(c, f0, E.cappella.largo / 2, E.cappella.fondo / 2)) continue;
+    kit.edificio('cappella', { u: c[0], v: c[1], fu: f0[0], fv: f0[1], misure: E.cappella });
+    const L = { c, s: [-f0[1], f0[0]], f: f0, a: E.cappella.largo / 2, b: E.cappella.fondo / 2 };
+    lotti.push(L);
+    forme.push({ ...L, a: L.a + 1, b: L.b + 1 });
+    cap = L;
+  }
+  if (cap) {
+    // Cella dell'eremita, di fianco alla cappella; croce di pietra davanti; orticello dietro.
+    const lato = rnd() < 0.5 ? 1 : -1, s = [-f0[1] * lato, f0[0] * lato];
+    for (let k = 0; k < 8; k++) {
+      const c = [cap.c[0] + s[0] * (E.cappella.largo / 2 + 2 + E.cella.largo / 2 + k * 0.8) - f0[0] * 2,
+        cap.c[1] + s[1] * (E.cappella.largo / 2 + 2 + E.cella.largo / 2 + k * 0.8) - f0[1] * 2];
+      if (!libero(c, f0, E.cella.largo / 2, E.cella.fondo / 2)) continue;
+      kit.corpo({ c, f: f0, largo: E.cella.largo, fondo: E.cella.fondo, piani: 1, intonaco: false,
+        comignolo: true, legno: false, retro: false });
+      const L = { c, s: [-f0[1], f0[0]], f: f0, a: E.cella.largo / 2, b: E.cella.fondo / 2 };
+      lotti.push(L);
+      forme.push({ ...L, a: L.a + 1, b: L.b + 1 });
+      break;
+    }
+    const co = [cap.c[0] + f0[0] * (E.cappella.fondo / 2 + 3.5), cap.c[1] + f0[1] * (E.cappella.fondo / 2 + 3.5)];
+    kit.catasta(co[0], co[1], f0[0], f0[1], 0.8);
+    const cOrto = [cap.c[0] - f0[0] * (E.cappella.fondo / 2 + E.orto), cap.c[1] - f0[1] * (E.cappella.fondo / 2 + E.orto)];
+    if (dislivello(cOrto, f0, E.orto / 2, E.orto / 2) < 2.2) {
+      orti.push({ c: cOrto, s: [-f0[1], f0[0]], f: f0, a: E.orto / 2, b: E.orto / 2 * 0.8 });
+    }
+  }
+  yield;
+  const r = yield* kit.chiudiAPezzi();
+  const distForme = (u, v) => {
+    let m = Infinity;
+    for (const L of forme) m = Math.min(m, distRett(L, u, v));
+    return m;
+  };
+  attaccaSuolo(r, [
+    ['terra', geoTerra(E.raggio + 6, distForme, ox, oz, quota, seme, EREMI.margine), 0],
+    ['orti', geoRettangoli(orti, ox, oz, quota, SUOLO.sopra + 0.03), 3],
+  ]);
+  yield;
+  return { tipo: 'eremo', sito, object: r.object, solidi: r.solidi,
+    spingiFuori: spintaDaScatole(r.scatole, ox, oz, E.raggio + 20), quotaSuolo: () => null,
+    dentro: () => false, aggiornaLuci: r.aggiornaLuci, sorgenti: r.sorgenti, misure: r.misure, edifici: r.edifici,
+    raggio: E.raggio };
 }

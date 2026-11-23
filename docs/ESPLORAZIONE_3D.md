@@ -1693,10 +1693,10 @@ frazione 55 m, villaggio 85 m, ovile 22 m; nessun cambio alle Carte, `VERSIONE_G
 - **Ovile:** stalla con recinto e pagliaio, terra calpestata attorno.
 - **Niente terrapieno** (deviazione dal piano): case sul terreno com'è con lo zoccolo del kit; i siti sono già i punti
   più piani della cella. Un piano rotondo di 0,7 × raggio tiene fuori la vegetazione.
-- **Misure** [Certo, Chromium headless, seme 570549]: frazione ~25 chiamate e ~7.000 triangoli; villaggio 33–36
-  chiamate e 17–22.500 triangoli; ovile 11 chiamate e ~1.700 triangoli. **Sopra il budget del piano (≤ 20 chiamate)**:
-  le zone dei dettagli del kit (fino a 2 × 2) moltiplicano le istanze; il kit non ha un'opzione per una zona sola (file
-  di M7). Restano sotto le 40 del borgo; triangoli entro i 30.000.
+- **Misure** [Certo, Chromium headless, seme 570549]: alla consegna un villaggio faceva 33–36 chiamate, sopra il budget
+  del piano (≤ 20), perché le zone dei dettagli del kit moltiplicavano le istanze. Con l'opzione `zone: 1` del kit
+  (M7, PR #200, poi unita) un villaggio sta a **14 chiamate e ~13.000 triangoli**: dentro il budget. Ovile 11 chiamate
+  e ~1.700 triangoli.
 - **Fuori dal passo:** persone nei villaggi, mulino, forno, orti e palizzata.
 
 ### Clima delle case sul mondo generato (fatto, da provare)
@@ -1716,6 +1716,36 @@ M7 (`edifici3d.js`, opzione `clima`, PR #201); qui si collega il clima del luogo
 - **Provato** [Certo, Chromium headless, nessun errore in console]: borgo freddo (570549, 108610, 9970) tetti ripidi
   di scandole sulla neve; villaggio arido (570549, 30900, 85100) cubi bianchi, terrazze e pergole fra le dune; rocca
   arida (33117, 103100, 81440) terrazze chiare dentro le mura; il borgo in foresta ora è temperato, a graticcio.
+
+### Passo 3 — monasteri ed eremi (fatto, da provare)
+
+Codice in `js/3d/villaggio3d.js` (come da piano: il file tiene villaggi, ovili, monasteri ed eremi), agganci in
+`main.js`. Nessun cambio al generatore: `VERSIONE_GENERATORE` invariata.
+- **Monastero** (4–6 per mondo): è una rocca che ha cambiato tipo nel generatore, quindi ha già terrapieno, poligono
+  del piano e porta scelti da `luoghi.js`. `costruisciRocche` salta i luoghi `tipo === 'monastero'` e il monastero si
+  costruisce in `costruisciVillaggi`, con la stessa regola di inclusione nel blocco.
+  - **muro di cinta basso** (2,3 m) lungo il poligono del piano, con il varco della porta largo 3,4 m nel punto scelto
+    dal generatore, due pilastri ai lati; una sola chiamata (`unisci`), nella pietra del luogo (`tonoDelLuogo`);
+  - **chiesa** in fondo, sul lato opposto alla porta, facciata verso il chiostro (la chiesa del kit, 9,5 × 17 m);
+  - **chiostro**: corte di 13 m col portico di 3 m sui quattro lati (`kit.loggia`) e il pozzo nella corte;
+  - **tre ali** addossate al portico (dormitorio, biblioteca, refettorio: `kit.corpo`, 7,5 m di fondo, due piani);
+  - **foresteria e infermeria** verso la porta, dove arriva il pellegrino; **sentiero** dalla porta alla facciata, che
+    esce 14 m oltre la cinta; **aiuole d'orto** dove resta posto dentro la cinta;
+  - **il terrazzo che sarebbe stato del borgo** (il generatore lo ha già spianato) diventa l'orto grande dell'abbazia,
+    ad aiuole separate dai passaggi, con la stalla e il pagliaio in fondo: così non resta una terrazza vuota.
+  - Fuori dalla cinta la fascia di terra battuta è stretta (1,5–4 m invece di 3–7): il monastero non spiana il monte.
+- **Eremo** (6–10 per mondo, in alto e isolati): cappella del kit (6 × 10 m), cella dell'eremita di fianco, una catasta
+  davanti e un orticello dietro, con poca terra calpestata attorno.
+- **Orto**: quarta textura del suolo (terra rivoltata scura con le porche), accanto a terra battuta, selciato e
+  carreggiata.
+- **Misure** [Certo, Chromium headless, seme 570549]: monastero 14–16 chiamate e 7–9.000 triangoli; eremo 11 chiamate e
+  ~1.800 triangoli. Dentro il budget (un villaggio ne fa 14 ora che il kit ha `zone: 1`, un borgo 40).
+- **Provato** [Certo, nessun errore in console]: monasteri 8 e 9 del seme 570549 (24870, 61970 e 38490, 80570), eremo
+  137 (59100, 85700); villaggio 32 rifatto dopo il rifacimento della coda comune, senza differenze.
+- **In sospeso, chiesto a M7**: gli edifici fatti con `kit.corpo` non finiscono in `edifici`, quindi non hanno il punto
+  «porta» che serve al passo 6 di M7 e a «Entra». Chieste cinque voci nuove in `EDIFICI` (foresteria, infermeria,
+  dormitorio, biblioteca, refettorio); appena ci sono, basta passare da `kit.edificio`.
+- **Fuori dal passo**: monaci (abitanti3d.js di M7), campane, cimitero, chiostro a due piani.
 
 ### Decisioni tecniche
 
