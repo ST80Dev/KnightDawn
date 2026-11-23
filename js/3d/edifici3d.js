@@ -912,6 +912,8 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
       const t = -li / 2 + pi / 2 + i * (pi + G.vialetto), d = -lj / 2 + pj / 2 + j * (pj + G.vialetto);
       const cq = [c[0] + s[0] * t + f[0] * d, c[1] + s[1] * t + f[1] * d];
       if (conVasca && Math.hypot(t, d) < Math.max(pi, pj) * 0.7) continue;        // al centro c'è la vasca
+      // Vialetto d'ingresso: niente aiuole davanti al varco, dal varco al centro (si entra e si arriva alla vasca).
+      if (Math.abs(t) < G.muro.varco / 2 + 0.3 + pi / 2 && d > 0) continue;
       const Rq = rett(cq, s, f, pi / 2, pj / 2);
       parti.pietra.push(prisma(q4(Rq), q4(Rq), pav - 0.3, pav + A.alto));          // bordo dell'aiuola
       const Rt = rett(cq, s, f, pi / 2 - A.bordo, pj / 2 - A.bordo);
@@ -931,7 +933,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     // Pergolato addossato a un lato lungo: pali, architravi e traversi, con la vite sopra.
     const PG = G.pergolato;
     if (2 * a >= PG.minimo) {
-      const lato = rnd() < 0.5 ? -1 : 1, d0 = lato * (b - sp - PG.largo / 2 - 0.1);
+      const d0 = -(b - sp - PG.largo / 2 - 0.1);     // sul lato opposto al varco: l'ingresso resta libero
       const n = Math.max(2, Math.round((2 * a - 2 * sp - 1) / PG.passo));
       for (let k = 0; k <= n; k++) {
         const t = -a + sp + 0.5 + (2 * a - 2 * sp - 1) * k / n;
