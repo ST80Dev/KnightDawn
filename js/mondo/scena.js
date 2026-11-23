@@ -12,6 +12,7 @@
 
 import { gradienteD, derivaSeme, smoothstep, ridged, completa } from './rumore.js';
 import { ACQUA, profiloMassicci } from './carta.js';
+import { distanzaDa } from './verifica.js';
 import { tracciaPercorso, lettoMonotono, PERCORSO } from './fiumi.js';
 import { spianaStrade, raffinaStrade, raffinaStradeAPezzi, stradeBlocco, attraversamentiBlocco } from './strade.js';   // import circolare: usate solo dentro le funzioni
 
@@ -455,6 +456,8 @@ export function fiumiFini(carta, avanzamento = null) {
   }
   carta.fiumi = fiumi;
   carta.fiumiFini = true;
+  // Valichi sulle selle vere dello stesso deflusso (passo G4): le valli sono quelle dei fiumi appena calcolati.
+  valichiFini(carta, { nx, nz, P, g, ric, bacino, ordine: ordine.subarray(0, no), foce });
   carta.statistiche = { ...(carta.statistiche || {}), fiumiFini: { corsi: fiumi.length, ms: Math.round(performance.now() - t0) } };
   if (avanzamento) avanzamento(1);
   return carta;
@@ -953,6 +956,149 @@ export function spianaPiani(P, x, z, h) {
   if (ritorno <= 0) return null;
   const c = lo <= hi ? (h < lo ? lo : h > hi ? hi : h) : hi;
   return h + ritorno * (c - h);
+}
+
+/**
+ * Valichi sulle selle del rilievo fine (passo G4 del piano «Mondo generato in anticipo», docs/ESPLORAZIONE_3D.md).
+ * Stessa regola dei passi dolomitici già decisa con l'utente (GDD §2), ma su `fiumiFini` invece che sulle celle di 1 km:
+ * ogni cella appartiene alla valle in cui scende (il ramo di fiume tra due confluenze); tra due valli confinanti il
+ * valico è il punto più basso del loro spartiacque. Così i valichi stanno sulle selle vere e tra le valli vere, e non
+ * serve più né lo scavo del passo (prima fino a 500 m sulle celle di 1 km) né cercarne la sella dopo (`sellaFine`).
+ * Scrive `carta.valichiCarta` (x, y in km) e `carta.valichiFini`.
+ */
+export const VALICHI_FINI = {
+  valle: { bacino: 40, accesso: 10000 },     // km² perché un fiume faccia valle; m al più di discesa dal passo al fiume
+  // Il passo serve se, senza di lui, le due valli sarebbero lontane: giro lungo i fiumi di almeno `giro` m, oppure
+  // almeno `rapporto` volte la via diretta (con le valli fini i rami sono corti e il solo giro minimo ne scartava
+  // troppi: 0–3 valichi per Carta).
+  giro: 12000, rapporto: 4,
+  sella: { sopra: 250, minima: 900, massima: 2600, cresta: 250, raggio: 4000 },
+  monti: { quota: 1700, entro: 8 },          // terra oltre `quota` m entro `entro` km dal passo (km: celle della Carta)
+  distanza: 12000,                           // m tra due valichi
+  peso: { salita: 0.5, pendenza: 4000, grandezza: 160, risparmio: 120 },
+};
+function valichiFini(carta, d) {
+  const C0 = carta.cella;
+  const V = VALICHI_FINI, { nx, nz, P, g, ric, bacino, ordine, foce } = d, n = nx * nz;
+  const soglia = V.valle.bacino;
+  const fiume = (i) => !foce[i] && bacino[i] >= soglia;
+  const passo = (i, j) => (((i % nx) !== (j % nx) && ((i / nx) | 0) !== ((j / nx) | 0)) ? Math.SQRT2 * P : P);
+  // Rami: tratti di fiume tra una testata o una confluenza e la confluenza dopo.
+  const affluenti = new Uint8Array(n), monte = new Int32Array(n).fill(-1);
+  for (let i = 0; i < n; i++) if (fiume(i) && ric[i] >= 0 && fiume(ric[i])) { affluenti[ric[i]]++; monte[ric[i]] = i; }
+  const ramo = new Int32Array(n).fill(-1);
+  let rami = 0;
+  for (let t = ordine.length - 1; t >= 0; t--) {           // ordine: dalle foci a monte, quindi a ritroso è monte → valle
+    const i = ordine[t];
+    if (fiume(i)) ramo[i] = affluenti[i] === 1 && ramo[monte[i]] >= 0 ? ramo[monte[i]] : rami++;
+  }
+  // Ogni cella: dove la sua discesa entra in un fiume, e quanti metri di discesa.
+  const entrata = new Int32Array(n).fill(-1), discesa = new Float32Array(n);
+  for (let t = 0; t < ordine.length; t++) {                // dalle foci verso monte: il ricevente è già fatto
+    const i = ordine[t];
+    if (foce[i]) continue;
+    if (fiume(i)) { entrata[i] = i; continue; }
+    const r = ric[i];
+    if (r >= 0 && entrata[r] >= 0 && discesa[r] < V.valle.accesso) { entrata[i] = entrata[r]; discesa[i] = discesa[r] + passo(i, r); }
+  }
+  // Foce di ogni cella (sistema del fiume) e giro lungo i fiumi tra due celle dello stesso sistema.
+  const fociDi = new Int32Array(n).fill(-1);
+  for (let t = 0; t < ordine.length; t++) {
+    const i = ordine[t], r = ric[i];
+    fociDi[i] = r < 0 ? i : fociDi[r] >= 0 ? fociDi[r] : r;
+  }
+  const lungo = new Map();
+  function giro(a, b) {
+    lungo.clear();
+    let s = 0, j = a;
+    for (let k = 0; j >= 0 && k < 200000; k++) { lungo.set(j, s); const r = ric[j]; if (r >= 0) s += passo(j, r); j = r; }
+    s = 0; j = b;
+    for (let k = 0; j >= 0 && k < 200000; k++) {
+      const v = lungo.get(j);
+      if (v !== undefined) return s + v;
+      const r = ric[j]; if (r >= 0) s += passo(j, r); j = r;
+    }
+    return Infinity;
+  }
+  // Terra alta vicino al passo, sulle celle della Carta (criterio grossolano per natura).
+  const vicinoMonti = distanzaDa(carta.cols, carta.rows,
+    (i) => !carta.mare[i] && carta.quota[i] >= V.monti.quota);
+  // Spartiacque tra due rami: per ogni coppia di celle vicine di valli diverse il passaggio costa la più alta delle due;
+  // il valico tra le due valli è il passaggio più basso (a parità, quello con la discesa più corta).
+  const selle = new Map(), bordi = new Map();
+  const vicini = [[1, 0], [0, 1], [1, 1], [-1, 1]];
+  const montano = (i) => {
+    if (g[i] < V.sella.minima || g[i] > V.sella.massima) return false;
+    const cx = Math.min(carta.cols - 1, Math.floor((i % nx) * P / C0));
+    const cz = Math.min(carta.rows - 1, Math.floor(Math.floor(i / nx) * P / C0));
+    return vicinoMonti[cz * carta.cols + cx] <= V.monti.entro;
+  };
+  for (let r = 0; r < nz; r++) {
+    for (let c = 0; c < nx; c++) {
+      const i = r * nx + c;
+      // Solo lo spartiacque tra i monti: il passo più basso di una coppia di valli, se lo si cercasse su tutto il loro
+      // confine, cadrebbe quasi sempre in collina a valle (85 % delle selle sotto i 900 m) e la coppia andava persa.
+      if (entrata[i] < 0 || !montano(i)) continue;
+      for (const [dc, dr] of vicini) {
+        const cc = c + dc, rr = r + dr;
+        if (cc < 0 || rr >= nz || cc >= nx) continue;
+        const j = rr * nx + cc;
+        if (entrata[j] < 0 || !montano(j)) continue;
+        const ra = ramo[entrata[i]], rb = ramo[entrata[j]];
+        if (ra === rb || ra < 0 || rb < 0) continue;
+        const h = Math.max(g[i], g[j]), k = ra < rb ? ra * rami + rb : rb * rami + ra;
+        const lung = discesa[i] + discesa[j], sl = selle.get(k);
+        let b = bordi.get(k);
+        if (!b) bordi.set(k, (b = []));
+        b.push(g[i] >= g[j] ? i : j);
+        if (!sl || h < sl.h || (h === sl.h && lung < sl.lungo)) {
+          const [p, q] = ra < rb ? [i, j] : [j, i];
+          selle.set(k, { h, lungo: lung, cella: g[i] >= g[j] ? i : j, p, q });
+        }
+      }
+    }
+  }
+  const candidati = [];
+  for (const [k, sl] of selle) {
+    const a = entrata[sl.p], b = entrata[sl.q];
+    if (sl.h < V.sella.minima || sl.h > V.sella.massima) continue;
+    if (sl.h - Math.max(g[a], g[b]) < V.sella.sopra) continue;
+    const cx = Math.min(carta.cols - 1, Math.floor((sl.cella % nx) * P / carta.cella));
+    const cz = Math.min(carta.rows - 1, Math.floor(Math.floor(sl.cella / nx) * P / carta.cella));
+    if (vicinoMonti[cz * carta.cols + cx] > V.monti.entro) continue;
+    const deviazione = fociDi[a] === fociDi[b] ? giro(a, b) : Infinity;
+    if (deviazione < V.giro && deviazione < V.rapporto * (sl.lungo + P)) continue;   // lungo i fiumi si fa prima
+    let cresta = -Infinity;
+    const sx = sl.cella % nx, sz = Math.floor(sl.cella / nx);
+    for (const j of bordi.get(k)) {
+      if (Math.hypot((j % nx) - sx, Math.floor(j / nx) - sz) * P <= V.sella.raggio && g[j] > cresta) cresta = g[j];
+    }
+    if (cresta - sl.h < V.sella.cresta) continue;            // un varco in una barriera, non tra colline dolci
+    const dritto = sl.lungo + P;
+    const pendenza = Math.max((sl.h - g[a]) / Math.max(P, discesa[sl.p]), (sl.h - g[b]) / Math.max(P, discesa[sl.q]));
+    const grandezza = Math.log2(Math.min(bacino[a], bacino[b]) / soglia);
+    const risparmio = Math.log2(Math.min(deviazione, 200000) / dritto);
+    const Pe = V.peso;
+    candidati.push({ sella: sl.cella, a, b, p: sl.p, q: sl.q, h: sl.h, dritto, deviazione,
+      punteggio: Pe.salita * (sl.h - Math.max(g[a], g[b])) + Pe.pendenza * pendenza - Pe.grandezza * grandezza - Pe.risparmio * risparmio });
+  }
+  candidati.sort((u, v) => u.punteggio - v.punteggio || u.sella - v.sella);
+  const C = carta.cella, scelti = [];
+  const giu = (i, m) => { for (let k = 0; k < m && ric[i] >= 0 && !foce[ric[i]]; k++) i = ric[i]; return i; };
+  const kmDi = (i) => ({ x: (i % nx) * P / C, y: Math.floor(i / nx) * P / C });
+  for (const c of candidati) {
+    const q = kmDi(c.sella);
+    if (scelti.some((v) => Math.hypot(v.x - q.x, v.y - q.y) * C < V.distanza)) continue;
+    scelti.push({
+      id: scelti.length, x: q.x, y: q.y, quota: c.h, scavo: 0, distanza: c.dritto / 1000,
+      deviazione: c.deviazione === Infinity ? Infinity : c.deviazione / 1000,
+      lati: [giu(c.p, Math.round(2000 / P)), giu(c.q, Math.round(2000 / P))].map(kmDi),
+      valli: [c.a, c.b].map((t) => ({ ...kmDi(t), quota: g[t] })),
+    });
+  }
+  carta.valichiCarta = scelti;
+  carta.valichiFini = true;
+  return scelti;
 }
 
 /**

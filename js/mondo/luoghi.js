@@ -1147,7 +1147,8 @@ export function valichiDaCarta(carta, V = VALICHI) {
   if (!carta.valichiCarta) return trovaValichi(carta, V);
   const seme = derivaSeme(carta.seme, 950);
   return carta.valichiCarta.map((v, id) => ({
-    id, ...sellaFine(carta, v), scavo: v.scavo,
+    // Valichi sul rilievo fine (G4): la sella è già quella vera; per le Carte di prima la cerca sellaFine.
+    id, ...(carta.valichiFini ? { x: v.x, y: v.y, quota: v.quota } : sellaFine(carta, v)), scavo: v.scavo,
     sopra: v.quota - Math.max(v.valli[0].quota, v.valli[1].quota),
     deviazione: v.deviazione, valli: v.valli,
     presidio: hashUnita(Math.floor(v.x), Math.floor(v.y), seme) < V.presidio,
