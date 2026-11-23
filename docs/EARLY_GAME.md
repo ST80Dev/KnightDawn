@@ -56,6 +56,11 @@ non power-creep). Riempie il `[TBD] Sistema di progressione` del GDD §2.
 | **Cavaliere di Ventura** | mid | corti minori, fondazione del 1° covo |
 | **Campione / Bannerale** | late | corti maggiori, più compagni, contratti d'élite |
 
+[Proposta, novembre 2026, con la scelta tra fedeltà e ventura di `docs/FACTIONS.md` §3] Dopo Cavaliere
+Errante i ranghi si dividono in due vie: **del vessillo** (giurato a una casata, fino a **Bannerale**) e
+**della ventura** (libero, fino a **Capitano di ventura**; «Campione» resta un titolo d'impresa). Si può
+passare da una via all'altra giurando o sciogliendo il giuramento. Nomi intermedi da decidere.
+
 ### Come si sale
 
 Avanzamento per **imprese + reputazione + soglie d'oro**, mai per grinding puro.
@@ -226,7 +231,7 @@ lavori nel borgo per i primi oro, mercato, maestro d'armi, un incarico fuori por
 combattimento, l'investitura. La modalità Libera parte invece da un cavaliere già fatto, con gli
 strumenti di sviluppo.
 
-**Durata della Veglia** [proposta, da confermare]: è il tempo reale che il prologo richiede prima che il
+**Durata della Veglia** [confermata dall'utente: ~60 minuti reali]: è il tempo reale che il prologo richiede prima che il
 garzone diventi Cavaliere Errante e il mondo si apra. Decide quanti lavori servono, quanto pagano e
 quanto costano ronzino e armi. Proposta: **~60 minuti reali** (forbice 45–90), cioè ~15–20 azioni e
 ~5–8 giorni di gioco (le azioni e il sonno fanno saltare il tempo d'un colpo; camminare nel borgo costa
@@ -263,14 +268,17 @@ poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un
    `docs/ESPLORAZIONE_3D.md`). In Storia si parte a piedi, in Libera con il cavallo.
 4. **Combattimento nel riquadro.** Tre colonne (cavaliere, scelte e Slancio, nemico) e cronaca dei Round;
    la scena dietro è ferma. Ogni Round confermato avanza il calendario dei suoi minuti; i rami di esito
-   tornano all'evento. **Schermata di morte** con ritorno al menu. In Libera un comando di prova apre un
+   tornano all'evento. In Veglia a Salute 0 si sviene; dopo l'investitura **schermata di morte** con
+   ritorno al menu. In Libera un comando di prova apre un
    combattimento con un nemico a scelta.
 5. **Incarico fuori porta: i lupi all'ovile.** Si accetta nel borgo; l'ovile vero più vicino (M8, entro
    2–4 km) si segna sulla minimappa; ci si va di persona (il blocco segue il cavaliere); vicino al recinto
    parte l'evento con il combattimento; la paga si ritira tornando al borgo. Le altre missioni (bestia
    smarrita, pacco al villaggio) si aggiungono con lo stesso schema se il tempo della Veglia lo chiede.
 6. **Investitura e fine della Veglia.** Requisiti come oggi (rango scudiero, prima battaglia, oro);
-   cerimonia nella Carta del cronista; parte il calendario ufficiale (*Prima Era · Prima Luce · Primavera ·
+   cerimonia nella Carta del cronista, con la prima scelta tra **giurare fedeltà** alla casata del
+   castello o **partire libero** (`docs/FACTIONS.md` §3; in G1 è solo la scelta registrata, gli effetti
+   arrivano con G3); parte il calendario ufficiale (*Prima Era · Prima Luce · Primavera ·
    Diario 1 · Passo 1*); il garzone diventa Cavaliere Errante. Da qui la Storia prosegue a piedi o a
    cavallo; il viaggio vero sulla Carta arriva con G2.
 
@@ -292,9 +300,11 @@ dal menu e conserva la sua partita a parte; il percorso di prova funziona come p
 - [Ipotesi] La formula dello Slancio (`js/combat.js`) non è mai stata provata con un giocatore: il
   bilanciamento del primo combattimento chiederà qualche giro.
 
-### Da decidere
+### Decise con l'utente (novembre 2026)
 
-- Durata della Veglia (proposta: ~60 minuti reali).
-- Morte in Storia: partita persa (il salvataggio si cancella) o ritorno all'ultimo riposo?
-- File nuovi: menu d'avvio e riquadri (Carta del cronista, combattimento) in un modulo a sé
-  (proposta: `js/3d/interfaccia.js`) invece che in `main.js`, che passa già le 1.700 righe.
+- Durata della Veglia: ~60 minuti reali.
+- **Durante la Veglia non si muore**: a Salute 0 il garzone sviene e si risveglia nel borgo, curato, con
+  qualche ora persa e senza l'oro che aveva addosso. **Dopo l'investitura la morte è vera**: la partita
+  Storia finisce e il suo salvataggio si cancella.
+- File nuovo approvato: `js/3d/interfaccia.js` (menu d'avvio, Carta del cronista, riquadro di
+  combattimento).
