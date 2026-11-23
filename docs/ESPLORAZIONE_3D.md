@@ -1530,6 +1530,28 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
       Prove: cammino 35/35 e 31/31; porte 10/10 (palazzo compreso). *Prova:* cammino porta del borgo →
       corte d'armi → corte del signore su tutte le rocche di due semi; porte e udienza raggiungibili; FPS sul percorso
       di prova.
+    - **Stato del passo (c), giardino e pertinenze: fatto, da provare dall'utente.** Nel kit (`edifici3d.js`):
+      `giardino()` (muro di cinta di 1,35 m con cornice e un varco di 2,6 m verso il palazzo, aiuole rialzate in quadri
+      divise da vialetti di 1,6 m, vasca tonda di pietra con l'acqua al centro nei giardini ≥ 11 m, pergolato con la
+      vite su un lato lungo, fino a 4 alberi da frutto negli angoli), `orto()` (filari e steccato di pali), `torretta()`
+      (colombaia: fusto di pietra, cornice, tetto a piramide, tre file di fori per lato) e le pertinenze `cucina`
+      (comignolo grande e legna), `cantina` (porta bassa e botti), `scuderia`. Misure del giardino: minore 15×11 m,
+      casata 19×14, maggiore 23×17, ridotte a passi fino a 7×6. Un solo materiale nuovo (`verde`, aiuole, vite e
+      chiome), dettagli della rocca in una zona sola (`zone: 1`): ≤ 18 chiamate di disegno, sotto il budget di 20.
+      Nella rocca (`rocca3d.js`): il palazzo non dipende più da `corti` (senza il muro interno il riferimento è il
+      centro della cinta in linea con la porta) e, senza muro, restano liberi solo il passaggio dall'ingresso al
+      cortile, non più il varco e il corridoio della porta interna; ordine di posa: palazzo, cappella, sala d'armi,
+      giardino, cucina, cantina, colombaia, scuderia, armeria, orto; le pertinenze si cercano ad anelli attorno al
+      palazzo e, se lì non c'è posto, lungo le mura. `rocca.giardino = { x, z, largo, fondo, varco }` per le persone
+      della casata (fuori da M7). Perché nel giardino si entri: il pergolato sta sempre sul lato opposto al varco, le
+      aiuole lasciano libero il vialetto dal varco alla vasca, il giardino parte a 4 m dal palazzo e davanti al varco
+      servono ~6 m di cortile libero, riservati come lotti, così nessuna pertinenza messa dopo lo chiude e il varco non
+      finisce in fondo a un vicolo cieco. Senza queste regole il cavaliere non entrava in 14 rocche su 31 e in 1 su 35.
+      [Certo] Nel seme 12345 (31 rocche): palazzo, cappella, colombaia e pozzo in tutte; cantina 30, cucina 29,
+      giardino 17, armeria 15, scuderia 12, sala d'armi 11, orto 1 (il cortile è pieno). Senza il controllo dello spazio
+      davanti al varco i giardini sarebbero 21 su 31, ma uno su 35 resterebbe chiuso: scelta la raggiungibilità.
+      Cammino porta del borgo → cortile → dentro il giardino, su griglia di 0,5 m: 31/31 (12345) e 35/35 (570549).
+      Da 16 a 18 chiamate di disegno, ≤ 17.510 triangoli. La Carta non cambia.
 
 ### Accettazione
 

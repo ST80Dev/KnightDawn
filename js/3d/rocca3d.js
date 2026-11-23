@@ -25,6 +25,9 @@ const PORTA = { larghezza: 3.4, imposta: 3.0, torreLarghezza: 8, sporgenza: 3.5,
 // `muro`: false su richiesta dell'utente (niente muro interno né seconda porta): le due corti restano come disposizione
 // degli edifici (armi davanti, signore dietro), il mastio si appoggia alla cinta sulla linea tra le due.
 const CORTI = { dietro: 0.46, muro: false, altezza: 5.5, spessore: 1.3, porta: 3.2, imposta: 3.4 };
+// Giardino murato della corte del signore (M7, passo 10c): [largo, fondo] in m per classe, e misure dell'orto.
+const GIARDINI = { minore: [15, 11], casata: [19, 14], maggiore: [23, 17] };
+const ORTO = [9, 7];
 // stacco: m tra la torre-porta e la rampa lungo il muro (così passa fuori dalle torri dei vertici).
 const RAMPA = { larghezza: 4.4, stacco: 2.5, pendenza: 0.22, minima: 3, massima: 40, parapetto: 0.5, muretto: 0.45 };
 const SCARPA = 0.18;                      // inclinazione della scarpa alla base (tangente: ~10°)
@@ -1039,22 +1042,30 @@ export function* createRoccaAPezzi(suolo, luogo, ox, oz, clima = 'temperato') {
   yield;
   // ─── Edifici del cortile (passo 5): cappella e pozzo; sala d'armi e armeria nel castello di casata e nella sede
   // maggiore. Addossati alle mura (facciata verso il cortile), o liberi nel cortile se lungo le mura non c'è posto.
-  const kit = creaKit({ X, Z, ux, uz, terreno, luogo, seme: (Math.floor(luogo.x) * 19349663) ^ (Math.floor(luogo.z) * 83492791), nome: 'rocca-edifici', contesto: 'rocca', clima });
+  const kit = creaKit({ X, Z, ux, uz, terreno, luogo, seme: (Math.floor(luogo.x) * 19349663) ^ (Math.floor(luogo.z) * 83492791), nome: 'rocca-edifici', contesto: 'rocca', clima, zone: 1 });   // la rocca sta in una zona sola: meno chiamate
+  let giardinoFatto = null;                      // giardino murato: centro, misure e varco (locali)
+  const corteFatta = new Set();                  // giardino, orto e pertinenze davvero costruiti (F3 e prove)
   {
     const lotti = [mastioL];
     const passaggio = [gm[0] - gn[0] * (PORTA.profondita - SPOR + 4), gm[1] - gn[1] * (PORTA.profondita - SPOR + 4)];
     // Zona: 'armi' davanti al muro interno, 'signore' dietro (con le corti); null ovunque (cinta senza muro interno).
     let zona = null;
     // Corridoi liberi: dall'ingresso della rocca alla porta del muro interno, e da lì al centro della corte del signore.
-    const corridoi = corti ? [[passaggio, [corti.uC + 2, corti.vg]], [[corti.uC - 2, corti.vg], [corti.uC - 8, corti.vg]]] : [];
+    // Col muro interno: dall'ingresso alla porta interna e da lì verso il centro della corte del signore. Senza muro
+    // (passo 10b) basta tenere libero il passaggio dall'ingresso al cortile: niente porta interna da raggiungere.
+    const corridoi = !corti ? [[passaggio, [0, 0]]]
+      : CORTI.muro ? [[passaggio, [corti.uC + 2, corti.vg]], [[corti.uC - 2, corti.vg], [corti.uC - 8, corti.vg]]]
+        : [[passaggio, [corti.uC - 2, corti.vg]]];
     const nelCorridoio = (u, v) => corridoi.some(([a, b]) => {
       const du = b[0] - a[0], dv = b[1] - a[1], l2 = du * du + dv * dv || 1;
       const t = clamp(((u - a[0]) * du + (v - a[1]) * dv) / l2, 0, 1);
       return Math.hypot(u - a[0] - du * t, v - a[1] - dv * t) < 2.5;
     });
     const nellaZona = (u, v) => {
+      if (nelCorridoio(u, v)) return false;
       if (!corti) return true;
-      if (Math.hypot(u - corti.uC, v - corti.vg) < 4 || nelCorridoio(u, v)) return false;   // varco e corridoi liberi
+      if (CORTI.muro && Math.hypot(u - corti.uC, v - corti.vg) < 4) return false;           // varco del muro interno
+      if (nelCorridoio(u, v)) return false;                                                  // corridoi liberi
       if (!zona) return true;
       // Senza muro interno il confine tra le corti è elastico (6 m oltre la linea): gli edifici si separano coi lotti.
       const m2 = CORTI.muro ? CORTI.spessore / 2 + 0.6 : -6;
@@ -1074,13 +1085,17 @@ export function* createRoccaAPezzi(suolo, luogo, ox, oz, clima = 'temperato') {
     };
     // Il palazzo per primo (è il più grande e la corte del signore è sua), poi gli altri.
     const palazzo = luogo.classe === 'minore' ? 'palazzoMinore' : luogo.classe === 'maggiore' ? 'palazzoMaggiore' : 'palazzo';
-    const tipi = luogo.classe === 'minore' ? ['cappella'] : ['salaArmi', 'cappella', 'armeria'];
+    const tipi = luogo.classe === 'minore' ? [] : ['armeria'];   // dopo il giardino e le pertinenze
     const edificiFatti = new Set();
+    let palazzoFatto = null;
     // Palazzo: ricerca dedicata nella corte del signore, dal fondo verso il muro interno, prima rivolto verso la porta
     // interna e poi in 16 direzioni; se non ci sta, la taglia più piccola (la casa dei signori c'è sempre).
-    if (corti) {
+    {
       // Senza muro interno il palazzo può stare ovunque nella cinta (dal fondo verso l'ingresso, il primo posto buono).
-      zona = CORTI.muro ? 'signore' : null;
+      zona = CORTI.muro && corti ? 'signore' : null;
+      // Punto verso cui guarda la facciata: la porta del muro interno; senza corti (cinta di sbieco, nessun posto per il
+      // mastio sulla linea) il centro della cinta in linea con la porta della rocca.
+      const rif = corti ? [corti.uC, corti.vg] : [(Math.min(...P.map((q) => q[0])) + Math.max(...P.map((q) => q[0]))) / 2, gm[1]];
       // Dalla misura della classe in giù, a passi (−2 m di larghezza, −1 m di profondità, un piano in meno sotto i 16 m):
       // il palazzo c'è sempre, più piccolo dove la cinta è stretta.
       const E0 = EDIFICI[palazzo], taglie = [];
@@ -1092,11 +1107,11 @@ export function* createRoccaAPezzi(suolo, luogo, ox, oz, clima = 'temperato') {
       const uMin = Math.min(...P.map((p) => p[0]));
       for (const M of taglie) {
         let fatto = null;
-        const uMax = CORTI.muro ? corti.uC - 2 : Math.max(...P.map((p) => p[0])) - M.fondo / 2;
+        const uMax = CORTI.muro && corti ? corti.uC - 2 : Math.max(...P.map((p) => p[0])) - M.fondo / 2;
         const vMin = Math.min(...P.map((p) => p[1])), vMax = Math.max(...P.map((p) => p[1]));
         for (let u = uMin + M.fondo / 2; u < uMax && !fatto; u += 1.5) {
           for (let v = vMin; v <= vMax && !fatto; v += 1.5) {
-            const dg = Math.hypot(corti.uC - u, corti.vg - v) || 1, verso = [(corti.uC - u) / dg, (corti.vg - v) / dg];
+            const dg = Math.hypot(rif[0] - u, rif[1] - v) || 1, verso = [(rif[0] - u) / dg, (rif[1] - v) / dg];
             const direzioni = [verso, ...Array.from({ length: 16 }, (_, k) => [Math.cos(k * Math.PI / 8), Math.sin(k * Math.PI / 8)])];
             for (const f of direzioni) {
               const L = { c: [u, v], f, s: [-f[1], f[0]], a: M.largo / 2, b: M.fondo / 2 + (M.largo >= 18 ? 2 : 0.5) };  // + scala
@@ -1112,11 +1127,13 @@ export function* createRoccaAPezzi(suolo, luogo, ox, oz, clima = 'temperato') {
           const sp = fatto.L.b - M.fondo / 2, c = [fatto.L.c[0] - fatto.f[0] * sp, fatto.L.c[1] - fatto.f[1] * sp];
           kit.edificio(palazzo, { u: c[0], v: c[1], fu: fatto.f[0], fv: fatto.f[1], quota: piano - 0.15, misure: M });
           edificiFatti.add('palazzo');
+          palazzoFatto = { c, f: fatto.f, s: fatto.L.s, M, L: fatto.L };
           break;
         }
       }
     }
-    for (const tipo of tipi) for (const z of tipo === 'cappella' ? ['signore', 'armi'] : ['armi']) {
+    /** Colloca un edificio nominato: lungo le mura, poi contro il muro interno, poi libero nel cortile. */
+    const colloca = (tipo, zone) => { for (const z of zone) {
       const E = EDIFICI[tipo];
       zona = z;                                           // la cappella nella corte del signore, se c'è posto
       if (edificiFatti.has(tipo)) continue;
@@ -1150,9 +1167,92 @@ export function* createRoccaAPezzi(suolo, luogo, ox, oz, clima = 'temperato') {
           lotti.push(L); kit.edificio(tipo, { u: c[0], v: c[1], fu: f[0], fv: f[1], quota: piano - 0.15 }); fatto = true; edificiFatti.add(tipo);
         }
       }
+    } };
+    colloca('cappella', ['signore', 'armi']);
+    if (luogo.classe !== 'minore') colloca('salaArmi', ['armi']);   // grande: prima del giardino, cerca un tratto di mura
+    // Pertinenze della corte del signore (passo 10c): ad anelli attorno al palazzo, rivolte verso di esso.
+    const pertinenza = (tipo) => {
+      if (!palazzoFatto) return;
+      zona = CORTI.muro ? 'signore' : null;
+      const E = EDIFICI[tipo];
+      for (let r0 = 4; r0 < 42; r0 += 1.5) {
+        for (let kk = 0; kk < 16; kk++) {
+          const ang = kk / 16 * Math.PI * 2;
+          const c = [palazzoFatto.c[0] + Math.cos(ang) * r0, palazzoFatto.c[1] + Math.sin(ang) * r0];
+          const dg = Math.hypot(palazzoFatto.c[0] - c[0], palazzoFatto.c[1] - c[1]) || 1;
+          const f = [(palazzoFatto.c[0] - c[0]) / dg, (palazzoFatto.c[1] - c[1]) / dg];
+          const w = E.largo + (E.recinto ? (E.recinto + 1) * 2 : 0);
+          const L = { c, f, s: [-f[1], f[0]], a: w / 2, b: E.fondo / 2 };
+          if (!libero(L)) continue;
+          lotti.push(L);
+          kit.edificio(tipo, { u: c[0], v: c[1], fu: f[0], fv: f[1], quota: piano - 0.15 });
+          edificiFatti.add(tipo); corteFatta.add(tipo);
+          return;
+        }
+      }
+      // Attorno al palazzo non c'è posto: come gli edifici nominati, lungo le mura o libera nel cortile.
+      colloca(tipo, [CORTI.muro ? 'signore' : null]);
+      if (edificiFatti.has(tipo)) corteFatta.add(tipo);
+    };
+    /** Orto: una piazzola libera vicino al palazzo (e quindi alla cucina). */
+    const mettiOrto = () => {
+      if (!palazzoFatto) return;
+      zona = CORTI.muro ? 'signore' : null;
+      for (let r0 = 5; r0 < 42; r0 += 1.5) {
+        for (let kk = 0; kk < 16; kk++) {
+          const ang = kk / 16 * Math.PI * 2;
+          const c = [palazzoFatto.c[0] + Math.cos(ang) * r0, palazzoFatto.c[1] + Math.sin(ang) * r0];
+          const L = { c, f: [1, 0], s: [0, 1], a: ORTO[0] / 2, b: ORTO[1] / 2 };
+          if (!libero(L)) continue;
+          lotti.push(L);
+          kit.orto(c, [1, 0], ORTO[0], ORTO[1], piano - 0.15);
+          corteFatta.add('orto');
+          return;
+        }
+      }
+    };
+    if (!edificiFatti.has('palazzo')) console.warn('[rocca] palazzo non collocato', luogo.classe);
+    // Giardino murato (passo 10c): davanti al palazzo, col varco verso la sua facciata; se davanti non ci sta, di
+    // fianco. Dalla misura della classe in giù, a passi di 2 m: dove la corte è stretta il giardino non c'è.
+    if (palazzoFatto) {
+      const { c: cp, f: fp, s: sp2, M } = palazzoFatto;
+      const G0 = GIARDINI[luogo.classe] ?? GIARDINI.casata;
+      // Direzioni attorno al palazzo, dalla facciata in poi: il giardino sta davanti se può, altrimenti di fianco o
+      // dietro, sempre col varco rivolto al palazzo.
+      const dirs = Array.from({ length: 16 }, (_, k) => k * Math.PI / 8)
+        .map((a2) => ({ a2, d: [Math.cos(a2), Math.sin(a2)] }))
+        .sort((A, B) => (B.d[0] * fp[0] + B.d[1] * fp[1]) - (A.d[0] * fp[0] + A.d[1] * fp[1]));
+      for (let k = 0; !edificiFatti.has('giardino') && k < 8; k++) {
+        const largo = G0[0] - 2 * k, fondo = G0[1] - 1.5 * k;
+        if (largo < 7 || fondo < 6) break;
+        for (const { d } of dirs) {
+          let messo = false;
+          for (let r0 = M.fondo / 2 + fondo / 2 + 4; r0 < 40 && !messo; r0 += 1.5) {
+            const c = [cp[0] + d[0] * r0, cp[1] + d[1] * r0];
+            const f = [-d[0], -d[1]], L = { c, f, s: [-f[1], f[0]], a: largo / 2, b: fondo / 2 };
+            if (!libero(L)) continue;
+            // Davanti al varco serve un pezzo di cortile libero, o nel giardino non si entra.
+            const cv = [c[0] + f[0] * (fondo / 2 + 2.4), c[1] + f[1] * (fondo / 2 + 2.4)];
+            const Lv = { c: cv, f, s: [-f[1], f[0]], a: 1.9, b: 1.8 };
+            if (!libero(Lv)) continue;
+            // E oltre, fino a ~7 m: senza un pezzo di cortile davanti, il varco resta in fondo a un vicolo chiuso.
+            const cw = [c[0] + f[0] * (fondo / 2 + 4.8), c[1] + f[1] * (fondo / 2 + 4.8)];
+            if (!libero({ c: cw, f, s: [-f[1], f[0]], a: 1.9, b: 1.2 })) continue;
+            lotti.push(L, Lv);                      // il lotto del varco resta libero anche dopo
+            const g = kit.giardino(c, f, largo, fondo, piano - 0.15);
+            giardinoFatto = { u: c[0], v: c[1], largo, fondo, varco: g.varco };
+            edificiFatti.add('giardino'); corteFatta.add('giardino');
+            messo = true;
+          }
+          if (messo) break;
+        }
+      }
     }
+    for (const tipo of tipi) colloca(tipo, ['armi']);            // armeria: piccola, prima delle pertinenze
+    for (const tipo of ['cucina', 'cantina', 'colombaia', 'scuderia']) pertinenza(tipo);
+    mettiOrto();
     // Pozzo: nella corte del signore, il punto libero più vicino al suo centro (o al centro del cortile).
-    zona = 'signore';
+    zona = corti ? 'signore' : null;
     const centroPozzo = corti ? [(corti.uC + Math.min(...P.map((p) => p[0]))) / 2, (corti.v0 + corti.v1) / 2] : [0, 0];
     let migliore = null;
     for (let u = -45; u <= 45; u += 1.5) for (let v = -45; v <= 45; v += 1.5) {
@@ -1235,10 +1335,15 @@ export function* createRoccaAPezzi(suolo, luogo, ox, oz, clima = 'temperato') {
     rampa: { lato: rampa.lato, lunghezza: rampa.l, pendenza: rampa.g, inizio: rampa.start, fine: rFine, dir: rampa.dir },
     porta: { u: gm[0], v: gm[1], nu: gn[0], nv: gn[1], sporgenza: SPOR, profondita: PORTA.profondita },
     edifici: edificiRocca.edifici,                // nominati: { tipo, nome, porta } (passo 6)
+    // Giardino murato della corte del signore (passo 10c), nelle coordinate del blocco: per le persone della casata.
+    giardino: giardinoFatto && { x: X(giardinoFatto.u, giardinoFatto.v), z: Z(giardinoFatto.u, giardinoFatto.v),
+      largo: giardinoFatto.largo, fondo: giardinoFatto.fondo,
+      varco: { x: X(giardinoFatto.varco.u, giardinoFatto.varco.v), z: Z(giardinoFatto.varco.u, giardinoFatto.varco.v),
+        nx: ux * giardinoFatto.varco.fu - uz * giardinoFatto.varco.fv, nz: uz * giardinoFatto.varco.fu + ux * giardinoFatto.varco.fv } },
     sorgenti: edificiRocca.sorgenti,
     misure: {
       oggetti: oggettiMura + edificiRocca.misure.chiamate, merli: merli.length, edifici: edificiRocca.edifici.length,
-      triangoli: triMura + edificiRocca.misure.triangoli,
+      triangoli: triMura + edificiRocca.misure.triangoli, corte: [...corteFatta].sort().join(','),
     },
   };
 }

@@ -21,6 +21,21 @@ import { prisma, unisci, rifinisci, materialeMuro, tonoDelLuogo, texturaAlone } 
 
 const COL = {
   pietra: '#aa9d87', intonaco: '#d2c6ad', tetto: '#ffffff', paglia: '#a8946a', legno: '#4a3220', finestra: '#1e1915',
+  verde: '#5c7038',
+};
+/**
+ * Giardino murato della corte del signore (hortus conclusus, M7 passo 10c): muro di cinta basso con un varco verso il
+ * palazzo, aiuole rialzate in quadri separate da vialetti, vasca al centro, pergolato su un lato, alberi da frutto.
+ * Misure in m; aiuola: lato minimo di un quadro; vialetto: passaggio tra i quadri.
+ */
+const GIARDINO = {
+  muro: { alto: 1.35, spessore: 0.4, varco: 2.6, cornice: 0.12 },
+  aiuola: { minimo: 2.2, bordo: 0.22, alto: 0.38, terra: 0.06 },
+  vialetto: 1.6,
+  vasca: { raggio: 1.5, alto: 0.55, acqua: 0.12, minimo: 11 },      // minimo: lato del giardino per avere la vasca
+  pergolato: { largo: 2.2, alto: 2.35, palo: 0.16, passo: 2.2, minimo: 9 },
+  albero: { tronco: 0.19, alto: [2.2, 3.2], chioma: [1.1, 1.7] },
+  orto: { filare: 0.9, palo: 0.07, alto: 0.75 },
 };
 /**
  * Coperture: pendenza (tangente) [min, max], spessore (m), tinta (moltiplica il colore per vertice: la texture dei
@@ -116,6 +131,17 @@ export const EDIFICI = {
   cappella:  { nome: 'Cappella', largo: 6, fondo: 10, piani: 2, intonaco: false, campanile: 1.8, copertura: 'lastre' },
   salaArmi:  { nome: "Sala d'armi", largo: 16, fondo: 9, piani: 2, intonaco: false, copertura: 'lastre' },
   armeria:   { nome: 'Armeria', largo: 8, fondo: 6, piani: 1, intonaco: false },
+  // Pertinenze della corte del signore (M7, passo 10c).
+  cucina:    { nome: 'Cucina', largo: 8, fondo: 6, piani: 1, intonaco: false, copertura: 'coppi', comignolone: 1.8 },
+  cantina:   { nome: 'Cantina', largo: 7, fondo: 5.5, piani: 1, intonaco: false, copertura: 'lastre', bassa: true },
+  colombaia: { nome: 'Colombaia', largo: 3.6, fondo: 3.6, piani: 4, intonaco: false, torretta: true },
+  scuderia:  { nome: 'Scuderia del signore', largo: 9, fondo: 6, piani: 1, intonaco: false, copertura: 'coppi' },
+  // Monastero ed eremo (M8, passo 3): le misure arrivano da chi li costruisce (`misure`), qui solo nome e materiali.
+  foresteria: { nome: 'Foresteria', largo: 11, fondo: 7.5, piani: 2, intonaco: true, copertura: 'lastre' },
+  infermeria: { nome: 'Infermeria', largo: 8, fondo: 6.5, piani: 1, intonaco: true },
+  dormitorio: { nome: 'Dormitorio', largo: 7.3, fondo: 7.5, piani: 2, intonaco: false, copertura: 'lastre' },
+  biblioteca: { nome: 'Biblioteca', largo: 7.3, fondo: 7.5, piani: 2, intonaco: false, copertura: 'lastre' },
+  refettorio: { nome: 'Refettorio', largo: 7.3, fondo: 7.5, piani: 2, intonaco: false, copertura: 'lastre' },
   // Dimora dei signori nella corte del signore (M7, passo 10b): piano nobile con bifore, cornici, stemma, scala esterna.
   // Più grandi delle case del borgo, in proporzione alla casata (richiesta dell'utente: «ben più maestoso»).
   palazzetto:      { nome: 'Palazzo del signore', largo: 15, fondo: 10, piani: 2, intonaco: false, palazzo: true, copertura: 'lastre' },
@@ -340,7 +366,8 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     tetto: materialeMuro(new THREE.Color(COL.tetto), LUCE_RIFLESSA * 0.6, texturaTetto()),
     paglia: materialeMuro(new THREE.Color(COL.paglia), LUCE_RIFLESSA, texturaPaglia()),
     legno: new THREE.MeshLambertMaterial({ color: col.legno, flatShading: true }),
-    finestra: new THREE.MeshLambertMaterial({ color: COL.finestra }),
+    finestra: new THREE.MeshLambertMaterial({ color: col.finestra }),
+    verde: new THREE.MeshLambertMaterial({ color: col.verde, flatShading: true }),
   };
   // Finestre accese: colore per istanza r = soglia (0–1); accesa se r < uQuota, quando è buio (uAccese).
   // Il colore per istanza non tinge la finestra (via color_fragment); nel frammento r187 lo segnala USE_COLOR.
@@ -356,7 +383,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
   const torce = [];                                    // { u, v, y, fu, fv }
   const sorgenti = [];                                 // { x, y, z, colore, intensita, distanza } nel blocco
   mat.legno.emissive.set(col.legno).multiplyScalar(LUCE_RIFLESSA * 0.5);
-  const parti = { pietra: [], intonaco: [], tetto: [], paglia: [], legno: [] };
+  const parti = { pietra: [], intonaco: [], tetto: [], paglia: [], legno: [], verde: [] };
   const scegli = (tabella) => { let x = rnd(); for (const [k, p] of Object.entries(tabella)) { if ((x -= p) < 0) return k; } return Object.keys(tabella)[0]; };
   /** Segna una geometria con tinta (moltiplica il colore), muschio (verde verso il basso) ed edera (verde al piede). */
   const segna = (g, o) => { Object.assign(g.userData, o); return g; };
@@ -437,7 +464,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
   }
 
   /** Finestre e porte su una facciata (lungo s, normale `n`), `piani` piani da `pavimento`. */
-  function facciata(c, s, n, a, piani, pavimento, { porta = 0, finestre = true, bottega = false, daPiano = 0, posti = null } = {}) {
+  function facciata(c, s, n, a, piani, pavimento, { porta = 0, finestre = true, bottega = false, daPiano = 0, posti = null, scalaPorta = 1 } = {}) {
     // Finestre piccole e poche, non allineate al millimetro; qualcuna con le imposte di legno aperte.
     const passo = 2.8, k = Math.max(1, Math.floor((2 * a - 1) / passo));
     for (let p = daPiano; p < piani; p++) {
@@ -461,7 +488,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     }
     if (porta) {
       dettagli.push({ tipo: 'porta', u: c[0] + n[0] * 0.05, v: c[1] + n[1] * 0.05, y: pavimento, fu: n[0], fv: n[1],
-        ...(bottega ? { sx: 2.17, sy: 1.18 } : { sx: 0.9 + rnd() * 0.2, sy: (0.92 + rnd() * 0.12) * (CL.porta ?? 1) }) });   // portone: la stessa porta più grande
+        ...(bottega ? { sx: 2.17, sy: 1.18 } : { sx: 0.9 + rnd() * 0.2, sy: (0.92 + rnd() * 0.12) * (CL.porta ?? 1) * scalaPorta }) });   // portone: la stessa porta più grande
     }
   }
 
@@ -491,7 +518,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
    * c: centro; f: fronte (verso la via); largo lungo la via, fondo di traverso; quota: pavimento dato (rocca).
    * I piani alti possono essere a graticcio e sporgere (GRATICCIO); muschio ed edera al piede di alcune case.
    */
-  function corpo({ c, f, largo, fondo, piani, intonaco, quota = null, porta = true, bottega = false, comignolo = true, finestre = true, retro = true, legno = null, copertura, tinta = null }) {
+  function corpo({ c, f, largo, fondo, piani, intonaco, quota = null, porta = true, bottega = false, comignolo = true, finestre = true, retro = true, legno = null, copertura, tinta = null, scalaPorta = 1 }) {
     const s = [-f[1], f[0]], a = largo / 2, b = fondo / 2;
     const { mn, mx } = quote(c, s, f, a, b);
     const pavimento = (quota ?? mx) + 0.15;
@@ -547,7 +574,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     } else {
       (intonaco ? parti.intonaco : parti.pietra).push(segna(prisma(q4(storto(R)), q4(storto(R)), pavimento + 0.5, gronda), intonaco ? { edera: 0, tinta } : { edera: umido }));
       cantonali(c, s, f, a, b, pavimento + 0.5, gronda);
-      facciata(fr, s, f, a, piani, pavimento, { porta, finestre, bottega });
+      facciata(fr, s, f, a, piani, pavimento, { porta, finestre, bottega, scalaPorta });
       if (retro) facciata(rt, s, [-f[0], -f[1]], a, piani, pavimento, { finestre });
     }
     const { colmo, falda } = tetto(c, s, f, a, bT, gronda, aTronchi ? parti.legno : aGraticcio || intonaco ? parti.intonaco : parti.pietra, copertura);
@@ -820,6 +847,165 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
   }
 
   /**
+   * Torretta di pietra (colombaia): fusto quadrato con tetto a piramide, fori per i colombi in file sotto la cornice,
+   * una porticina e una cornice marcapiano.
+   */
+  function torretta(c, f, E, quota) {
+    const s = [-f[1], f[0]], h = E.largo / 2, { mn, mx } = quote(c, s, f, h, h);
+    const pav = (quota ?? mx) + 0.15, alto = pav + E.piani * PIANO * 0.8;
+    const R = rett(c, s, f, h, h);
+    parti.pietra.push(segna(prisma(q4(R), q4(R), Math.min(mn, pav) - 0.6, alto), { sporco: 1 }));
+    piede(c, s, f, h, h);
+    cantonali(c, s, f, h, h, pav, alto, true);
+    const Rc = rett(c, s, f, h + 0.18, h + 0.18);                    // cornice sotto il tetto
+    parti.pietra.push(prisma(q4(Rc), q4(Rc), alto - 0.3, alto));
+    const cima = P(c[0], c[1], alto + E.largo * 0.75);
+    const Rs = Rc.map(([u, v]) => P(u, v, alto));
+    for (let k = 0; k < 4; k++) {
+      const A = Rs[k], B = Rs[(k + 1) % 4];
+      parti.tetto.push(segna(esaedro([A, B, cima, cima], [A, B, cima, cima].map(([x, y, z]) => [x, y - 0.14, z])),
+        { tinta: TT.coppi.tinta, muschio: 0.3 }));
+    }
+    // Fori dei colombi: tre file sui quattro lati, sotto la cornice.
+    for (const [nu, nv] of [[f[0], f[1]], [-f[0], -f[1]], [s[0], s[1]], [-s[0], -s[1]]]) {
+      const t = [-nv, nu];
+      for (let r = 0; r < 3; r++) for (let i = -1; i <= 1; i++) {
+        dettagli.push({ tipo: 'finestra', u: c[0] + nu * (h + 0.03) + t[0] * i * 0.9, v: c[1] + nv * (h + 0.03) + t[1] * i * 0.9,
+          y: alto - 1.1 - r * 0.6, fu: nu, fv: nv, sx: 0.42, sy: 0.4 });
+      }
+    }
+    dettagli.push({ tipo: 'porta', u: c[0] + f[0] * (h + 0.05), v: c[1] + f[1] * (h + 0.05), y: pav, fu: f[0], fv: f[1], sx: 0.7, sy: 0.82 });
+    sagome.push(prisma(q4(R), q4(R), Math.min(mn, pav) - 0.5, alto + E.largo * 0.75));
+    scatole.push({ cu: c[0], cv: c[1], au: s[0], av: s[1], hl: h + 0.05, hw: h + 0.05 });
+    return { pavimento: pav, gronda: alto, colmo: alto + E.largo * 0.75, s, a: h, b: h };
+  }
+
+  /**
+   * Giardino murato (hortus conclusus) della corte del signore: muro basso con cornice e un varco verso il palazzo
+   * (dal lato f), aiuole rialzate in quadri separate da vialetti, vasca di pietra al centro nei giardini grandi,
+   * pergolato addossato a un lato lungo e alberi da frutto negli angoli liberi.
+   * c: centro; f: lato del varco (verso il palazzo); largo lungo s, fondo lungo f.
+   */
+  function giardino(c, f, largo, fondo, quota = null) {
+    const G = GIARDINO, s = [-f[1], f[0]], a = largo / 2, b = fondo / 2;
+    const { mn, mx } = quote(c, s, f, a, b), pav = (quota ?? mx) + 0.05;
+    const M = G.muro, sp = M.spessore;
+    // Muro di cinta: quattro lati, quello del varco in due tratti.
+    const muretto = (ta, tb, da, db) => {
+      const t0 = Math.min(ta, tb), t1 = Math.max(ta, tb), d0 = Math.min(da, db), d1 = Math.max(da, db);
+      const R = [[t0, d0], [t1, d0], [t1, d1], [t0, d1]].map(([t, d]) => [c[0] + s[0] * t + f[0] * d, c[1] + s[1] * t + f[1] * d]);
+      parti.pietra.push(segna(prisma(q4(R), q4(R), Math.min(mn, pav) - 0.6, pav + M.alto), { edera: rnd() < 0.5 ? 1.1 : 0, sporco: 1 }));
+      const Rc = [[t0 - M.cornice, d0 - M.cornice], [t1 + M.cornice, d0 - M.cornice], [t1 + M.cornice, d1 + M.cornice], [t0 - M.cornice, d1 + M.cornice]]
+        .map(([t, d]) => [c[0] + s[0] * t + f[0] * d, c[1] + s[1] * t + f[1] * d]);
+      parti.pietra.push(prisma(q4(Rc), q4(Rc), pav + M.alto, pav + M.alto + M.cornice));
+      const cu = (R[0][0] + R[2][0]) / 2, cv = (R[0][1] + R[2][1]) / 2;
+      const lt = Math.abs(t1 - t0) / 2, ld = Math.abs(d1 - d0) / 2;
+      scatole.push({ cu, cv, au: s[0], av: s[1], hl: lt + M.cornice, hw: ld + M.cornice });
+      sagome.push(prisma(q4(R), q4(R), pav - 0.5, pav + M.alto + M.cornice));
+    };
+    const vv = G.muro.varco / 2;
+    muretto(-a, a, -b, -b + sp);                                       // fondo
+    for (const lato of [-1, 1]) muretto(lato * (a - sp), lato * a, -b, b);   // lati lunghi
+    muretto(-a, -vv, b - sp, b);                                       // lato del varco, due tratti
+    muretto(vv, a, b - sp, b);
+    // Aiuole in quadri: griglia che riempie l'interno lasciando i vialetti.
+    const A = G.aiuola, li = 2 * a - 2 * sp - G.vialetto, lj = 2 * b - 2 * sp - G.vialetto;
+    const nq = Math.max(1, Math.floor((li + G.vialetto) / (A.minimo + G.vialetto)));
+    const mq = Math.max(1, Math.floor((lj + G.vialetto) / (A.minimo + G.vialetto)));
+    const pi = (li - (nq - 1) * G.vialetto) / nq, pj = (lj - (mq - 1) * G.vialetto) / mq;
+    const conVasca = Math.min(2 * a, 2 * b) >= G.vasca.minimo && nq >= 2 && mq >= 2;
+    for (let i = 0; i < nq; i++) for (let j = 0; j < mq; j++) {
+      const t = -li / 2 + pi / 2 + i * (pi + G.vialetto), d = -lj / 2 + pj / 2 + j * (pj + G.vialetto);
+      const cq = [c[0] + s[0] * t + f[0] * d, c[1] + s[1] * t + f[1] * d];
+      if (conVasca && Math.hypot(t, d) < Math.max(pi, pj) * 0.7) continue;        // al centro c'è la vasca
+      // Vialetto d'ingresso: niente aiuole davanti al varco, dal varco al centro (si entra e si arriva alla vasca).
+      if (Math.abs(t) < G.muro.varco / 2 + 0.3 + pi / 2 && d > 0) continue;
+      const Rq = rett(cq, s, f, pi / 2, pj / 2);
+      parti.pietra.push(prisma(q4(Rq), q4(Rq), pav - 0.3, pav + A.alto));          // bordo dell'aiuola
+      const Rt = rett(cq, s, f, pi / 2 - A.bordo, pj / 2 - A.bordo);
+      parti.verde.push(segna(prisma(q4(Rt), q4(Rt), pav + A.alto - 0.2, pav + A.alto + A.terra), { tinta: [0.85 + rnd() * 0.4, 0.9 + rnd() * 0.3, 0.8 + rnd() * 0.3] }));
+      scatole.push({ cu: cq[0], cv: cq[1], au: s[0], av: s[1], hl: pi / 2, hw: pj / 2, cima: pav + A.alto + A.terra });
+    }
+    if (conVasca) {                                                    // vasca tonda con l'acqua
+      const V = G.vasca, x0 = X(c[0], c[1]), z0 = Z(c[0], c[1]);
+      const vera = new THREE.CylinderGeometry(V.raggio, V.raggio * 1.05, V.alto, 14);
+      vera.translate(x0, pav + V.alto / 2, z0);
+      const dentro = new THREE.CylinderGeometry(V.raggio - 0.22, V.raggio - 0.22, 0.1, 14);
+      dentro.translate(x0, pav + V.alto - V.acqua, z0);
+      parti.pietra.push(vera, segna(dentro, { tinta: [0.42, 0.5, 0.58] }));        // acqua: pietra in ombra
+      scatole.push({ cu: c[0], cv: c[1], au: 1, av: 0, hl: V.raggio, hw: V.raggio });
+      sagome.push(prisma(q4(rett(c, s, f, V.raggio, V.raggio)), q4(rett(c, s, f, V.raggio, V.raggio)), pav, pav + V.alto));
+    }
+    // Pergolato addossato a un lato lungo: pali, architravi e traversi, con la vite sopra.
+    const PG = G.pergolato;
+    if (2 * a >= PG.minimo) {
+      const d0 = -(b - sp - PG.largo / 2 - 0.1);     // sul lato opposto al varco: l'ingresso resta libero
+      const n = Math.max(2, Math.round((2 * a - 2 * sp - 1) / PG.passo));
+      for (let k = 0; k <= n; k++) {
+        const t = -a + sp + 0.5 + (2 * a - 2 * sp - 1) * k / n;
+        for (const j of [-1, 1]) {
+          const pu = c[0] + s[0] * t + f[0] * (d0 + j * PG.largo / 2), pv = c[1] + s[1] * t + f[1] * (d0 + j * PG.largo / 2);
+          const Rp = rett([pu, pv], s, f, PG.palo / 2, PG.palo / 2);
+          parti.legno.push(prisma(q4(Rp), q4(Rp), pav - 0.3, pav + PG.alto));
+          scatole.push({ cu: pu, cv: pv, au: s[0], av: s[1], hl: PG.palo, hw: PG.palo });
+        }
+        const Rt = rett([c[0] + s[0] * t + f[0] * d0, c[1] + s[1] * t + f[1] * d0], s, f, 0.06, PG.largo / 2 + 0.1);
+        parti.legno.push(prisma(q4(Rt), q4(Rt), pav + PG.alto, pav + PG.alto + 0.12));       // traverso
+      }
+      for (const j of [-1, 1]) {                                                             // architravi
+        const Rl = rett([c[0] + f[0] * (d0 + j * PG.largo / 2), c[1] + f[1] * (d0 + j * PG.largo / 2)], s, f, a - sp - 0.4, 0.07);
+        parti.legno.push(prisma(q4(Rl), q4(Rl), pav + PG.alto - 0.14, pav + PG.alto));
+      }
+      const Rv = rett([c[0] + f[0] * d0, c[1] + f[1] * d0], s, f, a - sp - 0.45, PG.largo / 2 + 0.05);
+      parti.verde.push(segna(prisma(q4(Rv), q4(Rv), pav + PG.alto + 0.12, pav + PG.alto + 0.38), { tinta: [0.9, 1, 0.85] }));
+      sagome.push(prisma(q4(Rv), q4(Rv), pav + PG.alto, pav + PG.alto + 0.4));
+    }
+    // Alberi da frutto negli angoli dei vialetti.
+    const AL = G.albero, ang = [];
+    for (const i of [-1, 1]) for (const j of [-1, 1]) ang.push([i * (a - sp - 1.2), j * (b - sp - 1.2)]);
+    for (const [t, d] of ang) {
+      if (rnd() < 0.35) continue;
+      const u = c[0] + s[0] * t + f[0] * d, v = c[1] + s[1] * t + f[1] * d;
+      if (Math.abs(d - b) < 1.5 && Math.abs(t) < G.muro.varco) continue;                     // non davanti al varco
+      const h = AL.alto[0] + rnd() * (AL.alto[1] - AL.alto[0]), rc = AL.chioma[0] + rnd() * (AL.chioma[1] - AL.chioma[0]);
+      const tr = new THREE.CylinderGeometry(AL.tronco * 0.8, AL.tronco, h, 7);
+      tr.translate(X(u, v), pav + h / 2, Z(u, v));
+      parti.legno.push(tr);
+      const ch = new THREE.IcosahedronGeometry(rc, 1);
+      ch.scale(1, 0.85, 1);
+      ch.translate(X(u, v), pav + h + rc * 0.55, Z(u, v));
+      parti.verde.push(segna(ch, { tinta: [0.85 + rnd() * 0.3, 0.95 + rnd() * 0.2, 0.8 + rnd() * 0.25] }));
+      scatole.push({ cu: u, cv: v, au: 1, av: 0, hl: AL.tronco * 2, hw: AL.tronco * 2 });
+      sagome.push(prisma(q4(rett([u, v], s, f, rc * 0.7, rc * 0.7)), q4(rett([u, v], s, f, rc * 0.7, rc * 0.7)), pav, pav + h + rc));
+    }
+    return { pavimento: pav, varco: { u: c[0] + f[0] * (b + 0.6), v: c[1] + f[1] * (b + 0.6), fu: f[0], fv: f[1] } };
+  }
+
+  /** Orto: filari di verdure su terra smossa e uno steccato basso di pali e frasche attorno. */
+  function orto(c, f, largo, fondo, quota = null) {
+    const O = GIARDINO.orto, s = [-f[1], f[0]], a = largo / 2, b = fondo / 2;
+    const { mx } = quote(c, s, f, a, b), pav = (quota ?? mx) + 0.05;
+    const n = Math.max(2, Math.floor((2 * b - 0.6) / O.filare));
+    for (let k = 0; k < n; k++) {
+      const d = -b + 0.3 + O.filare * (k + 0.5);
+      const R = rett([c[0] + f[0] * d, c[1] + f[1] * d], s, f, a - 0.3, O.filare * 0.34);
+      parti.verde.push(segna(prisma(q4(R), q4(R), pav - 0.1, pav + 0.26 + rnd() * 0.12), { tinta: [0.8 + rnd() * 0.35, 0.9 + rnd() * 0.25, 0.7 + rnd() * 0.3] }));
+    }
+    const giro = [[-a, -b], [a, -b], [a, b], [-a, b]];
+    for (let k = 0; k < 4; k++) {
+      const [t0, d0] = giro[k], [t1, d1] = giro[(k + 1) % 4], L = Math.hypot(t1 - t0, d1 - d0);
+      for (let i = 0, np = Math.max(2, Math.round(L / 1.6)); i <= np; i++) {
+        const t = t0 + (t1 - t0) * i / np, d = d0 + (d1 - d0) * i / np;
+        const pu = c[0] + s[0] * t + f[0] * d, pv = c[1] + s[1] * t + f[1] * d;
+        const Rp = rett([pu, pv], s, f, O.palo, O.palo);
+        parti.legno.push(prisma(q4(Rp), q4(Rp), terreno(pu, pv) - 0.25, terreno(pu, pv) + O.alto));
+      }
+    }
+    scatole.push({ cu: c[0], cv: c[1], au: s[0], av: s[1], hl: a, hw: b, cima: pav + O.alto });
+    return { pavimento: pav };
+  }
+
+  /**
    * Edificio nominato (EDIFICI). Restituisce le misure occupate (largo, fondo con gli annessi) per i lotti.
    */
   function edificio(tipo, { u, v, fu, fv, quota = null, misure = null }) {
@@ -828,9 +1014,18 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     let r;
     if (E.loggia) r = loggia(c, f, E.largo, E.fondo, quota);
     else if (E.palazzo) r = palazzo(c, f, E, quota);
-    else r = corpo({ c, f, largo: E.largo, fondo: E.fondo, piani: E.piani, intonaco: E.intonaco, quota, bottega: tipo === 'stalla' || tipo === 'fabbro',
-      comignolo: tipo !== 'chiesa' && tipo !== 'cappella', legno: E.graticcio ?? false, copertura: E.copertura });
+    else if (E.torretta) r = torretta(c, f, E, quota);
+    else r = corpo({ c, f, largo: E.largo, fondo: E.fondo, piani: E.piani, intonaco: E.intonaco, quota, bottega: tipo === 'stalla' || tipo === 'fabbro' || tipo === 'scuderia',
+      comignolo: tipo !== 'chiesa' && tipo !== 'cappella', legno: E.graticcio ?? false, copertura: E.copertura, scalaPorta: E.bassa ? 0.78 : 1 });
     if (tipo === 'taverna') { botte(u + s[0] * (E.largo / 2 - 1.5) + f[0] * (E.fondo / 2 + 0.55), v + s[1] * (E.largo / 2 - 1.5) + f[1] * (E.fondo / 2 + 0.55)); }
+    if (E.comignolone) {                                // cucina: un comignolo grande sul colmo, e la legna accanto
+      dettagli.push({ tipo: 'comignolo', u: c[0] - f[0] * E.fondo * 0.15, v: c[1] - f[1] * E.fondo * 0.15,
+        y: r.colmo - 0.6, fu: f[0], fv: f[1], sx: E.comignolone, sy: E.comignolone * 1.1, sz: E.comignolone });
+      catasta(u - s[0] * (E.largo / 2 - 1.4) + f[0] * (E.fondo / 2 + 0.5), v - s[1] * (E.largo / 2 - 1.4) + f[1] * (E.fondo / 2 + 0.5), f[0], f[1], 0.9);
+    }
+    if (E.bassa) {                                      // cantina: botti davanti alla porta bassa
+      botte(u + s[0] * (E.largo / 2 - 1.3) + f[0] * (E.fondo / 2 + 0.6), v + s[1] * (E.largo / 2 - 1.3) + f[1] * (E.fondo / 2 + 0.6));
+    }
     if (tipo === 'fabbro') catasta(u - s[0] * (E.largo / 2 - 1.6) + f[0] * (E.fondo / 2 + 0.5), v - s[1] * (E.largo / 2 - 1.6) + f[1] * (E.fondo / 2 + 0.5), f[0], f[1], 0.8);
     if (E.campanile) {
       const l = E.campanile, cc = [u + s[0] * (E.largo / 2 - l / 2) + f[0] * (E.fondo / 2 - l / 2), v + s[1] * (E.largo / 2 - l / 2) + f[1] * (E.fondo / 2 - l / 2)];
@@ -1137,7 +1332,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
   }
 
   const chiudi = () => completaPezzi(chiudiAPezzi());
-  return { casa, edificio, pozzo, banco, loggia, corpo, chiudi, chiudiAPezzi, rnd, rett, pagliaio, catasta, botte, torcia };
+  return { casa, edificio, pozzo, banco, loggia, corpo, giardino, orto, chiudi, chiudiAPezzi, rnd, rett, pagliaio, catasta, botte, torcia };
 }
 
 // ─── Lotti ────────────────────────────────────────────────────────────────
