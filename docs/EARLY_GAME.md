@@ -256,6 +256,15 @@ poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un
      il clic che teletrasporta, finché non arriva la Carta di gioco (G2).
    *Prova:* aprire, scegliere, ricaricare (si torna al menu con *Continua*), passare da una modalità
    all'altra senza perdere l'altra partita.
+   **Stato: fatto, da provare dall'utente** (`js/3d/interfaccia.js`, `mostraMenuAvvio`; `save.js`: slot 0 Libera,
+   slot 6 Storia, `modalita` nel salvataggio; `main.js`: `sceltaDiAvvio`, `nuovaPartitaDati(modalita)`, `tornaAlMenu`,
+   `soloInLibera`). In Storia niente cavallo, `T` e i clic di Carta e minimappa che teletrasportano rispondono
+   «solo nella modalità Libera». In Libera: Cavaliere Errante fuori dalla Veglia, spada, cotta e scudo, 60 oro, cavallo
+   3D accanto (`Knight.cavallo` resta vuoto finché la milestone Cavallo non corregge `isMounted`, che oggi darebbe lo
+   sconto di Forza anche a piedi). Provato in headless: menu, Storia nuova su seme scritto, `T` rifiutato, F8 al menu
+   con *Continua*, Libera nuova su seme casuale, ricarica con due *Continua*, ripresa della Storia, `?prova` senza menu;
+   nessun errore. Dopo una ricarica normale l'indirizzo contiene `?seme=` del mondo in corso, quindi il campo del seme
+   di una partita nuova arriva precompilato con quel seme (per un mondo nuovo: «Casuale»).
 2. **Carta del cronista vera.** Riquadro con titolo, testo, pulsanti tematici, prerequisiti visibili
    («Richiede…») ed esito; usa il motore di `js/events.js` così com'è. Effetto di tempo nuovo
    `{ type:'tempo', minuti:N }` accanto a `passi` (`Calendar.avanzaMinuti`); i costi della Veglia passano
