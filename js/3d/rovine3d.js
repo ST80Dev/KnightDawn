@@ -297,3 +297,292 @@ export function* createRovinaAPezzi(suolo, sito, ox, oz, carta) {
     dentro: () => false, aggiornaLuci: r.aggiornaLuci, sorgenti: r.sorgenti, misure: r.misure, edifici: r.edifici,
     raggio: ROVINE.raggio };
 }
+
+// ─── Grotte e luoghi del fantastico (M8, passo 5) ──────────────────────────
+// Qui la pietra non è muratura: una grotta e un cerchio di pietre sono roccia viva, senza corsi né malta. Perciò
+// accanto alla mesh di muratura (materialeMuro, texture a corsi) ce n'è una seconda, a facce piatte e colore per
+// vertice, che tiene roccia, terra del tumulo e legno. Il buio dentro la grotta è lo stesso materiale con il colore
+// quasi nero: non costa una chiamata in più.
+//
+// I siti: `grotta` (10–15 per mondo, sul terreno più ripido della cella) e `fantastico` (8–12, in alto) con le
+// varianti cerchio di pietre, tumulo, albero sacro e rovine antiche.
+
+export const MISTERI = {
+  raggio: 24,
+  grotta: { imbocco: [3.4, 4.6], alto: [3, 4], parete: 7, stipite: [3.5, 6], massi: [6, 9], masso: [2.5, 5],
+    dentro: 8, sfasciume: [10, 20] },
+  cerchio: { raggio: [5, 9], pietre: [7, 12], alta: [1.8, 3.2], larga: [0.7, 1.3], spessa: [0.4, 0.7], cadute: [1, 2] },
+  tumulo: { raggio: [7, 11], alto: [2, 3.2], anelli: 5, cordolo: [10, 16], porta: { largo: 1.5, alto: 1.6 } },
+  albero: { tronco: { base: 1.5, cima: 1, alto: 5.5 }, chiome: [7, 10], chioma: [1.7, 2.7], pali: [2, 4], sassi: [8, 14] },
+  antiche: { piano: [12, 9], gradino: 0.35, colonne: [6, 9], colonna: 0.85, alta: [1, 4.5], cadute: [1, 2], rocchi: 4 },
+  colori: {
+    roccia: [0.63, 0.59, 0.52], scuro: [0.045, 0.042, 0.04], terra: [0.36, 0.33, 0.24],
+    erba: [0.33, 0.38, 0.22], fronde: [0.19, 0.32, 0.14], legno: [0.3, 0.23, 0.16], panno: [0.5, 0.18, 0.16], pietraChiara: 0xa8a295,
+  },
+};
+
+/** Unisce geometrie dando a ciascuna un colore per vertice: una sola chiamata per roccia, terra e legno. */
+function unisciTinte(parti) {
+  if (!parti.length) return null;
+  const geos = parti.map(({ g }) => (g.index ? g.toNonIndexed() : g));
+  const n = geos.reduce((s, g) => s + g.attributes.position.count, 0);
+  const pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
+  let o = 0;
+  geos.forEach((g, i) => {
+    const p = g.attributes.position, [cr, cv, cb] = parti[i].c;
+    pos.set(p.array, o * 3);
+    for (let k = 0; k < p.count; k++) { col[3 * (o + k)] = cr; col[3 * (o + k) + 1] = cv; col[3 * (o + k) + 2] = cb; }
+    o += p.count;
+    g.dispose();
+  });
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.computeVertexNormals();                      // non indicizzata: normali per faccia, facce piatte
+  geo.computeBoundingSphere();
+  return geo;
+}
+
+/** Blocco squadrato e storto, appoggiato al terreno: il mattone di tutto quello che è roccia. */
+function blocco(c, ax, az, alto, rot, terreno, rnd, { affonda = 0.6, inclina = 0.25 } = {}) {
+  const cs = Math.cos(rot), sn = Math.sin(rot);
+  const R = [[-ax, -az], [ax, -az], [ax, az], [-ax, az]]
+    .map(([i, j]) => [c[0] + i * cs - j * sn, c[1] + i * sn + j * cs]);
+  const h = terreno(c[0], c[1]);
+  const y = R.map(() => h + alto + (rnd() - 0.5) * 2 * inclina * alto);
+  return prisma(R, R, h - affonda, y);
+}
+
+/**
+ * Masso: un icosaedro con i vertici tirati a caso, mezzo affondato nel terreno. Le scatole squadrate di `blocco` vanno
+ * per le lastre e i rocchi di colonna, ma per la roccia viva sembrano casse: qui serve una forma irregolare.
+ */
+function masso(c, rx, ry, rz, terreno, rnd, affonda = 0.35) {
+  const g = new THREE.IcosahedronGeometry(1, 0);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const k = 0.72 + rnd() * 0.56;
+    p.setXYZ(i, p.getX(i) * rx * k, p.getY(i) * ry * k, p.getZ(i) * rz * k);
+  }
+  g.translate(c[0], terreno(c[0], c[1]) + ry * (1 - affonda), c[1]);
+  return g;
+}
+
+/** Cupola a facce piatte (tumulo): anelli dal centro al bordo, altezza a campana. */
+function cupola(c, raggio, alto, anelli, nA, terreno) {
+  const pos = [], idx = [];
+  const p = (u, v, y) => { pos.push(u, y, v); return pos.length / 3 - 1; };
+  const q = (d) => alto * Math.cos(Math.min(1, d / raggio) * Math.PI / 2);
+  const centro = p(c[0], c[1], terreno(c[0], c[1]) + alto);
+  const anello = [];
+  for (let k = 1; k <= anelli; k++) {
+    const d = raggio * k / anelli, fila = [];
+    for (let j = 0; j < nA; j++) {
+      const a = j / nA * Math.PI * 2, u = c[0] + Math.cos(a) * d, v = c[1] + Math.sin(a) * d;
+      fila.push(p(u, v, terreno(u, v) + (k === anelli ? 0 : q(d))));
+    }
+    anello.push(fila);
+  }
+  for (let j = 0; j < nA; j++) idx.push(centro, anello[0][(j + 1) % nA], anello[0][j]);
+  for (let k = 1; k < anelli; k++) for (let j = 0; j < nA; j++) {
+    const a = anello[k - 1][j], b = anello[k - 1][(j + 1) % nA], cc = anello[k][j], d = anello[k][(j + 1) % nA];
+    idx.push(a, b, cc, b, d, cc);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setIndex(idx);
+  return geo;
+}
+
+/**
+ * Grotta o luogo del fantastico. Stessa forma di ritorno degli altri luoghi di M8.
+ */
+export function createMistero(suolo, sito, ox, oz, carta) {
+  return completaPezzi(createMisteroAPezzi(suolo, sito, ox, oz, carta));
+}
+
+export function* createMisteroAPezzi(suolo, sito, ox, oz, carta) {
+  const M = MISTERI, C = M.colori;
+  const seme = hash2(Math.floor(sito.x), Math.floor(sito.z), (carta.seme ?? 1) ^ 0x6a17ec) || 1;
+  let s0 = seme >>> 0 || 1;
+  const rnd = () => ((s0 = (s0 * 1103515245 + 12345) >>> 0) / 4294967296);
+  const terreno = (u, v) => suolo.getHeight(ox + u, oz + v);
+  const fra = ([a, b]) => a + rnd() * (b - a);
+  const quanti = (r) => Math.round(fra(r));
+  const tinte = [], muratura = [], scatole = [];
+  let t0 = performance.now();
+  const forse = function* () { if (performance.now() - t0 > PEZZO_MS) { yield; t0 = performance.now(); } };
+  /** Colore con una variazione per pezzo, così la roccia non è tutta uguale. */
+  const varia = (c, f = 0.1) => { const k = 1 + (rnd() - 0.5) * 2 * f; return [c[0] * k, c[1] * k, c[2] * k]; };
+  const roccia = (g) => tinte.push({ g, c: varia(C.roccia) });
+
+  // Direzione di monte: dove il terreno sale di più (la grotta sta su terreno ripido, l'imbocco guarda a valle).
+  let su = [0, 1], dMax = -Infinity;
+  for (let k = 0; k < 16; k++) {
+    const a = k / 16 * Math.PI * 2, d = terreno(Math.cos(a) * 7, Math.sin(a) * 7) - terreno(0, 0);
+    if (d > dMax) { dMax = d; su = [Math.cos(a), Math.sin(a)]; }
+  }
+  const giu = [-su[0], -su[1]], lat = [-su[1], su[0]];
+
+  if (sito.tipo === 'grotta') {
+    // ─── Grotta: una fascia di roccia attraversa il pendio, col vano aperto in mezzo ───
+    // Tre tentativi prima di questo: un mucchio di massi tondi non legge mai come una grotta, perché non c'è una
+    // parete in cui il buco sia un buco. Qui la parete è fatta di tre blocchi a facce piatte — a sinistra del vano, a
+    // destra e sopra — così il vuoto in mezzo è davvero un vuoto; i massi irregolari si appoggiano dopo, a rompere la
+    // regolarità. Tutto su UNA quota di riferimento: appoggiando ogni pezzo al terreno sotto di sé, su un pendio
+    // ripido (e la grotta sta sempre sul punto più ripido della cella) i pezzi di monte salivano sopra l'architrave.
+    const largo = fra(M.grotta.imbocco), alto = fra(M.grotta.alto), H = M.grotta.parete;
+    const hM = terreno(giu[0] * 0.5, giu[1] * 0.5), piano = () => hM;
+    const rotL = Math.atan2(lat[1], lat[0]);
+    const fondo = M.grotta.dentro / 2;
+    const dentro = [su[0] * fondo, su[1] * fondo];                 // la parete è spessa, sprofonda nel monte
+    for (const lato of [1, -1]) {                                  // stipiti
+      const w = fra(M.grotta.stipite);
+      const c = [dentro[0] + lat[0] * lato * (largo / 2 + w / 2), dentro[1] + lat[1] * lato * (largo / 2 + w / 2)];
+      roccia(blocco(c, w / 2, fondo, H * (0.8 + rnd() * 0.35), rotL, piano, rnd, { affonda: 1.2, inclina: 0.1 }));
+      scatole.push({ cu: c[0], cv: c[1], au: lat[0], av: lat[1], hl: w / 2, hw: fondo });
+    }
+    roccia(blocco(dentro, largo / 2 + 0.2, fondo, H, rotL, piano, rnd, { affonda: -alto, inclina: 0.07 }));  // architrave
+    const cB = [su[0] * (fondo + 0.3), su[1] * (fondo + 0.3)];     // il buio, dietro il piano della parete
+    tinte.push({ g: blocco(cB, largo / 2 - 0.1, fondo, alto, rotL, piano, rnd, { affonda: 0, inclina: 0 }), c: C.scuro });
+    yield* forse();
+    // Massi appoggiati alla parete e sopra, perché non sembri un muro.
+    for (let k = 0, n = quanti(M.grotta.massi); k < n; k++) {
+      const m = fra(M.grotta.masso) * 0.7;
+      const t = (rnd() - 0.5) * 2 * (largo / 2 + 4), d = fondo * (0.2 + rnd() * 1.4);
+      const c = [lat[0] * t + su[0] * d, lat[1] * t + su[1] * d];
+      const grosso = k % 3 === 0;
+      const alta = grosso ? H * (0.55 + rnd() * 0.3) : m * (0.5 + rnd() * 0.7);
+      roccia(masso(c, (grosso ? m : m * 0.6), alta / 2, (grosso ? m * 0.8 : m * 0.5), piano, rnd, grosso ? 0.1 : 0.3));
+    }
+    // Sfasciume davanti all'imbocco, questo sì appoggiato al terreno vero.
+    for (let k = 0, n = quanti(M.grotta.sfasciume); k < n; k++) {
+      const a = rnd() * Math.PI * 2, d = 2 + rnd() * 8;
+      const c = [giu[0] * 3 + Math.cos(a) * d, giu[1] * 3 + Math.sin(a) * d], l = 0.35 + rnd() * 0.8;
+      roccia(masso(c, l / 2, l / 2 * 0.55, l / 2 * 0.8, terreno, rnd, 0.45));
+    }
+  } else if (sito.variante === 'cerchio di pietre') {
+    // ─── Cerchio di pietre: lastre infisse, un po' storte; una o due cadute ───
+    const R = fra(M.cerchio.raggio), n = quanti(M.cerchio.pietre), cad = quanti(M.cerchio.cadute);
+    const fase = rnd() * Math.PI * 2;
+    for (let k = 0; k < n; k++) {
+      const a = fase + k / n * Math.PI * 2 + (rnd() - 0.5) * 0.14, d = R * (0.94 + rnd() * 0.12);
+      const c = [Math.cos(a) * d, Math.sin(a) * d];
+      const la = fra(M.cerchio.larga), sp = fra(M.cerchio.spessa), al = fra(M.cerchio.alta);
+      if (k < cad) {                                   // caduta: lunga a terra, verso l'esterno
+        roccia(blocco(c, al / 2, la / 2, sp, a, terreno, rnd, { affonda: 0.2, inclina: 0.05 }));
+      } else {
+        roccia(blocco(c, sp / 2, la / 2, al, a + Math.PI / 2, terreno, rnd, { affonda: 0.7, inclina: 0.1 }));
+        scatole.push({ cu: c[0], cv: c[1], au: Math.cos(a), av: Math.sin(a), hl: sp / 2, hw: la / 2 });
+      }
+      yield* forse();
+    }
+  } else if (sito.variante === 'tumulo') {
+    // ─── Tumulo: cupola d'erba, cordolo di pietre, porta di tre lastre a valle ───
+    const R = fra(M.tumulo.raggio), H = fra(M.tumulo.alto);
+    tinte.push({ g: cupola([0, 0], R, H, M.tumulo.anelli, 24, terreno), c: varia(C.erba, 0.06) });
+    const nC = quanti(M.tumulo.cordolo);
+    for (let k = 0; k < nC; k++) {
+      const a = k / nC * Math.PI * 2, c = [Math.cos(a) * R * 1.02, Math.sin(a) * R * 1.02];
+      roccia(masso(c, 0.55, 0.45 + rnd() * 0.25, 0.4, terreno, rnd, 0.4));
+    }
+    yield* forse();
+    const P = M.tumulo.porta;
+    const cP = [giu[0] * (R * 0.92), giu[1] * (R * 0.92)];
+    for (const lato of [1, -1]) {                      // stipiti
+      const c = [cP[0] + lat[0] * lato * (P.largo / 2 + 0.3), cP[1] + lat[1] * lato * (P.largo / 2 + 0.3)];
+      roccia(blocco(c, 0.3, 0.45, P.alto, Math.atan2(lat[1], lat[0]), terreno, rnd, { affonda: 0.5, inclina: 0.04 }));
+    }
+    roccia(blocco(cP, P.largo / 2 + 0.9, 0.45, P.alto + 0.45, Math.atan2(lat[1], lat[0]), terreno, rnd, { affonda: 0, inclina: 0.03 }));
+    const cB = [cP[0] + su[0] * 0.9, cP[1] + su[1] * 0.9];
+    tinte.push({ g: blocco(cB, P.largo / 2 - 0.1, 0.6, P.alto - 0.15, Math.atan2(lat[1], lat[0]), terreno, rnd, { affonda: 0.2, inclina: 0 }), c: C.scuro });
+    scatole.push({ cu: 0, cv: 0, au: 1, av: 0, hl: R * 0.8, hw: R * 0.8 });
+  } else if (sito.variante === 'albero sacro') {
+    // ─── Albero sacro: tronco grosso, chioma a blocchi, sassi e pali con i panni ───
+    const T = M.albero.tronco, h = terreno(0, 0);
+    const R0 = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([i, j]) => [i * T.base / 2, j * T.base / 2]);
+    const R1 = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([i, j]) => [i * T.cima / 2, j * T.cima / 2]);
+    tinte.push({ g: prisma(R0, R1, h - 0.8, h + T.alto), c: varia(C.legno, 0.08) });
+    scatole.push({ cu: 0, cv: 0, au: 1, av: 0, hl: T.base / 2, hw: T.base / 2 });
+    const nC = quanti(M.albero.chiome);
+    for (let k = 0; k < nC; k++) {
+      const a = rnd() * Math.PI * 2, d = k ? 1.2 + rnd() * 2.2 : 0, r = fra(M.albero.chioma);
+      const g = new THREE.IcosahedronGeometry(r, 0);
+      g.translate(Math.cos(a) * d, h + T.alto + (k ? 0.4 + rnd() * 2.6 : 1.6), Math.sin(a) * d);
+      tinte.push({ g, c: varia(C.fronde, 0.16) });
+      yield* forse();
+    }
+    for (let k = 0, n = quanti(M.albero.sassi); k < n; k++) {
+      const a = rnd() * Math.PI * 2, d = 2.2 + rnd() * 2.4, l = 0.3 + rnd() * 0.5;
+      roccia(masso([Math.cos(a) * d, Math.sin(a) * d], l / 2, l / 2 * 0.6, l / 2 * 0.8, terreno, rnd, 0.4));
+    }
+    for (let k = 0, n = quanti(M.albero.pali); k < n; k++) {
+      const a = rnd() * Math.PI * 2, d = 3.5 + rnd() * 2.5, c = [Math.cos(a) * d, Math.sin(a) * d];
+      tinte.push({ g: blocco(c, 0.09, 0.09, 1.7 + rnd() * 0.6, rnd(), terreno, rnd, { affonda: 0.5, inclina: 0.06 }), c: varia(C.legno) });
+      const hp = terreno(c[0], c[1]) + 1.5;
+      tinte.push({ g: blocco([c[0] + 0.12, c[1]], 0.02, 0.22, 0, rnd(), () => hp, rnd, { affonda: -0.7, inclina: 0 }), c: varia(C.panno, 0.18) });
+    }
+  } else {
+    // ─── Rovine antiche: basamento a gradini, colonne spezzate, due colonne a terra in rocchi ───
+    const A = M.antiche, [pl, pf] = A.piano, av = rnd() * Math.PI * 2;
+    const dir = [Math.cos(av), Math.sin(av)], nrm = [-dir[1], dir[0]];
+    const pt = (du, dv) => [dir[0] * du + nrm[0] * dv, dir[1] * du + nrm[1] * dv];
+    const hP = terreno(0, 0);
+    for (const [k, g] of [[0, 0], [1, 1]]) {
+      const a = pl / 2 + (1 - g) * 0.8, b = pf / 2 + (1 - g) * 0.8;
+      const R = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([i, j]) => pt(i * a, j * b));
+      muratura.push(prisma(R, R, hP - 1 + g * A.gradino, hP + g * A.gradino + A.gradino));
+    }
+    const base = hP + 2 * A.gradino;
+    const n = quanti(A.colonne), cad = quanti(A.cadute);
+    for (let k = 0; k < n; k++) {
+      // Lungo i due lati lunghi del basamento, alternate.
+      const lato = k % 2 ? 1 : -1, t = (Math.floor(k / 2) + 0.5) / Math.ceil(n / 2);
+      const c = pt(-pl / 2 + 1.2 + t * (pl - 2.4), lato * (pf / 2 - 1.2));
+      const al = fra(A.alta);
+      const R0 = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([i, j]) => [c[0] + i * A.colonna / 2, c[1] + j * A.colonna / 2]);
+      const R1 = R0.map(([u, v]) => [c[0] + (u - c[0]) * 0.86, c[1] + (v - c[1]) * 0.86]);
+      muratura.push(prisma(R0, R1, base - 0.2, [base + al, base + al - 0.12, base + al - 0.2, base + al - 0.08]));
+      scatole.push({ cu: c[0], cv: c[1], au: 1, av: 0, hl: A.colonna / 2, hw: A.colonna / 2 });
+      yield* forse();
+    }
+    for (let k = 0; k < cad; k++) {                    // colonne a terra, in rocchi staccati
+      const a = av + Math.PI / 2 + (rnd() - 0.5) * 1.2, d = pf / 2 + 2 + rnd() * 4;
+      const c0 = [Math.cos(a) * d, Math.sin(a) * d], dd = [Math.cos(a + Math.PI / 2), Math.sin(a + Math.PI / 2)];
+      for (let j = 0; j < A.rocchi; j++) {
+        const c = [c0[0] + dd[0] * j * (A.colonna + 0.25), c0[1] + dd[1] * j * (A.colonna + 0.25)];
+        muratura.push(blocco(c, A.colonna / 2, A.colonna / 2, A.colonna, a, terreno, rnd, { affonda: 0.35, inclina: 0.05 }));
+      }
+    }
+  }
+  yield;
+
+  const object = new THREE.Group();
+  object.name = `${sito.tipo}-${sito.id}`;
+  const solidi = [];
+  const misure = { case: 0, edifici: 0, chiamate: 0, triangoli: 0 };
+  const geoT = unisciTinte(tinte);
+  if (geoT) {
+    const m = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+    const mesh = new THREE.Mesh(geoT, m);
+    mesh.name = `${object.name}-roccia`;
+    object.add(mesh);
+    solidi.push(mesh);
+    misure.chiamate++;
+    misure.triangoli += geoT.attributes.position.count / 3;
+  }
+  const geoM = unisci(muratura);
+  if (geoM) {
+    invecchia(geoM, terreno, ox, oz);
+    const mesh = new THREE.Mesh(geoM, materialeMuro(new THREE.Color(C.pietraChiara), 0.16));
+    mesh.name = `${object.name}-pietra`;
+    object.add(mesh);
+    solidi.push(mesh);
+    misure.chiamate++;
+    misure.triangoli += geoM.attributes.position.count / 3;
+  }
+  yield;
+  return { tipo: sito.tipo, sito, object, solidi,
+    spingiFuori: spintaDaScatole(scatole, ox, oz, M.raggio + 20), quotaSuolo: () => null,
+    dentro: () => false, aggiornaLuci: () => {}, sorgenti: [], misure, edifici: [], raggio: M.raggio };
+}

@@ -1779,7 +1779,7 @@ Codice in `js/3d/villaggio3d.js` (come da piano: il file tiene villaggi, ovili, 
   chiamate e ~9.600 triangoli.
 - **Fuori dal passo**: monaci (abitanti3d.js di M7), campane, cimitero, chiostro a due piani.
 
-### Passo 4 — rovine e luoghi abbandonati (fatto, da provare)
+### Passo 4 — rovine e luoghi abbandonati (fatto, provato dall'utente e unito: PR #214)
 
 File nuovo `js/3d/rovine3d.js` (era già fra quelli approvati), agganci in `main.js`. Nessun cambio al generatore.
 - **Differenza fra i due tipi**, che guida tutto il modulo: una **rovina** non ha più tetti né solai (muri spezzati,
@@ -1806,6 +1806,28 @@ File nuovo `js/3d/rovine3d.js` (era già fra quelli approvati), agganci in `main
 - **Attenzione per le prove**: le coordinate dei siti **non** si possono ricavare da una pipeline ridotta in Node
   (generaCarta → aggiungiLuoghi → aggiungiSiti): saltando `fiumiFini` i punteggi cambiano e i siti si spostano. Vanno
   letti da `window.kd.carta.siti` nel browser.
+
+### Passo 5 — grotte e luoghi del fantastico (fatto, da provare)
+
+Nello stesso `js/3d/rovine3d.js`. Nessun cambio al generatore.
+- **Materiale nuovo**: una grotta e un cerchio di pietre sono roccia viva, non muratura, e la texture a corsi di
+  `materialeMuro` le farebbe sembrare costruite. Accanto alla mesh di muratura c'è quindi una seconda mesh a facce
+  piatte con il colore per vertice, che tiene roccia, terra del tumulo, legno e panni. **Il buio dentro la grotta è
+  lo stesso materiale col colore quasi nero: non costa una chiamata in più.**
+- **Grotta** (10–15 per mondo, sul punto più ripido della cella): una fascia di roccia attraversa il pendio, con il
+  vano aperto in mezzo; stipiti e architrave sono blocchi a facce piatte, così il vuoto è davvero un vuoto, e i massi
+  irregolari si appoggiano dopo. Tutto su **una sola quota di riferimento**: appoggiando ogni pezzo al terreno sotto
+  di sé, su un pendio ripido i pezzi di monte salivano sopra l'architrave e il vano si chiudeva a fessura.
+- **Luoghi del fantastico** (8–12): *cerchio di pietre* (7–12 lastre infisse e storte, una o due cadute), *tumulo*
+  (cupola d'erba, cordolo di massi, porta di tre lastre a valle col buio dietro), *albero sacro* (tronco grosso,
+  chioma a grappolo di blocchi, sassi d'offerta e pali con i panni), *rovine antiche* (basamento a due gradini,
+  sei-nove colonne spezzate, una o due colonne a terra in rocchi).
+- **Misure** [Certo, Chromium headless, seme 570549, nessun errore]: **una chiamata per luogo**, 120–604 triangoli.
+  Il più leggero di tutti i passi di M8.
+- **Punto debole dichiarato**: la **grotta** è l'unica delle cinque che non convince ancora. Quattro tentativi: massi
+  tondi (sembrava un mucchio di sassi), architrave da terra (tappava il vano), quote per pezzo (fessura), parete a
+  blocchi (letta come un bunker). Quella consegnata ha il vano visibile e la scala giusta, ma la parete resta
+  squadrata. Da rivedere con l'utente: serve una forma di roccia più ricca, o un imbocco scavato invece che costruito.
 
 ### Decisioni tecniche
 
