@@ -2537,6 +2537,10 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
     (banchina 5 → 4 m, così il ripiano scavato resta largo ~15 m), carrareccia 3 → **4,5 m**, mulattiera 2 → **2,8 m**,
     sentieri invariati. Pendenza di traverso sotto la carreggiata quasi invariata (90° percentile 2,3 → 3,5 % sul seme
     570549, 10,7 → 10,5 % sul 395728); salite invariate.
+  - *Banchina erbosa* [richiesta dell'utente: i campi arati arrivavano a ridosso della carreggiata e sembravano «pezzi
+    di strada ai lati» di colore diverso]: la fascia d'erba tra la carreggiata e i campi (`PARCELLE.strada.margine`)
+    passa da 0,6–2,2 a **3,5–5 m**. Verificato che le fasce segnalate erano appezzamenti arati: lungo la maestra sotto la
+    rocca di partenza (seme 570549) il terreno a 5, 8, 12 e 17 m dal centro è campo coltivato.
   - *Colore dal clima* (stessa decisione; **niente stagioni**, «i biomi le rappresentano già»): `coloreStrada` in
     `terrain.js` dà il colore della terra battuta da temperatura e umidità di `coperturaMondo` (interpolate: nessuno
     stacco tra celle), passato al nastro da `creaAcqueScena`. Misurato sul seme 570549: caldo secco `#c7b287`,
