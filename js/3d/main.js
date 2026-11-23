@@ -20,6 +20,8 @@ import { createCastle } from './castle3d.js';
 import { createRoccaAPezzi } from './rocca3d.js';
 import { creaCaseCampagna, quotaFinestre } from './edifici3d.js';
 import { createBorgoAPezzi } from './borgo3d.js';
+import { createVillaggioAPezzi, pianoDelSito } from './villaggio3d.js';
+import { raggioSito } from '../mondo/siti.js';
 import { createCartaVista } from './cartaVista.js';
 import { creaMinimappa } from './minimappa.js';
 import { creaOrizzonteAPezzi } from './orizzonte.js';
@@ -230,6 +232,7 @@ let carta = null;                         // Carta del mondo generato (null a Ta
 let scenaAttuale = null;                  // { tipo: 'tavullia' } | { tipo: 'mondo', cx, cz } (centro, m del mondo)
 let statPendenze = '';                    // percentili della pendenza della Scena (F3)
 let vegetazione = null;                   // alberi, arbusti, rocce della Scena (vegetazione3d.js)
+let villaggi = [];                        // M8, passo 2: villaggi e ovili del blocco (villaggio3d.js)
 let campagna = null;                      // M7, passo 5: case di campagna del blocco (edifici3d.js)
 let abitanti = null;                      // M7, passo 7: persone di rocche e borghi (abitanti3d.js)
 let vegetazioneVisibile = true;           // tasto V
@@ -419,7 +422,7 @@ function cercaPortaVicina() {
   const st = knight.stato, dx0 = Math.sin(st.direzione), dz0 = Math.cos(st.direzione);
   personaVicina = abitanti?.personaVicina(st.x, st.z, st.direzione) ?? null;
   let migliore = PORTA.distanza;
-  for (const r of rocche) {
+  for (const r of [...rocche, ...villaggi]) {
     for (const e of r.edifici ?? []) {
       const p = e.porta;
       if (p.x === undefined) continue;
@@ -502,7 +505,7 @@ function luciVicine(t, buio) {
   const st = knight?.stato;
   const tutte = [];
   if (f > 0 && st) {
-    for (const r of [...rocche, campagna]) for (const sg of r?.sorgenti ?? []) {
+    for (const r of [...rocche, ...villaggi, campagna]) for (const sg of r?.sorgenti ?? []) {
       const d = Math.hypot(sg.x - st.x, sg.z - st.z);
       if (d < LUCI_VICINE.raggio) tutte.push({ sg, d });
     }
@@ -578,15 +581,34 @@ function* costruisciRocche(cx, cz, ter) {
   return out;
 }
 
+/**
+ * M8, passo 2: villaggi e ovili (carta.siti) il cui ingombro tocca il blocco o gli sta a meno di 50 m, costruiti interi
+ * in coordinate del blocco (fuori dal blocco il terreno viene da quotaFinale, come per le rocche).
+ */
+function* costruisciVillaggi(cx, cz, ter) {
+  const half = ter.size / 2, out = [];
+  const suoloMondo = {
+    getHeight: (x, z) => (Math.abs(x) <= half && Math.abs(z) <= half ? ter.getHeight(x, z) : quotaFinale(carta, x + cx, z + cz)),
+  };
+  for (const s of carta?.siti ?? []) {
+    if (s.tipo !== 'villaggio' && s.tipo !== 'ovile') continue;
+    const x = s.x - cx, z = s.z - cz, m = raggioSito(s) + 50;
+    if (Math.abs(x) > half + m || Math.abs(z) > half + m) continue;
+    out.push(yield* createVillaggioAPezzi(suoloMondo, s, x, z, carta, cx, cz));
+  }
+  return out;
+}
+
 /** Toglie dalla scena gli oggetti della Scena attuale; se `subito` li libera ora, altrimenti a pezzi (M7, passo 9). */
 function togliScenaAttuale(subito = true) {
   for (const o of [terrain?.mesh, acqua, castle?.object, orizzonte?.oggetto, acqueScena, vegetazione?.oggetto,
-    ...rocche.map((r) => r.object), gruppoPonti, campagna?.object, abitanti?.object]) {
+    ...rocche.map((r) => r.object), ...villaggi.map((r) => r.object), gruppoPonti, campagna?.object, abitanti?.object]) {
     if (!o) continue;
     scene.remove(o);
     if (subito) libera(o); else daLiberare.push(o);
   }
   rocche = [];
+  villaggi = [];
   campagna = null;
   abitanti = null;
   ponti = []; gruppoPonti = null;
@@ -619,10 +641,13 @@ function* preparaMondo(desc) {
   yield 'acque e ponti';
   const roc = yield* costruisciRocche(cx, cz, ter);
   yield 'rocche';
+  const vil = yield* costruisciVillaggi(cx, cz, ter);
+  yield 'villaggi';
   const posVeg = yield* posizionaVegetazioneAPezzi({
     heights, cols: meta.cols, cell: meta.cellSize, cx, cz, acqua: dati,
     copertura: coperturaMondo(carta, Calendar.stagione), seme: carta.seme, carta,
-    piani: (carta.luoghi || []).flatMap((l) => l.piani || []), mare: true,
+    piani: [...(carta.luoghi || []).flatMap((l) => l.piani || []),
+      ...(carta.siti || []).filter((s) => s.tipo === 'villaggio' || s.tipo === 'ovile').map(pianoDelSito)], mare: true,
   }, MS_PEZZO);
   yield 'posizione vegetazione';
   const veg = yield* creaVegetazioneAPezzi(posVeg, ter, renderer, MS_PEZZO);   // il terreno nuovo, mai quello in scena
@@ -652,9 +677,9 @@ function* preparaMondo(desc) {
   yield* veg.preparaOmbre(sole.position, MS_PEZZO);
   yield 'ombre';
   // Shader e texture pronti prima dello scambio (note di M1): niente compilazioni né caricamenti nel suo fotogramma.
-  yield* preparaScheda([ter.mesh, acque, pp.gruppo, ...roc.map((r) => r.object), veg.oggetto, camp?.object,
+  yield* preparaScheda([ter.mesh, acque, pp.gruppo, ...roc.map((r) => r.object), ...vil.map((r) => r.object), veg.oggetto, camp?.object,
     oriz.oggetto, oriz.acqua]);
-  return { desc: { ...desc, cx, cz }, scostamento: { x: desc.cx - cx, z: desc.cz - cz }, meta, dati, ter, acque, strade, pp, roc,
+  return { desc: { ...desc, cx, cz }, scostamento: { x: desc.cx - cx, z: desc.cz - cz }, meta, dati, ter, acque, strade, pp, roc, vil,
     veg, camp, msCot, msCotOriz, oriz };
 }
 
@@ -697,6 +722,13 @@ function applicaMondo(p) {
   livelliAcqua = { fiume: dati.fiume, lago: dati.lago, cols: meta.cols, cell: meta.cellSize, half: meta.sizeMeters / 2 };
   rocche = p.roc;
   for (const r of rocche) {
+    scene.add(r.object);
+    raccogliEmissivi(r.object);
+    ostacoli.push(r);
+    occlusori.push(...r.solidi);
+  }
+  villaggi = p.vil ?? [];
+  for (const r of villaggi) {
     scene.add(r.object);
     raccogliEmissivi(r.object);
     ostacoli.push(r);
@@ -987,7 +1019,7 @@ async function init() {
     scene, camera, cam, controls, suolo, Knight, Calendar, Save, renderer, qualita,
     get terrain() { return terrain; }, get knight() { return knight; }, get castle() { return castle; },
     get carta() { return carta; }, get scena() { return scenaAttuale; }, get orizzonte() { return orizzonte; },
-    get rocche() { return rocche; }, get campagna() { return campagna; }, get abitanti() { return abitanti; },
+    get rocche() { return rocche; }, get villaggi() { return villaggi; }, get campagna() { return campagna; }, get abitanti() { return abitanti; },
     get vegetazione() { return vegetazione; }, get cavallo() { return cavallo; }, get ponti() { return ponti; },
     caricaScena, posizionaCavaliere, minimappa,
     /** M7, passo 9: ricentra il blocco (su { x, z } del mondo, o sul cavaliere) — per il percorso di prova. */
@@ -1251,7 +1283,7 @@ function gruppoDi(o) {
   if (terrain && top === terrain.mesh) return 'ter. blocco';
   if (orizzonte && top === orizzonte.oggetto) return 'ter. orizzonte';
   if (vegetazione && top === vegetazione.oggetto) return 'veg. resto';
-  if ((castle && top === castle.object) || rocche.some((r) => r.object === top) || (campagna && top === campagna.object)) return 'edifici';
+  if ((castle && top === castle.object) || rocche.some((r) => r.object === top) || villaggi.some((r) => r.object === top) || (campagna && top === campagna.object)) return 'edifici';
   if ((knight && top === knight.object) || (cavallo && top === cavallo.object) || (abitanti && top === abitanti.object)) return 'personaggi';
   return null;
 }
@@ -1550,6 +1582,11 @@ function aggiornaPannello(now) {
           + ` ${r.rampa.lato ? 'lungo il muro' : 'dritta'} di ${fmt(r.rampa.lunghezza, 1)} m al ${fmt(100 * r.rampa.pendenza)} %,`
           + ` ${r.misure.edifici} edifici, ${r.misure.oggetti} oggetti, ${fmt(r.misure.triangoli)} triangoli`;
       }
+      for (const r of villaggi) {
+        const d = Math.hypot(r.sito.x - (scenaAttuale.cx + k.x), r.sito.z - (scenaAttuale.cz + k.z));
+        testo += `\n${r.tipo === 'ovile' ? 'ovile' : r.sito.dimensione === 'villaggio' ? 'villaggio' : 'frazione'} ${r.sito.id + 1} a ${fmt(d)} m:`
+          + ` ${r.misure.case} case, ${r.misure.edifici} edifici, ${r.misure.chiamate} chiamate, ${fmt(r.misure.triangoli)} triangoli`;
+      }
       if (campagna) testo += `\ncase di campagna: ${campagna.misure.case}, ${campagna.misure.chiamate} oggetti, ${fmt(campagna.misure.triangoli)} triangoli`;
     }
     if (castle) {
@@ -1635,6 +1672,7 @@ function frame(now) {
       const quota = quotaFinestre(Calendar.oraDelGiorno());
       for (const r of rocche) r.aggiornaLuci(now / 1000, 1 - _luceGiorno, quota);
       campagna?.aggiornaLuci(now / 1000, 1 - _luceGiorno, quota);
+      for (const r of villaggi) r.aggiornaLuci(now / 1000, 1 - _luceGiorno, quota);
       luciVicine(now / 1000, 1 - _luceGiorno);
     }
     orizzonte?.luciLontane?.(1 - _luceGiorno);   // M7, passo 8: luci dei borghi lontani (orizzonte.js)
