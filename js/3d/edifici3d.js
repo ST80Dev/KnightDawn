@@ -31,7 +31,7 @@ const COL = {
 const GIARDINO = {
   muro: { alto: 1.35, spessore: 0.4, varco: 2.6, cornice: 0.12 },
   aiuola: { minimo: 2.2, bordo: 0.22, alto: 0.38, terra: 0.06 },
-  vialetto: 1.3,
+  vialetto: 1.6,
   vasca: { raggio: 1.5, alto: 0.55, acqua: 0.12, minimo: 11 },      // minimo: lato del giardino per avere la vasca
   pergolato: { largo: 2.2, alto: 2.35, palo: 0.16, passo: 2.2, minimo: 9 },
   albero: { tronco: 0.19, alto: [2.2, 3.2], chioma: [1.1, 1.7] },

@@ -1190,6 +1190,9 @@ export function* createRoccaAPezzi(suolo, luogo, ox, oz, clima = 'temperato') {
           return;
         }
       }
+      // Attorno al palazzo non c'è posto: come gli edifici nominati, lungo le mura o libera nel cortile.
+      colloca(tipo, [CORTI.muro ? 'signore' : null]);
+      if (edificiFatti.has(tipo)) corteFatta.add(tipo);
     };
     /** Orto: una piazzola libera vicino al palazzo (e quindi alla cucina). */
     const mettiOrto = () => {
