@@ -85,7 +85,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 
 const scene = new THREE.Scene();
 // Cielo: luci del giorno e della notte, colore del cielo, nebbia (cielo.js).
-const cieloScena = creaCielo(scene);
+const cieloScena = creaCielo(scene, renderer);
 const { sole } = cieloScena;
 
 // Qualità (F2, ?qualita=basso|medio|alto, ricordata nel browser) e risoluzione adattiva: prestazioni.js.

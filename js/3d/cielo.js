@@ -161,13 +161,124 @@ function creaCupola() {
   return cupola;
 }
 
+// ─── Stelle ───
+// ~2000 punti su una sfera dentro la cupola, disegnati dopo di lei e con il test di profondità (il terreno le copre).
+// Luminosità e colore per stella, fascia più fitta come la Via Lattea, cielo che si svuota verso l'orizzonte
+// (foschia). Sorgono e tramontano col tempo: tutto il cielo ruota attorno alla stella polare, come quello vero.
+// Niente texture, una sola chiamata di disegno.
+const STELLE = {
+  numero: 2400,
+  raggio: 120000,                          // m: dentro la cupola (125 km)
+  dimensione: 2.3,                         // px (a risoluzione piena) della stella più luminosa
+  latitudine: 44,                          // gradi: altezza della polare sull'orizzonte (come l'Italia centrale)
+  viaLattea: 0.45,                         // quota di stelle addensate nella fascia
+};
+
+const VERTICI_STELLE = /* glsl */ `
+  #include <common>
+  #include <logdepthbuf_pars_vertex>
+  uniform float uScala, uNotte;
+  attribute float aLum;
+  varying vec3 vCol;
+  varying float vFuoco;
+  void main() {
+    vec4 p = modelViewMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * p;
+    // Verso l'orizzonte la foschia le spegne; sotto l'orizzonte non ci sono.
+    vec3 d = normalize(position);
+    float basse = smoothstep(0.015, 0.22, d.y);
+    vFuoco = uNotte * basse * aLum;
+    vCol = color;
+    gl_PointSize = uScala * (0.55 + 0.75 * aLum);
+    #include <logdepthbuf_vertex>
+  }`;
+const FRAMMENTI_STELLE = /* glsl */ `
+  #include <common>
+  #include <logdepthbuf_pars_fragment>
+  varying vec3 vCol;
+  varying float vFuoco;
+  void main() {
+    #include <logdepthbuf_fragment>
+    if (vFuoco <= 0.002) discard;
+    // Disco morbido: piena al centro, spenta al bordo del punto (niente texture).
+    float r = length(gl_PointCoord - 0.5) * 2.0;
+    float a = vFuoco * (1.0 - smoothstep(0.35, 1.0, r));
+    gl_FragColor = vec4(vCol * a, a);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+  }`;
+
+/** Numeri casuali ripetibili: le stelle sono le stesse ogni notte e in ogni partita. */
+function _rng(seme) {
+  let a = seme >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function creaStelle() {
+  const n = STELLE.numero;
+  const pos = new Float32Array(n * 3), col = new Float32Array(n * 3), lum = new Float32Array(n);
+  const r = _rng(20261122);
+  const _v = new THREE.Vector3();
+  // Colore per temperatura: la maggior parte bianco-azzurre, poche giallo-arancio.
+  const caldo = new THREE.Color('#ffd0a0'), freddo = new THREE.Color('#cfe0ff'), _c = new THREE.Color();
+  for (let i = 0; i < n; i++) {
+    // Direzione in coordinate del cielo: distribuzione uniforme sulla sfera, più una fascia densa (Via Lattea).
+    let x, y, z;
+    if (r() < STELLE.viaLattea) {
+      const t = r() * Math.PI * 2;
+      // Fascia stretta attorno a un piano inclinato: somma di due sorteggi = addensamento al centro.
+      const b = (r() + r() - 1) * 0.30;
+      x = Math.cos(t); y = b; z = Math.sin(t);
+      const l = Math.hypot(x, y, z); x /= l; y /= l; z /= l;
+      // Inclinazione della fascia rispetto all'equatore celeste.
+      const inc = 62 * _gradi, ci = Math.cos(inc), si = Math.sin(inc);
+      const y2 = y * ci - z * si, z2 = y * si + z * ci;
+      y = y2; z = z2;
+    } else {
+      const u = r() * 2 - 1, t = r() * Math.PI * 2, s = Math.sqrt(1 - u * u);
+      x = s * Math.cos(t); y = u; z = s * Math.sin(t);
+    }
+    _v.set(x, y, z).multiplyScalar(STELLE.raggio);
+    pos[i * 3] = _v.x; pos[i * 3 + 1] = _v.y; pos[i * 3 + 2] = _v.z;
+    // Poche stelle luminose, molte deboli (curva ripida come le magnitudini vere).
+    lum[i] = Math.pow(r(), 2.6);
+    _c.copy(freddo).lerp(caldo, Math.pow(r(), 2));
+    col[i * 3] = _c.r; col[i * 3 + 1] = _c.g; col[i * 3 + 2] = _c.b;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setAttribute('aLum', new THREE.BufferAttribute(lum, 1));
+  geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), STELLE.raggio * 1.01);
+  const materiale = new THREE.ShaderMaterial({
+    uniforms: { uScala: { value: STELLE.dimensione }, uNotte: { value: 0 } },
+    vertexShader: VERTICI_STELLE, fragmentShader: FRAMMENTI_STELLE,
+    vertexColors: true, transparent: true, blending: THREE.AdditiveBlending,
+    depthWrite: false, depthTest: true, fog: false,
+  });
+  const stelle = new THREE.Points(geo, materiale);
+  stelle.name = 'cielo-stelle';
+  stelle.renderOrder = 1001;               // dopo la cupola (nessuna delle due scrive la profondità)
+  stelle.frustumCulled = false;
+  // L'asse del cielo punta alla polare: alto sull'orizzonte verso nord (-Z), inclinato come la latitudine.
+  stelle.rotation.order = 'YXZ';
+  stelle.rotation.x = (90 - STELLE.latitudine) * _gradi;
+  stelle.onBeforeRender = (_r, _s, cam) => { stelle.position.copy(cam.position); stelle.updateMatrixWorld(); };
+  return stelle;
+}
+
 /**
  * Crea luci, sfondo e nebbia della scena.
  * @returns {{ sole: THREE.DirectionalLight, luna: THREE.DirectionalLight, emisfera: THREE.HemisphereLight,
  *   readonly luceGiorno: number, aggiorna(ora: number): boolean, invalida(): void,
  *   aggiornaNebbia(camera: THREE.Camera, punto: THREE.Vector3, conOrizzonte: boolean, seme: number, giorni: number): void }}
  */
-export function creaCielo(scene) {
+export function creaCielo(scene, renderer = null) {
   scene.background = new THREE.Color(COLORE_CIELO);
   scene.fog = new THREE.Fog(COLORE_CIELO, NEBBIA[0], NEBBIA[1]);
 
@@ -188,6 +299,9 @@ export function creaCielo(scene) {
   scene.add(cupola);
   const U = cupola.material.uniforms;
   U.uDirLuna.value.copy(luna.position).normalize();
+  const stelle = creaStelle();
+  scene.add(stelle);
+  const S = stelle.material.uniforms;
 
   const _col = new THREE.Color();
   let _oraCielo = -1;
@@ -227,6 +341,12 @@ export function creaCielo(scene) {
     U.uColoreSole.value.copy(sole.color);
     U.uSole.value = smoothstep(-3, 2, altezza);
     U.uLuna.value = 1 - giorno;
+
+    // Stelle: si accendono col buio (prima le più luminose: la scala non è lineare) e girano con l'ora.
+    S.uNotte.value = Math.pow(1 - smoothstep(-12, 2, altezza), 1.4);
+    S.uScala.value = STELLE.dimensione * (renderer ? renderer.getPixelRatio() : 1);
+    // Un giro completo in 24 ore, verso ovest (orario visto da sotto la polare).
+    stelle.rotation.y = -ora / 24 * Math.PI * 2;
     return true;
   }
 
@@ -244,7 +364,7 @@ export function creaCielo(scene) {
   }
 
   return {
-    sole, luna, emisfera, cupola,
+    sole, luna, emisfera, cupola, stelle,
     get luceGiorno() { return _luceGiorno; },
     aggiorna,
     /** Forza il ricalcolo al prossimo aggiorna (nuova Scena: luci proprie di castello e mura). */

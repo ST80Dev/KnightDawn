@@ -2920,7 +2920,16 @@ si resta sotto 1,5 ms e ≤ 10 chiamate (cupola 1, stelle 1, precipitazioni 1). 
    altezza; disco del sole di 0,75° (più grande del vero, per vederlo dalla vista di gioco) con due aloni; luna di 0,6°
    nella direzione della luce lunare (fissa, alta a sud-est), solo di notte. Nel percorso di prova la cupola finisce in
    «resto» finché non entra in `main` il gruppo «cielo» di M1.
-2. **Stelle di notte.**
+2. **Stelle di notte.** **Stato: fatto, da provare dall'utente.** `creaStelle` in `cielo.js`: 2400 punti (`cielo-stelle`,
+   una chiamata di disegno, nessuna texture) su una sfera di 120 km dentro la cupola, disegnati dopo di lei e con il test
+   di profondità (il terreno le copre). Luminosità con curva ripida (poche luminose, molte deboli) e colore per stella
+   (bianco-azzurro → giallo-arancio); **fascia più fitta** come la Via Lattea, inclinata di 62°; sempre le stesse (sorteggio
+   da un seme fisso). Si spengono verso l'orizzonte (foschia) e sotto non ci sono. Si accendono col buio
+   (`uNotte` da −12° a +2° di altezza del sole, curva 1,4: prima le più luminose) e **tutto il cielo ruota** attorno alla
+   polare, alta 44° a nord, un giro in 24 ore: le costellazioni sorgono e tramontano. La dimensione in pixel segue la
+   risoluzione vera (`renderer.getPixelRatio()`), quindi non cambia con la qualità né con la risoluzione adattiva.
+   Verificato in headless (nessun errore; giorno senza stelle, notte con stelle e cielo diverso tra le ore; mondo generato
+   e Tavullia; profondità invertita e logaritmica; qualità bassa). Costo da misurare sulla UHD 730 col percorso di prova.
 3. **Meteo a periodi senza nuvole disegnate:** scala, periodi, regione, foschia standard al posto di quella per giorno,
    luci, `?meteo=`, F3. Qui si provano con M7 le mura col cielo coperto e con Vegetazione le ombre finte.
 4. **Nuvole ferme** per stato, illuminate dall'ora, ricotte a strisce al cambio di periodo.
