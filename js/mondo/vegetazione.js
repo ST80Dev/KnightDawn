@@ -187,10 +187,20 @@ export const VEGETAZIONE = {
   // Massi erratici: pochi massi molto grandi (4–8 m) isolati nei prati, segni nel paesaggio (una cella di `passo` m
   // ogni tanto). Alberi lungo le strade: a tratti (rumore su `lunghezza` m), a `banda` m dal bordo della carreggiata.
   erratici: { passo: 220, probabilita: 0.3, scala: [1.8, 3.2] },
-  // (richiesta dell'utente: «non esagerare, il mondo medievale è più casuale, non piantati lungo il percorso»): pochi
-  // tratti, radi, sparsi in una fascia larga: alberi rimasti accanto alla strada, non un viale.
-  stradaAlberi: { passo: 3, banda: [2.5, 10], probabilita: 0.07, lunghezza: 260, soglia: 0.32 },
-  limiteAlberi: [-0.5, 2],               // °C attorno a CLIMA.bosco: gli alberi si diradano e si abbassano
+  // (richieste dell'utente: «non esagerare, il mondo medievale è più casuale, non piantati lungo il percorso», poi
+  // «un po' più di alberi lungo le strade, senza filari uno dietro l'altro su entrambi i lati per km e km»): a tratti
+  // (rumore su `lunghezza` m, 2 ottave: tratti alberati e tratti nudi si alternano ogni ~100 m, non per chilometri),
+  // in una fascia larga. Dentro il tratto un lato prevale (`unLato`: quota dei tratti con un lato solo) e l'altro ha
+  // `altroLato` della densità: la strada si legge senza sembrare un viale piantato.
+  // (`fbm` sta attorno a 0, tra ∓1: la soglia del tratto è negativa perché i tratti alberati sono circa la metà.)
+  stradaAlberi: { passo: 3, banda: [2.5, 11], probabilita: 0.09, lunghezza: 150, soglia: [-0.12, 0.22],
+    unLato: 0.72, altroLato: 0.18 },
+  limiteAlberi: [-0.5, 2],               // °C attorno a CLIMA.bosco: il bosco si dirada e si abbassa
+  // Alberi sparsi (isolati nei prati e lungo le strade): il limite degli alberi del bosco (`limiteAlberi`) è quello di
+  // una copertura continua; un albero solo regge molto più freddo (in Siberia i boschi di larice arrivano sotto −5 °C
+  // di media annua). Senza, le pianure settentrionali restavano nude per chilometri (richiesta dell'utente: «guarda se
+  // è voluto dal bioma; nel deserto o nella tundra andrebbe bene, altrove aumentiamo un po'»).
+  limiteSparsi: [-5.5, -1.5],            // °C attorno a CLIMA.bosco (nudo sotto ~−4 °C, vicino alla neve perenne)
   pendenza: { alberi: [30, 40], arbusti: [36, 46], pareti: 48 },   // gradi (pendenza fine della mesh)
   riva: { celle: [1, 3], densita: 0.22, canne: 0.35 },             // celle di 7,8 m dall'acqua
   spianata: 20,                          // m oltre la scarpata dei terrapieni: niente alberi né arbusti
@@ -487,7 +497,7 @@ export function caseCampagna(carta) {
   return out;
 }
 
-const CAMPI = ['ramo', 'campo', 'alberi', 'limite', 'conifera', 'pino', 'secco', 'riva', 'cespuglio', 'alto', 'sterpo', 'canne',
+const CAMPI = ['ramo', 'campo', 'alberi', 'limite', 'pianta', 'conifera', 'pino', 'secco', 'riva', 'cespuglio', 'alto', 'sterpo', 'canne',
   'sasso', 'masso', 'affioramento', 'tronco', 'foresta', 'erba', 'felce', 'frana', 'ciottolo'];
 
 /**
@@ -555,9 +565,16 @@ function densitaVertice(cp, pend, pf, distAcqua, x, z, semeBordo, D, i, coltivat
   const fasciaF = distFiume >= 1 && distFiume <= V.fiume.fascia.length && cp.T > 3 ? V.fiume.fascia[distFiume - 1] : 0;
   const isolati = (V.isolati.base + V.isolati.umidita * cp.umidita) * (1 + 2 * coltivato) * (1 - foresta) * prato * (1 - 0.8 * sabbia);
   const asciutto = distAcqua >= 1 ? 1 : 0;
-  D.alberi[i] = asciutto * (1 - cp.neveFissa) * (1 - cp.roccia) * (1 - 0.8 * cp.ghiaia) * ripido * limite
-    * Math.max(V.bosco.densita * foresta, isolati, riva * V.riva.densita, fasciaF * V.fiume.bosco, 0.04 * palude);
+  // Il limite del bosco (copertura continua) e quello degli alberi sparsi (più basso): un albero solo regge più freddo.
+  const sparsi = smoothstep(CLIMA.bosco + V.limiteSparsi[0], CLIMA.bosco + V.limiteSparsi[1], cp.T);
+  D.alberi[i] = asciutto * (1 - cp.neveFissa) * (1 - cp.roccia) * (1 - 0.8 * cp.ghiaia) * ripido
+    * Math.max(limite * Math.max(V.bosco.densita * foresta, riva * V.riva.densita, fasciaF * V.fiume.bosco, 0.04 * palude),
+      sparsi * isolati);
   D.limite[i] = limite;
+  // Quanto il posto regge un albero isolato, a prescindere da bosco e campi: all'asciutto, in piano, niente roccia,
+  // neve, ghiaia, sabbia né deserto, con il limite degli alberi sparsi.
+  D.pianta[i] = asciutto * (1 - cp.neveFissa) * (1 - cp.neve) * (1 - cp.roccia) * (1 - 0.8 * cp.ghiaia) * ripido * prato
+    * (1 - 0.9 * sabbia) * sparsi;
   D.conifera[i] = Math.max(smoothstep(8, 3, cp.T), 0.6 * cp.monte);
   D.pino[i] = smoothstep(12, 16, cp.T) * smoothstep(0.55, 0.35, cp.umidita);
   D.secco[i] = 0.5 * palude + 0.15 * sabbia + 0.05 * foresta;   // legno morto: qualche albero secco anche nel bosco
@@ -1107,19 +1124,36 @@ export function* posizionaVegetazioneAPezzi(o, budget = 2.5) {
         ((h >>> 16) & 0x3ff) / 1024 * 2 * Math.PI, (h >>> 26) / 64);
     });
   }
-  // Alberi lungo le strade: a tratti, fuori dal bosco (lì ci sono già), all'asciutto, sotto il limite degli alberi.
+  // Alberi lungo le strade: a tratti, fuori dal bosco (lì ci sono già), dove il posto regge un albero (D.pianta:
+  // all'asciutto, in piano, niente roccia, neve, sabbia né tundra). Dentro il tratto un lato prevale, l'altro è molto
+  // più rado: la strada si legge da lontano senza diventare un viale piantato (richieste dell'utente).
   if (o.carta?.strade) {
     const SR = V.stradaAlberi, sR = derivaSeme(seme, 463);
     yield* griglia(SR.passo, sR, (ix, iz, X, Z, lx, lz, u) => {
       if (u >= SR.probabilita) return;
       const m = oltreStrada(X, Z);
-      if (m < SR.banda[0] || m > SR.banda[1] || fbm(X, Z, sR ^ 0x7f4a7c15, SR.lunghezza, 1) < SR.soglia) return;
+      if (m < SR.banda[0] || m > SR.banda[1]) return;
+      // Tratto alberato (rumore su `lunghezza` m): la densità sale da soglia[0] a soglia[1], così i tratti cominciano
+      // e finiscono sfumando invece che di netto.
+      const tratto = smoothstep(SR.soglia[0], SR.soglia[1], fbm(X, Z, sR ^ 0x7f4a7c15, SR.lunghezza, 2));
+      if (tratto <= 0) return;
+      // Lato prevalente del tratto: nei tratti «a un lato solo» l'altro lato tiene solo `altroLato` della densità.
+      const hL = hash2(Math.round(X / SR.lunghezza), Math.round(Z / SR.lunghezza), sR ^ 0x1b873593);
+      const unLato = (hL & 0xffff) / 65536 < SR.unLato;
+      const lato = _st.lato < 0 ? 1 : 0, prevale = (hL >>> 16) & 1;
+      const peso = tratto * (unLato && lato !== prevale ? SR.altroLato : 1);
+      if (u >= SR.probabilita * peso) return;
       trova(lx, lz);
-      if (!asciutta() || pendenzaFine() > 25 || campo(D.foresta) > 0.5 || campo(D.limite) < 0.3) return;
+      const regge = campo(D.pianta);
+      if (!asciutta() || pendenzaFine() > 25 || campo(D.foresta) > 0.5 || regge < 0.25) return;
       if (oltreScarpata(X, Z) < 5 || dCasa(X, Z) < KC.aia[1]) return;
+      // Specie: come nel bosco le conifere si contendono la cella per peso, così anche al freddo restano latifoglie
+      // mescolate (prima bastava conifera > 0,6 e venivano tutte conifere, come abeti piantati in mezzo al grano).
       const h = hash2(ix, iz, sR ^ 0x68e31da4) / 4294967296;
-      const tipo = campo(D.conifera) > 0.6 ? T.conifera : h < 0.6 ? T.riva : T.latifoglia;
-      emetti(tipo, ix, iz, sR, lx, lz, quota(), 0.85 + 0.3 * campo(D.limite));
+      const wc = campo(D.conifera) * 0.7, wp = campo(D.pino) * (1 - wc);
+      const tipo = h < wc ? T.conifera : h < wc + wp ? T.pino : h < wc + wp + (1 - wc - wp) * 0.45 ? T.riva : T.latifoglia;
+      // Più piccoli dove il clima è al limite (alberi stentati, non fusti da bosco di pianura).
+      emetti(tipo, ix, iz, sR, lx, lz, quota(), 0.75 + 0.35 * campo(D.limite) + 0.1 * regge);
     });
   }
 
