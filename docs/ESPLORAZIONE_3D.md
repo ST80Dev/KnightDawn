@@ -1544,12 +1544,14 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
       giardino, cucina, cantina, colombaia, scuderia, armeria, orto; le pertinenze si cercano ad anelli attorno al
       palazzo e, se lì non c'è posto, lungo le mura. `rocca.giardino = { x, z, largo, fondo, varco }` per le persone
       della casata (fuori da M7). Perché nel giardino si entri: il pergolato sta sempre sul lato opposto al varco, le
-      aiuole lasciano libero il vialetto dal varco alla vasca, il giardino parte a 4 m dal palazzo e il pezzo di cortile
-      davanti al varco diventa un lotto, così nessuna pertinenza messa dopo lo chiude (senza queste regole il cavaliere
-      non entrava in 14 rocche su 31).
-      [Certo] Nel seme 12345 (31 rocche): palazzo, cappella, colombaia e pozzo in tutte; cantina 28, cucina 27,
-      giardino 21, armeria 14, sala d'armi 11, scuderia 10, orto 1 (il cortile è pieno). Cammino porta del borgo →
-      cortile → dentro il giardino 31/31. Da 16 a 18 chiamate di disegno, ≤ 17.510 triangoli. La Carta non cambia.
+      aiuole lasciano libero il vialetto dal varco alla vasca, il giardino parte a 4 m dal palazzo e davanti al varco
+      servono ~6 m di cortile libero, riservati come lotti, così nessuna pertinenza messa dopo lo chiude e il varco non
+      finisce in fondo a un vicolo cieco. Senza queste regole il cavaliere non entrava in 14 rocche su 31 e in 1 su 35.
+      [Certo] Nel seme 12345 (31 rocche): palazzo, cappella, colombaia e pozzo in tutte; cantina 30, cucina 29,
+      giardino 17, armeria 15, scuderia 12, sala d'armi 11, orto 1 (il cortile è pieno). Senza il controllo dello spazio
+      davanti al varco i giardini sarebbero 21 su 31, ma uno su 35 resterebbe chiuso: scelta la raggiungibilità.
+      Cammino porta del borgo → cortile → dentro il giardino, su griglia di 0,5 m: 31/31 (12345) e 35/35 (570549).
+      Da 16 a 18 chiamate di disegno, ≤ 17.510 triangoli. La Carta non cambia.
 
 ### Accettazione
 
