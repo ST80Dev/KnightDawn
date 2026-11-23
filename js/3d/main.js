@@ -21,7 +21,7 @@ import { createRoccaAPezzi } from './rocca3d.js';
 import { creaCaseCampagna, quotaFinestre } from './edifici3d.js';
 import { createBorgoAPezzi } from './borgo3d.js';
 import { createVillaggioAPezzi, pianoDelSito } from './villaggio3d.js';
-import { raggioSito } from '../mondo/siti.js';
+import { raggioSito, climaDelLuogo } from '../mondo/siti.js';
 import { createCartaVista } from './cartaVista.js';
 import { creaMinimappa } from './minimappa.js';
 import { creaOrizzonteAPezzi } from './orizzonte.js';
@@ -40,10 +40,12 @@ import { creaProfilatore, creaPercorso, GRUPPI, FAMIGLIE, BUDGET_GPU, budgetDi, 
 const LONTANO = 130000;                   // m: distanza massima disegnata dalla camera
 const PARAMETRI = new URL(window.location.href).searchParams;
 const TAVULLIA = PARAMETRI.get('terreno') === 'tavullia';
-// Clima delle case (freddo | temperato | caldo). `?clima=` lo forza ovunque, per provare gli stili; senza, per ora
-// temperato: il clima del luogo (climaDelLuogo, M8) si collega qui.
+// Clima delle case (freddo | temperato | caldo). `?clima=` lo forza ovunque, per provare gli stili; senza, il clima
+// del luogo dal bioma e dalla temperatura della Carta (climaDelLuogo, M8). Tavullia non ha Carta: temperato.
+// x, z sono in metri del mondo. Le case di campagna ne chiedono uno per blocco (una cella di clima è 1 km, il blocco
+// 2 km): sul confine fra due climi tutto il blocco prende quello del centro, in cambio di un solo kit di edifici.
 const CLIMA_FORZATO = ['freddo', 'temperato', 'caldo'].includes(PARAMETRI.get('clima')) ? PARAMETRI.get('clima') : null;
-const climaDi = (x, z) => CLIMA_FORZATO ?? 'temperato';
+const climaDi = (x, z) => CLIMA_FORZATO ?? (carta ? climaDelLuogo(carta, x, z) : 'temperato');
 const PROVA_PRESTAZIONI = PARAMETRI.has('prova');             // percorso di prova: niente salvataggi (vedi init)
 const CENTRO_PROVA = (() => {                                   // ?centro=x,z (m del mondo) per il percorso di prova
   const v = (PARAMETRI.get('centro') || '').split(',').map(Number);
