@@ -87,7 +87,11 @@ const ORE_MARCIA_GIORNO = 9;           // ~3 Passi di marcia al giorno
 export const CLASSI_ROCCA = { minore: ['rocca minore', 5], casata: ['castello di casata', 6.5], maggiore: ['sede maggiore', 8] };
 const COLORE_ROCCA = '#8c1c13';
 const COLORE_VALICHI = '#d9822b';
+const COLORE_PONTE = 'rgba(52, 34, 20, 0.96)';
+const COLORE_GUADO = 'rgba(32, 72, 124, 0.95)';
 // Luoghi maggiori che non sono rocche (M8): stesso segno della rocca, altro colore e altra lettera.
+// Misure dei segni in pixel CSS (× dpr): più grandi di prima per leggerli sopra il rilievo (richiesta dell'utente).
+export const SEGNI = { valico: 6.5, ponte: 5.5, sito: [3.4, 4.4], panorama: 4.2, forcella: 4 };
 export const TIPI_LUOGO = { rocca: [COLORE_ROCCA, 'R'], monastero: ['#4b2f7a', 'M'], citta: ['#1d4f86', 'C'] };
 // Siti di villaggi e luoghi speciali (M8, js/mondo/siti.js): colore del segno.
 export const COLORI_SITI = { villaggio: '#5a3416', ovile: '#6f8f3a', rovina: '#6b6359', abbandonato: '#3c3833', grotta: '#1d1a17',
@@ -95,6 +99,57 @@ export const COLORI_SITI = { villaggio: '#5a3416', ovile: '#6f8f3a', rovina: '#6
 // Ordine del menu «Vai a» (M8): luoghi maggiori, poi i siti.
 const VAI_A = ['rocca', 'monastero', 'citta', 'villaggio', 'rovina', 'abbandonato', 'grotta', 'eremo', 'fantastico',
   'accampamento', 'sentinella', 'ospizio', 'ovile'];
+
+// Segni della Carta in pixel dello schermo. Un alone chiaro dietro al tratto li stacca dal rilievo (segnalato
+// dall'utente: ponti e valichi si perdevano nel disegno di altimetria e terreno).
+export function conAlone(ctx, dis, forza = 3) {
+  ctx.save();
+  ctx.shadowColor = 'rgba(250, 242, 222, 0.9)';
+  ctx.shadowBlur = forza;
+  dis();
+  ctx.restore();
+}
+
+/** Valico: due archi contrapposti «)(»; con un quadratino se è presidiato. */
+export function segnoValico(ctx, px, py, m, presidio) {
+  ctx.strokeStyle = COLORE_VALICHI; ctx.lineWidth = m * 0.42;
+  ctx.beginPath(); ctx.arc(px - m * 1.5, py, m * 1.2, -0.75, 0.75); ctx.stroke();
+  ctx.beginPath(); ctx.arc(px + m * 1.5, py, m * 1.2, Math.PI - 0.75, Math.PI + 0.75); ctx.stroke();
+  if (presidio) { ctx.fillStyle = COLORE_VALICHI; ctx.fillRect(px - m * 0.4, py - m * 0.4, m * 0.8, m * 0.8); }
+}
+
+/** Ponte: due archetti contrapposti lungo la strada (angolo `a`). */
+export function segnoPonte(ctx, px, py, m, a = 0) {
+  ctx.save(); ctx.translate(px, py); ctx.rotate(a);
+  ctx.strokeStyle = COLORE_PONTE; ctx.lineWidth = m * 0.42;
+  ctx.beginPath(); ctx.arc(0, -m * 1.6, m, Math.PI * 0.2, Math.PI * 0.8); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, m * 1.6, m, -Math.PI * 0.8, -Math.PI * 0.2); ctx.stroke();
+  ctx.restore();
+}
+
+/** Guado: tre sassi in fila nell'acqua. */
+export function segnoGuado(ctx, px, py, m) {
+  ctx.fillStyle = COLORE_GUADO;
+  for (const o of [-1, 0, 1]) { ctx.beginPath(); ctx.arc(px + o * m * 0.95, py, m * 0.4, 0, 2 * Math.PI); ctx.fill(); }
+}
+
+/** Rocca, monastero o città: torre con due merli, colorata per tipo. */
+export function segnoRocca(ctx, px, py, m, tipo = 'rocca') {
+  ctx.fillStyle = TIPI_LUOGO[tipo]?.[0] ?? COLORE_ROCCA; ctx.strokeStyle = '#f4ead0'; ctx.lineWidth = m * 0.2;
+  ctx.beginPath();
+  ctx.moveTo(px - m, py + m); ctx.lineTo(px - m, py - m * 0.6); ctx.lineTo(px - m * 0.45, py - m * 0.6);
+  ctx.lineTo(px - m * 0.45, py - m * 0.15); ctx.lineTo(px + m * 0.45, py - m * 0.15); ctx.lineTo(px + m * 0.45, py - m * 0.6);
+  ctx.lineTo(px + m, py - m * 0.6); ctx.lineTo(px + m, py + m); ctx.closePath();
+  ctx.fill(); ctx.stroke();
+}
+
+/** Triangolo: gruppo montuoso (pieno scuro col bordo chiaro) o punto panoramico. */
+export function segnoTriangolo(ctx, px, py, m, colore, bordo = null) {
+  ctx.fillStyle = colore;
+  ctx.beginPath(); ctx.moveTo(px, py - m); ctx.lineTo(px + m, py + m * 0.8); ctx.lineTo(px - m, py + m * 0.8); ctx.closePath();
+  ctx.fill();
+  if (bordo) { ctx.strokeStyle = bordo; ctx.lineWidth = m * 0.24; ctx.stroke(); }
+}
 
 /** Segno di un sito (M8) in pixel dello schermo, lato ~2m. */
 export function segnoSito(ctx, s, px, py, m) {
@@ -250,40 +305,118 @@ export function createCartaVista(contenitore, opzioni = {}) {
       <button type="button" class="candidati" title="Siti validi non scelti, colorati per punteggio">Candidati</button>
       <button type="button" class="semi" title="Genera 10 semi a caso e verifica ogni regola (fiumi, punti panoramici, varietà)">Verifica 10 semi</button>
       <button type="button" class="tavullia" title="Terreno reale di Tavullia con il castello (scena di prova)">Tavullia (prova)</button>
-      <span class="legenda"></span>
+      <button type="button" class="dettagli" title="Statistiche e verifiche del generatore">Dettagli</button>
       <span class="info"></span>
       <span class="tasto">rotella: zoom · trascina: sposta · clic sulla terra: vai lì · M: torna alla scena</span>
     </div>
-    <div class="area"><canvas></canvas></div>
+    <div class="area">
+      <canvas></canvas>
+      <aside class="simboli"><canvas class="chiave"></canvas></aside>
+    </div>
     <div class="piede">
       <div class="cursore">&nbsp;</div>
-      <div class="fasce"></div>
-      <canvas class="istogramma" width="360" height="56" title="Quote della terra, a passi di 100 m"></canvas>
+      <div class="dati" hidden>
+        <div class="fasce"></div>
+        <canvas class="istogramma" width="360" height="56" title="Quote della terra, a passi di 100 m"></canvas>
+      </div>
     </div>`;
   contenitore.appendChild(el);
-  const elLegenda = el.querySelector('.legenda');
   const selLivello = el.querySelector('.livello');
   let livello = 'naturale';
-  const sfumatura = (scala) => 'linear-gradient(to right, ' + scala.map(([, c], k) => `rgb(${c.join(',')}) ${k / (scala.length - 1) * 100}%`).join(', ') + ')';
-  const pallino = (c) => `<i style="width:10px;background:rgb(${c.join(',')})"></i>`;
+  const elChiave = el.querySelector('.chiave');
+  const elSimboli = el.querySelector('.simboli');
+
+  /**
+   * Legenda dei simboli accanto alla Carta (richiesta dell'utente): disegnata con gli stessi segni della Carta, così
+   * quello che si vede nell'elenco è esattamente quello che si vede sul rilievo.
+   */
   function legenda() {
-    const pan = ` · <b style="color:${COLORE_PANORAMA}">▴</b> punti panoramici`;
-    const valichiLeg = ` · <b style="color:${COLORE_VALICHI}">)(</b> valico (pieno: con sentinella)`
-      + ' · ' + Object.entries(TIPI_LUOGO).map(([t, [c, l]]) => `<b style="color:${c}">${l}</b> ${NOMI_SITI[t]}`).join(' ')
-      + ' · siti: ' + Object.entries(COLORI_SITI).filter(([t]) => t !== 'ospizio')
-        .map(([t, c]) => `<b style="color:${c}">■</b> ${NOMI_SITI[t]}`).join(' ');
-    if (livello === 'temperatura') elLegenda.innerHTML = `media annua −15 <i style="background:${sfumatura(SCALA_T)}"></i> 24 °C` + pan + valichiLeg;
-    else if (livello === 'umidita') elLegenda.innerHTML = `umidità secco <i style="background:${sfumatura(SCALA_U)}"></i> umido` + pan + valichiLeg;
+    const d = window.devicePixelRatio || 1, W = 186;
+    const righe = [];                               // { h, dis(g, y) } in pixel CSS
+    const testo = (g, t, y, col = '#d8c8a0', size = 11.5) => {
+      g.fillStyle = col; g.font = `${size}px Georgia, serif`; g.textAlign = 'left'; g.textBaseline = 'middle';
+      g.fillText(t, 34, y);
+    };
+    const titolo = (t) => righe.push({ h: 19, dis: (g, y) => { g.fillStyle = '#c8a030'; g.font = '11px Georgia, serif';
+      g.textAlign = 'left'; g.textBaseline = 'bottom'; g.fillText(t.toUpperCase(), 4, y + 7);
+      g.strokeStyle = '#5a4020'; g.lineWidth = 1; g.beginPath(); g.moveTo(4, y + 10); g.lineTo(W - 6, y + 10); g.stroke(); } });
+    // Dietro al segno un riquadro chiaro come la pergamena della Carta: i tratti scuri (ponti, siti) si leggono anche
+    // sul fondo scuro del pannello.
+    const voce = (t, dis) => righe.push({ h: 18, dis: (g, y) => {
+      g.fillStyle = '#cdbb92'; g.fillRect(4, y - 8, 28, 16);
+      dis(g, 18, y); testo(g, t, y);
+    } });
+    const barra = (t, scala) => righe.push({ h: 24, dis: (g, y) => {
+      const grad = g.createLinearGradient(4, 0, W - 6, 0);
+      for (const [k, c] of scala.map(([q, c], i) => [i / (scala.length - 1), c])) grad.addColorStop(k, `rgb(${c.join(',')})`);
+      g.fillStyle = grad; g.fillRect(4, y - 8, W - 10, 9);
+      g.strokeStyle = '#5a4020'; g.lineWidth = 1; g.strokeRect(4.5, y - 8.5, W - 11, 10);
+      g.fillStyle = '#b8a880'; g.font = '10.5px Georgia, serif'; g.textAlign = 'left'; g.textBaseline = 'top';
+      g.fillText(t, 4, y + 3);
+    } });
+    const quadretto = (t, c) => voce(t, (g, x, y) => { g.fillStyle = Array.isArray(c) ? `rgb(${c.join(',')})` : c; g.fillRect(x - 6, y - 5, 12, 10);
+      g.strokeStyle = '#5a4020'; g.lineWidth = 1; g.strokeRect(x - 6.5, y - 5.5, 13, 11); });
+
+    // Scala del livello mostrato
+    titolo(livello === 'temperatura' ? 'temperatura' : livello === 'umidita' ? 'umidità' : livello === 'biomi' ? 'biomi' : 'quota');
+    if (livello === 'temperatura') barra('−15 … 24 °C', SCALA_T);
+    else if (livello === 'umidita') barra('secco … umido', SCALA_U);
     else if (livello === 'biomi') {
-      // (i valichi della Carta dei biomi sono le forcelle dei gruppi montuosi)
-      elLegenda.innerHTML = [BIOMA.PIANURA_N, BIOMA.PIANURA, BIOMA.PIANURA_S, BIOMA.COLLINA, BIOMA.FORESTA,
-        BIOMA.MONTAGNA, BIOMA.ROCCIA, BIOMA.NEVE, BIOMA.GHIACCIO, BIOMA.SABBIA, BIOMA.PALUDE]
-        .map((b) => `${pallino(COLORI_BIOMI[b])} ${NOMI_BIOMI[b]}`).join(' ') + ` ${pallino(COLORE_VALICO)} forcella` + pan + valichiLeg;
-    } else elLegenda.innerHTML = `quota 0 <i style="background:${sfumatura(TERRA)}"></i> 3500 m · non biomi` + pan + valichiLeg;
+      for (const b of [BIOMA.PIANURA_N, BIOMA.PIANURA, BIOMA.PIANURA_S, BIOMA.COLLINA, BIOMA.FORESTA, BIOMA.MONTAGNA,
+        BIOMA.ROCCIA, BIOMA.NEVE, BIOMA.GHIACCIO, BIOMA.SABBIA, BIOMA.PALUDE]) quadretto(NOMI_BIOMI[b], COLORI_BIOMI[b]);
+    } else barra('0 … 3500 m', TERRA);
+    if (livello !== 'biomi') { quadretto('lago', LAGO); quadretto('mare', MARE_BASSO); }
+
+    titolo('luoghi');
+    for (const [t, [, lettera]] of Object.entries(TIPI_LUOGO)) {
+      voce(`${NOMI_SITI[t]} (${lettera})`, (g, x, y) => segnoRocca(g, x, y, 6, t));
+    }
+    titolo('siti');
+    for (const t of Object.keys(COLORI_SITI)) {
+      if (t === 'ospizio') continue;
+      voce(NOMI_SITI[t], (g, x, y) => segnoSito(g, { tipo: t, dimensione: 'villaggio', variante: '' }, x, y, 4.4));
+    }
+    titolo('passaggi');
+    voce('valico', (g, x, y) => segnoValico(g, x, y, SEGNI.valico, false));
+    voce('valico con sentinella', (g, x, y) => segnoValico(g, x, y, SEGNI.valico, true));
+    voce('ponte', (g, x, y) => segnoPonte(g, x, y, SEGNI.ponte));
+    voce('guado', (g, x, y) => segnoGuado(g, x, y, SEGNI.ponte));
+    titolo('strade');
+    for (const [classe, , trattino] of STILE_STRADE) {
+      voce(classe, (g, x, y) => {
+        g.strokeStyle = classe === 'sentiero' ? COLORE_SENTIERO : COLORE_STRADA;
+        g.lineWidth = STRADE_ZOOM.minimo[classe];
+        g.setLineDash(trattino.map((v) => v * STRADE_ZOOM.minimo[classe] * 1.5));
+        g.beginPath(); g.moveTo(x - 12, y); g.lineTo(x + 12, y); g.stroke(); g.setLineDash([]);
+      });
+    }
+    titolo('rilievo');
+    voce('gruppo montuoso', (g, x, y) => segnoTriangolo(g, x, y, 5, '#2a1a0c', '#f4ead0'));
+    voce('forcella', (g, x, y) => { g.fillStyle = `rgb(${COLORE_VALICO.join(',')})`; g.beginPath(); g.arc(x, y, SEGNI.forcella, 0, Math.PI * 2); g.fill(); });
+    voce('punto panoramico', (g, x, y) => segnoTriangolo(g, x, y, SEGNI.panorama, COLORE_PANORAMA));
+    voce('fiume', (g, x, y) => { g.strokeStyle = COLORE_FIUME; g.lineWidth = 2; g.beginPath(); g.moveTo(x - 12, y); g.lineTo(x + 12, y); g.stroke(); });
+
+    const H = righe.reduce((a, r) => a + r.h, 0) + 10;
+    elChiave.width = Math.round(W * d); elChiave.height = Math.round(H * d);
+    elChiave.style.width = W + 'px'; elChiave.style.height = H + 'px';
+    const g = elChiave.getContext('2d');
+    g.setTransform(d, 0, 0, d, 0, 0);
+    g.clearRect(0, 0, W, H);
+    let y = 6;
+    for (const r of righe) { y += r.h; r.dis(g, y - r.h / 2); }
   }
   legenda();
-  selLivello.addEventListener('change', () => { livello = selLivello.value; legenda(); if (carta) mostra(carta); });
+  selLivello.addEventListener('change', () => { livello = selLivello.value; legenda(); adatta(); if (carta) mostra(carta); });
   selLivello.addEventListener('keydown', (e) => e.stopPropagation());
+  // Statistiche e verifiche del generatore: nascoste (richiesta dell'utente: sopra e sotto la Carta erano decine di
+  // righe), si aprono con «Dettagli».
+  const elDati = el.querySelector('.dati');
+  const btnDettagli = el.querySelector('.dettagli');
+  btnDettagli.addEventListener('click', () => {
+    elDati.hidden = !elDati.hidden;
+    btnDettagli.classList.toggle('attivo', !elDati.hidden);
+    adatta();
+  });
   const elFasce = el.querySelector('.fasce');
   const isto = el.querySelector('.istogramma');
 
@@ -338,7 +471,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
   function adatta() {
     if (!carta || el.hidden) return;
     dpr = window.devicePixelRatio || 1;
-    const w = area.clientWidth, h = area.clientHeight;
+    const w = Math.max(1, area.clientWidth - (elSimboli.offsetWidth || 0)), h = area.clientHeight;
     canvas.style.width = w + 'px';
     canvas.style.height = h + 'px';
     larghezza = canvas.width = Math.max(1, Math.round(w * dpr));
@@ -643,19 +776,10 @@ export function createCartaVista(contenitore, opzioni = {}) {
       else for (const p of carta.strade?.ponti ?? []) segni.push({ ponte: true, x: p.x, y: p.y, dx: 1, dz: 0 });
       for (const g of segni) {
         const [px, py] = P(g.x, g.y);
-        if (px < -10 || py < -10 || px > canvas.width + 10 || py > canvas.height + 10) continue;
-        if (g.ponte) {
-          // Ponte: due archetti contrapposti «)(» lungo la strada.
-          const a = Math.atan2(g.dz, g.dx), r = 4 * dpr;
-          ctx.save(); ctx.translate(px, py); ctx.rotate(a);
-          ctx.strokeStyle = 'rgba(60, 40, 25, 0.95)'; ctx.lineWidth = 1.6 * dpr;
-          ctx.beginPath(); ctx.arc(0, -r * 1.6, r, Math.PI * 0.2, Math.PI * 0.8); ctx.stroke();
-          ctx.beginPath(); ctx.arc(0, r * 1.6, r, -Math.PI * 0.8, -Math.PI * 0.2); ctx.stroke();
-          ctx.restore();
-        } else {
-          ctx.fillStyle = 'rgba(40, 80, 130, 0.9)';
-          for (const o of [-3, 0, 3]) { ctx.beginPath(); ctx.arc(px + o * dpr, py, 1.2 * dpr, 0, 2 * Math.PI); ctx.fill(); }
-        }
+        if (px < -14 || py < -14 || px > canvas.width + 14 || py > canvas.height + 14) continue;
+        const m = SEGNI.ponte * dpr;
+        if (g.ponte) conAlone(ctx, () => segnoPonte(ctx, px, py, m, Math.atan2(g.dz, g.dx)), 3 * dpr);
+        else conAlone(ctx, () => segnoGuado(ctx, px, py, m), 3 * dpr);
       }
     }
     // Gruppi montuosi: un segno e un numero (il nome arriverà con i luoghi); forcelle in giallo.
@@ -671,12 +795,12 @@ export function createCartaVista(contenitore, opzioni = {}) {
         ctx.fillStyle = '#f4ead0'; ctx.fillText(`${g.id + 1}`, px + m + 2 * dpr, py);
         if (vista.z >= 4) {
           ctx.fillStyle = `rgb(${COLORE_VALICO.join(',')})`;
-          for (const f of g.forcelle) { const [fx, fy] = P(f.x, f.y); ctx.beginPath(); ctx.arc(fx, fy, 3 * dpr, 0, Math.PI * 2); ctx.fill(); }
+          for (const f of g.forcelle) { const [fx, fy] = P(f.x, f.y); ctx.beginPath(); ctx.arc(fx, fy, SEGNI.forcella * dpr, 0, Math.PI * 2); ctx.fill(); }
         }
       }
     }
     if (panorami && mostraPanorami) {
-      const m = 3.5 * dpr;
+      const m = SEGNI.panorama * dpr;
       ctx.fillStyle = COLORE_PANORAMA;
       ctx.beginPath();
       for (const [x, y] of panorami.punti) {
@@ -688,15 +812,11 @@ export function createCartaVista(contenitore, opzioni = {}) {
     }
     // Valichi (M7): due archi contrapposti «)(»; pieni se presidiati da una sentinella.
     if (carta.valichi) {
-      const m = 4.5 * dpr;
-      ctx.lineWidth = 1.6 * dpr;
+      const m = SEGNI.valico * dpr;
       for (const v of carta.valichi) {
         const [px, py] = P(v.x, v.y);
-        if (px < -m || py < -m || px > larghezza + m || py > altezza + m) continue;
-        ctx.strokeStyle = COLORE_VALICHI;
-        ctx.beginPath(); ctx.arc(px - m * 1.6, py, m * 1.2, -0.75, 0.75); ctx.stroke();
-        ctx.beginPath(); ctx.arc(px + m * 1.6, py, m * 1.2, Math.PI - 0.75, Math.PI + 0.75); ctx.stroke();
-        if (v.presidio) { ctx.fillStyle = COLORE_VALICHI; ctx.fillRect(px - m * 0.35, py - m * 0.35, m * 0.7, m * 0.7); }
+        if (px < -3 * m || py < -3 * m || px > larghezza + 3 * m || py > altezza + 3 * m) continue;
+        conAlone(ctx, () => segnoValico(ctx, px, py, m, v.presidio), 3.5 * dpr);
       }
     }
     // Rocche (M7): torre stilizzata, più grande secondo la classe; la partenza cerchiata.
@@ -712,12 +832,12 @@ export function createCartaVista(contenitore, opzioni = {}) {
     }
     // Siti (M8): segni piccoli; i nomi dei tipi nel puntatore. Sotto le rocche.
     if (carta.siti) {
-      const C = carta.cella, m = (vista.z >= 3 ? 3.2 : 2.4) * dpr;
-      ctx.lineWidth = 1.3 * dpr;
+      const C = carta.cella, m = (vista.z >= 3 ? SEGNI.sito[1] : SEGNI.sito[0]) * dpr;
+      ctx.lineWidth = 1.6 * dpr;
       for (const st of carta.siti) {
         const [px, py] = P(st.x / C, st.z / C);
-        if (px < -10 || py < -10 || px > larghezza + 10 || py > altezza + 10) continue;
-        segnoSito(ctx, st, px, py, m);
+        if (px < -14 || py < -14 || px > larghezza + 14 || py > altezza + 14) continue;
+        conAlone(ctx, () => segnoSito(ctx, st, px, py, m), 2.5 * dpr);
       }
     }
     if (carta.luoghi) {
@@ -726,13 +846,9 @@ export function createCartaVista(contenitore, opzioni = {}) {
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
       for (const l of carta.luoghi) {
         const [px, py] = P(l.x / C, l.z / C), m = CLASSI_ROCCA[l.classe][1] * dpr;
-        const [colore, lettera] = TIPI_LUOGO[l.tipo ?? 'rocca'];
-        ctx.fillStyle = colore; ctx.strokeStyle = '#f4ead0'; ctx.lineWidth = 1.2 * dpr;
-        ctx.beginPath();                                   // torre con due merli
-        ctx.moveTo(px - m, py + m); ctx.lineTo(px - m, py - m * 0.6); ctx.lineTo(px - m * 0.45, py - m * 0.6);
-        ctx.lineTo(px - m * 0.45, py - m * 0.15); ctx.lineTo(px + m * 0.45, py - m * 0.15); ctx.lineTo(px + m * 0.45, py - m * 0.6);
-        ctx.lineTo(px + m, py - m * 0.6); ctx.lineTo(px + m, py + m); ctx.closePath();
-        ctx.fill(); ctx.stroke();
+        const lettera = TIPI_LUOGO[l.tipo ?? 'rocca'][1];
+        segnoRocca(ctx, px, py, m, l.tipo ?? 'rocca');     // torre con due merli (misura della classe)
+        ctx.strokeStyle = '#f4ead0'; ctx.lineWidth = 1.2 * dpr;
         if (l.partenza) { ctx.beginPath(); ctx.arc(px, py + m * 0.2, m * 1.7, 0, Math.PI * 2); ctx.stroke(); }
         ctx.fillStyle = '#f4ead0'; ctx.fillText(`${lettera}${l.id + 1}`, px + m + 3 * dpr, py);
         if (vista.z >= 8) {                                // verso del borgo
@@ -779,12 +895,14 @@ export function createCartaVista(contenitore, opzioni = {}) {
       ctx.beginPath(); ctx.arc(px, py, 4.5 * dpr, 0, Math.PI * 2); ctx.fill();
     }
     const st = carta.statistiche;
-    elInfo.textContent = `${diPartita() ? 'mondo della partita' : 'anteprima'} · ${carta.cols}×${carta.rows} km`
-      + ` · mare ${fmt(st.frazioneMare * 100, 1)} % · ${carta.daCache ? 'dalla cache' : `${fmt(st.ms)} ms`}`
-      + ` · controllo ${carta.controllo} · zoom ×${fmt(vista.z, 1)}`
+    elInfo.textContent = `seme ${carta.seme} · ${carta.cols}×${carta.rows} km · zoom ×${fmt(vista.z, 1)}`
       + (vista.z < DETTAGLIO.da || !conDettaglio() ? '' : dettaglio?.chiave === chiaveVista()
-        ? ` · rilievo delle Scene, curve ogni ${dettaglio.eq} m${dettaglio.percorsi ? ' · fiumi come nelle Scene' : ''}${dettaglio.strade ? ' · strade come nelle Scene' : ''}`
-        : ' · calcolo del rilievo delle Scene…');
+        ? ` · curve ogni ${dettaglio.eq} m` : ' · calcolo del rilievo…');
+    if (!elDati.hidden) {
+      elInfo.textContent += ` · ${diPartita() ? 'mondo della partita' : 'anteprima'}`
+        + ` · mare ${fmt(st.frazioneMare * 100, 1)} % · ${carta.daCache ? 'dalla cache' : `${fmt(st.ms)} ms`}`
+        + ` · controllo ${carta.controllo}`;
+    }
     chiediDettaglio();
   }
 

@@ -2855,6 +2855,19 @@ si resta sotto 1,5 ms e ≤ 10 chiamate (cupola 1, stelle 1, precipitazioni 1). 
 Periodi variabili 2–3 ore canoniche; foschia calda al tramonto non ora; neve anche in pianura al Nord, ogni tanto; meteo
 tendenziale per bioma e latitudine; foschia di giorno a distanza standard per ogni stato (decisioni 7–10 sopra).
 
+## Carta: simboli, legenda, meno righe (richiesta dell'utente, novembre 2026) — da provare
+
+- **Segni più grandi** (non le rocche, già leggibili) con un alone chiaro dietro al tratto (`conAlone`), perché ponti e
+  valichi si perdevano nel disegno di altimetria e terreno: valico 4,5 → 6,5 px, ponte e guado 4 → 5,5, siti 2,4/3,2 →
+  3,4/4,4, punti panoramici 3,5 → 4,2, forcelle 3 → 4 (`SEGNI`).
+- **Legenda dei simboli** in un pannello a destra della Carta, disegnata con gli stessi segni (`segnoValico`,
+  `segnoPonte`, `segnoGuado`, `segnoRocca`, `segnoSito`, `segnoTriangolo`): scala del livello mostrato, luoghi, siti,
+  passaggi, classi di strada, rilievo. Ogni segno su un riquadro color pergamena, così i tratti scuri si leggono anche
+  sul fondo scuro del pannello.
+- **Meno righe**: in alto resta `seme · dimensioni · zoom · curve`; le statistiche e le verifiche del generatore (fasce,
+  biomi, varietà, rocche, siti, istogramma) stanno dietro al pulsante **Dettagli**, che le mostra in fondo insieme alle
+  misure della generazione.
+
 ## Minimappa (richiesta dell'utente, novembre 2026) — fatta, da provare
 
 Richiesta: «una minimappa che segue il cavaliere dall'alto, con zoom regolabile, che si possa allargare a circa 1/3
