@@ -1016,6 +1016,11 @@ float kdCresci(float fin, float d) {
 // larga o la parete di roccia che lo nascondono davvero, mentre il tronco, il masso o la siepe che gli stanno addosso
 // restano: si vede il cavaliere e si vede l'ostacolo che lo ferma (quarta richiesta dell'utente: «arrivo a toccare il
 // masso, non posso proseguire, e il masso non si vede»).
+// **Superamento:** sparisce solo ciò che il cavaliere ha già passato, cioè cosa ha il centro di qua da lui lungo l'asse
+// camera→cavaliere. Un albero che ha ancora davanti resta intero anche quando la chioma, allargandosi, gli arriva sopra
+// la testa e coprirebbe la vista: prima bastava quella a far sparire tutto l'albero, tronco compreso, mentre gli si
+// andava contro (quinta richiesta dell'utente: «ci vado contro ma sparisce prima che ci vada a sbattere, così non
+// capisco nemmeno contro cosa sto sbattendo»).
 // Valori provabili dalla console: kd.vegetazione.cfgVisuale (x = margine, y = di quanto i segmenti si fermano prima
 // del cavaliere, z = raggio attorno alla camera per erba e felci, w = mezza larghezza del cavaliere), in metri.
 
@@ -1116,9 +1121,11 @@ function conVisuale(mat, uni, modo, geo = null, fine = null) {
       // camera → testa, tra i due, sta sempre sopra la più bassa delle due quote.
       float kdCima = kdO.y + uCima * kdSc.y + uVisCfg.x;
       float kdTesta = uCav.y + ${ALTEZZE_CAVALIERE[2].toFixed(2)};
-      // Solo gli oggetti che possono stare tra camera e cavaliere (gli altri: niente calcolo)
+      // Solo gli oggetti già superati dal cavaliere (centro di qua da lui) e che stanno tra lui e la camera: un albero
+      // che ha ancora davanti non sparisce mai, nemmeno quando la chioma gli arriva sopra la testa (quinta richiesta
+      // dell'utente: «ci vado contro e sparisce prima che ci sbatta, non capisco contro cosa sto sbattendo»).
       if (uVisuale > 0.0 && kdMisura > 0.0 && kdCima > min(cameraPosition.y, kdTesta)
-        && kdT > -kdR && kdT < kdL + kdR && abs(dot(kdRel, vec2(-kdU.y, kdU.x))) < kdR + 1.0) {
+        && kdT > -kdR && kdT < kdL - uVisCfg.y && abs(dot(kdRel, vec2(-kdU.y, kdU.x))) < kdR + 1.0) {
         // Segmenti nel sistema dell'istanza: colonne ortogonali (rotazione per scala lungo gli assi)
         vec3 kdA = cameraPosition - kdO;
         vec3 kdPa = vec3(dot(kdA, kdM[0].xyz), dot(kdA, kdM[1].xyz), dot(kdA, kdM[2].xyz)) / kdS2;
@@ -1181,7 +1188,7 @@ bool kdSegVolume(vec3 p, vec3 q, vec3 s0, vec3 s1, vec4 c, float mr) {
     }`);
   };
   const chiave = mat.customProgramCacheKey.bind(mat);
-  mat.customProgramCacheKey = () => `${chiave()}|kd-visuale-${modo}-9${fine !== null ? '-cresce' : ''}`;
+  mat.customProgramCacheKey = () => `${chiave()}|kd-visuale-${modo}-10${fine !== null ? '-cresce' : ''}`;
   return mat;
 }
 

@@ -1871,12 +1871,19 @@ Deserto e steppa: arbusti secchi radi, sassi; niente piante esotiche (stile medi
   2. deve coprire **tutte e tre** le linee (piedi, busto, testa), non una qualsiasi;
   3. anche la più stretta delle tre coperture deve essere **larga quanto il cavaliere** vista dalla camera
      (`VISUALE.mezzaLarghezza` 0,45 m, in proporzione alla distanza): un tronco sottile addosso a lui interseca le tre
-     linee ma lo lascia vedere tutt'attorno, quindi resta.
+     linee ma lo lascia vedere tutt'attorno, quindi resta;
+  4. l'oggetto deve essere **già superato** dal cavaliere, cioè avere il centro di qua da lui lungo l'asse
+     camera→cavaliere (quinta richiesta: «mi trovo un albero alto di fronte, ci vado contro ma sparisce prima che ci
+     vada a sbattere, così non capisco contro cosa sto sbattendo»). La chioma di un albero che ha ancora davanti si
+     allarga fin sopra la sua testa e copriva le tre linee: bastava a far sparire tutto l'albero, tronco compreso,
+     proprio mentre gli andava addosso. Ora un ostacolo non davanti sparisce mai; camminando contro il faggio più grande
+     del seme 570549 il cavaliere si ferma a 0,94 m dal tronco e l'albero si vede (in `main` spariva: 34 467 pixel di
+     differenza accendendo la visuale, ora 466).
   Erba e felci a ridosso della camera (1,6 m) si rimpiccioliscono. Spento con la camera libera (C). Le ombre finte a
   terra restano. Valori provabili da console: `kd.vegetazione.cfgVisuale` (margine, arretramento, raggio di erba e
   felci, mezza larghezza del cavaliere). Misure in headless (seme 570549, confronto acceso/spento nello stesso punto):
   nei punti più fitti ciò che sparisce vicino al cavaliere passa da 13 863 pixel a 139 in un caso tipico, mentre dove un
-  oggetto copre davvero tutto (camera dentro una chioma) sparisce come prima. Camminando contro un masso o un
+  oggetto copre davvero tutto (camera dentro una chioma) sparisce come prima (143 800 pixel, invariati). Camminando contro un masso o un
   affioramento finché blocca il cammino, l'ostacolo si vede in entrambe le versioni: sta davanti al cavaliere, non tra
   lui e la camera.
   **Comparsa con la distanza (richieste dell'utente, nov. 2026):** camminando alberi, massi e altri oggetti «apparivano
