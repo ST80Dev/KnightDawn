@@ -1861,9 +1861,24 @@ Deserto e steppa: arbusti secchi radi, sassi; niente piante esotiche (stile medi
   fermano 0,4 m prima del cavaliere (il tronco contro cui cammina resta). Calcolo solo per gli oggetti vicini alla
   linea di vista. Storia delle richieste: prima spariva tutto ciò che era più vicino alla camera del cavaliere (anche
   siepi e muretti di lato: tolto); poi la dissolvenza «a retino» sembrava sfocata, non coerente con la grafica: ora
-  l'oggetto **sparisce netto** (vertici fuori dallo schermo), senza trasparenze né `discard`. Erba e felci a ridosso
-  della camera (1,6 m) si rimpiccioliscono. Spento con la camera libera (C). Le ombre finte a terra restano. Valori
-  provabili da console: `kd.vegetazione.cfgVisuale` (margine, arretramento, raggio di erba e felci).
+  l'oggetto **sparisce netto** (vertici fuori dallo schermo), senza trasparenze né `discard`. Infine (quarta richiesta:
+  «troppi elementi spariscono nei pressi vicinissimi; cancellare solo ciò che impedisce del tutto di vedere il
+  cavaliere») tre condizioni insieme, perché bastava **una** linea coperta e spariva anche un masso basso che lasciava
+  vedere il cavaliere, proprio mentre gli si arrivava addosso da scavalcare:
+  1. l'oggetto deve arrivare **più in alto della testa** del cavaliere (`cima` dei volumi per la scala verticale
+     dell'istanza, confrontata con la quota della testa o della camera, la minore): ciò che è più basso non può coprirla,
+     non sparisce mai e non costa nemmeno il calcolo;
+  2. deve coprire **tutte e tre** le linee (piedi, busto, testa), non una qualsiasi;
+  3. anche la più stretta delle tre coperture deve essere **larga quanto il cavaliere** vista dalla camera
+     (`VISUALE.mezzaLarghezza` 0,45 m, in proporzione alla distanza): un tronco sottile addosso a lui interseca le tre
+     linee ma lo lascia vedere tutt'attorno, quindi resta.
+  Erba e felci a ridosso della camera (1,6 m) si rimpiccioliscono. Spento con la camera libera (C). Le ombre finte a
+  terra restano. Valori provabili da console: `kd.vegetazione.cfgVisuale` (margine, arretramento, raggio di erba e
+  felci, mezza larghezza del cavaliere). Misure in headless (seme 570549, confronto acceso/spento nello stesso punto):
+  nei punti più fitti ciò che sparisce vicino al cavaliere passa da 13 863 pixel a 139 in un caso tipico, mentre dove un
+  oggetto copre davvero tutto (camera dentro una chioma) sparisce come prima. Camminando contro un masso o un
+  affioramento finché blocca il cammino, l'ostacolo si vede in entrambe le versioni: sta davanti al cavaliere, non tra
+  lui e la camera.
   **Comparsa con la distanza (richieste dell'utente, nov. 2026):** camminando alberi, massi e altri oggetti «apparivano
   dal nulla». Una prima versione li dissolveva a retino alle soglie di distanza (anche tra i modelli dello stesso
   oggetto, disegnati due volte nella fascia: +41 % di triangoli nel bosco fitto) e l'utente l'ha trovata sfocata e

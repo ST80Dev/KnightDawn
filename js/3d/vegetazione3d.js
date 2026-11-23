@@ -1000,22 +1000,34 @@ float kdCresci(float fin, float d) {
 // FASCE_VISUALE fasce di altezza. Ogni volume è un cilindro verticale (alberi, cespugli, rocce: segue la sagoma rotonda
 // o a cono, mentre una scatola «occupa» anche gli angoli vuoti) oppure, se la fascia è allungata (muretti), una
 // scatola. Lo shader porta nel sistema dell'istanza i segmenti camera → piedi, busto e testa del cavaliere e controlla
-// se attraversano i volumi, allargati di un margine: se sì l'oggetto sparisce, netto (terza richiesta dell'utente: la
-// dissolvenza a puntini sembrava sfocata, non coerente con la grafica; niente stati a metà). I segmenti si fermano poco
-// prima del cavaliere: il tronco contro cui sta camminando resta. Sparisce anche ciò che tocca l'obiettivo (entro il
-// margine). Nessuna trasparenza e nessun discard: un oggetto nascosto ha i vertici fuori dallo schermo. Erba e felci a
-// ridosso della camera si rimpiccioliscono. Il calcolo si fa solo per gli oggetti vicini alla linea camera→cavaliere.
+// se attraversano i volumi, allargati di un margine. Sparisce solo chi li attraversa **tutti e tre**, cioè chi copre il
+// cavaliere per intero (quarta richiesta dell'utente: bastava una linea, così un masso o una siepe bassa davanti al
+// cavaliere spariva pur lasciandolo visibile, e spariva proprio mentre gli si arrivava addosso da scavalcare). Chi ne
+// copre una o due resta: si vede il cavaliere e si vede l'ostacolo. La sparizione è netta (terza richiesta: la
+// dissolvenza a puntini sembrava sfocata, incoerente con la grafica; niente stati a metà). I segmenti si fermano poco
+// prima del cavaliere: il tronco contro cui sta camminando resta. Nessuna trasparenza e nessun discard: un oggetto
+// nascosto ha i vertici fuori dallo schermo. Erba e felci a ridosso della camera si rimpiccioliscono. Il calcolo si fa
+// solo per gli oggetti vicini alla linea camera→cavaliere e abbastanza alti da poter coprire la testa (vedi `cima`):
+// un masso o un muretto più basso del cavaliere non sparisce mai e non costa nemmeno il calcolo.
+// **Larghezza:** non basta che le tre linee siano coperte, perché passano per il centro del cavaliere: un tronco
+// sottile a un metro da lui le interseca tutte e tre, ma lascia vedere il cavaliere tutt'attorno. Quindi per ogni linea
+// si prende il volume più largo che la copre, e tra le tre il più stretto: l'oggetto sparisce solo se anche il più
+// stretto, visto dalla camera, è largo almeno quanto il cavaliere (VISUALE.mezzaLarghezza). Così sparisce la chioma
+// larga o la parete di roccia che lo nascondono davvero, mentre il tronco, il masso o la siepe che gli stanno addosso
+// restano: si vede il cavaliere e si vede l'ostacolo che lo ferma (quarta richiesta dell'utente: «arrivo a toccare il
+// masso, non posso proseguire, e il masso non si vede»).
 // Valori provabili dalla console: kd.vegetazione.cfgVisuale (x = margine, y = di quanto i segmenti si fermano prima
-// del cavaliere, z = raggio attorno alla camera per erba e felci), in metri.
+// del cavaliere, z = raggio attorno alla camera per erba e felci, w = mezza larghezza del cavaliere), in metri.
 
-const VISUALE = { margine: 0.35, arretra: 0.4, vicino: 1.6 };
+const VISUALE = { margine: 0.35, arretra: 0.4, vicino: 1.6, mezzaLarghezza: 0.45 };
 const ALTEZZE_CAVALIERE = [0.15, 0.95, 1.75];   // m: piedi, busto, testa
 const FASCE_VISUALE = 4;                         // fasce della chioma; più il tronco
 const VOLUMI_VISUALE = FASCE_VISUALE + 1;
 const ALLUNGATA = 1.4;                           // rapporto dei lati oltre il quale una fascia è una scatola
 
 /**
- * Volumi per la visuale nel sistema della geometria: il primo è il tronco (sotto la chioma; vuoto se non c'è), poi
+ * Volumi per la visuale nel sistema della geometria (più `cima`, la quota del vertice più alto): il primo è il tronco
+ * (sotto la chioma; vuoto se non c'è), poi
  * FASCE_VISUALE fasce della chioma (o dell'oggetto intero) di uguale altezza. La chioma comincia dove i vertici superano
  * metà del raggio orizzontale massimo. Per ogni volume: min e max (scatola) e, in `cil`, centro x, z, raggio e 1 se
  * cilindro / 0 se scatola. min > max = volume vuoto.
@@ -1052,7 +1064,7 @@ function volumiVisuale(geo) {
     for (const i of membri[k]) r = Math.max(r, Math.hypot(p.getX(i) - cx, p.getZ(i) - cz));
     cil.push(new THREE.Vector4(cx, cz, r, Math.max(lx, lz) / Math.max(Math.min(lx, lz), 1e-3) > ALLUNGATA ? 0 : 1));
   });
-  return { min, max, cil, raggio: rMax };
+  return { min, max, cil, raggio: rMax, cima: yTop };
 }
 
 /**
@@ -1076,6 +1088,7 @@ function conVisuale(mat, uni, modo, geo = null, fine = null) {
       sh.uniforms.uVol1 = { value: vol.max };
       sh.uniforms.uVolC = { value: vol.cil };
       sh.uniforms.uRaggio = { value: vol.raggio };
+      sh.uniforms.uCima = { value: vol.cima };
     }
     if (fine !== null) sh.uniforms.uFine = { value: fine };
     // Misura dell'istanza: crescita con la distanza (livello più lontano) o, per erba e felci, a ridosso della camera
@@ -1099,30 +1112,46 @@ function conVisuale(mat, uni, modo, geo = null, fine = null) {
       vec2 kdRel = kdO.xz - cameraPosition.xz;
       float kdR = uRaggio * max(kdSc.x, kdSc.z) + uVisCfg.x;
       float kdT = dot(kdRel, kdU);
+      // Un oggetto che non arriva all'altezza della testa non può coprirla, quindi non sparisce mai: la linea
+      // camera → testa, tra i due, sta sempre sopra la più bassa delle due quote.
+      float kdCima = kdO.y + uCima * kdSc.y + uVisCfg.x;
+      float kdTesta = uCav.y + ${ALTEZZE_CAVALIERE[2].toFixed(2)};
       // Solo gli oggetti che possono stare tra camera e cavaliere (gli altri: niente calcolo)
-      if (uVisuale > 0.0 && kdMisura > 0.0 && kdT > -kdR && kdT < kdL + kdR && abs(dot(kdRel, vec2(-kdU.y, kdU.x))) < kdR + 1.0) {
+      if (uVisuale > 0.0 && kdMisura > 0.0 && kdCima > min(cameraPosition.y, kdTesta)
+        && kdT > -kdR && kdT < kdL + kdR && abs(dot(kdRel, vec2(-kdU.y, kdU.x))) < kdR + 1.0) {
         // Segmenti nel sistema dell'istanza: colonne ortogonali (rotazione per scala lungo gli assi)
         vec3 kdA = cameraPosition - kdO;
         vec3 kdPa = vec3(dot(kdA, kdM[0].xyz), dot(kdA, kdM[1].xyz), dot(kdA, kdM[2].xyz)) / kdS2;
         vec3 kdFine = vec3(uCav.x - kdU.x * uVisCfg.y, 0.0, uCav.z - kdU.y * uVisCfg.y) - kdO;
         vec3 mg = vec3(uVisCfg.x) / kdSc;
         float mr = uVisCfg.x / (0.5 * (kdSc.x + kdSc.z));
+        // Sparisce solo se copre tutte e tre le altezze (piedi, busto, testa) e se anche la più stretta delle tre
+        // coperture è larga quanto il cavaliere: un tronco sottile addosso a lui copre le tre linee ma non lui.
+        float kdLargo = 1e9;                    // larghezza (m) della copertura più stretta
+        float kdScOr = 0.5 * (kdSc.x + kdSc.z);
         for (int i = 0; i < 3; i++) {
           vec3 kdB = kdFine + vec3(0.0, uCav.y + (i == 0 ? ${ALTEZZE_CAVALIERE[0].toFixed(2)} : i == 1 ? ${ALTEZZE_CAVALIERE[1].toFixed(2)} : ${ALTEZZE_CAVALIERE[2].toFixed(2)}), 0.0);
           vec3 kdPb = vec3(dot(kdB, kdM[0].xyz), dot(kdB, kdM[1].xyz), dot(kdB, kdM[2].xyz)) / kdS2;
-          for (int f = 0; f < ${VOLUMI_VISUALE}; f++) kdNascosto = kdNascosto || kdSegVolume(kdPa, kdPb, uVol0[f] - mg, uVol1[f] + mg, uVolC[f], mr);
+          float kdW = 0.0;                      // il volume più largo che copre questa linea
+          for (int f = 0; f < ${VOLUMI_VISUALE}; f++) {
+            if (kdSegVolume(kdPa, kdPb, uVol0[f] - mg, uVol1[f] + mg, uVolC[f], mr)) kdW = max(kdW, uVolC[f].z * kdScOr + uVisCfg.x);
+          }
+          if (kdW <= 0.0) { kdLargo = 0.0; break; }   // una linea scoperta basta: l'oggetto resta
+          kdLargo = min(kdLargo, kdW);
         }
+        // Larghezza apparente: l'oggetto deve coprire almeno quanto il cavaliere alla sua distanza
+        kdNascosto = kdLargo > 0.0 && kdLargo * kdL >= uVisCfg.w * max(length(kdRel), 0.2);
       }` : '';
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
 uniform vec3 uCav;
 uniform float uVisuale;
-uniform vec3 uVisCfg;${fine !== null ? `
+uniform vec4 uVisCfg;${fine !== null ? `
 uniform float uFine;     // distanza massima dell'oggetto (livello più lontano)
 ${GLSL_CRESCITA}` : ''}${vol ? `
 uniform vec3 uVol0[${VOLUMI_VISUALE}], uVol1[${VOLUMI_VISUALE}];
 uniform vec4 uVolC[${VOLUMI_VISUALE}];
-uniform float uRaggio;
+uniform float uRaggio, uCima;
 // Il segmento p→q attraversa il volume? s0, s1: scatola già allargata (vuota se s0 > s1); c: centro x, z, raggio,
 // 1 = cilindro verticale tra s0.y e s1.y (raggio allargato di mr) / 0 = la scatola stessa.
 bool kdSegVolume(vec3 p, vec3 q, vec3 s0, vec3 s1, vec4 c, float mr) {
@@ -1152,7 +1181,7 @@ bool kdSegVolume(vec3 p, vec3 q, vec3 s0, vec3 s1, vec4 c, float mr) {
     }`);
   };
   const chiave = mat.customProgramCacheKey.bind(mat);
-  mat.customProgramCacheKey = () => `${chiave()}|kd-visuale-${modo}-6${fine !== null ? '-cresce' : ''}`;
+  mat.customProgramCacheKey = () => `${chiave()}|kd-visuale-${modo}-9${fine !== null ? '-cresce' : ''}`;
   return mat;
 }
 
@@ -1318,7 +1347,7 @@ export function* creaVegetazioneAPezzi(pos, terrain = null, renderer = null, bud
   const uniVis = {
     uCav: { value: new THREE.Vector3() },
     uVisuale: { value: 0 },                   // 0 finché non arriva la posizione del cavaliere
-    uVisCfg: { value: new THREE.Vector3(VISUALE.margine, VISUALE.arretra, VISUALE.vicino) },
+    uVisCfg: { value: new THREE.Vector4(VISUALE.margine, VISUALE.arretra, VISUALE.vicino, VISUALE.mezzaLarghezza) },
   };
   const uniDirada = { value: new THREE.Vector2(SAGOME_DIRADA.da, 0) };
 
