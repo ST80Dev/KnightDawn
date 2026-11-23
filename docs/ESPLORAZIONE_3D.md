@@ -1543,7 +1543,7 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
       cortile, non più il varco e il corridoio della porta interna; ordine di posa: palazzo, cappella, sala d'armi,
       giardino, cucina, cantina, colombaia, scuderia, armeria, orto; le pertinenze si cercano ad anelli attorno al
       palazzo e, se lì non c'è posto, lungo le mura. `rocca.giardino = { x, z, largo, fondo, varco }` per le persone
-      della casata (fuori da M7). `main.js`: il clima delle case ora viene da `climaDelLuogo` come nei villaggi.
+      della casata (fuori da M7).
       [Certo] Nel seme 12345 (31 rocche): palazzo, cappella, colombaia e pozzo in tutte; cucina 21, cantina 19,
       giardino 24, sala d'armi 11, armeria 10, scuderia e orto pochi (il cortile è pieno). La Carta non cambia.
 
