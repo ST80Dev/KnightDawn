@@ -568,7 +568,7 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
           float y0 = c0 * MEZZA, y1 = B - c1 * MEZZA;                      // il fondo tra le carrarecce (in fb)
           // Erba: capezzagne in testa, bordi di banda senza carrareccia, margine della strada.
           float erbaB = min(min(min(fu, L - fu), min(c0 > 0.5 ? 1e4 : fb, c1 > 0.5 ? 1e4 : B - fb)),
-            margineS - ${PARCELLE.strada.margine[0].toFixed(1)});
+            margineS);                                     // margineS: m oltre la banchina erbosa (negativi dentro)
           vec3 cC;
           if (tipo > 1.5) {
             cC = cPrato * vec3(1.05, 1.02, 0.88);                              // incolto: pascolo
@@ -629,11 +629,11 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
           }
           // Carrareccia: due carreggiate di terra con l'erba nel mezzo, fino al margine della strada.
           float dL = min(c0 > 0.5 ? fb : 1e4, c1 > 0.5 ? B - fb : 1e4);
-          float carr = (1.0 - smoothstep(MEZZA - 0.3, MEZZA + 0.1, dL)) * step(${PARCELLE.strada.margine[0].toFixed(1)}, margineS);
+          float carr = (1.0 - smoothstep(MEZZA - 0.3, MEZZA + 0.1, dL)) * step(0.0, margineS);
           vec3 cTerra = mix(vec3(0.25, 0.19, 0.115), vec3(0.18, 0.135, 0.08), r2) * (0.85 + 0.3 * r3);
           cC = mix(cC, mix(cTerra, cPrato * 0.8, (1.0 - smoothstep(0.25, 0.5, dL)) * 0.85), carr);
           // Fondo coltivato per intero (tabella del blocco); il campo per vertice toglie solo acqua, rive e terrapieni.
-          float dentro = fondoC(i, jb) * smoothstep(0.06, 0.1, vSuolo.z) * step(0.3, margineS);
+          float dentro = fondoC(i, jb) * smoothstep(0.06, 0.1, vSuolo.z) * step(0.0, margineS);
           cPrato = mix(cPrato, cC, dentro * blocco);
         }
         if (vCampi.z > 0.01) {

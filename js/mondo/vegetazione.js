@@ -308,10 +308,13 @@ export const PARCELLE = {
   // Incolti (richiesta dell'utente: «ogni tanto una zona non coltivata»): fondi interi a pascolo, anche a gruppi di
   // 2 × 2 (`gruppi`: parte della quota), da quota[0] entro vicino[0]·R a quota[1] oltre vicino[1]·R.
   incolti: { quota: [0.04, 0.16], vicino: [2, 6], gruppi: 0.6, cespugli: 1.0 },
-  // Strade: i campi (e le carrarecce) finiscono a `margine` m dal bordo della carreggiata, con erba. Fascia larga
+  // Strade: i campi (e le carrarecce) finiscono dopo la banchina erbosa, che stacca la terra battuta dagli appezzamenti
   // [richiesta dell'utente, novembre 2026: i campi arati arrivavano a ridosso della carreggiata e sembravano «pezzi di
-  // strada ai lati»]: una banchina erbosa stacca la terra battuta dai campi.
-  strada: { margine: [3.5, 5], lontano: 25 },
+  // strada ai lati»]. Larga in proporzione alla strada (`base` + `perSemi` × semilarghezza), non fissa: su una maestra
+  // (7 m) viene 3,7 m per lato, su una carrareccia 2,8, su una mulattiera 2,2, su un sentiero 1,6; una banchina fissa
+  // sarebbe stata quasi il doppio della carreggiata sulle strade strette. Siepi, muretti e case stanno `oltre` m più in
+  // là. Il quarto valore di aCampi è la distanza dalla fine della banchina (negativa dentro), in m.
+  strada: { base: 1.2, perSemi: 0.7, oltre: 1.5, lontano: 25 },
   siepi: { lungo: 0.45, traverso: 0.3, filari: 0.25, passo: 1.7, passoFilare: 9, dentro: 0.9, striscia: [1.0, 1.7],
     // Aperture naturali (richiesta dell'utente: «più di un punto per lato, una cosa naturale»): ogni tratto di `cella` m
     // ha un'apertura con probabilità `quota`, in un punto a caso, larga 2·(larghezza) m.
@@ -908,7 +911,8 @@ export function* posizionaVegetazioneAPezzi(o, budget = 2.5) {
       let w = PC.strada.lontano;
       if (o.carta?.strade) {
         distanzaStrada(o.carta, x, z, _st);
-        if (_st.d < Infinity) w = Math.min(PC.strada.lontano, Math.max(0.01, _st.d - _st.semi));
+        // Metri oltre la banchina erbosa (negativi dentro): la banchina cresce con la larghezza della strada.
+        if (_st.d < Infinity) w = Math.min(PC.strada.lontano, _st.d - _st.semi - (PC.strada.base + PC.strada.perSemi * _st.semi));
       }
       aCampi[i * 4 + 3] = w;
     }
@@ -1044,7 +1048,7 @@ export function* posizionaVegetazioneAPezzi(o, budget = 2.5) {
       if (lx < -half || lx > half || lz < -half || lz > half) return;
       trova(lx, lz);
       if (!asciutta() || pendenzaFine() > 28) return;
-      if (triangolo(aCampi, 4, 3) < PC.strada.margine[1]) return;                     // margine della strada
+      if (triangolo(aCampi, 4, 3) < PC.strada.oltre) return;                        // banchina della strada
       parcella(triangolo(aCampi, 4, 0), triangolo(aCampi, 4, 1), ver);
       if (ver.i !== i || ver.jb !== jb || Math.abs((lato & 1 ? ver.fu : ver.fb) - linea) > S.striscia[0]) return;
       if (triangolo(suolo, 4, 2) < 0.1) return;                                         // acqua, rive, terrapieni
