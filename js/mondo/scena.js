@@ -320,7 +320,11 @@ const FIUMI_SCENA = {
  * i fiumi stanno sul fondo delle valli vere invece di essere scavati dopo lungo i tracciati della Carta a 1 km
  * (radice di fiumi rialzati, canyon e strade di traverso segnalati dall'utente). `carta.fiumiFini` = true.
  */
-export const FIUMI_FINI = { passo: 62.5, bacino: 20, minimo: 12, liscia: [2, 2] };
+export const FIUMI_FINI = { passo: 62.5, bacino: 20, minimo: 12, liscia: [2, 2],
+  // Foce a imbuto (deciso con l'utente): negli ultimi `lunghezza` m (× larghezza del fiume, entro `tra` m) il letto si
+  // allarga fino a `mare`/`lago` volte, di più per i fiumi grandi (da `piccolo` a `grande` m di larghezza): estuario al
+  // mare, delta basso al lago; i ruscelli costieri al più raddoppiano. Il quarto valore dei punti di carta.fiumi.
+  foce: { mare: [1.8, 4], lago: [1.3, 1.8], piccolo: 6, grande: 40, lunghezza: 40, tra: [400, 3000] } };
 export function fiumiFini(carta, avanzamento = null) {
   const t0 = performance.now(), F = FIUMI_FINI, P = F.passo, C = carta.cella;
   const nx = Math.round(carta.cols * C / P) + 1, nz = Math.round(carta.rows * C / P) + 1, n = nx * nz;
@@ -417,7 +421,23 @@ export function fiumiFini(carta, avanzamento = null) {
     const m = xs.length, f = new Float32Array(m * 4);
     for (let k = 0; k < m; k++) {
       const cell = k < celle.length ? celle[k] : valle;
-      f[k * 4] = xs[k]; f[k * 4 + 1] = ys[k]; f[k * 4 + 2] = bacino[cell]; f[k * 4 + 3] = NaN;
+      f[k * 4] = xs[k]; f[k * 4 + 1] = ys[k]; f[k * 4 + 2] = bacino[cell]; f[k * 4 + 3] = 1;
+    }
+    // Foce in mare o in lago (non al bordo, non in un altro fiume): imbuto negli ultimi metri.
+    const bordo = (i) => { const q = i % nx, r = (i - q) / nx; return q === 0 || r === 0 || q === nx - 1 || r === nz - 1; };
+    if (valle >= 0 && foce[valle] && !bordo(valle)) {
+      const Fo = F.foce, SW = FIUMI_SCENA.semilarghezza, b = bacino[celle[celle.length - 1]];
+      const largo = 2 * Math.min(SW.max, Math.max(SW.min, SW.k * Math.pow(b, SW.esponente)));
+      const [a, z] = g[valle] <= 0 ? Fo.mare : Fo.lago;
+      const massimo = a + (z - a) * smoothstep(Fo.piccolo, Fo.grande, largo);
+      const L = Math.min(Fo.tra[1], Math.max(Fo.tra[0], Fo.lunghezza * largo));
+      let d = 0;
+      for (let k = m - 1; k >= 0; k--) {
+        if (k < m - 1) d += Math.hypot(xs[k + 1] - xs[k], ys[k + 1] - ys[k]) * C;
+        if (d >= L) break;
+        const t = 1 - d / L;
+        f[k * 4 + 3] = 1 + (massimo - 1) * t * t;
+      }
     }
     // I punti come Float32 (le chiavi delle confluenze sono quelle dei valori salvati).
     for (let k = 0; k < celle.length; k++) punto.set(celle[k], [f[k * 4], f[k * 4 + 1]]);
@@ -458,8 +478,10 @@ export function fiumiScena(carta) {
     for (let i = 0; i < m; i++) {
       x[i] = f[i * 4] * C; z[i] = f[i * 4 + 1] * C;
       const b = Math.max(1, f[i * 4 + 2]), r = Math.sqrt(b), SW = F.semilarghezza;
-      w[i] = Math.min(SW.max, Math.max(SW.min, SW.k * Math.pow(b, SW.esponente)));
-      prof[i] = F.profondita.base + F.profondita.perRadice * r;
+      // Foce a imbuto (fiumi fini, FIUMI_FINI.foce): più larga e più bassa (stessa portata su più larghezza).
+      const imbuto = carta.fiumiFini && f[i * 4 + 3] > 1 ? f[i * 4 + 3] : 1;
+      w[i] = Math.min(SW.max, Math.max(SW.min, SW.k * Math.pow(b, SW.esponente))) * imbuto;
+      prof[i] = (F.profondita.base + F.profondita.perRadice * r) / Math.sqrt(imbuto);
       // Letto sotto la superficie liscia della Carta: pelo dell'acqua F.sponda.altezza sotto il terreno.
       // Vicino ai laghi conta la riva rialzata come nella Scena (scavaFiumi), dentro il livello del lago.
       const suolo = conRiva(carta, x[i], z[i], carta.fiumiFini ? quotaMondo(carta, x[i], z[i]) : quotaCarta(carta, x[i], z[i]));
