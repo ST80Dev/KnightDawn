@@ -88,7 +88,7 @@ export function materialeAcqua(colore) {
  * @param {{x:number, z:number}} [centro]  centro del blocco in coordinate del mondo (per il rumore delle strade)
  * @returns {THREE.Group|null}
  */
-export function creaAcqueScena(acqua, meta, colore, centro) {
+export function creaAcqueScena(acqua, meta, colore, centro, coloreStrada = null) {
   const gruppo = new THREE.Group();
   gruppo.name = 'acque-scena';
   const mat = materialeAcqua(colore);
@@ -126,7 +126,7 @@ export function creaAcqueScena(acqua, meta, colore, centro) {
   // Strade (js/mondo/strade.js): nastro della carreggiata sul terreno disegnato.
   if (acqua.strade?.length && acqua.altezza) {
     const ms = materialeStrada(centro);
-    acqua.strade.forEach((t, n) => gruppo.add(creaNastroStrada(t, ms, acqua.altezza, acqua.quoteStrade?.[n])));
+    acqua.strade.forEach((t, n) => gruppo.add(creaNastroStrada(t, ms, acqua.altezza, acqua.quoteStrade?.[n], coloreStrada)));
   }
   return gruppo.children.length ? gruppo : null;
 }
@@ -294,10 +294,11 @@ export function suoloStrade(gruppo, terreno = null) {
  * ruote, centro), ciascuno alla quota del terreno disegnato `altezza(x, z)` (o della strada, `quote[i]`, se data) più
  * STRADA.sopra.
  */
-export function creaNastroStrada(t, mat, altezza, quote = null) {
+export function creaNastroStrada(t, mat, altezza, quote = null, coloreClima = null) {
   const m = t.length / 3, S = STRADA.sezione, k = S.length;
   const pos = new Float32Array(m * k * 3), col = new Float32Array(m * k * 3), trasv = new Float32Array(m * k);
   const base = new THREE.Color(STRADA.colore), erba = new THREE.Color(STRADA.centro), c = new THREE.Color();
+  const _clima = new THREE.Color();
   for (let i = 0; i < m; i++) {
     const a = Math.max(0, i - 1), b = Math.min(m - 1, i + 1);
     let tx = t[b * 3] - t[a * 3], tz = t[b * 3 + 1] - t[a * 3 + 1];
@@ -314,7 +315,8 @@ export function creaNastroStrada(t, mat, altezza, quote = null) {
       const h = quote ? Math.min(Math.max(quote[i], suolo - STRADA.scarto), suolo + STRADA.scarto) : suolo;
       pos.set([px, h + STRADA.sopra[j], pz], (i * k + j) * 3);
       trasv[i * k + j] = S[j];
-      c.copy(base);
+      // Colore della terra battuta dal clima del luogo (terrain.js, coloreStrada): polvere nel secco, fango nell'umido.
+      c.copy(coloreClima ? coloreClima(_clima, px, pz, h) : base);
       if (w > 1.2 && Math.abs(S[j]) === 0.45) c.multiplyScalar(STRADA.solchi);     // solchi delle ruote
       if (w > 1.2 && S[j] === 0) c.lerp(erba, 0.35);                               // erba al centro
       c.multiplyScalar(variazione);

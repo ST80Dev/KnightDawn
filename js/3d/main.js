@@ -12,7 +12,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { loadTerrain, componiSuolo, createTerrainAPezzi, coloreMondo, cuociSuolo, cuociOrizzonteAPezzi } from './terrain.js';
+import { loadTerrain, componiSuolo, createTerrainAPezzi, coloreMondo, coloreStrada, cuociSuolo, cuociOrizzonteAPezzi } from './terrain.js';
 import { createKnight } from './knight3d.js';
 import { createCavallo } from './cavallo3d.js';
 import { createFollowCamera } from './camera.js';
@@ -635,7 +635,7 @@ function* preparaMondo(desc) {
   const { meta, heights, acqua: dati } = yield* generaScenaAPezzi(carta, cx, cz);
   const ter = yield* createTerrainAPezzi(meta, heights, false, coloreMondo(carta, Calendar.stagione));
   yield 'terreno';
-  const acque = creaAcqueScena(dati, meta, COLORE_ACQUA, meta.centroMondo);
+  const acque = creaAcqueScena(dati, meta, COLORE_ACQUA, meta.centroMondo, coloreStrada(carta));
   // Suolo delle carreggiate: serve ai ponti (testate alla quota della strada, non del terreno: niente gradino) e poi
   // al suolo composto della Scena.
   const strade = suoloStrade(acque, (x, z) => ter.getHeight(x, z));   // con la rampa dal prato sul bordo (#181)

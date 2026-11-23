@@ -308,8 +308,10 @@ export const PARCELLE = {
   // Incolti (richiesta dell'utente: «ogni tanto una zona non coltivata»): fondi interi a pascolo, anche a gruppi di
   // 2 × 2 (`gruppi`: parte della quota), da quota[0] entro vicino[0]·R a quota[1] oltre vicino[1]·R.
   incolti: { quota: [0.04, 0.16], vicino: [2, 6], gruppi: 0.6, cespugli: 1.0 },
-  // Strade: i campi (e le carrarecce) finiscono a `margine` m dal bordo della carreggiata, con erba.
-  strada: { margine: [0.6, 2.2], lontano: 25 },
+  // Strade: i campi (e le carrarecce) finiscono a `margine` m dal bordo della carreggiata, con erba. Fascia larga
+  // [richiesta dell'utente, novembre 2026: i campi arati arrivavano a ridosso della carreggiata e sembravano «pezzi di
+  // strada ai lati»]: una banchina erbosa stacca la terra battuta dai campi.
+  strada: { margine: [3.5, 5], lontano: 25 },
   siepi: { lungo: 0.45, traverso: 0.3, filari: 0.25, passo: 1.7, passoFilare: 9, dentro: 0.9, striscia: [1.0, 1.7],
     // Aperture naturali (richiesta dell'utente: «più di un punto per lato, una cosa naturale»): ogni tratto di `cella` m
     // ha un'apertura con probabilità `quota`, in un punto a caso, larga 2·(larghezza) m.
