@@ -1724,16 +1724,23 @@ Codice in `js/3d/villaggio3d.js` (come da piano: il file tiene villaggi, ovili, 
 - **Monastero** (4–6 per mondo): è una rocca che ha cambiato tipo nel generatore, quindi ha già terrapieno, poligono
   del piano e porta scelti da `luoghi.js`. `costruisciRocche` salta i luoghi `tipo === 'monastero'` e il monastero si
   costruisce in `costruisciVillaggi`, con la stessa regola di inclusione nel blocco.
-  - **muro di cinta basso** (2,3 m) lungo il poligono del piano, con il varco della porta largo 3,4 m nel punto scelto
-    dal generatore, due pilastri ai lati; una sola chiamata (`unisci`), nella pietra del luogo (`tonoDelLuogo`);
-  - **chiesa** in fondo, sul lato opposto alla porta, facciata verso il chiostro (la chiesa del kit, 9,5 × 17 m);
+  - **muro di cinta basso** (2,3 m) lungo il poligono del piano, con il varco della porta largo 3,4 m e due pilastri
+    ai lati; una sola chiamata (`unisci`), nella pietra del luogo (`tonoDelLuogo`). Il varco si apre **dal lato da cui
+    arriva la strada della rete** (campionata attorno al contorno), non dove il generatore aveva messo la porta della
+    rocca: quella guarda il borgo, che qui non c'è, e la strada entrava scavalcando il muro (difetto visto dall'utente);
+  - **chiesa** in fondo, sul lato opposto alla porta, facciata verso il chiostro (la chiesa del kit, 9,5 × 17 m). Dove
+    da quella parte la cinta è corta si accorcia (come il palazzo della rocca) e, sotto i 12 m, si sposta su un altro
+    lato del chiostro: senza questo, su un piano stretto restava senza chiesa;
   - **chiostro**: corte di 13 m col portico di 3 m sui quattro lati (`kit.loggia`) e il pozzo nella corte;
   - **tre ali** addossate al portico (dormitorio, biblioteca, refettorio: `kit.corpo`, 7,5 m di fondo, due piani);
   - **foresteria e infermeria** verso la porta, dove arriva il pellegrino; **sentiero** dalla porta alla facciata, che
     esce 14 m oltre la cinta; **aiuole d'orto** dove resta posto dentro la cinta;
   - **il terrazzo che sarebbe stato del borgo** (il generatore lo ha già spianato) diventa l'orto grande dell'abbazia,
     ad aiuole separate dai passaggi, con la stalla e il pagliaio in fondo: così non resta una terrazza vuota.
-  - Fuori dalla cinta la fascia di terra battuta è stretta (1,5–4 m invece di 3–7): il monastero non spiana il monte.
+  - **Suolo del cortile**: dentro la cinta la terra battuta è **piena e uniforme fino al muro** (`geoPoligono`: anelli
+    dal centro al bordo del poligono), non la griglia con il bordo sfumato dei villaggi, che lasciava chiazze d'erba
+    in mezzo al cortile (richiesta dell'utente). Fuori resta la griglia, stretta (1,5–4 m invece di 3–7) e solo attorno
+    al sentiero e alle forme che stanno fuori: il monastero non spiana il monte.
 - **Eremo** (6–10 per mondo, in alto e isolati): cappella del kit (6 × 10 m), cella dell'eremita di fianco, una catasta
   davanti e un orticello dietro, con poca terra calpestata attorno.
 - **Orto**: quarta textura del suolo (terra rivoltata scura con le porche), accanto a terra battuta, selciato e

@@ -225,7 +225,9 @@ function geoTerra(L, dist, ox, oz, quota, seme, M = SUOLO.margine) {
 function attaccaSuolo(r, pezzi) {
   pezzi.forEach(([nome, geo, tipo], k) => {
     if (!geo) return;
-    const m = new THREE.MeshLambertMaterial({ map: texturaSuolo(tipo), vertexColors: nome === 'terra', alphaTest: nome === 'terra' ? 0.5 : 0 });
+    // Solo i pezzi con l'alpha per vertice (la griglia di geoTerra) hanno il bordo frastagliato: alphaTest.
+    const sfumato = !!geo.getAttribute('color');
+    const m = new THREE.MeshLambertMaterial({ map: texturaSuolo(tipo), vertexColors: sfumato, alphaTest: sfumato ? 0.5 : 0 });
     m.polygonOffset = true; m.polygonOffsetFactor = -2 - k; m.polygonOffsetUnits = -2 - k;
     const mesh = new THREE.Mesh(geo, m);
     mesh.name = `${r.object.name}-suolo-${nome}`;
@@ -547,6 +549,45 @@ export const EREMI = {
   margine: [1.5, 4],               // m: la terra calpestata attorno, più stretta che in un villaggio
 };
 
+/**
+ * Suolo pieno dentro un poligono a stella (il piano di una rocca lo è): anelli dal centro al bordo, nessun buco e
+ * nessuna sfumatura. Serve dove il contorno è netto perché c'è un muro, invece del bordo frastagliato di `geoTerra`.
+ */
+/** Distanza dal centro al bordo del poligono lungo la direzione (dx, dz), per poligoni a stella sul centro. */
+function raggioPoligono(P, dx, dz) {
+  let r = 0;
+  for (let i = 0, k = P.length - 1; i < P.length; k = i++) {
+    const [u0, v0] = P[k], [u1, v1] = P[i], eu = u1 - u0, ev = v1 - v0;
+    const den = dx * ev - dz * eu;
+    if (Math.abs(den) < 1e-9) continue;
+    const t = (u0 * ev - v0 * eu) / den, s = (dz * u0 - dx * v0) / den;   // t: lungo il raggio, s: lungo il lato
+    if (t > r && s >= 0 && s <= 1) r = t;
+  }
+  return r;
+}
+
+function geoPoligono(P, ox, oz, quota, sopra, anelli = 6) {
+  const nA = 64, T = SUOLO.tessera;
+  const raggi = [];
+  for (let j = 0; j < nA; j++) {
+    const a = j / nA * Math.PI * 2;
+    raggi.push(raggioPoligono(P, Math.cos(a), Math.sin(a)));
+  }
+  const pos = [], uv = [], idx = [];
+  const p = (u, v) => { pos.push(ox + u, quota(u, v) + sopra, oz + v); uv.push(u / T, v / T); };
+  p(0, 0);
+  for (let k = 1; k <= anelli; k++) for (let j = 0; j < nA; j++) {
+    const a = j / nA * Math.PI * 2, d = raggi[j] * k / anelli;
+    p(Math.cos(a) * d, Math.sin(a) * d);
+  }
+  for (let j = 0; j < nA; j++) idx.push(0, 1 + (j + 1) % nA, 1 + j);
+  for (let k = 1; k < anelli; k++) for (let j = 0; j < nA; j++) {
+    const a = 1 + (k - 1) * nA + j, b = 1 + (k - 1) * nA + (j + 1) % nA, c = a + nA, d = b + nA;
+    idx.push(a, b, c, b, d, c);
+  }
+  return chiudiGeo(pos, uv, idx);
+}
+
 /** Rettangoli di suolo (orti, spiazzi) appoggiati sul terreno: griglia di ~2 m per lotto. */
 function geoRettangoli(lotti, ox, oz, quota, sopra) {
   const pos = [], uv = [], idx = [], T = SUOLO.tessera;
@@ -593,9 +634,23 @@ export function* createMonasteroAPezzi(suolo, luogo, ox, oz, carta) {
   let t0 = performance.now();
   const forse = function* () { if (performance.now() - t0 > PEZZO_MS) { yield; t0 = performance.now(); } };
 
-  // ─── Porta nel muro di cinta: il lato più vicino al punto scelto dal generatore ───
-  const pr = luogo.portaRocca;
-  const [pu, pv] = pr ? localeDelLuogo(luogo, [[pr.x, pr.z]])[0] : [P[0][0], P[0][1]];
+  // ─── Porta nel muro di cinta: dal lato da cui arriva la strada della rete ───
+  // Il punto scelto dal generatore (`portaRocca`) guarda il borgo, che qui non c'è: se lo usassimo, la strada
+  // entrerebbe scavalcando il muro da un'altra parte. Si cerca invece il punto del contorno più vicino alla strada,
+  // e si apre il varco sul lato che gli corrisponde; senza strade vicine si torna al punto del generatore.
+  const Rm = Math.max(...P.map(([u, v]) => Math.hypot(u, v)));
+  const mondoX = (u, v) => X(u, v) - ox + luogo.x, mondoZ = (u, v) => Z(u, v) - oz + luogo.z;
+  const st = { d: Infinity, semi: 0, banchina: 0 };
+  let pu = 0, pv = 0, dStrada = Infinity;
+  for (let k = 0; k < 48; k++) {
+    const a = k / 48 * Math.PI * 2, u = Math.cos(a) * (Rm + 6), v = Math.sin(a) * (Rm + 6);
+    distanzaStrada(carta, mondoX(u, v), mondoZ(u, v), st);
+    if (st.d < dStrada) { dStrada = st.d; pu = u; pv = v; }
+  }
+  if (dStrada > 150) {                                           // nessuna strada vicina: il punto del generatore
+    const pr = luogo.portaRocca;
+    [pu, pv] = pr ? localeDelLuogo(luogo, [[pr.x, pr.z]])[0] : [P[0][0], P[0][1]];
+  }
   let latoPorta = 0, dPorta = Infinity;
   for (let i = 0; i < P.length; i++) {
     const a = P[i], b = P[(i + 1) % P.length], m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
@@ -673,18 +728,32 @@ export function* createMonasteroAPezzi(suolo, luogo, ox, oz, carta) {
   }
 
   // ─── Chiesa: chiude il lato opposto alla porta, facciata verso il chiostro ───
+  // Dove la cinta da quella parte è corta, la chiesa si accorcia (come il palazzo della rocca); se nemmeno accorciata
+  // ci sta, si cerca lungo gli altri due assi del chiostro.
   const C = M.chiesa;
   const dCorte = M.corte / 2 + M.portico;
-  const cChiesa = [dentroDir[0] * (dCorte + C.fondo / 2 + 0.6), dentroDir[1] * (dCorte + C.fondo / 2 + 0.6)];
+  const fondoQui = (d) => Math.min(C.fondo, raggioPoligono(P, d[0], d[1]) - (dCorte + 0.6) - 1.8);
+  let verso = dentroDir, fondo = fondoQui(dentroDir);
+  if (fondo < C.fondo) {
+    for (const d of [croce, [-croce[0], -croce[1]]]) {
+      const f2 = fondoQui(d);
+      if (f2 > fondo) { verso = d; fondo = f2; }
+    }
+  }
   let chiesa = null;
-  for (let k = 0; k < 10 && !chiesa; k++) {
-    // Se non ci sta, prima un poco di sbieco lungo la cinta, poi più vicina al chiostro.
-    const sposta = (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 2.5, arretra = Math.floor(k / 4) * 2;
-    const c = [cChiesa[0] - dentroDir[0] * arretra + croce[0] * sposta, cChiesa[1] - dentroDir[1] * arretra + croce[1] * sposta];
-    const f = [-dentroDir[0], -dentroDir[1]];
-    if (!libero(c, f, C.largo / 2, C.fondo / 2)) continue;
-    kit.edificio('chiesa', { u: c[0], v: c[1], fu: f[0], fv: f[1], quota: piano, misure: C });
-    chiesa = segnaLotto(c, f, C.largo, C.fondo, 3);
+  if (fondo >= 12) {
+    const misureC = { ...C, fondo };
+    const dC = dCorte + fondo / 2 + 0.6;
+    for (let k = 0; k < 10 && !chiesa; k++) {
+      // Se non ci sta, prima un poco di sbieco lungo la cinta, poi più vicina al chiostro.
+      const sposta = (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 2.5, arretra = Math.floor(k / 4) * 2;
+      const lato = [-verso[1], verso[0]];
+      const c = [verso[0] * (dC - arretra) + lato[0] * sposta, verso[1] * (dC - arretra) + lato[1] * sposta];
+      const f = [-verso[0], -verso[1]];
+      if (!libero(c, f, C.largo / 2, fondo / 2)) continue;
+      kit.edificio('chiesa', { u: c[0], v: c[1], fu: f[0], fv: f[1], quota: piano, misure: misureC });
+      chiesa = segnaLotto(c, f, C.largo, fondo, 3);
+    }
   }
   yield* forse();
 
@@ -798,12 +867,20 @@ export function* createMonasteroAPezzi(suolo, luogo, ox, oz, carta) {
     sentiero.punti.push([-dentroDir[0] * d, -dentroDir[1] * d]);
   }
   const Lm = Math.max(...P.map(([u, v]) => Math.max(Math.abs(u), Math.abs(v)))) + 6;
-  // Terra battuta: tutta dentro la cinta, e fuori attorno alle forme e al sentiero che esce dalla porta.
-  const dentroCinta = (u, v) => (dentroPoligono(P, u, v) ? 0
-    : Math.min(distForme(u, v), vicinoPolilinea(sentiero.punti, u, v).d - sentiero.largo / 2));
+  // Fuori dalla cinta: solo la fascia attorno al sentiero che esce dalla porta e alle forme che stanno fuori (la
+  // stalla sul terrazzo). Gli edifici dentro non devono tirarsi dietro terra oltre il muro, o si vedono striature.
+  // Dentro ci pensa `geoPoligono`, che riempie tutto senza buchi fino al muro.
+  const formeFuori = forme.filter((L) => !dentroPoligono(P, L.c[0], L.c[1]));
+  const fuoriCinta = (u, v) => {
+    if (dentroPoligono(P, u, v)) return Infinity;
+    let m = vicinoPolilinea(sentiero.punti, u, v).d - sentiero.largo / 2;
+    for (const L of formeFuori) m = Math.min(m, distRett(L, u, v));
+    return m;
+  };
   attaccaSuolo(r, [
-    // Fuori dalla cinta la fascia di terra è stretta (dentro è tutta terra battuta): il monastero non spiana il monte.
-    ['terra', geoTerra(Lm, dentroCinta, ox, oz, quotaS, seme, [1.5, 4]), 0],
+    // Cortile: terra battuta piena fino al muro (richiesta dell'utente: non a macchie). Fuori, una fascia stretta.
+    ['terra', geoPoligono(P, ox, oz, quotaS, SUOLO.sopra), 0],
+    ['fuori', geoTerra(Lm, fuoriCinta, ox, oz, quotaS, seme, [1.5, 4]), 0],
     ['sentiero', geoNastri([sentiero], ox, oz, quotaS, SUOLO.sopra + 0.02), 1],
     ['orti', geoRettangoli(orti, ox, oz, quotaS, SUOLO.sopra + 0.03), 3],
   ]);
