@@ -759,22 +759,26 @@ export function* createMonasteroAPezzi(suolo, luogo, ox, oz, carta) {
 
   // ─── Ali addossate al portico sui due lati: dormitorio, biblioteca, refettorio ───
   // Prima del chiostro, perché gli stanno attaccate: il test di sovrapposizione vale solo con la chiesa e fra loro.
-  const A = M.ala;
+  // Edifici nominati del kit (M7): hanno il punto «porta», da cui nascono «Entra» e la riga del cronista.
+  const A = M.ala, ALI = ['dormitorio', 'biblioteca', 'refettorio'];
+  const largoAla = M.corte * 0.56;
+  // Posti attorno al chiostro, in ordine di preferenza: i due lati, poi il lato della porta (la chiesa tiene il quarto).
+  const postiAla = [];
+  for (const lato of [1, -1]) for (const avanti of [0.5, -0.5, 0]) postiAla.push([lato, avanti, croce]);
+  for (const avanti of [0.5, -0.5]) postiAla.push([-1, avanti, dentroDir]);
   let nAli = 0;
-  for (const lato of [1, -1]) {
-    for (const avanti of [0.5, -0.5]) {
-      if (nAli >= 3) break;
-      const largo = M.corte * 0.56;
-      const c = [croce[0] * lato * (dCorte + A.fondo / 2) + dentroDir[0] * avanti * largo,
-        croce[1] * lato * (dCorte + A.fondo / 2) + dentroDir[1] * avanti * largo];
-      const f = [-croce[0] * lato, -croce[1] * lato];
-      if (!libero(c, f, largo / 2, A.fondo / 2)) continue;
-      kit.corpo({ c, f, largo, fondo: A.fondo, piani: A.piani, intonaco: false, quota: piano, porta: true,
-        comignolo: nAli === 2, legno: false, copertura: 'lastre' });
-      segnaLotto(c, f, largo, A.fondo, 2);
-      nAli++;
-      yield* forse();
-    }
+  for (const [lato, avanti, asse] of postiAla) {
+    if (nAli >= ALI.length) break;
+    const perp = [-asse[1], asse[0]];
+    const c = [asse[0] * lato * (dCorte + A.fondo / 2) + perp[0] * avanti * largoAla,
+      asse[1] * lato * (dCorte + A.fondo / 2) + perp[1] * avanti * largoAla];
+    const f = [-asse[0] * lato, -asse[1] * lato];
+    if (!libero(c, f, largoAla / 2, A.fondo / 2)) continue;
+    kit.edificio(ALI[nAli], { u: c[0], v: c[1], fu: f[0], fv: f[1], quota: piano,
+      misure: { largo: largoAla, fondo: A.fondo, piani: A.piani } });
+    segnaLotto(c, f, largoAla, A.fondo, 2);
+    nAli++;
+    yield* forse();
   }
 
   // ─── Chiostro: corte quadrata col portico sui quattro lati, pozzo nel mezzo ───
@@ -789,16 +793,23 @@ export function* createMonasteroAPezzi(suolo, luogo, ox, oz, carta) {
   kit.pozzo(croce[0] * 2.5, croce[1] * 2.5, piano);
 
   // ─── Foresteria e infermeria verso la porta, dove arriva il pellegrino ───
-  for (const [E, lato] of [[M.foresteria, 1], [M.infermeria, -1]]) {
-    for (let k = 0; k < 10; k++) {
-      const d = dCorte + 3 + k * 1.2;
-      const c = [-dentroDir[0] * d + croce[0] * lato * (dCorte * 0.55), -dentroDir[1] * d + croce[1] * lato * (dCorte * 0.55)];
-      const f = [dentroDir[0], dentroDir[1]];
-      if (!libero(c, f, E.largo / 2, E.fondo / 2)) continue;
-      kit.corpo({ c, f, largo: E.largo, fondo: E.fondo, piani: E.piani, intonaco: true, quota: null,
-        comignolo: true, legno: false });
-      segnaLotto(c, f, E.largo, E.fondo, 2.5);
-      break;
+  for (const [tipo, E, lato] of [['foresteria', M.foresteria, 1], ['infermeria', M.infermeria, -1]]) {
+    let messo = false;
+    // Verso la porta, sul proprio lato; se non ci sta, più in là, più di fianco e infine dall'altro lato.
+    for (const l of [lato, -lato]) {
+      for (const sposta of [0.55, 0.95, 0.2, 1.35]) {
+        for (let k = 0; k < 10 && !messo; k++) {
+          const d = dCorte + 3 + k * 1.2;
+          const c = [-dentroDir[0] * d + croce[0] * l * (dCorte * sposta), -dentroDir[1] * d + croce[1] * l * (dCorte * sposta)];
+          const f = [dentroDir[0], dentroDir[1]];
+          if (!libero(c, f, E.largo / 2, E.fondo / 2)) continue;
+          kit.edificio(tipo, { u: c[0], v: c[1], fu: f[0], fv: f[1], misure: E });
+          segnaLotto(c, f, E.largo, E.fondo, 2.5);
+          messo = true;
+        }
+        if (messo) break;
+      }
+      if (messo) break;
     }
     yield* forse();
   }

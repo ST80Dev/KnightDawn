@@ -1771,9 +1771,12 @@ Codice in `js/3d/villaggio3d.js` (come da piano: il file tiene villaggi, ovili, 
   ~1.800 triangoli. Dentro il budget (un villaggio ne fa 14 ora che il kit ha `zone: 1`, un borgo 40).
 - **Provato** [Certo, nessun errore in console]: monasteri 8 e 9 del seme 570549 (24870, 61970 e 38490, 80570), eremo
   137 (59100, 85700); villaggio 32 rifatto dopo il rifacimento della coda comune, senza differenze.
-- **In sospeso, chiesto a M7**: gli edifici fatti con `kit.corpo` non finiscono in `edifici`, quindi non hanno il punto
-  «porta» che serve al passo 6 di M7 e a «Entra». Chieste cinque voci nuove in `EDIFICI` (foresteria, infermeria,
-  dormitorio, biblioteca, refettorio); appena ci sono, basta passare da `kit.edificio`.
+- **Edifici nominati** (fatto dopo l'unione della PR #208 di M7, che ha aggiunto le voci a `EDIFICI`): ali, foresteria
+  e infermeria passano da `kit.edificio`, non più da `kit.corpo`, quindi hanno il punto «porta» da cui nascono «Entra»
+  e la riga del cronista. Allargata anche la ricerca del posto (sei posizioni attorno al chiostro per le tre ali,
+  due lati per foresteria e infermeria): prima refettorio e infermeria restavano spesso fuori. Ora un monastero ha
+  sette edifici nominati — chiesa, dormitorio, biblioteca, refettorio, foresteria, infermeria, pozzo — a 16–17
+  chiamate e ~9.600 triangoli.
 - **Fuori dal passo**: monaci (abitanti3d.js di M7), campane, cimitero, chiostro a due piani.
 
 ### Decisioni tecniche
