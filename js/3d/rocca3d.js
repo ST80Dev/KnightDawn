@@ -1241,8 +1241,8 @@ export function* createRoccaAPezzi(suolo, luogo, ox, oz, clima = 'temperato') {
         }
       }
     }
+    for (const tipo of tipi) colloca(tipo, ['armi']);            // armeria: piccola, prima delle pertinenze
     for (const tipo of ['cucina', 'cantina', 'colombaia', 'scuderia']) pertinenza(tipo);
-    for (const tipo of tipi) colloca(tipo, ['armi']);
     mettiOrto();
     // Pozzo: nella corte del signore, il punto libero più vicino al suo centro (o al centro del cortile).
     zona = corti ? 'signore' : null;
