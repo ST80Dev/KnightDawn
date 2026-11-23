@@ -1674,7 +1674,7 @@ segni e «Vai a…» in `cartaVista.js`; `VERSIONE_GENERATORE` + `siti-1`.
   Scene dei siti sono ancora vuote: il 3D arriva dal passo 2; monasteri e città mostrano ancora rocca e borgo fino
   ai passi 3 e 8); tempo di generazione nel browser.
 
-### Passo 2 — villaggi e ovili 3D (fatto, da provare)
+### Passo 2 — villaggi e ovili 3D (fatto, provato dall'utente e unito: PR #199)
 
 Codice: `js/3d/villaggio3d.js` (nuovo), agganci in `main.js` (`costruisciVillaggi` accanto a `costruisciRocche`, nel
 blocco che segue il cavaliere; porte per «Entra», luci, F3), `raggioSito` in `js/mondo/siti.js` (raggio d'ingombro:
@@ -1697,8 +1697,25 @@ frazione 55 m, villaggio 85 m, ovile 22 m; nessun cambio alle Carte, `VERSIONE_G
   chiamate e 17–22.500 triangoli; ovile 11 chiamate e ~1.700 triangoli. **Sopra il budget del piano (≤ 20 chiamate)**:
   le zone dei dettagli del kit (fino a 2 × 2) moltiplicano le istanze; il kit non ha un'opzione per una zona sola (file
   di M7). Restano sotto le 40 del borgo; triangoli entro i 30.000.
-- **Fuori dal passo:** persone nei villaggi, mulino, forno, orti e palizzata; differenze per clima delle case e dei
-  borghi (proposta all'utente).
+- **Fuori dal passo:** persone nei villaggi, mulino, forno, orti e palizzata.
+
+### Clima delle case sul mondo generato (fatto, da provare)
+
+Richiesta dell'utente: case diverse secondo il clima nei villaggi, nelle case isolate e nei borghi. Gli stili sono di
+M7 (`edifici3d.js`, opzione `clima`, PR #201); qui si collega il clima del luogo e si corregge la sua definizione.
+- **Aggancio** (`main.js`): `climaDi(x, z)` chiamava sempre `'temperato'`; ora risponde `climaDelLuogo(carta, x, z)`
+  (Tavullia non ha Carta: temperato). `?clima=freddo|temperato|caldo` continua a forzarlo ovunque per le prove.
+  Rocche e borghi prendono il clima del loro luogo; le case di campagna uno per blocco (cella di clima 1 km, blocco
+  2 km): sul confine fra due climi tutto il blocco prende quello del centro, in cambio di un solo kit di edifici.
+- **Correzione in `siti.js`:** `climaDelLuogo` guardava solo temperatura e bioma, e un borgo *in piena foresta a
+  15 °C* riceveva tetti piatti a terrazza e intonaco chiaro da zona arida (visto nella prova, seme 570549 a
+  38490, 80570). Il tetto piatto vuole un clima **secco**: ora «caldo» chiede anche umidità ≤ 0,34, e foresta e
+  palude non lo sono mai. Misure sui luoghi di cinque semi: sabbia U 0,22–0,31, foresta U 0,36–0,62 anche calda.
+- **Misure** [Certo, Node, sei semi]: 32 % freddo, 10 % caldo, 57 % temperato (prima 30/20/50, con i falsi caldi).
+  Nessun luogo caldo in foresta. `VERSIONE_GENERATORE` invariata: il clima si calcola fuori dalla cache.
+- **Provato** [Certo, Chromium headless, nessun errore in console]: borgo freddo (570549, 108610, 9970) tetti ripidi
+  di scandole sulla neve; villaggio arido (570549, 30900, 85100) cubi bianchi, terrazze e pergole fra le dune; rocca
+  arida (33117, 103100, 81440) terrazze chiare dentro le mura; il borgo in foresta ora è temperato, a graticcio.
 
 ### Decisioni tecniche
 
@@ -2146,7 +2163,21 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      *Massi erratici* (`VEGETAZIONE.erratici`): pochi massi di 4–8 m isolati nei prati (non nel bosco, nei campi,
      vicino a strade, case e terrapieni). *Alberi lungo le strade* (`stradaAlberi`): a tratti, a 2,5–5 m dal bordo,
      fuori dal bosco; poi ridotti (richiesta dell'utente: «il mondo medievale è più casuale, non un viale»): pochi
-     tratti, radi, sparsi tra 2,5 e 10 m dal bordo (~50 in un blocco).
+     tratti, radi, sparsi tra 2,5 e 10 m dal bordo (~50 in un blocco). Poi di nuovo aumentati (richiesta dell'utente:
+     «lungo le strade attorno ai castelli non si capisce che c'è una strada; e per chilometri solo terreno e strada,
+     va bene nel deserto o nella tundra, altrove aumentiamo un po', senza filari su entrambi i lati»): da 0,1 a ~3
+     alberi per 100 m di strada nelle pianure nude, fino a 11 dove c'è bosco. Il tratto alberato lo decide un rumore
+     su 150 m a 2 ottave con soglia sfumata (prima 260 m a 1 ottava e soglia netta: interi chilometri cadevano in un
+     tratto nudo), e dentro il tratto un lato prevale (`unLato` 0,72) mentre l'altro tiene il 18 % della densità:
+     la strada si legge senza sembrare piantata. Le specie si contendono la cella per peso come nel bosco (prima
+     bastava `conifera > 0,6` e al freddo venivano tutte conifere). *Limite degli alberi sparsi* (`limiteSparsi`,
+     −5,5…−1,5 °C attorno a `CLIMA.bosco`): il limite del bosco vale per una copertura continua, un albero solo regge
+     più freddo (in Siberia i larici arrivano sotto −5 °C di media annua). Senza, nelle pianure settentrionali
+     (`PIANURA_N`, media annua sotto i 5 °C) non c'era un albero pur essendoci campi di grano e un castello. Resta
+     nudo sotto i ~−4 °C, vicino alla neve perenne. Nuovo campo per vertice `D.pianta`: quanto il posto regge un albero
+     isolato (asciutto, in piano, niente roccia, neve, ghiaia, sabbia né tundra), usato dagli alberi delle strade.
+     Oggetti: +1 % in headless. Da fare: anche con gli alberi, da 300 m la carreggiata si confonde con il grano, il
+     colore del nastro della strada (`acqua.js`) è un'altra cosa da guardare.
      *Chiome e cespugli* (richiesta dell'utente: chiome «troppo arrotondate o piene, si vede che sono di un gioco»;
      arbusti «con pezzi vuoti, fatti da più elementi, non un blocco come un masso»; senza appesantire): `chiomaAMasse`,
      la chioma in 4–7 masse separate, ognuna con pochi ciuffi e un ramo dal fusto (`ramoVerso`), con vuoti da cui si
@@ -2845,6 +2876,19 @@ si resta sotto 1,5 ms e ≤ 10 chiamate (cupola 1, stelle 1, precipitazioni 1). 
 
 Periodi variabili 2–3 ore canoniche; foschia calda al tramonto non ora; neve anche in pianura al Nord, ogni tanto; meteo
 tendenziale per bioma e latitudine; foschia di giorno a distanza standard per ogni stato (decisioni 7–10 sopra).
+
+## Carta: simboli, legenda, meno righe (richiesta dell'utente, novembre 2026) — da provare
+
+- **Segni più grandi** (non le rocche, già leggibili) con un alone chiaro dietro al tratto (`conAlone`), perché ponti e
+  valichi si perdevano nel disegno di altimetria e terreno: valico 4,5 → 6,5 px, ponte e guado 4 → 5,5, siti 2,4/3,2 →
+  3,4/4,4, punti panoramici 3,5 → 4,2, forcelle 3 → 4 (`SEGNI`).
+- **Legenda dei simboli** in un pannello a destra della Carta, disegnata con gli stessi segni (`segnoValico`,
+  `segnoPonte`, `segnoGuado`, `segnoRocca`, `segnoSito`, `segnoTriangolo`): scala del livello mostrato, luoghi, siti,
+  passaggi, classi di strada, rilievo. Ogni segno su un riquadro color pergamena, così i tratti scuri si leggono anche
+  sul fondo scuro del pannello.
+- **Meno righe**: in alto resta `seme · dimensioni · zoom · curve`; le statistiche e le verifiche del generatore (fasce,
+  biomi, varietà, rocche, siti, istogramma) stanno dietro al pulsante **Dettagli**, che le mostra in fondo insieme alle
+  misure della generazione.
 
 ## Minimappa (richiesta dell'utente, novembre 2026) — fatta, da provare
 

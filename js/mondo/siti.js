@@ -355,17 +355,23 @@ export function raggioSito(s) {
 
 /**
  * Clima di un luogo per lo stile delle case (richiesta dell'utente: villaggi, case isolate e borghi diversi secondo il
- * clima): 'freddo', 'temperato' o 'caldo', dalla temperatura media annua (°C) e dal bioma della cella. Soglie tarate
- * sui siti di tre semi (temperature dei luoghi: p10 ≈ −3,5 °C, mediana ≈ 4 °C, p90 ≈ 16 °C): ~30 % freddo, ~20 % caldo.
+ * clima): 'freddo', 'temperato' o 'caldo', dalla temperatura media annua (°C), dall'umidità e dal bioma della cella.
+ *
+ * Il tetto piatto a terrazza e l'intonaco chiaro vogliono un clima SECCO, non soltanto caldo: con la sola temperatura
+ * un borgo in piena foresta a 15 °C prendeva le case da zona arida. Perciò «caldo» chiede poca umidità, e la foresta e
+ * la palude (dove piove) non lo sono mai. Misure sui luoghi di cinque semi: sabbia U 0,22–0,31 e T 14–18,5 °C; foresta
+ * U 0,36–0,62 anche calda; pianura meridionale T ≈ 17 °C, U 0,33–0,41. Risultato: ~30 % freddo, ~10 % caldo.
  */
-export const CLIMI = { freddo: 0.5, caldo: 12 };
+export const CLIMI = { freddo: 0.5, caldo: 12, secco: 0.34 };
 export function climaDelLuogo(carta, x, z) {
   const c = Math.min(carta.cols - 1, Math.max(0, Math.floor(x / carta.cella)));
   const r = Math.min(carta.rows - 1, Math.max(0, Math.floor(z / carta.cella)));
   const i = r * carta.cols + c, b = carta.bioma?.[i], t = carta.temperatura?.[i] ?? 8;
-  if (b === BIOMA.SABBIA || b === BIOMA.PIANURA_S || t >= CLIMI.caldo) return 'caldo';
+  const u = carta.umidita?.[i] ?? 0.5;
   if (b === BIOMA.NEVE || b === BIOMA.GHIACCIO || b === BIOMA.PIANURA_N || t <= CLIMI.freddo) return 'freddo';
-  return 'temperato';
+  if (b === BIOMA.FORESTA || b === BIOMA.PALUDE) return 'temperato';
+  if (b === BIOMA.SABBIA || b === BIOMA.PIANURA_S) return 'caldo';
+  return t >= CLIMI.caldo && u <= CLIMI.secco ? 'caldo' : 'temperato';
 }
 
 /** Nome leggibile per la Carta e per F3. */
