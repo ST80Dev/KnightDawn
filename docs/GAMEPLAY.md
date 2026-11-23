@@ -1,5 +1,12 @@
 # Knight Dawn — Modello di gameplay
 
+> **Superato in parte dal 3D (novembre 2026).** Il movimento nelle Scene è in tempo reale e si
+> cammina dentro i luoghi: «niente movimento real-time» e «niente scena navigabile» non valgono più.
+> Restano le cinque modalità come ritmo. Il viaggio sulla Carta (Calmo) arriva con G2; le scene di
+> luogo (Contemplativo) sono il borgo di persona più la Carta del cronista alle porte (`docs/GDD.md`
+> §3 *Interazione con luoghi*); il combattimento (Drammatico) è un riquadro sopra la scena ferma, con
+> Round che costano minuti (`docs/COMBAT.md`). Ordine delle milestone: `docs/GDD.md` §5.
+>
 > **Stato:** definizione concettuale. Verrà raffinato man mano che le fasi
 > S2–S4 procedono. Sistemi di supporto: `docs/EVENTS.md` (eventi e scelte),
 > `docs/TEXT_SYSTEM.md` (architettura testi), `docs/UI_GUIDE.md` (UI).

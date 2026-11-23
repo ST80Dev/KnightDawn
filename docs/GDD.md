@@ -1,7 +1,9 @@
 # Knight Dawn — Game Design Document
 
 > Documento vivo. Le sezioni marcate [TBD] sono da definire.
-> Ultimo aggiornamento: novembre 2026 — il gioco diventa **Carta e Scene su un mondo inventato,
+> Ultimo aggiornamento: novembre 2026 — ordine delle milestone di gioco (§5), combattimento in minuti
+> e nel riquadro (§3), Carta del cronista per il gioco di persona (§3 *Interazione con luoghi*).
+> Prima: il gioco diventa **Carta e Scene su un mondo inventato,
 > generato a ogni partita** (§2 *Il mondo*, §3 *Tempo e calendario*, §3 *Viaggio*). Le parti sulla
 > mappa a tile del 2D sono superate dove lo dicono queste sezioni.
 
@@ -299,7 +301,7 @@ Il mondo ha **stagioni** che influenzano il gameplay:
 - Primavera: viaggio facile, commercio attivo
 - Estate: siccità possibili, ribellioni contadine
 - Autunno: raccolto, feste, diplomazia
-- Inverno: passi chiusi, fame, creature più aggressive
+- Inverno: valichi alti più duri (neve, freddo: rischio e fatica, mai chiusi), fame, creature più aggressive
 
 [TBD] Tabella costi di viaggio per cella (bioma, pendenza, strade)
 [TBD] Tabella strutture con frequenza di spawn e contenuto
@@ -368,7 +370,7 @@ azioni del giocatore — non dal cronometro.
 | Pausa modale (pre-recap, POI)     | Come la pausa: nulla scorre                       |
 | Lettura evento / scelta narrativa | Nulla scorre durante la lettura                   |
 | Azione atomica dentro luogo       | *N* Passi scattano d'un colpo a conferma azione   |
-| Combattimento (Round interattivi) | 1 Passo a ogni Round confermato dal giocatore     |
+| Combattimento (Round interattivi) | I minuti del Round a ogni Round confermato (`docs/COMBAT.md` §2) |
 
 **Conseguenze di design:**
 
@@ -382,8 +384,9 @@ azioni del giocatore — non dal cronometro.
   se eri in pausa, resti in pausa. Nessuna tensione passiva sul testo.
 - **Il combattimento sospende il tempo reale** e diventa puro turn-based:
   il cronometro si ferma e ogni Round confermato (auto, fuga, resa,
-  parlamento, colpo) avanza il calendario di 1 Passo. La durata reale
-  del combattimento è decisa dal giocatore, non dal sistema.
+  parlamento, colpo) avanza il calendario dei suoi minuti di gioco (pochi
+  minuti in un duello, ore per una fase di battaglia; prima era 1 Passo).
+  La durata reale del combattimento è decisa dal giocatore, non dal sistema.
 - **Le deadlines (`addDeadline`) vengono spuntate solo quando il Passo
   scatta davvero** — viaggio, azione atomica, Round combat. Una scadenza
   fissata a 60 Passi non scade mentre stai leggendo un evento.
@@ -527,9 +530,9 @@ Durante la Veglia:
 
 ### Combattimento
 
-Combattimento **a Round interattivi** (vedi `docs/COMBAT.md`). Sospende
-il tempo reale del viaggio e diventa turn-based puro: il calendario
-avanza di 1 Passo solo a ogni Round confermato dal giocatore (auto,
+Combattimento **a Round interattivi** (vedi `docs/COMBAT.md`), in un **riquadro a sé sopra la
+scena ferma** [deciso con l'utente, novembre 2026]. Sospende il tempo reale e diventa turn-based
+puro: il calendario avanza dei minuti del Round solo a ogni Round confermato dal giocatore (auto,
 fuga, resa, parlamento, colpo disperato).
 
 - Risultato del singolo Round automatico (attributi + equipaggiamento +
@@ -563,13 +566,14 @@ con ciascuna. La reputazione apre e chiude porte.
 
 ### Interazione con luoghi
 
-Quando entri in un castello, villaggio, dungeon o luogo speciale, la vista
-cartografica si oscura e appare una **Carta del cronista**: una composizione
-statica in stile manoscritto miniato medievale (cornice ornata, miniatura
-centrale, testo sotto, pulsanti tematici).
+[Rivisto con l'utente, novembre 2026, per il gioco di persona.] **Il 3D decide dove sei e con chi
+parli, la Carta del cronista decide cosa fai.** Nel luogo si cammina di persona (borgo, villaggio,
+monastero); arrivati alla porta di un edificio o a una persona si apre una **Carta del cronista**:
+una composizione in stile manoscritto miniato medievale (cornice ornata, testo, pulsanti tematici;
+la miniatura in alto arriverà più avanti). Gli interni non si disegnano (`docs/PRESTAZIONI.md`):
+ciò che accade dentro un edificio sta nella carta.
 
-**Non** è una scena navigabile point&click. Si interagisce *per scelta*,
-non *per click su posizione*.
+Dentro la carta si interagisce *per scelta*, non *per clic su posizione*.
 
 - **Miniatura** in alto: illuminazione singola (sala del trono, taverna,
   cella, biblioteca…) coerente con lo stile della mappa.
@@ -578,10 +582,11 @@ non *per click su posizione*.
 - **Pulsanti contestuali**: cambiano in base a chi è presente, ora del giorno,
   stagione, reputazione del cavaliere, news note al nodo, seguito al fianco.
 - **Tempo**: ogni interazione consuma Passi.
-- **Esplorazione assorbita**: pulsanti come *"Osserva la sala"*, *"Cerca nei
-  dintorni"*, *"Chiedi notizie"* fanno *pescaggi pesati* su tabelle di
-  scoperta (oggetti, persone, eventi). La varietà nasce dalla casualità
-  contestualizzata, non dal click su elementi visivi.
+- **Esplorazione assorbita** solo per ciò che non si disegna: pulsanti come *"Osserva la sala"*,
+  *"Chiedi notizie"* fanno *pescaggi pesati* su tabelle di scoperta (oggetti, persone, eventi).
+  Fuori dagli edifici si cerca di persona: nelle Scene gli incontri stanno in un punto del mondo
+  (un accampamento, un viandante sulla strada, il lupo vicino all'ovile); gli eventi a probabilità
+  per Passo valgono per il viaggio sulla Carta.
 
 Stesso linguaggio visivo viene riusato per gli eventi di viaggio
 (modalità *Sospesa*), che appaiono come *carte mobili* sopra la mappa.
@@ -750,7 +755,24 @@ Dettagli in `docs/UI_GUIDE.md`.
 
 > Roadmap della versione 2D. Il binario Grafica è sostituito dal prototipo 3D
 > (`docs/ESPLORAZIONE_3D.md`, che ha l'ordine attuale delle milestone); la fase S2 diventa la
-> **generatore del mondo** (Carta e Scene). Le fasi S3–S9 restano valide.
+> **generatore del mondo** (Carta e Scene). Le fasi S3–S9 restano valide come contenuto.
+>
+> **Ordine del gioco dopo il 3D** [deciso con l'utente, novembre 2026]. I sistemi esistono in parte
+> come logica (`js/*.js`) ma nel 3D sono collegati solo `Knight`, `Calendar` e `Save`. Si procede
+> per milestone di gioco, ognuna giocabile:
+> 1. **G1 — Veglia giocabile e menu d'avvio** (Storia o Libera, prima della generazione): Carta del
+>    cronista vera, mercato, combattimento nel riquadro, lupi all'ovile, investitura. Piano in
+>    `docs/EARLY_GAME.md` §7.
+> 2. **G2 — Viaggio sulla Carta**: la Carta di sviluppo diventa di gioco (percorso, tempo e Forza,
+>    eventi di viaggio, «fermati qui» che porta nella Scena) e **nebbia della conoscenza** rivelata da
+>    ciò che il cavaliere vede dalle alture.
+> 3. **G3 — Fazioni e nomi generati** (S5, prima parte).
+> 4. **G4 — Incarichi per tipo di luogo, reputazione, notizie che si propagano** (S3, S5, S6).
+> 5. **G5 — Seguito e covi** (S7). 6. **G6 — Archi narrativi e titoli** (S8).
+>
+> La **modalità Libera** (senza storia, strumenti di sviluppo attivi) resta sempre disponibile per
+> provare grafica e sistemi senza ripassare dall'inizio. I passi aperti della grafica proseguono
+> quando un passo di gioco li richiede.
 
 Due binari procedono in parallelo: **Grafica** (Fase G1…Gn, definita in
 `docs/GRAFICA.md`) e **Sistemi** (Fase S1…Sn, definita qui). I sistemi
@@ -803,7 +825,7 @@ da console / log testuale) prima di aggiungere la sua UI.
 #### Fase S4 — Combattimento
 - Scontro a **Round interattivi**: ogni Round presenta scelte (continua,
   fuga, resa, azioni speciali contestuali)
-- **1 Round = 1 Passo del calendario** (~3 ore in-fiction): nessuna sotto-unità
+- **Un Round costa minuti di gioco** secondo il tipo di scontro (prima 1 Passo, rivisto a novembre 2026)
 - Numero di Round scala con la complessità del nemico (ladro 1,
   cavaliere 4-6, battaglia in esercito 10-20)
 - Risoluzione automatica del singolo Round via formula su attributi,

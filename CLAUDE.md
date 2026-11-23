@@ -66,6 +66,7 @@ architettura: quelle stanno in `docs/`. Aggiornare la fase corrente a ogni cambi
 
 ## Fase corrente
 
-**M7, rocca e borgo sul mondo generato** (`docs/ESPLORAZIONE_3D.md`), ripresa. Milestone «Prestazioni» chiusa
-(nov. 2026): ogni contenuto disegnato rispetta budget e regole di `docs/PRESTAZIONI.md` e passa dal percorso di prova
-(`?seme=570549&prova`, anche `&centro=97042,80681` sul borgo). M0–M6 completate. La 2D resta nella cronologia git (`2c869fa`).
+**G1, Veglia giocabile e menu d'avvio** (`docs/EARLY_GAME.md` §7, piano da approvare): prima milestone di gioco,
+ordine delle successive in `docs/GDD.md` §5. La grafica (M7 7–8, M8 5–8, `docs/ESPLORAZIONE_3D.md`) prosegue quando un
+passo di gioco la richiede; contenuti nuovi sempre nel budget di `docs/PRESTAZIONI.md` e provati con `?seme=570549&prova`.
+M0–M6 e «Prestazioni» completate. La 2D resta nella cronologia git (`2c869fa`).
