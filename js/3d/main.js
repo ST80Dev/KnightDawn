@@ -402,6 +402,16 @@ const RIGHE_CRONISTA = {
   palazzo: "Arazzi, un camino acceso e un lungo tavolo: la sala grande della casata.",
   palazzoMaggiore: "Scale di pietra, stemmi alle pareti e un brusio di cortigiani: qui si decide la sorte della regione.",
   pozzo: "L'acqua è fredda e profonda; la corda è consumata dalle mani.",
+  // Corte del signore (M7, passo 10c) e monastero (M8, passo 3).
+  cucina: 'Il fuoco è sempre acceso; pentole di rame e un odore di pane e brodo.',
+  cantina: "Botti in fila nel fresco; il cellerario conta gli orci a mente.",
+  colombaia: 'Un battito d\'ali nel buio: i colombi tornano al loro fusto di pietra.',
+  scuderia: 'Selle lucide e cavalli da battaglia: nessuno li monta senza permesso.',
+  foresteria: 'Letti per i pellegrini, una brocca d\'acqua e nessuna domanda.',
+  infermeria: 'Pochi letti, erbe e silenzio: qui si guarisce o si prega.',
+  dormitorio: 'File di giacigli sotto le travi; di giorno non c\'è nessuno.',
+  biblioteca: 'Banchi da copista, inchiostro e pergamene legate con cura.',
+  refettorio: 'Tavole lunghe e un leggio: si mangia mentre uno legge.',
 };
 let cronista = null;                       // la Carta del cronista aperta (elemento), o null
 let personaVicina = null;                  // abitante a portata di «E: parla» (abitanti3d.js)

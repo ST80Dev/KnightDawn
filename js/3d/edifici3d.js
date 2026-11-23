@@ -136,6 +136,12 @@ export const EDIFICI = {
   cantina:   { nome: 'Cantina', largo: 7, fondo: 5.5, piani: 1, intonaco: false, copertura: 'lastre', bassa: true },
   colombaia: { nome: 'Colombaia', largo: 3.6, fondo: 3.6, piani: 4, intonaco: false, torretta: true },
   scuderia:  { nome: 'Scuderia del signore', largo: 9, fondo: 6, piani: 1, intonaco: false, copertura: 'coppi' },
+  // Monastero ed eremo (M8, passo 3): le misure arrivano da chi li costruisce (`misure`), qui solo nome e materiali.
+  foresteria: { nome: 'Foresteria', largo: 11, fondo: 7.5, piani: 2, intonaco: true, copertura: 'lastre' },
+  infermeria: { nome: 'Infermeria', largo: 8, fondo: 6.5, piani: 1, intonaco: true },
+  dormitorio: { nome: 'Dormitorio', largo: 7.3, fondo: 7.5, piani: 2, intonaco: false, copertura: 'lastre' },
+  biblioteca: { nome: 'Biblioteca', largo: 7.3, fondo: 7.5, piani: 2, intonaco: false, copertura: 'lastre' },
+  refettorio: { nome: 'Refettorio', largo: 7.3, fondo: 7.5, piani: 2, intonaco: false, copertura: 'lastre' },
   // Dimora dei signori nella corte del signore (M7, passo 10b): piano nobile con bifore, cornici, stemma, scala esterna.
   // Più grandi delle case del borgo, in proporzione alla casata (richiesta dell'utente: «ben più maestoso»).
   palazzetto:      { nome: 'Palazzo del signore', largo: 15, fondo: 10, piani: 2, intonaco: false, palazzo: true, copertura: 'lastre' },
