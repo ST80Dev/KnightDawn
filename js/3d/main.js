@@ -21,7 +21,7 @@ import { createRoccaAPezzi } from './rocca3d.js';
 import { creaCaseCampagna, quotaFinestre } from './edifici3d.js';
 import { createBorgoAPezzi } from './borgo3d.js';
 import { createVillaggioAPezzi, pianoDelSito } from './villaggio3d.js';
-import { raggioSito } from '../mondo/siti.js';
+import { raggioSito, climaDelLuogo } from '../mondo/siti.js';
 import { createCartaVista } from './cartaVista.js';
 import { creaMinimappa } from './minimappa.js';
 import { creaOrizzonteAPezzi } from './orizzonte.js';
@@ -40,10 +40,10 @@ import { creaProfilatore, creaPercorso, GRUPPI, FAMIGLIE, BUDGET_GPU, budgetDi, 
 const LONTANO = 130000;                   // m: distanza massima disegnata dalla camera
 const PARAMETRI = new URL(window.location.href).searchParams;
 const TAVULLIA = PARAMETRI.get('terreno') === 'tavullia';
-// Clima delle case (freddo | temperato | caldo). `?clima=` lo forza ovunque, per provare gli stili; senza, per ora
-// temperato: il clima del luogo (climaDelLuogo, M8) si collega qui.
+// Clima delle case (freddo | temperato | caldo): dal bioma e dalla temperatura del luogo (climaDelLuogo, come i
+// villaggi), così rocca, borgo, campagna e villaggi vicini hanno lo stesso stile. `?clima=` lo forza, per le prove.
 const CLIMA_FORZATO = ['freddo', 'temperato', 'caldo'].includes(PARAMETRI.get('clima')) ? PARAMETRI.get('clima') : null;
-const climaDi = (x, z) => CLIMA_FORZATO ?? 'temperato';
+const climaDi = (carta, x, z) => CLIMA_FORZATO ?? (carta ? climaDelLuogo(carta, x, z) : 'temperato');
 const PROVA_PRESTAZIONI = PARAMETRI.has('prova');             // percorso di prova: niente salvataggi (vedi init)
 const CENTRO_PROVA = (() => {                                   // ?centro=x,z (m del mondo) per il percorso di prova
   const v = (PARAMETRI.get('centro') || '').split(',').map(Number);
@@ -572,7 +572,7 @@ function* costruisciRocche(cx, cz, ter) {
     if (Math.abs(x) > half + m || Math.abs(z) > half + m) continue;
     // Carte di prima delle forme irregolari (senza poligoni): niente rocca (la cache si rigenera con la versione).
     if (!l.piani[0].poligono) continue;
-    const clima = climaDi(l.x, l.z);
+    const clima = climaDi(carta, l.x, l.z);
     const rocca = yield* createRoccaAPezzi(suoloMondo, l, x, z, clima);         // cinta poligonale, porta verso il borgo (M7)
     out.push(rocca);
     // M7, passo 4: il borgo murato in pendio, addossato alla rocca.
@@ -657,7 +657,7 @@ function* preparaMondo(desc) {
   if (posVeg.case?.length) {
     const half = ter.size / 2;
     const suoloC = { getHeight: (x, z) => (Math.abs(x) <= half && Math.abs(z) <= half ? ter.getHeight(x, z) : quotaFinale(carta, x + cx, z + cz)) };
-    camp = creaCaseCampagna(suoloC, posVeg.case, cx, cz, carta.seme, climaDi(cx, cz));
+    camp = creaCaseCampagna(suoloC, posVeg.case, cx, cz, carta.seme, climaDi(carta, cx, cz));
     yield 'case';
   }
   // Colore del blocco in una texture (docs/PRESTAZIONI.md, passo 3): dopo la vegetazione, che aggiunge al terreno
