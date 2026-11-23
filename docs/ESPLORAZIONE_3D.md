@@ -2141,7 +2141,21 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      *Massi erratici* (`VEGETAZIONE.erratici`): pochi massi di 4–8 m isolati nei prati (non nel bosco, nei campi,
      vicino a strade, case e terrapieni). *Alberi lungo le strade* (`stradaAlberi`): a tratti, a 2,5–5 m dal bordo,
      fuori dal bosco; poi ridotti (richiesta dell'utente: «il mondo medievale è più casuale, non un viale»): pochi
-     tratti, radi, sparsi tra 2,5 e 10 m dal bordo (~50 in un blocco).
+     tratti, radi, sparsi tra 2,5 e 10 m dal bordo (~50 in un blocco). Poi di nuovo aumentati (richiesta dell'utente:
+     «lungo le strade attorno ai castelli non si capisce che c'è una strada; e per chilometri solo terreno e strada,
+     va bene nel deserto o nella tundra, altrove aumentiamo un po', senza filari su entrambi i lati»): da 0,1 a ~3
+     alberi per 100 m di strada nelle pianure nude, fino a 11 dove c'è bosco. Il tratto alberato lo decide un rumore
+     su 150 m a 2 ottave con soglia sfumata (prima 260 m a 1 ottava e soglia netta: interi chilometri cadevano in un
+     tratto nudo), e dentro il tratto un lato prevale (`unLato` 0,72) mentre l'altro tiene il 18 % della densità:
+     la strada si legge senza sembrare piantata. Le specie si contendono la cella per peso come nel bosco (prima
+     bastava `conifera > 0,6` e al freddo venivano tutte conifere). *Limite degli alberi sparsi* (`limiteSparsi`,
+     −5,5…−1,5 °C attorno a `CLIMA.bosco`): il limite del bosco vale per una copertura continua, un albero solo regge
+     più freddo (in Siberia i larici arrivano sotto −5 °C di media annua). Senza, nelle pianure settentrionali
+     (`PIANURA_N`, media annua sotto i 5 °C) non c'era un albero pur essendoci campi di grano e un castello. Resta
+     nudo sotto i ~−4 °C, vicino alla neve perenne. Nuovo campo per vertice `D.pianta`: quanto il posto regge un albero
+     isolato (asciutto, in piano, niente roccia, neve, ghiaia, sabbia né tundra), usato dagli alberi delle strade.
+     Oggetti: +1 % in headless. Da fare: anche con gli alberi, da 300 m la carreggiata si confonde con il grano, il
+     colore del nastro della strada (`acqua.js`) è un'altra cosa da guardare.
      *Chiome e cespugli* (richiesta dell'utente: chiome «troppo arrotondate o piene, si vede che sono di un gioco»;
      arbusti «con pezzi vuoti, fatti da più elementi, non un blocco come un masso»; senza appesantire): `chiomaAMasse`,
      la chioma in 4–7 masse separate, ognuna con pochi ciuffi e un ramo dal fusto (`ramoVerso`), con vuoti da cui si
