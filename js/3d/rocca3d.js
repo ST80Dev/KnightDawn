@@ -519,8 +519,8 @@ function casoLuogo(luogo, k) {
 // ─── Rocca ───────────────────────────────────────────────────────────────
 
 /** Versione sincrona: costruisce la rocca in un colpo (stesso risultato di createRoccaAPezzi). */
-export function createRocca(suolo, luogo, ox, oz) {
-  return completaPezzi(createRoccaAPezzi(suolo, luogo, ox, oz));
+export function createRocca(suolo, luogo, ox, oz, clima = 'temperato') {
+  return completaPezzi(createRoccaAPezzi(suolo, luogo, ox, oz, clima));
 }
 
 /**
@@ -530,7 +530,7 @@ export function createRocca(suolo, luogo, ox, oz) {
  * @param {number} ox  centro del sito nel blocco
  * @param {number} oz
  */
-export function* createRoccaAPezzi(suolo, luogo, ox, oz) {
+export function* createRoccaAPezzi(suolo, luogo, ox, oz, clima = 'temperato') {
   const K = MISURE_ROCCA[luogo.classe] ?? MISURE_ROCCA.casata;
   const ux = luogo.verso.x, uz = luogo.verso.z;
   const R0 = luogo.piani[0], B = luogo.piani[1];
@@ -1039,7 +1039,7 @@ export function* createRoccaAPezzi(suolo, luogo, ox, oz) {
   yield;
   // ─── Edifici del cortile (passo 5): cappella e pozzo; sala d'armi e armeria nel castello di casata e nella sede
   // maggiore. Addossati alle mura (facciata verso il cortile), o liberi nel cortile se lungo le mura non c'è posto.
-  const kit = creaKit({ X, Z, ux, uz, terreno, luogo, seme: (Math.floor(luogo.x) * 19349663) ^ (Math.floor(luogo.z) * 83492791), nome: 'rocca-edifici', contesto: 'rocca' });
+  const kit = creaKit({ X, Z, ux, uz, terreno, luogo, seme: (Math.floor(luogo.x) * 19349663) ^ (Math.floor(luogo.z) * 83492791), nome: 'rocca-edifici', contesto: 'rocca', clima });
   {
     const lotti = [mastioL];
     const passaggio = [gm[0] - gn[0] * (PORTA.profondita - SPOR + 4), gm[1] - gn[1] * (PORTA.profondita - SPOR + 4)];
