@@ -38,9 +38,21 @@
 
 ## 3. Fedeltà o ventura
 
-La scelta si fa **quando si vuole**, la prima volta all'investitura: il signore che arma il garzone
-chiede il giuramento, che si può accettare o rifiutare (si parte libero). Più tardi si può giurare a
-qualunque casata che ti accetti, o sciogliere il giuramento.
+La scelta si fa **quando si vuole e quante volte si vuole** [deciso con l'utente, novembre 2026]. La prima
+occasione è l'investitura: il signore che arma il garzone chiede il giuramento, che si può accettare o
+rifiutare (si parte libero). Poi, in qualunque momento della partita e senza limite di volte: giurare a una
+casata che ti accetti, sciogliersi, tornare di ventura, giurare a un'altra. Il ritorno a una casata lasciata
+in pace è possibile; a una casata tradita solo dopo una grande impresa.
+
+Cambiare non è mai gratis, ma non è mai vietato [proposta]:
+- **Prova del nuovo signore**: dopo un giuramento i vantaggi pieni (alloggio gratis, incarichi di fiducia,
+  promozioni) arrivano dopo un periodo di servizio (~un Diario) o subito con un'impresa per la casata.
+- **Fama di incostante**: ogni giuramento sciolto conta. Con 2–3 cambi in poco tempo (una Luce) le casate
+  d'onore alzano la soglia per accettarti e la prova si allunga; la fama cala col tempo passato fedeli.
+- Il **rango della via del vessillo** si conserva cambiando casata (sei Bannerale, ma non della nuova casata
+  finché non te lo riconosce); la reputazione resta per casata.
+- **Una sola casata alla volta**. Le fazioni senza territorio (ordini, città libere, briganti) hanno
+  reputazione propria; se ci si possa anche affiliare, e con quali incompatibilità, è da decidere.
 
 | | **Giurato** (vassallo di una casata) | **Di ventura** (libero, mercenario) |
 |---|---|---|
@@ -105,4 +117,6 @@ qualunque casata che ti accetti, o sciogliere il giuramento.
 - Numero di casate e unioni per mondo (proposta: 10–16 casate, 2–4 unioni).
 - Nomi dei ranghi nelle due vie dopo Cavaliere Errante (`docs/EARLY_GAME.md` §2).
 - Se un tradimento possa mai essere perdonato del tutto.
+- Affiliazione a fazioni senza territorio (ordini, città, briganti) insieme al giuramento a una casata.
+- Durata della prova e soglie della fama di incostante.
 - File nuovo per la generazione e la simulazione (proposta: `js/mondo/fazioni.js`, senza grafica né DOM).
