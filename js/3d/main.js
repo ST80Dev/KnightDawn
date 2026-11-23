@@ -21,6 +21,7 @@ import { createRoccaAPezzi } from './rocca3d.js';
 import { creaCaseCampagna, quotaFinestre } from './edifici3d.js';
 import { createBorgoAPezzi } from './borgo3d.js';
 import { createVillaggioAPezzi, createMonasteroAPezzi, createEremoAPezzi, pianoDelSito } from './villaggio3d.js';
+import { createRovinaAPezzi } from './rovine3d.js';
 import { raggioSito, climaDelLuogo } from '../mondo/siti.js';
 import { createCartaVista } from './cartaVista.js';
 import { creaMinimappa } from './minimappa.js';
@@ -605,11 +606,12 @@ function* costruisciVillaggi(cx, cz, ter) {
     getHeight: (x, z) => (Math.abs(x) <= half && Math.abs(z) <= half ? ter.getHeight(x, z) : quotaFinale(carta, x + cx, z + cz)),
   };
   for (const s of carta?.siti ?? []) {
-    const eremo = s.tipo === 'eremo';
-    if (s.tipo !== 'villaggio' && s.tipo !== 'ovile' && !eremo) continue;
+    const eremo = s.tipo === 'eremo', rovina = s.tipo === 'rovina' || s.tipo === 'abbandonato';
+    if (s.tipo !== 'villaggio' && s.tipo !== 'ovile' && !eremo && !rovina) continue;
     const x = s.x - cx, z = s.z - cz, m = raggioSito(s) + 50;
     if (Math.abs(x) > half + m || Math.abs(z) > half + m) continue;
-    out.push(eremo ? yield* createEremoAPezzi(suoloMondo, s, x, z, carta)
+    if (rovina) out.push(yield* createRovinaAPezzi(suoloMondo, s, x, z, carta));          // M8, passo 4
+    else out.push(eremo ? yield* createEremoAPezzi(suoloMondo, s, x, z, carta)
       : yield* createVillaggioAPezzi(suoloMondo, s, x, z, carta, cx, cz));
   }
   // M8, passo 3: i monasteri sono rocche che hanno cambiato tipo, quindi hanno già il terrapieno e il poligono del
@@ -671,7 +673,9 @@ function* preparaMondo(desc) {
     heights, cols: meta.cols, cell: meta.cellSize, cx, cz, acqua: dati,
     copertura: coperturaMondo(carta, Calendar.stagione), seme: carta.seme, carta,
     piani: [...(carta.luoghi || []).flatMap((l) => l.piani || []),
-      ...(carta.siti || []).filter((s) => s.tipo === 'villaggio' || s.tipo === 'ovile' || s.tipo === 'eremo').map(pianoDelSito)], mare: true,
+      ...(carta.siti || []).filter((s) => s.tipo === 'villaggio' || s.tipo === 'ovile' || s.tipo === 'eremo').map((s) => pianoDelSito(s)),
+      // Rovine e abbandonati: cerchio più stretto, gli alberi stanno fuori dai muri ma il bosco se li riprende.
+      ...(carta.siti || []).filter((s) => s.tipo === 'rovina' || s.tipo === 'abbandonato').map((s) => pianoDelSito(s, 0.45))], mare: true,
   }, MS_PEZZO);
   yield 'posizione vegetazione';
   const veg = yield* creaVegetazioneAPezzi(posVeg, ter, renderer, MS_PEZZO);   // il terreno nuovo, mai quello in scena
