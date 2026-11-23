@@ -1235,6 +1235,9 @@ export function* createRoccaAPezzi(suolo, luogo, ox, oz, clima = 'temperato') {
             const cv = [c[0] + f[0] * (fondo / 2 + 2.4), c[1] + f[1] * (fondo / 2 + 2.4)];
             const Lv = { c: cv, f, s: [-f[1], f[0]], a: 1.9, b: 1.8 };
             if (!libero(Lv)) continue;
+            // E oltre, fino a ~7 m: senza un pezzo di cortile davanti, il varco resta in fondo a un vicolo chiuso.
+            const cw = [c[0] + f[0] * (fondo / 2 + 5.6), c[1] + f[1] * (fondo / 2 + 5.6)];
+            if (!libero({ c: cw, f, s: [-f[1], f[0]], a: 1.9, b: 1.4 })) continue;
             lotti.push(L, Lv);                      // il lotto del varco resta libero anche dopo
             const g = kit.giardino(c, f, largo, fondo, piano - 0.15);
             giardinoFatto = { u: c[0], v: c[1], largo, fondo, varco: g.varco };
