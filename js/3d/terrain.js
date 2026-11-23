@@ -17,7 +17,7 @@
 import * as THREE from 'three';
 import { BIOMA, CLIMA } from '../mondo/carta.js';
 import { smoothstep, completa } from '../mondo/rumore.js';
-import { COPERTURA, coperturaMondo, nuovaCopertura, campagnaMondo, PARCELLE, PERM_CAMPI } from '../mondo/vegetazione.js';
+import { COPERTURA, coperturaMondo, nuovaCopertura, campagnaMondo, PARCELLE, PERM_CAMPI, CASE_CAMPAGNA, LATO_FONDI } from '../mondo/vegetazione.js';
 
 const PAL = (typeof PALETTE !== 'undefined') ? PALETTE : {};
 
@@ -338,6 +338,10 @@ export function materialeSuolo(cx, cz, mezzo = 1e9) {
     // Campi coltivati (vegetazione.js, PARCELLE): permutazione condivisa. La maschera è la terza componente di aSuolo,
     // le coordinate dei campi l'attributo aCampi (li aggiunge vegetazione3d.js).
     uPermCampi: { value: TEXTURE_PERM_CAMPI },
+    uOrti: { value: 0 },          // raggio degli orti del luogo dei campi (m; 0 = niente orti): PARCELLE.orti
+    // Fondi coltivati del blocco (vegetazione.js, fondoColtivato): tabella LATO_FONDI², dal fondo (i0, j0).
+    uFondi: { value: TEXTURE_NERA },
+    uFondi0: { value: new THREE.Vector2(0, 0) },
   };
   mat.userData.uniformi = uniformi;
   mat.onBeforeCompile = (sh) => {
@@ -385,6 +389,14 @@ varying vec2 vLocCotto;
 varying vec4 vSuolo;
 varying vec4 vCampi;
 uniform sampler2D uPermCampi;
+uniform float uOrti;
+uniform sampler2D uFondi;
+uniform vec2 uFondi0;
+float fondoC(float i, float jb) {
+  vec2 t = vec2(i, jb) - uFondi0;
+  if (t.x < 0.0 || t.y < 0.0 || t.x >= ${LATO_FONDI.toFixed(1)} || t.y >= ${LATO_FONDI.toFixed(1)}) return 0.0;
+  return texture2D(uFondi, (t + 0.5) / ${LATO_FONDI.toFixed(1)}).r > 0.5 ? 1.0 : 0.0;
+}
 // Permutazione dei campi (PERM_CAMPI): interi esatti, uguali a quelli di vegetazione.js.
 float permC(float x) { return floor(texture2D(uPermCampi, vec2((mod(x, 256.0) + 0.5) / 256.0, 0.5)).r * 255.0 + 0.5); }
 float hashC(float a, float b) { return permC(permC(b) + a); }
@@ -394,6 +406,17 @@ float aperturaC(float i, float j, float lato, float lungo) {
   if (hashC(c, b) >= ${(PARCELLE.siepi.aperture.quota * 256).toFixed(1)}) return 0.0;
   float centro = (c + 0.2 + 0.6 * hashC(c, b + 1.0) / 255.0) * ${PARCELLE.siepi.aperture.cella.toFixed(1)};
   return abs(lungo - centro) < ${PARCELLE.siepi.aperture.larghezza[0].toFixed(2)} + ${(PARCELLE.siepi.aperture.larghezza[1] - PARCELLE.siepi.aperture.larghezza[0]).toFixed(2)} * hashC(c, b + 2.0) / 255.0 ? 1.0 : 0.0;
+}
+// Carrareccia sul bordo basso della banda jb (come carrareccia in vegetazione.js).
+float carrC(float jb) { return hashC(jb, 9.0) < ${(PARCELLE.carrareccia.quota * 256).toFixed(1)} ? 1.0 : 0.0; }
+// Tipo del fondo (come tipoFondo in vegetazione.js): 0 campo, 1 orto, 2 incolto.
+float tipoFondoC(float i, float jb, float L, float u0) {
+  if (uOrti <= 0.0) return 0.0;
+  float d = length(vec2(u0 + 0.5 * L, (jb + 0.5) * ${PARCELLE.banda.toFixed(1)})) / uOrti;
+  if (hashC(i, jb + 151.0) < ${(PARCELLE.orti.quota * 256).toFixed(2)} * (1.0 - smoothstep(${PARCELLE.orti.vicino[0].toFixed(2)}, ${PARCELLE.orti.vicino[1].toFixed(2)}, d))) return 1.0;
+  float p = (${PARCELLE.incolti.quota[0].toFixed(3)} + ${(PARCELLE.incolti.quota[1] - PARCELLE.incolti.quota[0]).toFixed(3)} * smoothstep(${PARCELLE.incolti.vicino[0].toFixed(2)}, ${PARCELLE.incolti.vicino[1].toFixed(2)}, d)) * 256.0;
+  if (hashC(i, jb + 171.0) < p * ${(1 - PARCELLE.incolti.gruppi).toFixed(3)} || hashC(floor(i / 2.0) + 61.0, floor(jb / 2.0) + 173.0) < p * ${PARCELLE.incolti.gruppi.toFixed(3)}) return 2.0;
+  return 0.0;
 }
 float hashSuolo(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -499,60 +522,114 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
         }
         if (vSuolo.z > 0.01) {
           // Campi coltivati attorno ai luoghi (niente stagioni; disegno in PARCELLE, js/mondo/vegetazione.js, che lo
-          // calcola uguale per mettere le siepi): strisce lungo il verso del borgo larghe 20–55 m e lunghe 70–190 m;
-          // vicino al luogo orti più piccoli. Ogni appezzamento sceglie arato, seminato, grano, fieno o maggese; tra uno
-          // e l'altro una capezzagna erbosa; sui lati con la siepe una striscia scura (da lontano la siepe si legge
-          // anche dove i cespugli non si disegnano più). Dove la campagna finisce si fermano appezzamenti interi.
-          // Strade: ogni lato ha appezzamenti suoi (righe spostate) e i campi finiscono al margine, con erba.
-          float latoS = vCampi.w < 0.0 ? 1.0 : 0.0, margineS = abs(vCampi.w);
-          vec2 q = vCampi.xy + vec2(0.0, latoS * ${PARCELLE.strada.lato.toFixed(1)});
-          float orto = vCampi.z < 0.0 ? 1.0 : 0.0;
-          float banda = mix(${PARCELLE.banda[0].toFixed(1)}, ${PARCELLE.banda[1].toFixed(1)}, orto);
-          float extra = mix(${PARCELLE.extra[0].toFixed(1)}, ${PARCELLE.extra[1].toFixed(1)}, orto);
-          float W = banda / (2.0 + floor(hashC(floor(q.y / banda), 7.0 + orto) * extra / 256.0));
-          float j = floor(q.y / W);
-          float hj = hashC(j, 3.0 + orto) / 255.0;
-          float L = orto > 0.5 ? ${PARCELLE.lungo[1][0].toFixed(1)} + ${PARCELLE.lungo[1][1].toFixed(1)} * hj
-            : ${PARCELLE.lungo[0][0].toFixed(1)} + ${PARCELLE.lungo[0][1].toFixed(1)} * hj;
-          float u = q.x + hj * ${PARCELLE.spostamento.toFixed(1)};
-          float i = floor(u / L);
-          float h = hashC(i, j + 17.0) / 255.0, h2 = hashC(i, j + 41.0) / 255.0;
-          float fu = u - i * L, fv = q.y - j * W;
-          float bordoC = min(min(min(fu, L - fu), min(fv, W - fv)), margineS - ${PARCELLE.strada.margine[0].toFixed(1)});
-          float solchi = 0.5 + 0.5 * sin(fv * 6.2832 / mix(2.4, 1.3, orto));
+          // calcola uguale per mettere siepi e muretti). Fondi larghi una banda e lunghi 130–220 m, divisi per il lungo
+          // in 2–4 strisce di colture diverse (arato, seminato, grano, fieno, maggese) separate solo da un solco; in
+          // testa al fondo una capezzagna erbosa; su una parte dei bordi di banda una carrareccia di terra. Ogni fondo è
+          // campo, orto (aiuole con vialetti, chiuso da muretti) o incolto (pascolo). Dove la campagna finisce si
+          // fermano fondi interi, netti; alla strada i campi finiscono al margine, con erba.
+          float B = ${PARCELLE.banda.toFixed(1)}, MEZZA = ${PARCELLE.carrareccia.mezza.toFixed(2)};
+          vec2 q = vCampi.xy;
+          float margineS = vCampi.w;
+          float jb = floor(q.y / B), fb = q.y - jb * B;
+          float nS = ${PARCELLE.strisce[0].toFixed(1)} + floor(hashC(jb, 7.0) * ${(PARCELLE.strisce[1] - PARCELLE.strisce[0] + 1).toFixed(1)} / 256.0), W = B / nS;
+          float hb = hashC(jb, 3.0) / 255.0, L = ${PARCELLE.fondo[0].toFixed(1)} + ${(PARCELLE.fondo[1] - PARCELLE.fondo[0]).toFixed(1)} * hb;
+          float off = hb * ${PARCELLE.spostamento.toFixed(1)};
+          float i = floor((q.x + off) / L), u0 = i * L - off, fu = q.x - u0;
+          float s = min(nS - 1.0, floor(fb / W)), fv = fb - s * W, j = jb * 8.0 + s;
+          float tipo = tipoFondoC(i, jb, L, u0);
+          float dCm = length(vec2(u0 + 0.5 * L, (jb + 0.5) * B));
+          float c0 = carrC(jb), c1 = carrC(jb + 1.0);
+          float y0 = c0 * MEZZA, y1 = B - c1 * MEZZA;                      // il fondo tra le carrarecce (in fb)
+          // Erba: capezzagne in testa, bordi di banda senza carrareccia, margine della strada.
+          float erbaB = min(min(min(fu, L - fu), min(c0 > 0.5 ? 1e4 : fb, c1 > 0.5 ? 1e4 : B - fb)),
+            margineS - ${PARCELLE.strada.margine[0].toFixed(1)});
           vec3 cC;
-          if (orto > 0.5) cC = h < 0.35 ? vec3(0.15, 0.095, 0.05) * (0.85 + 0.2 * solchi)
-            : mix(vec3(0.12, 0.08, 0.04), vec3(0.05, 0.12, 0.03), 0.35 + 0.4 * smoothstep(0.3, 0.7, solchi));
-          else if (h < 0.24) cC = vec3(0.15, 0.095, 0.05) * (0.78 + 0.32 * solchi);                    // arato
-          else if (h < 0.46) cC = mix(vec3(0.10, 0.20, 0.03), vec3(0.15, 0.26, 0.05), solchi * 0.6);  // seminato
-          else if (h < 0.7) cC = vec3(0.42, 0.32, 0.11) * (0.9 + 0.15 * solchi);                    // grano
-          else if (h < 0.88) cC = vec3(0.24, 0.27, 0.09) * (0.9 + 0.12 * solchi);                  // fieno, prato da sfalcio
-          else cC = mix(cPrato, vec3(0.2, 0.14, 0.07), 0.45);                                          // maggese
-          cC *= 0.86 + 0.28 * r2;
-          cC = mix(cC, cPrato * 0.85, 1.0 - smoothstep(0.8, 1.8, bordoC));                             // capezzagna
-          if (orto < 0.5) {
-            // Siepi (non i filari d'alberi: quelli hanno le loro ombre finte) e, vicino al luogo, muretti a secco con
-            // un varco per lato: come in posizionaVegetazione.
-            float zonaMuri = vCampi.z < ${PARCELLE.muretti.oltreOrti.toFixed(1)} ? 1.0 : 0.0;
-            float noFilL = hashC(i, j + 97.0) >= ${(PARCELLE.siepi.filari * 256).toFixed(1)} ? 1.0 : 0.0;
-            float noFilC = hashC(i, j + 98.0) >= ${(PARCELLE.siepi.filari * 256).toFixed(1)} ? 1.0 : 0.0;
-            float hasL = hashC(i, j + 59.0) < ${(PARCELLE.siepi.lungo * 256).toFixed(1)} ? noFilL : 0.0;
-            float hasC = hashC(i, j + 83.0) < ${(PARCELLE.siepi.traverso * 256).toFixed(1)} && fv > 2.0 ? noFilC : 0.0;
-            float muroL = hasL * zonaMuri * (hashC(i, j + 113.0) < ${(PARCELLE.muretti.quota * 256).toFixed(1)} ? 1.0 : 0.0);
-            float muroC = hasC * zonaMuri * (hashC(i, j + 114.0) < ${(PARCELLE.muretti.quota * 256).toFixed(1)} ? 1.0 : 0.0);
-            float vL = L * (0.15 + 0.7 * hashC(i, j + 127.0) / 255.0), vC = W * (0.15 + 0.7 * hashC(i, j + 131.0) / 255.0);
-            muroL *= step(${PARCELLE.muretti.varco.toFixed(1)}, abs(fu - vL));
-            muroC *= step(${PARCELLE.muretti.varco.toFixed(1)}, abs(fv - vC));
-            float sL = hasL > 0.5 && muroL < 0.5 && aperturaC(i, j, 0.0, fu) < 0.5 && !(zonaMuri > 0.5 && hashC(i, j + 113.0) < ${(PARCELLE.muretti.quota * 256).toFixed(1)}) ? fv : 1e4;
-            float sC = hasC > 0.5 && muroC < 0.5 && aperturaC(i, j, 1.0, fv) < 0.5 && !(zonaMuri > 0.5 && hashC(i, j + 114.0) < ${(PARCELLE.muretti.quota * 256).toFixed(1)}) ? fu : 1e4;
-            float siepe = 1.0 - smoothstep(${PARCELLE.siepi.striscia[0].toFixed(1)}, ${PARCELLE.siepi.striscia[1].toFixed(1)}, min(sL, sC));
-            cC = mix(cC, vec3(0.035, 0.055, 0.02) * (0.7 + 0.6 * r2), siepe);
-            float dM = min(muroL > 0.5 ? abs(fv - ${PARCELLE.muretti.dentro.toFixed(1)}) : 1e4, muroC > 0.5 ? abs(fu - ${PARCELLE.muretti.dentro.toFixed(1)}) : 1e4);
-            float pietra = 1.0 - smoothstep(${PARCELLE.muretti.striscia[0].toFixed(1)}, ${PARCELLE.muretti.striscia[1].toFixed(1)}, dM);
-            cC = mix(cC, vec3(0.13, 0.125, 0.115) * (0.75 + 0.5 * r3), pietra);
+          if (tipo > 1.5) {
+            cC = cPrato * vec3(1.05, 1.02, 0.88);                              // incolto: pascolo
+          } else if (tipo > 0.5) {
+            // Orto: aiuole di ~${PARCELLE.orti.aiuola[0]} × ${PARCELLE.orti.aiuola[1]} m con vialetti di terra battuta.
+            float Lu = L - ${(2 * PARCELLE.capezzagna).toFixed(2)}, Lv = y1 - y0;
+            float pu = Lu / max(2.0, floor(Lu / ${PARCELLE.orti.aiuola[0].toFixed(1)} + 0.5)), pv = Lv / max(2.0, floor(Lv / ${PARCELLE.orti.aiuola[1].toFixed(1)} + 0.5));
+            float iu = fu - ${PARCELLE.capezzagna.toFixed(2)}, iv = fb - y0;
+            float su = floor(iu / pu), sv = floor(iv / pv), au = iu - su * pu, av = iv - sv * pv;
+            float ho = hashC(i + su * 37.0, jb + sv * 53.0 + 19.0) / 255.0;
+            float so = 0.5 + 0.5 * sin(av * 6.2832 / 1.3);
+            if (ho < 0.3) cC = vec3(0.15, 0.095, 0.05) * (0.85 + 0.2 * so);                                  // vangato
+            else if (ho < 0.62) cC = mix(vec3(0.12, 0.08, 0.04), vec3(0.05, 0.12, 0.03), 0.35 + 0.4 * smoothstep(0.3, 0.7, so));
+            else if (ho < 0.8) cC = vec3(0.04, 0.09, 0.025) * (0.85 + 0.3 * so);                             // foglie
+            else cC = cPrato * 0.95;                                                                          // prato
+            cC *= 0.9 + 0.2 * r2;
+            float vial = min(min(au, pu - au), min(av, pv - av));
+            cC = mix(vec3(0.26, 0.20, 0.12) * (0.9 + 0.2 * r3), cC, smoothstep(${(PARCELLE.orti.vialetto - 0.2).toFixed(2)}, ${(PARCELLE.orti.vialetto + 0.2).toFixed(2)}, vial));
+          } else {
+            float h = hashC(i, j + 17.0) / 255.0;
+            float solchi = 0.5 + 0.5 * sin(fv * 6.2832 / 2.4);
+            if (h < 0.24) cC = vec3(0.15, 0.095, 0.05) * (0.78 + 0.32 * solchi);                    // arato
+            else if (h < 0.46) cC = mix(vec3(0.10, 0.20, 0.03), vec3(0.15, 0.26, 0.05), solchi * 0.6);  // seminato
+            else if (h < 0.7) cC = vec3(0.42, 0.32, 0.11) * (0.9 + 0.15 * solchi);                    // grano
+            else if (h < 0.88) cC = vec3(0.24, 0.27, 0.09) * (0.9 + 0.12 * solchi);                  // fieno, prato da sfalcio
+            else cC = mix(cPrato, vec3(0.2, 0.14, 0.07), 0.45);                                          // maggese
+            cC *= 0.9 + 0.2 * r2;
+            // Solco tra le strisce (non sui bordi di banda): niente erba, solo una riga più scura.
+            float dS = min(s > 0.5 ? fv : 1e4, s < nS - 1.5 ? W - fv : 1e4);
+            cC *= mix(0.7, 1.0, smoothstep(${(PARCELLE.solco * 0.4).toFixed(2)}, ${PARCELLE.solco.toFixed(2)}, dS));
           }
-          float dentro = smoothstep(0.0, 0.06, vSuolo.z - (0.12 + 0.6 * h2)) * step(0.3, margineS);
+          if (tipo < 1.5) cC = mix(cC, cPrato * 0.85, 1.0 - smoothstep(${(PARCELLE.capezzagna - 0.3).toFixed(2)}, ${(PARCELLE.capezzagna + 0.3).toFixed(2)}, erbaB));
+          {
+            // Siepi (non i filari d'alberi: quelli hanno le loro ombre finte) e muretti a secco sui bordi del fondo, come
+            // in posizionaVegetazione: lato 0 basso, 1 in testa; gli orti chiusi su tutti e quattro.
+            float zona = dCm < uOrti + ${PARCELLE.muretti.oltreOrti.toFixed(1)} || vCampi.z > ${(CASE_CAMPAGNA.vicino - CASE_CAMPAGNA.muretti).toFixed(1)} ? 1.0 : 0.0;
+            float orto = tipo > 0.5 && tipo < 1.5 ? 1.0 : 0.0;
+            float VARCO = ${PARCELLE.muretti.varco.toFixed(2)}, MD = ${PARCELLE.muretti.dentro.toFixed(2)}, SD = ${PARCELLE.siepi.dentro.toFixed(2)};
+            float dSiepe = 1e4, dMuro = 1e4;
+            bool has0 = orto > 0.5 || hashC(i, jb + 59.0) < ${(PARCELLE.siepi.lungo * 256).toFixed(1)};
+            bool has1 = orto > 0.5 || hashC(i, jb + 83.0) < ${(PARCELLE.siepi.traverso * 256).toFixed(1)};
+            bool m0 = orto > 0.5 || zona > 0.5 && hashC(i, jb + 113.0) < ${(PARCELLE.muretti.quota * 256).toFixed(1)};
+            bool m1 = orto > 0.5 || zona > 0.5 && hashC(i, jb + 114.0) < ${(PARCELLE.muretti.quota * 256).toFixed(1)};
+            if (has0) {
+              if (m0) { if (abs(fu - L * (0.15 + 0.7 * hashC(i, jb + 127.0) / 255.0)) >= VARCO) dMuro = min(dMuro, abs(fb - y0 - MD)); }
+              else if (hashC(i, jb + 97.0) >= ${(PARCELLE.siepi.filari * 256).toFixed(1)} && aperturaC(i, jb, 0.0, fu) < 0.5) dSiepe = min(dSiepe, abs(fb - y0 - SD));
+            }
+            if (has1 && fb > y0 + 1.0 && fb < y1 - 1.0) {
+              if (m1) { if (abs(fb - B * (0.15 + 0.7 * hashC(i, jb + 131.0) / 255.0)) >= VARCO) dMuro = min(dMuro, abs(fu - MD)); }
+              else if (hashC(i, jb + 98.0) >= ${(PARCELLE.siepi.filari * 256).toFixed(1)} && aperturaC(i, jb, 1.0, fb) < 0.5) dSiepe = min(dSiepe, abs(fu - SD));
+            }
+            if (orto > 0.5) {
+              if (abs(fu - L * (0.15 + 0.7 * hashC(i, jb + 135.0) / 255.0)) >= VARCO) dMuro = min(dMuro, abs(fb - y1 + MD));
+              if (fb > y0 + 1.0 && fb < y1 - 1.0 && abs(fb - B * (0.15 + 0.7 * hashC(i, jb + 139.0) / 255.0)) >= VARCO) dMuro = min(dMuro, abs(fu - L + MD));
+            }
+            cC = mix(cC, vec3(0.035, 0.055, 0.02) * (0.7 + 0.6 * r2), 1.0 - smoothstep(${PARCELLE.siepi.striscia[0].toFixed(1)}, ${PARCELLE.siepi.striscia[1].toFixed(1)}, dSiepe));
+            cC = mix(cC, vec3(0.13, 0.125, 0.115) * (0.75 + 0.5 * r3), 1.0 - smoothstep(${PARCELLE.muretti.striscia[0].toFixed(1)}, ${PARCELLE.muretti.striscia[1].toFixed(1)}, dMuro));
+          }
+          // Carrareccia: due carreggiate di terra con l'erba nel mezzo, fino al margine della strada.
+          float dL = min(c0 > 0.5 ? fb : 1e4, c1 > 0.5 ? B - fb : 1e4);
+          float carr = (1.0 - smoothstep(MEZZA - 0.3, MEZZA + 0.1, dL)) * step(${PARCELLE.strada.margine[0].toFixed(1)}, margineS);
+          vec3 cTerra = mix(vec3(0.25, 0.19, 0.115), vec3(0.18, 0.135, 0.08), r2) * (0.85 + 0.3 * r3);
+          cC = mix(cC, mix(cTerra, cPrato * 0.8, (1.0 - smoothstep(0.25, 0.5, dL)) * 0.85), carr);
+          // Fondo coltivato per intero (tabella del blocco); il campo per vertice toglie solo acqua, rive e terrapieni.
+          float dentro = fondoC(i, jb) * smoothstep(0.06, 0.1, vSuolo.z) * step(0.3, margineS);
           cPrato = mix(cPrato, cC, dentro * blocco);
+        }
+        if (vCampi.z > 0.01) {
+          // Case isolate (CASE_CAMPAGNA; richiesta dell'utente: «l'intorno dovrebbe essere terra battuta chiara o scura,
+          // qualche orto solo un po' nelle vicinanze»): un orto compatto (gruppi di 2 × 2 aiuole di 12 × 9 m, ~un terzo
+          // dei gruppi) a ridosso dell'aia, poi l'aia di terra battuta a chiazze. vCampi.z = vicino − distanza.
+          float dK = ${CASE_CAMPAGNA.vicino.toFixed(1)} - vCampi.z + 5.0 * (r2 - 0.5);
+          if (dK < ${(CASE_CAMPAGNA.aia[1] + CASE_CAMPAGNA.orti).toFixed(1)}) {
+            vec2 qo = vCampi.xy;
+            float oi = floor(qo.x / 12.0), oj = floor(qo.y / 9.0), ou = qo.x - oi * 12.0, ov = qo.y - oj * 9.0;
+            // A gruppi di 2 × 2 aiuole (un orto compatto accanto all'aia, non quadratini sparsi).
+            float ho = hashC(floor(oi / 2.0), floor(oj / 2.0) + 201.0) < 90.0 ? hashC(oi, oj + 205.0) / 255.0 * 0.45 : 1.0;
+            if (ho < 0.45) {
+              float so = 0.5 + 0.5 * sin(ov * 6.2832 / 1.3);
+              vec3 cO = ho < 0.18 ? vec3(0.15, 0.095, 0.05) * (0.85 + 0.2 * so)
+                : mix(vec3(0.12, 0.08, 0.04), vec3(0.05, 0.12, 0.03), 0.35 + 0.4 * smoothstep(0.3, 0.7, so));
+              cO = mix(cO, cPrato * 0.85, 1.0 - smoothstep(0.5, 1.2, min(min(ou, 12.0 - ou), min(ov, 9.0 - ov))));
+              cPrato = mix(cPrato, cO, blocco);
+            }
+          }
+          vec3 cT = mix(vec3(0.27, 0.20, 0.12), vec3(0.15, 0.10, 0.06), smoothstep(0.3, 0.7, r2)) * (0.88 + 0.24 * r3);
+          cPrato = mix(cPrato, cT, (1.0 - smoothstep(${CASE_CAMPAGNA.aia[0].toFixed(1)}, ${(CASE_CAMPAGNA.aia[1] - 2).toFixed(1)}, dK)) * blocco);
         }
         // Colori vari e chiaroscuri da vicino (richiesta dell'utente: «colorazione varia e chiaroscuri marcati nel
         // breve anche senza pendenze, senza sprecare FPS in oggetti»): chiazze secche (ocra) e cupe (verde scuro) su

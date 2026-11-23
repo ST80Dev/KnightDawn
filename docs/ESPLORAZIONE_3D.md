@@ -2163,13 +2163,31 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      secondo solo entro 18 m, punta) con l'ultimo ciuffo centrato un po' sotto la punta; cime più corte (faggio 5,2 m,
      pioppo 3 m). Bosco fitto: 568 000 triangoli contro 553 000.
      Bosco fitto in headless: ~550 000 triangoli (prima delle chiome nuove 458 000): da misurare sulla scheda.
+     *Fondi, carrarecce e case collegate* (richiesta dell'utente: vista dall'alto «più organizzata», niente texture
+     sovrapposte a casaccio e sfumate; confini così numerosi vogliono o una stradina o siepi e muretti; orti attorno al
+     castello troppo fitti; doppia riga parallela alla strada). L'unità è il *fondo*, come nella campagna medievale:
+     largo una banda (110 m) e lungo 130–220 m, diviso per il lungo in 2–4 strisce di colture diverse separate solo da
+     un solco (niente erba tra le strisce); in testa una capezzagna erbosa; sul bordo di ~60 % delle bande una
+     carrareccia di terra (due carreggiate con l'erba nel mezzo), la rete che arriva alle strade. Ogni fondo è campo,
+     orto o incolto (`tipoFondo`, uguale in `vegetazione.js` e nello shader): orti solo in qualche fondo vicino al
+     luogo (fino a ~0,5–1,4 raggi degli orti), in aiuole di ~24 × 16 m con vialetti di terra e chiusi da muretti;
+     incolti (pascolo con più cespugli, alberi e sassi) 4–16 % dei fondi, anche a gruppi di 2 × 2. Dove la campagna
+     finisce si fermano fondi interi: un fondo è coltivato se in 4 × 3 punti la campagna (quanta, in piano,
+     all'asciutto) c'è sempre e in media supera la sua soglia; la tabella dei fondi del blocco (`pos.fondi`, 64 × 64)
+     va allo shader come texture `uFondi` (il campo per vertice toglie solo acqua, rive e terrapieni). Siepi, filari e
+     muretti solo sui bordi dei fondi (lato lungo dopo la carrareccia, lato in testa), muretti vicino al luogo e alle
+     case: in headless le siepi oggetto sono circa la metà di prima. Strade: un solo disegno dai due lati, i campi
+     finiscono al margine con erba (prima ogni lato aveva appezzamenti suoi e restava una riga parallela alla strada).
+     Case isolate: ognuna si sposta di traverso accanto alla carrareccia più vicina (`CASE_CAMPAGNA.lato`, al più
+     `sposta` m), che passa sul bordo dell'aia: ogni casa ha il suo accesso. Attorno: aia di terra battuta marrone a
+     chiazze (fino a ~18 m), poi un orto compatto (gruppi di 2 × 2 aiuole di 12 × 9 m) a ridosso. Oggetti nei blocchi
+     con campagna in headless: circa come prima di queste modifiche (+10 % rispetto a prima degli incolti).
      *Case fuori dal borgo* (richiesta dell'utente: case isolate o a gruppetti di 2–3 in mezzo o a lato dei campi):
      `CASE_CAMPAGNA` / `caseCampagna(carta)`, siti deterministici per Carta (4–9 gruppi per rocca secondo la classe,
      tra gli orti e il limite dei campi pieni, in piano, all'asciutto, lontano dai terrapieni e tra loro, orientati
-     come i campi); nel blocco si scartano quelli che la strada fine tocca. Attorno: aia libera (12–20 m), poi orto;
-     niente siepi né muretti. Gli edifici li disegna chi fa le case (M7, passo 5): `pos.case` ha posizione e verso.
-     Da fare: i campi negli anelli dell'orizzonte (ora solo nel blocco); il bordo della zona coltivata segue i
-     triangoli del terreno (un po' seghettato).
+     come i campi, accanto a una carrareccia); nel blocco si scartano quelli che la strada fine tocca. Attorno: aia
+     libera (12–20 m), poi orto; muretti sui bordi dei fondi vicini. Gli edifici li disegna chi fa le case (M7, passo 5): `pos.case` ha posizione e verso.
+     Da fare: i campi negli anelli dell'orizzonte (ora solo nel blocco).
    - *A pezzi* (passo 9 di M7, blocco che segue il cavaliere): `posizionaVegetazioneAPezzi(o, budget)`,
      `boscoLontanoAPezzi(…, budget)`, `creaVegetazioneAPezzi(pos, terrain, renderer, budget)` e, sull'oggetto,
      `aggiungiLontanoAPezzi(…, budget)` e `preparaOmbre(dir, budget)`: generatori che fanno `yield` ogni ~`budget` ms
