@@ -1227,11 +1227,15 @@ export function* createRoccaAPezzi(suolo, luogo, ox, oz, clima = 'temperato') {
         if (largo < 7 || fondo < 6) break;
         for (const { d } of dirs) {
           let messo = false;
-          for (let r0 = M.fondo / 2 + fondo / 2 + 2.5; r0 < 40 && !messo; r0 += 1.5) {
+          for (let r0 = M.fondo / 2 + fondo / 2 + 4; r0 < 40 && !messo; r0 += 1.5) {
             const c = [cp[0] + d[0] * r0, cp[1] + d[1] * r0];
             const f = [-d[0], -d[1]], L = { c, f, s: [-f[1], f[0]], a: largo / 2, b: fondo / 2 };
             if (!libero(L)) continue;
-            lotti.push(L);
+            // Davanti al varco serve un pezzo di cortile libero, o nel giardino non si entra.
+            const cv = [c[0] + f[0] * (fondo / 2 + 2.4), c[1] + f[1] * (fondo / 2 + 2.4)];
+            const Lv = { c: cv, f, s: [-f[1], f[0]], a: 1.9, b: 1.8 };
+            if (!libero(Lv)) continue;
+            lotti.push(L, Lv);                      // il lotto del varco resta libero anche dopo
             const g = kit.giardino(c, f, largo, fondo, piano - 0.15);
             giardinoFatto = { u: c[0], v: c[1], largo, fondo, varco: g.varco };
             edificiFatti.add('giardino'); corteFatta.add('giardino');
