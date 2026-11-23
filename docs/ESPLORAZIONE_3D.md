@@ -1543,9 +1543,13 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
       cortile, non più il varco e il corridoio della porta interna; ordine di posa: palazzo, cappella, sala d'armi,
       giardino, cucina, cantina, colombaia, scuderia, armeria, orto; le pertinenze si cercano ad anelli attorno al
       palazzo e, se lì non c'è posto, lungo le mura. `rocca.giardino = { x, z, largo, fondo, varco }` per le persone
-      della casata (fuori da M7).
-      [Certo] Nel seme 12345 (31 rocche): palazzo, cappella, colombaia e pozzo in tutte; cucina 21, cantina 19,
-      giardino 24, sala d'armi 11, armeria 10, scuderia e orto pochi (il cortile è pieno). La Carta non cambia.
+      della casata (fuori da M7). Perché nel giardino si entri: il pergolato sta sempre sul lato opposto al varco, le
+      aiuole lasciano libero il vialetto dal varco alla vasca, il giardino parte a 4 m dal palazzo e il pezzo di cortile
+      davanti al varco diventa un lotto, così nessuna pertinenza messa dopo lo chiude (senza queste regole il cavaliere
+      non entrava in 14 rocche su 31).
+      [Certo] Nel seme 12345 (31 rocche): palazzo, cappella, colombaia e pozzo in tutte; cantina 28, cucina 27,
+      giardino 21, armeria 14, sala d'armi 11, scuderia 10, orto 1 (il cortile è pieno). Cammino porta del borgo →
+      cortile → dentro il giardino 31/31. Da 16 a 18 chiamate di disegno, ≤ 17.510 triangoli. La Carta non cambia.
 
 ### Accettazione
 
