@@ -3079,9 +3079,12 @@ Le mesh 3D restano per blocco (tutta la mappa a 7,8 m sarebbe centinaia di milio
 Case isolate: solo nella campagna di rocche e borghi (10 e 4 per blocco di 2×2 km con una rocca, **0** nei blocchi
 senza). Distanza dall'acqua: rocche 2,9 km mediana (97 % oltre 1 km), villaggi 1,7 km (65 % oltre 1 km).
 
-**Fatto**: `mappaAcqua` e `distanzaAcqua` in `js/mondo/scena.js` (distanza dall'acqua corrente a 125 m su tutta la
-Carta, con i fiumi fini; 2,8 MB, nessun costo di tempo apprezzabile), così chi sceglie i siti la legge senza
-ricalcolare.
+**Fatto**: `mappaAcqua` e `distanzaAcqua(carta, x, z, dolce)` in `js/mondo/scena.js`: distanza dall'acqua a 125 m su
+tutta la Carta, calcolata con i fiumi fini (5,5 MB, nessun costo di tempo apprezzabile), così chi sceglie i siti la
+legge senza ricalcolare. Due mappe: da qualsiasi acqua e solo da acqua dolce (fiumi, torrenti, laghi interni)
+[chiesto dalla sessione M8: un villaggio a 500 m da un fiume è normale, uno a 500 m dal mare su una costa a picco no,
+e un mulino sul mare non esiste]. Provato su 163 punti di costa: nell'88 % l'acqua dolce risulta oltre 500 m più
+lontana del mare.
 
 **Da decidere con l'utente** (numeri bersaglio, poi il lavoro è di M8 per i siti e di M7/Vegetazione per le case):
 villaggi e frazioni da 78 a ~250–300 (uno ogni 35–40 km², mediana ~2,5 km); case isolate e cascine anche fuori dalla
