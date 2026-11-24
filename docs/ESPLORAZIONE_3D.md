@@ -1638,7 +1638,7 @@ di luoghi generici.
 | **Castelli** con borgo | ~28 (dai 30–40) | come oggi | corte, fazioni, mercato, Veglia |
 | **Monasteri / abbazie** | 4–6 (dai 30–40) | collina, bosco, monte, isolati | Volontà, guarigione, lore; cripta → dungeon |
 | **Città** | 2–4 (dai 30–40) | pianura, fiumi, costa (porto) | commercio, notizie, contratti (ultimo passo) |
-| **Villaggi** | 60–80 (frazioni di 6–10 case, villaggi di 12–20 con pieve e locanda) | vicino all'acqua, pendii dolci, sulle strade | locanda (Forza), voci, missioni locali; la Veglia («il villaggio vicino») |
+| **Villaggi** | 250–300 (frazioni di 6–10 case, villaggi di 12–20 con pieve e locanda) | vicino all'acqua, pendii dolci, sulle strade | locanda (Forza), voci, missioni locali; la Veglia («il villaggio vicino») |
 | **Rovine** (castello diroccato, torre crollata, chiesa sventrata, villaggio abbandonato) | 15–20 | ovunque, anche in alto | esplorazione, dungeon, covi |
 | **Abbandonati** (torre isolata, maniero decaduto, casale) | 10–15 | margini, colline | candidati **covo** (GDD §3) |
 | **Grotte** | 10–15 | monti, rocce, valli strette | dungeon, tane, covo |
@@ -3162,10 +3162,31 @@ legge senza ricalcolare. Due mappe: da qualsiasi acqua e solo da acqua dolce (fi
 e un mulino sul mare non esiste]. Provato su 163 punti di costa: nell'88 % l'acqua dolce risulta oltre 500 m più
 lontana del mare.
 
-**Da decidere con l'utente** (numeri bersaglio, poi il lavoro è di M8 per i siti e di M7/Vegetazione per le case):
-villaggi e frazioni da 78 a ~250–300 (uno ogni 35–40 km², mediana ~2,5 km); case isolate e cascine anche fuori dalla
-campagna dei borghi (1–3 per blocco in pianura e collina coltivata, nessuna in alta montagna); ovili e stazzi da 29 a
-~60–80; mulini sull'acqua (tipo nuovo); villaggi quasi tutti entro 400–600 m dall'acqua.
+**Fatto da M8** (siti sulla Carta, `js/mondo/siti.js`; `VERSIONE_GENERATORE` + `densita-1`, le Carte si rigenerano):
+villaggi **253–297** (uno ogni 33–38 km², mediana dal più vicino 2,2–2,5 km), ovili **64–81**, **mulini 36–50** (tipo
+nuovo, sempre sull'acqua dolce: mediana 31 m, mai oltre 140 m). Misure su otto semi, verifica automatica 8/8.
+- **Vicino all'acqua**: la distanza si misura sul punto, non sulla cella, con la mappa fine di M6. Mediana **128 m**.
+  Non bastava sceglierne la cella: la cella è larga 1 km e il punto finiva lo stesso a mezzo chilometro dal fiume.
+  Tre cose insieme: griglia di ricerca a 9×9 **che sconfina un poco nelle celle vicine** (se il fiume scorre in quella
+  accanto), filtro sul punto scelto (la cella si scarta e se ne prova un'altra), e il divieto di stare *dentro* l'acqua.
+- **Difetto trovato dalla verifica**: sconfinando, il punto finiva in mare o in un lago. Cinque semi su otto avevano un
+  villaggio o un mulino «in acqua». Ora le celle d'acqua si saltano anche fuori dalla cella di partenza.
+- **Montagna** (richiesta dell'utente: «in montagna non ci sarà sempre quasi nulla, non rendiamo il mondo troppo
+  realistico a scapito della giocabilità»). Misurato: i villaggi stavano al 3 % sopra i 600 m, contro il 22–27 % della
+  terra. Non era la quota a frenarli, ma **l'acqua**: i fiumi del generatore nascono dove il bacino è grande, cioè in
+  basso, e sopra i 600 m solo 29 celle su 1875 hanno acqua dolce entro 400 m. Tre interventi: il limite dell'acqua
+  **cresce con la quota** (650 m in pianura, 2.200 m sopra i 900 m: un paese di montagna vive di sorgenti, che la
+  Carta non disegna), montagna e roccia diventano abitabili sopra i 600 m, e **un quarto dei villaggi è riservato alla
+  terra alta e si sceglie per primo** — senza la riserva le celle di pianura vincevano comunque tutti i posti.
+  Risultato: **9–20 % dei villaggi sopra i 600 m**, mediana della quota da 160 a 183–216 m, i più alti a 1.700–1.800 m.
+- **Tempo**: la generazione è 6,1–8,2 s; `precalcolaStrade` passa da 8 a **15–19 s** con 295 villaggi (misura in Node),
+  oltre i ~15 s accettati. Riferito a M6 con i numeri, come d'accordo: la ricerca delle strade è sua.
+- **3D**: nessun aggravio per blocco. Con la distanza minima di 1,8 km non capitano due villaggi nello stesso blocco di
+  2 km; il blocco più affollato del seme 570549 ne ha uno solo, a 11 chiamate, e si carica in 2,3 s.
+
+**Da decidere con l'utente**: case isolate e cascine anche fuori dalla campagna dei borghi (1–3 per blocco in pianura
+e collina coltivata, nessuna in alta montagna) — lavoro di M7/Vegetazione; e il mulino in 3D (edificio sull'acqua con
+la ruota), che è un passo a sé.
 
 ## Fuori dal prototipo (non farlo ora)
 
