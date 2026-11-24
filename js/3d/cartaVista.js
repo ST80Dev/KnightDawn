@@ -95,10 +95,11 @@ export const SEGNI = { valico: 6.5, ponte: 5.5, sito: [3.4, 4.4], panorama: 4.2,
 export const TIPI_LUOGO = { rocca: [COLORE_ROCCA, 'R'], monastero: ['#4b2f7a', 'M'], citta: ['#1d4f86', 'C'] };
 // Siti di villaggi e luoghi speciali (M8, js/mondo/siti.js): colore del segno.
 export const COLORI_SITI = { villaggio: '#5a3416', ovile: '#6f8f3a', rovina: '#6b6359', abbandonato: '#3c3833', grotta: '#1d1a17',
-  eremo: '#4b2f7a', fantastico: '#1f7a6a', accampamento: '#b0451c', sentinella: '#d9822b', ospizio: '#d9822b' };
+  eremo: '#4b2f7a', fantastico: '#1f7a6a', accampamento: '#b0451c', sentinella: '#d9822b', ospizio: '#d9822b',
+  mulino: '#2f6ea8' };
 // Ordine del menu «Vai a» (M8): luoghi maggiori, poi i siti.
-const VAI_A = ['rocca', 'monastero', 'citta', 'villaggio', 'rovina', 'abbandonato', 'grotta', 'eremo', 'fantastico',
-  'accampamento', 'sentinella', 'ospizio', 'ovile'];
+const VAI_A = ['rocca', 'monastero', 'citta', 'villaggio', 'mulino', 'rovina', 'abbandonato', 'grotta', 'eremo',
+  'fantastico', 'accampamento', 'sentinella', 'ospizio', 'ovile'];
 
 // Segni della Carta in pixel dello schermo. Un alone chiaro dietro al tratto li stacca dal rilievo (segnalato
 // dall'utente: ponti e valichi si perdevano nel disegno di altimetria e terreno).
@@ -185,6 +186,15 @@ export function segnoSito(ctx, s, px, py, m) {
       ctx.moveTo(px, py - m * 1.1); ctx.lineTo(px + m * 1.1, py + m * 0.9); ctx.lineTo(px - m * 1.1, py + m * 0.9); ctx.closePath(); ctx.fill(); break;
     case 'sentinella':                                 // torre stretta
       ctx.rect(px - m * 0.45, py - m * 1.2, m * 0.9, m * 2.2); ctx.fill(); break;
+    case 'mulino': {                                   // ruota: cerchio con quattro raggi
+      ctx.arc(px, py, m * 0.85, 0, Math.PI * 2);
+      for (let k = 0; k < 4; k++) {
+        const a = k * Math.PI / 4 + Math.PI / 8;
+        ctx.moveTo(px - Math.cos(a) * m * 0.85, py - Math.sin(a) * m * 0.85);
+        ctx.lineTo(px + Math.cos(a) * m * 0.85, py + Math.sin(a) * m * 0.85);
+      }
+      ctx.stroke(); break;
+    }
   }
 }
 // Rilievo fine della parte visibile: da zoom DA, un campione ogni `passo` pixel (CSS) dello schermo,

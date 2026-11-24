@@ -51,8 +51,8 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
  * piano niente vegetazione; oltre, per VEGETAZIONE.spianata m, solo erba e sassi: con raggio 0,7 R gli alberi restano
  * fuori da tutto il villaggio, e oltre la terra battuta cresce l'erba.
  */
-export function pianoDelSito(s) {
-  const r = 0.7 * raggioSito(s);
+export function pianoDelSito(s, frazione = 0.7) {
+  const r = frazione * raggioSito(s);
   return { cx: s.x, cz: s.z, ux: 1, uz: 0, a: r, b: r, r, s: 4 };
 }
 
@@ -60,7 +60,7 @@ export function pianoDelSito(s) {
 // Terra battuta: una griglia che copre solo dove serve (entro `margine` m da case, aie e strade, con il bordo che
 // ondeggia), alpha per vertice e alphaTest: bordo frastagliato, nessuna trasparenza da ordinare. Strade: nastri di
 // terra più scura. Piazzetta selciata (villaggi grandi). Al più 3 chiamate, qualche cm sopra il terreno.
-const SUOLO = { sopra: 0.06, passo: 2.5, tessera: 4, margine: [3, 7], aia: 6 };
+export const SUOLO = { sopra: 0.06, passo: 2.5, tessera: 4, margine: [3, 7], aia: 6 };
 const _tex = {};
 /** 0 terra battuta, 1 selciato rustico, 2 carreggiata (solchi delle ruote), 3 orto arato: 512 px = SUOLO.tessera m. */
 function texturaSuolo(tipo) {
@@ -190,7 +190,7 @@ function geoChiazza(c, r, ox, oz, quota, sopra, rnd) {
  * dalla forma più vicina, 0 oltre; si tengono solo le celle con almeno un vertice dentro. `dist(u, v)` dà la distanza
  * dalla forma più vicina (case con aia, strade, piazzetta).
  */
-function geoTerra(L, dist, ox, oz, quota, seme, M = SUOLO.margine) {
+export function geoTerra(L, dist, ox, oz, quota, seme, M = SUOLO.margine) {
   const P = SUOLO.passo, n = Math.ceil(2 * L / P) + 1, T = SUOLO.tessera;
   const alfa = new Float32Array(n * n), id = new Int32Array(n * n).fill(-1);
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
@@ -222,7 +222,7 @@ function geoTerra(L, dist, ox, oz, quota, seme, M = SUOLO.margine) {
  * Attacca all'oggetto i pezzi di suolo: `[nome, geometria, tipo di textura]`. Le strade e le chiazze stanno sopra la
  * terra battuta (polygonOffset crescente), la terra sola ha l'alpha per vertice.
  */
-function attaccaSuolo(r, pezzi) {
+export function attaccaSuolo(r, pezzi) {
   pezzi.forEach(([nome, geo, tipo], k) => {
     if (!geo) return;
     // Solo i pezzi con l'alpha per vertice (la griglia di geoTerra) hanno il bordo frastagliato: alphaTest.
@@ -242,7 +242,7 @@ function attaccaSuolo(r, pezzi) {
  * Collisioni dalle scatole orientate locali (u, v) = (x − ox, z − oz), con una griglia di 16 m per cercare solo le
  * vicine. Restituisce `spingiFuori(x, z, raggio, yPiedi, superabile)`: null se non ha spostato nulla.
  */
-function spintaDaScatole(scatole, ox, oz, limite) {
+export function spintaDaScatole(scatole, ox, oz, limite) {
   const griglia = new Map(), G = 16;
   scatole.forEach((s, i) => {
     const e = Math.max(s.hl, s.hw) + 1;
@@ -283,7 +283,7 @@ function spintaDaScatole(scatole, ox, oz, limite) {
 }
 
 /** Distanza (m) di (u, v) dal rettangolo orientato { c, s, f, a, b } (0 dentro). */
-function distRett(L, u, v) {
+export function distRett(L, u, v) {
   const du = u - L.c[0], dv = v - L.c[1];
   const x = Math.abs(du * L.s[0] + dv * L.s[1]) - L.a, y = Math.abs(du * L.f[0] + dv * L.f[1]) - L.b;
   return Math.hypot(Math.max(x, 0), Math.max(y, 0));

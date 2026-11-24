@@ -16,7 +16,7 @@
 // Solo operazioni dal risultato esatto (+ − × ÷, sqrt, floor) e hash su interi: uguale in ogni browser.
 
 import { ACQUA, BIOMA } from './carta.js';
-import { quotaMondo } from './scena.js';
+import { quotaMondo, distanzaAcqua } from './scena.js';
 import { derivaSeme, hash2 } from './rumore.js';
 import { distanzaDa } from './verifica.js';
 
@@ -31,7 +31,11 @@ export const SITI = {
   citta: { numero: [2, 4], distanza: 30, quota: 500 },
   // Tipi (quantità [min, max] per mondo; distanze minime in km dal proprio tipo, da tutti i siti, dalle rocche).
   tipi: {
-    villaggio: { numero: [60, 80], proprio: 4.5, altri: 2, rocche: 2.5, quota: [0, 1300] },
+    // Quantità alzate su richiesta dell'utente (M6 aveva misurato un villaggio ogni 126 km², mediana 4,9 km fra
+    // l'uno e l'altro): il mondo sembrava spoglio. Con `proprio` a 4,5 km non ci stavano 300 villaggi, qualunque
+    // numero si chiedesse: la distanza minima fra due villaggi è il vero limite, non il numero.
+    villaggio: { numero: [250, 300], proprio: 1.8, altri: 1, rocche: 1.6, quota: [0, 1700], inQuota: 0.25 },
+    mulino: { numero: [30, 50], proprio: 3, altri: 0.7, rocche: 1.2, quota: [0, 1100] },
     rovina: { numero: [15, 20], proprio: 7, altri: 2, rocche: 3, quota: [0, 2200],
       varianti: ['castello', 'torre', 'chiesa', 'villaggio'] },
     abbandonato: { numero: [10, 15], proprio: 8, altri: 2, rocche: 3, quota: [0, 1600],
@@ -40,10 +44,19 @@ export const SITI = {
     eremo: { numero: [6, 10], proprio: 10, altri: 2, rocche: 3, quota: [300, 2000] },
     fantastico: { numero: [8, 12], proprio: 9, altri: 2, rocche: 4, quota: [0, 2400],
       varianti: ['cerchio di pietre', 'tumulo', 'albero sacro', 'rovine antiche'] },
-    ovile: { perRocca: [1, 2], entro: [2, 4], sparsi: [6, 10], proprio: 2.5, altri: 1.5, rocche: 1.5, quota: [0, 1900] },
+    ovile: { perRocca: [1, 2], entro: [2, 4], sparsi: [34, 48], proprio: 1.8, altri: 1, rocche: 1.2, quota: [0, 1900] },
     accampamento: { numero: [8, 12], proprio: 8, altri: 2, rocche: 6, quota: [0, 1600],
       varianti: ['briganti', 'mercanti', 'soldati'] },
   },
+  // Acqua del villaggio: in pianura deve essere vicinissima, in quota si allarga. I fiumi del generatore nascono dove
+  // il bacino è grande, cioè in basso: sopra i 600 m solo 29 celle su 1875 hanno acqua dolce entro 400 m, e con il
+  // limite di pianura la montagna restava vuota (misurato sul seme 570549). Un paese di montagna vive di sorgenti e
+  // di pozzi, che la Carta non disegna, quindi il limite cresce con la quota.
+  villaggioAcqua: 650,              // m in pianura
+  villaggioAcquaMonte: 2200,        // m sopra `villaggioQuota`
+  villaggioQuota: [250, 900],       // m: fra queste due quote il limite passa dall'uno all'altro
+  villaggioMonti: 600,              // m: sopra, anche montagna e roccia ospitano villaggi (alpeggi), e c'è la riserva
+  mulinoAcqua: 140,                 // m: oltre questa distanza dall'acqua dolce la cella non è da mulino
   riempi: 5,                        // km: vuoti da riempire con i luoghi speciali avanzati
   ospizio: 0.6,                     // probabilità di un ospizio a un valico (oltre alla sentinella, se presidiato)
   rumore: 0.35,                     // peso del caso nel punteggio delle celle (0 = sempre le stesse)
@@ -51,13 +64,18 @@ export const SITI = {
   // larghi (piano: nessun vuoto oltre ~10 km). Peso per tipo: i villaggi riempiono le terre abitabili, rovine e
   // luoghi del fantastico anche deserti, paludi e alture.
   copertura: { entro: 8, pesi: { villaggio: 1.5, rovina: 2.5, abbandonato: 1, grotta: 1.2, eremo: 1, fantastico: 2,
-    ovile: 0.6, accampamento: 1 } },
+    ovile: 0.6, accampamento: 1, mulino: 0.4 } },
   villaggio: { grande: 0.4 },       // frazione dei villaggi grandi (12–20 case, pieve e locanda)
 };
 
 const hashU = (a, b, seme) => hash2(a, b, seme) / 4294967296;
 const conta = ([a, b], seme, sale) => a + Math.floor(hashU(sale, 7, seme) * (b - a + 1));
 const rampa = (v, a, b) => (v <= a ? 0 : v >= b ? 1 : (v - a) / (b - a));     // 0 fino ad a, 1 da b
+/** Quanto può stare lontano dall'acqua dolce un villaggio a quota h: poco in pianura, molto in montagna. */
+export function acquaDelVillaggio(h) {
+  const [q0, q1] = SITI.villaggioQuota;
+  return SITI.villaggioAcqua + (SITI.villaggioAcquaMonte - SITI.villaggioAcqua) * rampa(h, q0, q1);
+}
 const campana = (v, a, b, c, d) => Math.min(rampa(v, a, b), 1 - rampa(v, c, d));   // 1 tra b e c
 
 /** Campi della Carta che servono a tutti i tipi (distanze in km a celle). */
@@ -81,11 +99,27 @@ function punteggio(tipo, carta, i, F) {
   const abitabile = ABITABILI.includes(b);
   switch (tipo) {
     case 'villaggio': {
-      // anche nel deserto, ma solo all'acqua (oasi)
-      if ((!abitabile && !(b === B.SABBIA && F.acqua[i] < 1.5)) || a > 0.25 || F.acqua[i] > 6) return -Infinity;
-      // vicino all'acqua (non sopra), in basso, su terreno dolce; le pianure fertili un po' meglio dei boschi
-      return 1.2 * campana(F.acqua[i], 0, 0.5, 2.5, 6) + 0.6 * (1 - rampa(h, 300, 1300)) + 0.6 * (1 - rampa(a, 0, 0.25))
-        + (b === B.FORESTA ? 0 : 0.3) + 0.2 * campana(umidita ? umidita[i] : 0.5, 0.15, 0.3, 0.8, 0.95);
+      // Anche nel deserto, ma solo all'acqua (oasi); in montagna e sulla roccia solo in quota (alpeggi, richiesta
+      // dell'utente: «in montagna non ci sarà sempre quasi nulla»).
+      const montano = (b === B.MONTAGNA || b === B.ROCCIA) && h > SITI.villaggioMonti;
+      if ((!abitabile && !montano && !(b === B.SABBIA && F.acqua[i] < 1.5)) || a > 0.33) return -Infinity;
+      // L'acqua si misura sulla mappa fine, al centro della cella, col limite che cresce con la quota.
+      const cx = (i % carta.cols + 0.5) * carta.cella, cz = (Math.floor(i / carta.cols) + 0.5) * carta.cella;
+      if (carta.acquaVicina && distanzaAcqua(carta, cx, cz, true) > acquaDelVillaggio(h) + 400) return -Infinity;
+      // Vicino all'acqua, in basso, su terreno dolce. L'utente: «villaggi e borghi stavano per necessità vicino a un
+      // fiume». La cella è larga 1 km, quindi qui l'acqua pesa solo per scegliere la cella: il punto dentro la cella
+      // lo sceglie affinaPunto col modo 'villaggio', sulla mappa fine dell'acqua dolce.
+      // La quota pesa poco, e solo in alta montagna: con la penalità che partiva da 300 m i villaggi stavano tutti
+      // in pianura (mediana 160 m, il 3 % sopra i 600 m, contro il 25 % della terra abitabile) e il giocatore in
+      // montagna non trovava nulla. Scelta dell'utente: giocabilità prima del realismo.
+      return 1.2 * campana(F.acqua[i], 0, 0.3, 1.5, 4) + 0.35 * (1 - rampa(h, 900, 1800)) + 0.5 * (1 - rampa(a, 0, 0.33))
+        + (b === B.FORESTA ? 0 : 0.3) + (montano ? -0.25 : 0)
+        + 0.2 * campana(umidita ? umidita[i] : 0.5, 0.15, 0.3, 0.8, 0.95);
+    }
+    case 'mulino': {
+      // Mulino ad acqua: sul torrente o sul fiume, mai sul mare; in basso, dove c'è gente da servire.
+      if (!abitabile || a > 0.3 || F.acqua[i] > 1) return -Infinity;
+      return 1.6 * (1 - rampa(F.acqua[i], 0, 1)) + 0.7 * (1 - rampa(h, 200, 1100)) + 0.4 * (1 - rampa(a, 0, 0.3));
     }
     case 'rovina':
       // ovunque, meglio in alto e lontano dalle rocche (dove nessuno le ha ricostruite)
@@ -121,25 +155,57 @@ function punteggio(tipo, carta, i, F) {
 
 /**
  * Punto del sito dentro la cella (m): griglia 5×5 di quotaMondo con la pendenza ai vicini (passo 25 m).
- * modo: 'piano' (pendenza minima), 'alto' (quota massima, pendenza moderata), 'ripido' (pendenza massima ammessa).
+ * modo: 'piano' (pendenza minima), 'alto' (quota massima, pendenza moderata), 'ripido' (pendenza massima ammessa),
+ * 'villaggio' (dolce e vicino all'acqua dolce), 'acqua' (il più vicino possibile all'acqua dolce: i mulini).
+ *
+ * I due modi nuovi usano la mappa fine dell'acqua dolce (125 m, `distanzaAcqua` di scena.js, chiesta a M6): la cella
+ * è larga 1 km, quindi sceglierla «vicino all'acqua» non bastava — il punto finiva lo stesso a mezzo chilometro dal
+ * fiume. Il mare e i laghi costieri non contano: un mulino sul mare non esiste, e un villaggio sulla scogliera non ha
+ * acqua da bere.
  */
 function affinaPunto(carta, c, r, modo, seed) {
   const C = carta.cella, d = 25;
+  // I modi che inseguono l'acqua cercano su una griglia più fitta: con 200 m di passo il punto migliore restava
+  // lontano dal fiume anche quando il fiume attraversava la cella.
+  // …e cercano anche un poco FUORI dalla cella: se il fiume scorre nella cella accanto, il punto migliore dentro la
+  // cella resta comunque lontano dall'acqua, e il villaggio nasce in mezzo ai campi invece che sulla riva.
+  const acquoso = modo === 'villaggio' || modo === 'acqua';
+  const n = acquoso ? 9 : 5, oltre = acquoso ? 0.2 : 0;
+  const p0 = -oltre + 0.5 * (1 + 2 * oltre) / n, pd = (1 + 2 * oltre) / n;
   let migliore = null;
-  for (let j = 0; j < 5; j++) for (let k = 0; k < 5; k++) {
-    const x = (c + 0.1 + 0.2 * k) * C, z = (r + 0.1 + 0.2 * j) * C;
+  for (let j = 0; j < n; j++) for (let k = 0; k < n; k++) {
+    const x = (c + p0 + pd * k) * C, z = (r + p0 + pd * j) * C;
+    // Cercando fuori dalla cella si finisce in mare o in un lago: la cella di partenza è terra, quella accanto no.
+    // (Trovato dalla verifica: cinque semi su otto avevano un villaggio o un mulino «in acqua».)
+    if (oltre) {
+      const cc = Math.floor(x / C), rr = Math.floor(z / C);
+      if (cc < 0 || rr < 0 || cc >= carta.cols || rr >= carta.rows) continue;
+      const ci = rr * carta.cols + cc;
+      if (carta.mare[ci] || (carta.acque && carta.acque[ci] !== ACQUA.TERRA)) continue;
+    }
     const h = quotaMondo(carta, x, z, seed);
     const gx = (quotaMondo(carta, x + d, z, seed) - quotaMondo(carta, x - d, z, seed)) / (2 * d);
     const gz = (quotaMondo(carta, x, z + d, seed) - quotaMondo(carta, x, z - d, seed)) / (2 * d);
     const p = Math.sqrt(gx * gx + gz * gz);
-    const v = modo === 'piano' ? -p : modo === 'alto' ? h - (p > 0.4 ? 1e4 : 0) : (p > 1 ? -1e4 : p);
+    let v;
+    if (modo === 'piano') v = -p;
+    else if (modo === 'alto') v = h - (p > 0.4 ? 1e4 : 0);
+    else if (modo === 'villaggio') {
+      const dA = distanzaAcqua(carta, x, z, true);
+      v = -3 * p - 1.2 * rampa(dA, 120, 900) - (p > 0.3 || dA < 40 ? 1e4 : 0);   // sulla riva, non nel fiume
+    }
+    else if (modo === 'acqua') {
+      const dA = distanzaAcqua(carta, x, z, true);
+      v = -rampa(dA, 0, 300) - 0.5 * p - (p > 0.35 || dA < 12 ? 1e4 : 0);        // sulla riva, non in mezzo
+    }
+    else v = (p > 1 ? -1e4 : p);
     if (!migliore || v > migliore.v) migliore = { v, x, z, h, p };
   }
   return { x: migliore.x, z: migliore.z, quota: migliore.h, pendenza: migliore.p };
 }
 
-const MODO = { villaggio: 'piano', rovina: 'alto', abbandonato: 'alto', grotta: 'ripido', eremo: 'piano',
-  fantastico: 'alto', ovile: 'piano', accampamento: 'piano', sentinella: 'alto', ospizio: 'piano' };
+const MODO = { villaggio: 'villaggio', mulino: 'acqua', rovina: 'alto', abbandonato: 'alto', grotta: 'ripido',
+  eremo: 'piano', fantastico: 'alto', ovile: 'piano', accampamento: 'piano', sentinella: 'alto', ospizio: 'piano' };
 
 /** Stato della scelta: siti già presi e una griglia di secchi (5 km) per le distanze. */
 function nuovoInsieme(carta, dRocche) {
@@ -185,7 +251,7 @@ function nuovoInsieme(carta, dRocche) {
  * Sceglie `numero` siti di un tipo: a ogni passo la cella ammessa col punteggio più alto (regole del tipo, un poco di
  * caso, copertura dei vuoti) che rispetta le distanze. `extra(i)` aggiunge al punteggio (es. vicinanza alle strade).
  */
-function scegliTipo(carta, insieme, F, tipo, numero, seme, extra = null, varianti = null) {
+function scegliTipo(carta, insieme, F, tipo, numero, seme, extra = null, varianti = null, accetta = null) {
   const { cols, rows } = carta, T = SITI.tipi[tipo], bordo = SITI.bordo, sale = derivaSeme(seme, tipo.length * 131 + tipo.charCodeAt(0));
   const celle = [];
   for (let r = bordo; r < rows - bordo; r++) for (let c = bordo; c < cols - bordo; c++) {
@@ -210,6 +276,7 @@ function scegliTipo(carta, insieme, F, tipo, numero, seme, extra = null, variant
     const st = celle[k];
     if (!insieme.libero(st.c + 0.5, st.r + 0.5, tipo, T.proprio, T.altri)) continue;
     const p = affinaPunto(carta, st.c, st.r, MODO[tipo], seed);
+    if (accetta && !accetta(p)) continue;            // il punto non va bene comunque (un mulino lontano dall'acqua)
     if (!insieme.libero(p.x / carta.cella, p.z / carta.cella, tipo, T.proprio, T.altri)) continue;
     const sito = { tipo, ...p };
     const v = varianti ?? T.varianti;
@@ -289,7 +356,23 @@ export function aggiungiSiti(carta) {
       fatti++;
     }
   }
-  scegliTipo(carta, insieme, F, 'villaggio', conta(T.villaggio.numero, seme, 21), seme);
+  // Un villaggio senza acqua dolce a portata non si scarta subito: la cella si scarta e se ne prova un'altra. Senza
+  // questo filtro un villaggio su tre restava oltre 600 m dall'acqua (richiesta dell'utente: «stavano per necessità
+  // vicino a un fiume»).
+  // Una parte dei villaggi è riservata alla terra alta e si sceglie PRIMA. Senza la riserva la montagna restava
+  // vuota comunque: le celle di pianura vincono sempre il punteggio, e i 250–300 posti finivano tutti là (misurato:
+  // il 3 % dei villaggi sopra i 600 m, contro il 25 % della terra). Richiesta dell'utente: giocabilità prima del
+  // realismo, «in montagna non ci sarà sempre quasi nulla».
+  const nVil = conta(T.villaggio.numero, seme, 21);
+  const nAlti = Math.round(nVil * T.villaggio.inQuota);
+  const acquaOk = (p) => distanzaAcqua(carta, p.x, p.z, true) <= acquaDelVillaggio(p.quota);
+  scegliTipo(carta, insieme, F, 'villaggio', nAlti, seme,
+    (i) => (carta.quota[i] > SITI.villaggioMonti ? 0 : -Infinity), null, acquaOk);
+  const fatti = insieme.siti.filter((s) => s.tipo === 'villaggio').length;
+  scegliTipo(carta, insieme, F, 'villaggio', nVil - fatti, seme, null, null, acquaOk);
+  // Un mulino lontano dall'acqua non è un mulino: se il punto migliore della cella non ce l'ha, la cella si scarta.
+  scegliTipo(carta, insieme, F, 'mulino', conta(T.mulino.numero, seme, 23), seme, null, null,
+    (p) => distanzaAcqua(carta, p.x, p.z, true) <= SITI.mulinoAcqua);
   // Valichi: sentinella dove c'è il presidio, a volte un ospizio sul passo.
   for (const v of carta.valichi ?? []) {
     const c = Math.floor(v.x), r = Math.floor(v.y);
@@ -378,7 +461,7 @@ export function climaDelLuogo(carta, x, z) {
 export const NOMI_SITI = {
   villaggio: 'villaggio', rovina: 'rovine', abbandonato: 'luogo abbandonato', grotta: 'grotta', eremo: 'eremo',
   fantastico: 'luogo del fantastico', ovile: 'ovile', accampamento: 'accampamento', sentinella: 'torre di sentinella',
-  ospizio: 'ospizio', monastero: 'monastero', citta: 'città', rocca: 'rocca',
+  ospizio: 'ospizio', monastero: 'monastero', citta: 'città', rocca: 'rocca', mulino: 'mulino',
 };
 
 /**
@@ -420,12 +503,23 @@ export function verificaSiti(carta, limiti = { vuoto: 9, oltre: 6, frazione: 0.0
   if (vuoto > limiti.vuoto || frazione > limiti.frazione) {
     errori.push(`vuoto di ${(2 * vuoto).toFixed(0)} km (${(100 * frazione).toFixed(1)} % delle celle oltre ${limiti.oltre} km)`);
   }
+  // Villaggi e mulini devono stare sull'acqua dolce (richiesta dell'utente). Si misura sul punto, non sulla cella.
+  let lontani = 0, vill = 0, mulLontani = 0;
+  if (carta.acquaVicina) {
+    for (const s of S) {
+      if (s.tipo === 'villaggio') { vill++; if (distanzaAcqua(carta, s.x, s.z, true) > acquaDelVillaggio(s.quota) + 200) lontani++; }
+      else if (s.tipo === 'mulino' && distanzaAcqua(carta, s.x, s.z, true) > SITI.mulinoAcqua + 60) mulLontani++;
+    }
+    if (vill && lontani / vill > 0.12) errori.push(`villaggi lontani dall'acqua: ${(100 * lontani / vill).toFixed(0)} %`);
+    if (mulLontani) errori.push(`mulini lontani dall'acqua: ${mulLontani}`);
+  }
   const L = carta.luoghi ?? [];
   const nT = (t) => L.filter((l) => l.tipo === t).length;
   return {
     ok: errori.length === 0, errori, conti, vuoto: 2 * vuoto, frazione,
     testo: (errori.length ? errori[0] + ' · ' : '') + `siti ${S.length}: villaggi ${conti.villaggio ?? 0}, monasteri ${nT('monastero')}, città ${nT('citta')}, `
-      + `speciali ${S.length - (conti.villaggio ?? 0) - (conti.ovile ?? 0)}, ovili ${conti.ovile ?? 0}; vuoto massimo ${(2 * vuoto).toFixed(0)} km`
+      + `mulini ${conti.mulino ?? 0}, speciali ${S.length - (conti.villaggio ?? 0) - (conti.ovile ?? 0) - (conti.mulino ?? 0)}, `
+      + `ovili ${conti.ovile ?? 0}; lontani dall'acqua ${vill ? (100 * lontani / vill).toFixed(0) : '-'} %; vuoto massimo ${(2 * vuoto).toFixed(0)} km`
       + ` (${(100 * frazione).toFixed(1)} % oltre ${limiti.oltre} km)`,
   };
 }

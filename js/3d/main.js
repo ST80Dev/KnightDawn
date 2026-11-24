@@ -21,8 +21,10 @@ import { createRoccaAPezzi } from './rocca3d.js';
 import { creaCaseCampagna, quotaFinestre } from './edifici3d.js';
 import { createBorgoAPezzi } from './borgo3d.js';
 import { createVillaggioAPezzi, createMonasteroAPezzi, createEremoAPezzi, pianoDelSito } from './villaggio3d.js';
+import { createRovinaAPezzi, createMisteroAPezzi } from './rovine3d.js';
 import { raggioSito, climaDelLuogo } from '../mondo/siti.js';
 import { createCartaVista } from './cartaVista.js';
+import { mostraMenuAvvio } from './interfaccia.js';
 import { creaMinimappa } from './minimappa.js';
 import { creaOrizzonteAPezzi } from './orizzonte.js';
 import { creaAcqueScena, creaPonti, suoloStrade } from './acqua.js';
@@ -39,7 +41,8 @@ import { creaProfilatore, creaPercorso, GRUPPI, FAMIGLIE, BUDGET_GPU, budgetDi, 
 
 const LONTANO = 130000;                   // m: distanza massima disegnata dalla camera
 const PARAMETRI = new URL(window.location.href).searchParams;
-const TAVULLIA = PARAMETRI.get('terreno') === 'tavullia';
+// Tavullia (scena di prova): dal menu d'avvio (partita Libera), dal salvataggio o con ?terreno=tavullia (vedi init).
+let TAVULLIA = PARAMETRI.get('terreno') === 'tavullia';
 // Clima delle case (freddo | temperato | caldo). `?clima=` lo forza ovunque, per provare gli stili; senza, il clima
 // del luogo dal bioma e dalla temperatura della Carta (climaDelLuogo, M8). Tavullia non ha Carta: temperato.
 // x, z sono in metri del mondo. Le case di campagna ne chiedono uno per blocco (una cella di clima è 1 km, il blocco
@@ -85,7 +88,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 
 const scene = new THREE.Scene();
 // Cielo: luci del giorno e della notte, colore del cielo, nebbia (cielo.js).
-const cieloScena = creaCielo(scene);
+const cieloScena = creaCielo(scene, renderer);
 const { sole } = cieloScena;
 
 // Qualità (F2, ?qualita=basso|medio|alto, ricordata nel browser) e risoluzione adattiva: prestazioni.js.
@@ -298,29 +301,49 @@ let controls = null;                      // camera libera di debug (tasto C)
 let modoCamera = 'segui';                 // 'segui' | 'libera'
 const ALTEZZA_MIN_LIBERA = 3;             // m sopra il terreno, camera libera
 
-// ─── Partita: nuova o ripresa dal salvataggio automatico ───────────────
-let nonSalvare = false;                   // true mentre si ricomincia (niente salvataggio in uscita)
+// ─── Partita: modalità, nuova o ripresa dal salvataggio automatico ─────
+// G1 (docs/EARLY_GAME.md §7): Storia (dalla Veglia) o Libera (senza storia, strumenti di sviluppo), scelte nel menu
+// d'avvio prima della generazione del mondo; ognuna ha il suo autosave (Save.slotAutosave).
+let modalita = 'libera';
+const inStoria = () => modalita === 'storia';
+let nonSalvare = false;                   // true mentre si torna al menu dopo aver salvato, o nel percorso di prova
 
-function nuovaPartitaDati() {
+/** Stato di una partita nuova. Storia: il garzone della Veglia. Libera: Cavaliere Errante già armato, fuori Veglia. */
+function nuovaPartitaDati(m) {
   Knight.init();
   Calendar.init();
   if (typeof Events !== 'undefined' && Events.reset) Events.reset();
   if (typeof News !== 'undefined' && News.reset) News.reset();
+  if (m === 'libera') {
+    Knight.promuovi('errante');
+    Object.assign(Knight.equip, { arma: 'Spada da arme', armatura: 'Cotta di maglia', scudo: 'Scudo di legno' });
+    Knight.oro = 60;
+    Knight.addestramento = 3;
+    Calendar.fineVeglia();
+    // Knight.cavallo resta null finché la milestone Cavallo non corregge isMounted (oggi conterebbe anche a piedi):
+    // il cavallo 3D c'è comunque in Libera (posizionaCavaliere).
+  }
 }
 
 function salvaOra() {
-  if (knight && !nonSalvare) Save.save(Save.AUTOSAVE_SLOT);
+  if (knight && !nonSalvare) Save.save(Save.slotAutosave(modalita));
 }
 
-function nuovaPartita() {
-  if (!window.confirm('Nuova partita? Il salvataggio attuale verrà cancellato.')) return;
+/** F8: salva e torna al menu d'avvio (lì si continua, si cambia modalità o si comincia una partita nuova). */
+function tornaAlMenu() {
+  salvaOra();
   nonSalvare = true;
   Save.stopAutosave();
-  Save.delete(Save.AUTOSAVE_SLOT);
-  // Nuova partita = nuovo mondo: senza seme nell'indirizzo se ne sceglie uno a caso.
   const url = new URL(window.location.href);
-  url.searchParams.delete('seme');
+  for (const k of ['seme', 'terreno', 'storia', 'libera', 'carta']) url.searchParams.delete(k);
   window.location.replace(url);
+}
+
+/** In Storia gli strumenti di sviluppo sono spenti: avvisa e dice di no. */
+function soloInLibera(cosa) {
+  if (!inStoria()) return true;
+  messaggio(`${cosa}: solo nella modalità Libera (F8 torna al menu).`);
+  return false;
 }
 
 // Recupero da fermi: ~10 Forza per Passo di gioco (VIAGGIO.FORZA_RIPOSO_PER_PASSO), con lo stesso
@@ -339,6 +362,7 @@ const _guadagno = (prima) => {
 // all'inizio della prossima ora canonica. Da fermi si recupera come aspettando.
 function avanza() {
   if (!knight || inPausa) return;
+  if (!soloInLibera('Avanza (T)')) return;      // GDD §3: Avanza resta solo per i test
   if (knight.stato.velEffettiva > 0.1) { messaggio('Fermati prima di far passare il tempo.'); return; }
   const prima = Knight.forza.cur;
   const passi = Calendar.avanzaAllaProssimaOra();
@@ -605,11 +629,14 @@ function* costruisciVillaggi(cx, cz, ter) {
     getHeight: (x, z) => (Math.abs(x) <= half && Math.abs(z) <= half ? ter.getHeight(x, z) : quotaFinale(carta, x + cx, z + cz)),
   };
   for (const s of carta?.siti ?? []) {
-    const eremo = s.tipo === 'eremo';
-    if (s.tipo !== 'villaggio' && s.tipo !== 'ovile' && !eremo) continue;
+    const eremo = s.tipo === 'eremo', rovina = s.tipo === 'rovina' || s.tipo === 'abbandonato';
+    const mistero = s.tipo === 'grotta' || s.tipo === 'fantastico';
+    if (s.tipo !== 'villaggio' && s.tipo !== 'ovile' && !eremo && !rovina && !mistero) continue;
     const x = s.x - cx, z = s.z - cz, m = raggioSito(s) + 50;
     if (Math.abs(x) > half + m || Math.abs(z) > half + m) continue;
-    out.push(eremo ? yield* createEremoAPezzi(suoloMondo, s, x, z, carta)
+    if (mistero) out.push(yield* createMisteroAPezzi(suoloMondo, s, x, z, carta));        // M8, passo 5
+    else if (rovina) out.push(yield* createRovinaAPezzi(suoloMondo, s, x, z, carta));     // M8, passo 4
+    else out.push(eremo ? yield* createEremoAPezzi(suoloMondo, s, x, z, carta)
       : yield* createVillaggioAPezzi(suoloMondo, s, x, z, carta, cx, cz));
   }
   // M8, passo 3: i monasteri sono rocche che hanno cambiato tipo, quindi hanno già il terrapieno e il poligono del
@@ -671,7 +698,11 @@ function* preparaMondo(desc) {
     heights, cols: meta.cols, cell: meta.cellSize, cx, cz, acqua: dati,
     copertura: coperturaMondo(carta, Calendar.stagione), seme: carta.seme, carta,
     piani: [...(carta.luoghi || []).flatMap((l) => l.piani || []),
-      ...(carta.siti || []).filter((s) => s.tipo === 'villaggio' || s.tipo === 'ovile' || s.tipo === 'eremo').map(pianoDelSito)], mare: true,
+      ...(carta.siti || []).filter((s) => s.tipo === 'villaggio' || s.tipo === 'ovile' || s.tipo === 'eremo').map((s) => pianoDelSito(s)),
+      // Rovine e abbandonati: cerchio più stretto, gli alberi stanno fuori dai muri ma il bosco se li riprende.
+      ...(carta.siti || []).filter((s) => s.tipo === 'rovina' || s.tipo === 'abbandonato').map((s) => pianoDelSito(s, 0.45)),
+      // Grotte e luoghi del fantastico: cerchio ancora più stretto, stanno dentro il paesaggio che li circonda.
+      ...(carta.siti || []).filter((s) => s.tipo === 'grotta' || s.tipo === 'fantastico').map((s) => pianoDelSito(s, 0.4))], mare: true,
   }, MS_PEZZO);
   yield 'posizione vegetazione';
   const veg = yield* creaVegetazioneAPezzi(posVeg, ter, renderer, MS_PEZZO);   // il terreno nuovo, mai quello in scena
@@ -855,13 +886,16 @@ function posizionaCavaliere(x, z, direzione) {
     knight.update(0, { avanti: 0, gira: 0, giroMouse: 0, corsa: false, camminata: false });
   }
   _prec.x = knight.stato.x; _prec.y = knight.stato.y; _prec.z = knight.stato.z;   // niente fatica per il salto
-  // Cavallo accanto al cavaliere; è anche un ostacolo per lui (la lista si rifà a ogni Scena).
-  if (!cavallo) {
+  // Cavallo accanto al cavaliere; è anche un ostacolo per lui (la lista si rifà a ogni Scena). In Storia il garzone
+  // parte a piedi: il cavallo arriva comprandolo (G1, passo 3).
+  if (!cavallo && (!inStoria() || Knight.cavallo)) {
     cavallo = createCavallo(suolo, ostacoli);
     scene.add(cavallo.object);
   }
-  cavallo.posizionaAccanto(knight.stato);
-  if (!ostacoli.includes(cavallo)) ostacoli.push(cavallo);
+  if (cavallo) {
+    cavallo.posizionaAccanto(knight.stato);
+    if (!ostacoli.includes(cavallo)) ostacoli.push(cavallo);
+  }
   if (cam) {
     if (modoCamera === 'libera') cambiaModoCamera();
     cam.riattiva();
@@ -948,20 +982,48 @@ async function entraTavullia() {
   salvaOra();
 }
 
+/**
+ * Scelta d'avvio (G1, passo 1): menu prima della generazione del mondo, con le partite salvate, i file JSON da
+ * scaricare o caricare e la partita nuova (seme casuale se non scritto). ?storia o ?libera lo saltano (continua la
+ * partita di quella modalità, o ne comincia una se non c'è, sul ?seme= dell'indirizzo se c'è).
+ */
+async function sceltaDiAvvio() {
+  const partite = { storia: Save.infoPartita('storia'), libera: Save.infoPartita('libera') };
+  const diretta = PARAMETRI.has('storia') ? 'storia' : PARAMETRI.has('libera') ? 'libera' : null;
+  if (diretta) {
+    return { modalita: diretta, nuova: !partite[diretta], seme: PARAMETRI.get('seme') ?? '', luogo: TAVULLIA ? 'tavullia' : 'partenza' };
+  }
+  return mostraMenuAvvio({
+    partite,
+    esporta: (m) => Save.esporta(m),
+    leggiFile: (testo) => Save.leggiFile(testo),
+  });
+}
+
 async function init() {
-  // Partita ripresa dal salvataggio automatico, se c'è; altrimenti nuova.
-  // Percorso di prova (?prova): niente salvataggio letto né scritto, così parte sempre dalla partenza standard del
-  // seme (misure confrontabili) e non tocca la partita dell'utente.
+  // Percorso di prova (?prova): niente menu e niente salvataggio letto né scritto, così parte sempre dalla partenza
+  // standard del seme (misure confrontabili) e non tocca le partite dell'utente. Come una partita Libera nuova.
   if (PROVA_PRESTAZIONI) nonSalvare = true;
-  const ripresa = PROVA_PRESTAZIONI ? null : await Save.load(Save.AUTOSAVE_SLOT);
-  if (!ripresa) nuovaPartitaDati();
+  const scelta = PROVA_PRESTAZIONI
+    ? { modalita: 'libera', nuova: true, seme: PARAMETRI.get('seme') ?? '', luogo: TAVULLIA ? 'tavullia' : 'partenza' }
+    : await sceltaDiAvvio();
+  modalita = scelta.modalita;
+  const slot = Save.slotAutosave(modalita);
+  // Partita da file: entra nello slot della sua modalità (se localStorage lo permette) e si riprende da lì.
+  if (scelta.importa) Save.importa(modalita, scelta.importa);
+  const ripresa = scelta.importa ? Save.applyBlob(scelta.importa.data) : !scelta.nuova && await Save.load(slot);
+  if (!ripresa) {
+    if (!PROVA_PRESTAZIONI) await Save.delete(slot);
+    nuovaPartitaDati(modalita);
+  }
+  Save.modalita = modalita;
   const sc = ripresa ? Save.scenaSalvata : null;
   const finiti = (...v) => v.every(Number.isFinite);
+  TAVULLIA = ripresa ? sc?.terreno === 'tavullia' : scelta.luogo === 'tavullia';
 
-  // Seme del mondo: dall'indirizzo, poi dal salvataggio (anche se la partita è a Tavullia), altrimenti a caso.
-  const testo = PARAMETRI.get('seme');
-  const seme = testo ? semeDaTesto(testo)
-    : (sc && Number.isFinite(sc.seme)) ? sc.seme
+  // Seme del mondo: ripresa → quello salvato (anche se la partita è a Tavullia); nuova → quello scritto, o a caso.
+  const seme = (sc && Number.isFinite(sc.seme)) ? sc.seme
+    : scelta.seme ? semeDaTesto(scelta.seme)
       : Math.floor(Math.random() * 1e6);
 
   if (TAVULLIA) {
@@ -1025,7 +1087,7 @@ async function init() {
     if (document.visibilityState === 'hidden') salvaOra();
   });
   pannelloStato.hidden = false;
-  if (ripresa) messaggio('Partita ripresa dall\'ultimo salvataggio.');
+  if (ripresa) messaggio(`Partita ${inStoria() ? 'Storia' : 'Libera'} ripresa dall'ultimo salvataggio.`);
 
   cam = createFollowCamera(camera, suoloCamera, knight, renderer.domElement, occlusori);
 
@@ -1052,9 +1114,9 @@ async function init() {
   };
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no · Spazio: scavalca'
-    + ' · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: Carta (clic: vai lì)'
+    + ` · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: Carta${inStoria() ? '' : ' (clic: vai lì) · T: avanza'}`
     + ' · N: minimappa grande · +/−: zoom minimappa'
-    + ' · F2: qualità · F3: info · F8: nuova partita',
+    + ` · F2: qualità · F3: info · F8: menu · modalità ${inStoria() ? 'Storia' : 'Libera'}`,
   'aiuto');
 }
 
@@ -1109,12 +1171,15 @@ const cartaVista = createCartaVista(document.body, {
       direzione: knight.stato.direzione }
     : null),
   onScegli: (c, x, y) => {
+    if (!soloInLibera('Il clic sulla Carta che porta lì')) return;
     entraDallaCarta(c, x, y).catch((err) => { console.error('[scena]', err); messaggio(`Errore: ${err.message}`); });
   },
   onRocca: (c, sito) => {
+    if (!soloInLibera('«Vai a» sulla Carta')) return;
     entraNelSito(c, sito).catch((err) => { console.error('[scena]', err); messaggio(`Errore: ${err.message}`); });
   },
   onTavullia: () => {
+    if (!soloInLibera('Tavullia')) return;
     entraTavullia().catch((err) => { console.error('[scena]', err); messaggio(`Errore: ${err.message}`); });
   },
 });
@@ -1127,6 +1192,7 @@ const minimappa = creaMinimappa(document.body, {
   cavallo: () => (nelMondo() && cavallo ? { x: scenaAttuale.cx + cavallo.stato.x, z: scenaAttuale.cz + cavallo.stato.z } : null),
   blocco: () => (nelMondo() ? { x: scenaAttuale.cx, z: scenaAttuale.cz, half: terrain.size / 2 } : null),
   onVai: (x, z) => {
+    if (!soloInLibera('Il clic sulla minimappa che porta lì')) return;
     vaiA(x, z).catch((err) => { console.error('[minimappa]', err); messaggio(`Errore: ${err.message}`); });
   },
 });
@@ -1207,7 +1273,7 @@ window.addEventListener('keydown', (e) => {
   }
   if (e.code === 'F8' && !e.repeat) {
     e.preventDefault();
-    nuovaPartita();
+    tornaAlMenu();
   }
 });
 window.addEventListener('keyup', (e) => tasti.delete(e.code));

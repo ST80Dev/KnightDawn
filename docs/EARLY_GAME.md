@@ -56,6 +56,11 @@ non power-creep). Riempie il `[TBD] Sistema di progressione` del GDD §2.
 | **Cavaliere di Ventura** | mid | corti minori, fondazione del 1° covo |
 | **Campione / Bannerale** | late | corti maggiori, più compagni, contratti d'élite |
 
+[Proposta, novembre 2026, con la scelta tra fedeltà e ventura di `docs/FACTIONS.md` §3] Dopo Cavaliere
+Errante i ranghi si dividono in due vie: **del vessillo** (giurato a una casata, fino a **Bannerale**) e
+**della ventura** (libero, fino a **Capitano di ventura**; «Campione» resta un titolo d'impresa). Si può
+passare da una via all'altra giurando o sciogliendo il giuramento. Nomi intermedi da decidere.
+
 ### Come si sale
 
 Avanzamento per **imprese + reputazione + soglie d'oro**, mai per grinding puro.
@@ -78,12 +83,12 @@ ti ricevono).
 
 ## 3. Azioni e missioni del garzone (Veglia)
 
-La Veglia usa la **Vista luoghi — Layout top-down** (`docs/GRAFICA.md §2b`,
-implementata in `js/castle.js`): il garzone vede il **cortile del castello
-dall'alto** con gli **edifici cliccabili** (stalla, cortile, taverna, sala
-d'armi, armeria/mercato, portale, cappella). Recandosi a un edificio — il marker
-ci si sposta da solo, *non* navigazione libera — si apre la sua **Carta del
-cronista** con il compito. **Ogni azione consuma Passi** e rende **pochi oro**.
+La Veglia si gioca **di persona nel borgo 3D della rocca di partenza** [rivisto con l'utente,
+novembre 2026: la vista top-down del 2D, `js/castle.js`, non c'è più]. Il garzone cammina fino
+alla porta di un edificio (stalla, taverna, armeria o fabbro, loggia del mercato, cappella,
+palazzo del signore, porta del borgo) o fino a una persona; lì si apre la sua **Carta del
+cronista** con il compito. **Ogni azione costa la sua durata in minuti di gioco** (GDD §3, tabella
+«Azioni di persona») e rende **pochi oro**. Piano di attuazione in §7.
 
 ### Lavori al castello — oro sicuro, basso
 
@@ -202,3 +207,123 @@ lavorando.
 - [TBD] Catalogo oggetti iniziali (armi/armature/cavalli) con prezzo base.
 - [TBD] Scelta dell'arco (Missione/Sandbox/Campagna, GDD §2): per ora default
   Sandbox; si aggancia qui quando si affronta S8.
+
+---
+
+## 7. Milestone G1 — Veglia giocabile e menu d'avvio (piano da approvare)
+
+> Prima milestone di **gioco** (non di grafica), decisa con l'utente a novembre 2026: oggi nel 3D sono
+> collegati solo `Knight`, `Calendar` e `Save`; `Events`, `Combat`, `News`, `Items` ed `Enemies` sono
+> caricati ma nessuno li usa, e la Carta del cronista è un segnaposto (`main.js`, `apriCronista`).
+> Ordine dei sistemi dopo G1 in `docs/GDD.md` §5. I passi aperti di grafica (M7 7–8, M8 5–8) proseguono
+> solo quando un passo di gioco li richiede.
+
+**Decisioni dell'utente (novembre 2026):**
+1. Un Round di combattimento costa **minuti di gioco**, non un Passo (`docs/COMBAT.md` §2).
+2. Il combattimento si gioca in un **riquadro a sé sopra la scena ferma** (`docs/COMBAT.md` §9).
+3. Si comincia dalla Veglia, ma resta sempre una **modalità libera** senza storia, per provare la grafica
+   e il resto senza ripassare dall'inizio.
+4. La **scelta del tipo di partita viene prima della generazione del mondo** (menu d'avvio).
+5. **Stagioni ferme**: il mondo resta in Primavera e la data non nomina la stagione (`docs/GDD.md` §2
+   *Scoperta*, stagioni).
+6. **Salvataggi in file JSON** che il giocatore scarica e ricarica dal menu d'avvio, prima della generazione del
+   mondo; il seme di una partita nuova è casuale se non lo si scrive.
+
+**Obiettivo.** Da una partita nuova in modalità Storia si gioca la Veglia dall'inizio all'investitura:
+lavori nel borgo per i primi oro, mercato, maestro d'armi, un incarico fuori porta con il primo
+combattimento, l'investitura. La modalità Libera parte invece da un cavaliere già fatto, con gli
+strumenti di sviluppo.
+
+**Durata della Veglia** [confermata dall'utente: ~60 minuti reali]: è il tempo reale che il prologo richiede prima che il
+garzone diventi Cavaliere Errante e il mondo si apra. Decide quanti lavori servono, quanto pagano e
+quanto costano ronzino e armi. Proposta: **~60 minuti reali** (forbice 45–90), cioè ~15–20 azioni e
+~5–8 giorni di gioco (le azioni e il sonno fanno saltare il tempo d'un colpo; camminare nel borgo costa
+poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un mondo nuovo si annoia
+(in quel caso c'è la modalità Libera).
+
+### Passi (ciascuno provato nel browser e dal percorso di prova `?seme=570549&prova`)
+
+1. **Menu d'avvio, prima della generazione.** Una schermata HTML all'apertura, prima che il Worker
+   generi la Carta:
+   - *Continua* (per ogni salvataggio presente): modalità, seme, data di gioco;
+   - *Nuova partita — Storia*: Veglia, garzone fuori dalla porta del borgo, a piedi, 2–3 oro;
+   - *Nuova partita — Libera*: Cavaliere Errante armato, con oro e cavallo; partenza standard del seme,
+     Tavullia o coordinate (`centro`); strumenti di sviluppo attivi (Carta con il clic che porta lì, `T`
+     Avanza); nessun evento di storia obbligato;
+   - **seme**: casuale (predefinito) o scritto;
+   - **due salvataggi automatici separati**, uno per modalità: provare in Libera non cancella la Storia;
+   - `F8` riporta al menu invece di ricominciare su un seme a caso;
+   - `?prova` salta il menu come oggi (il percorso di prova resta automatico); `?libera` e `?storia`
+     saltano il menu e continuano (o cominciano) quella modalità; `?seme=` precompila il seme.
+   - In Storia `T` (Avanza) è spento (GDD §3: «solo per i test») e la Carta di sviluppo si guarda senza
+     il clic che teletrasporta, finché non arriva la Carta di gioco (G2).
+   *Prova:* aprire, scegliere, ricaricare (si torna al menu con *Continua*), passare da una modalità
+   all'altra senza perdere l'altra partita.
+   **Stato: fatto, da provare dall'utente** (`js/3d/interfaccia.js`, `mostraMenuAvvio`; `save.js`: slot 0 Libera,
+   slot 6 Storia, `modalita` nel salvataggio; `main.js`: `sceltaDiAvvio`, `nuovaPartitaDati(modalita)`, `tornaAlMenu`,
+   `soloInLibera`). In Storia niente cavallo, `T` e i clic di Carta e minimappa che teletrasportano rispondono
+   «solo nella modalità Libera». In Libera: Cavaliere Errante fuori dalla Veglia, spada, cotta e scudo, 60 oro, cavallo
+   3D accanto (`Knight.cavallo` resta vuoto finché la milestone Cavallo non corregge `isMounted`, che oggi darebbe lo
+   sconto di Forza anche a piedi). Provato in headless: menu, Storia nuova su seme scritto, `T` rifiutato, F8 al menu
+   con *Continua*, Libera nuova su seme casuale, ricarica con due *Continua*, ripresa della Storia, `?prova` senza menu;
+   nessun errore.
+   *Seconda parte (dopo la prima lettura dell'utente):* **file JSON**. Nel menu ogni partita salvata ha «Scarica»
+   (file `knightdawn-<modalità>-seme<N>-<data>.json`, la riga del salvataggio così com'è) e «Carica una partita da
+   file…» riprende una partita da un file: entra nello slot della sua modalità (con conferma se ce n'è già una) e si
+   gioca da lì, anche se il browser non permette localStorage. Un file che non è un salvataggio, o di un'altra versione,
+   dà un messaggio e non tocca nulla. In gioco: F8 salva e porta al menu, da lì si scarica. Il campo del seme parte
+   vuoto (casuale). Provato in headless: scarica, file non valido rifiutato, caricamento in un browser pulito con
+   oro, data e seme identici.
+2. **Carta del cronista vera.** Riquadro con titolo, testo, pulsanti tematici, prerequisiti visibili
+   («Richiede…») ed esito; usa il motore di `js/events.js` così com'è. Effetto di tempo nuovo
+   `{ type:'tempo', minuti:N }` accanto a `passi` (`Calendar.avanzaMinuti`); i costi della Veglia passano
+   in minuti. Le porte degli edifici del borgo di partenza aprono gli eventi `veglia.*`: stalla → stalla
+   o scuderia, taverna → taverna, mercato → loggia del mercato o armeria, sala d'armi → cortile della
+   rocca, portale → porta del borgo, cappella → cappella o chiesa. Mentre è aperta il tempo è fermo.
+   Pannello di stato con oro, rango ed equipaggiamento.
+3. **Mercato ed equipaggiamento.** Compra e vendi dal catalogo `js/data/items.js` (rivendita al 50 %),
+   equipaggiamento indossato; il ronzino comprato compare accanto al cavaliere (milestone Cavallo,
+   `docs/ESPLORAZIONE_3D.md`). In Storia si parte a piedi, in Libera con il cavallo.
+4. **Combattimento nel riquadro.** Tre colonne (cavaliere, scelte e Slancio, nemico) e cronaca dei Round;
+   la scena dietro è ferma. Ogni Round confermato avanza il calendario dei suoi minuti; i rami di esito
+   tornano all'evento. In Veglia a Salute 0 si sviene; dopo l'investitura **schermata di morte** con
+   ritorno al menu. In Libera un comando di prova apre un
+   combattimento con un nemico a scelta.
+5. **Incarico fuori porta: i lupi all'ovile.** Si accetta nel borgo; l'ovile vero più vicino (M8, entro
+   2–4 km) si segna sulla minimappa; ci si va di persona (il blocco segue il cavaliere); vicino al recinto
+   parte l'evento con il combattimento; la paga si ritira tornando al borgo. Le altre missioni (bestia
+   smarrita, pacco al villaggio) si aggiungono con lo stesso schema se il tempo della Veglia lo chiede.
+6. **Investitura e fine della Veglia.** Requisiti come oggi (rango scudiero, prima battaglia, oro);
+   cerimonia nella Carta del cronista, con la prima scelta tra **giurare fedeltà** alla casata del
+   castello o **partire libero** (`docs/FACTIONS.md` §3; in G1 è solo la scelta registrata, gli effetti
+   arrivano con G3); parte il calendario ufficiale (*Prima Era · Prima Luce · Primavera ·
+   Diario 1 · Passo 1*); il garzone diventa Cavaliere Errante. Da qui la Storia prosegue a piedi o a
+   cavallo; il viaggio vero sulla Carta arriva con G2.
+
+### Accettazione
+
+Una partita Storia nuova si gioca dall'apertura all'investitura senza console e senza `T`, in un tempo
+vicino a quello deciso; morire porta alla schermata di morte; la modalità Libera parte in pochi secondi
+dal menu e conserva la sua partita a parte; il percorso di prova funziona come prima; 60 FPS invariati
+(il riquadro è HTML, la scena è ferma).
+
+### Rischi
+
+- [Certo] I salvataggi di oggi non hanno la modalità: alla prima apertura dopo G1 l'unico salvataggio
+  diventa una partita Libera (è quella usata finora per provare).
+- [Probabile] I 32 eventi scritti bastano per la Veglia, non per il resto del gioco: dopo G1 servono
+  modelli di evento per tipo di luogo, riempiti con nomi e fazioni generati.
+- [Probabile] Non tutti i borghi hanno tutti gli edifici della Veglia; per la rocca di partenza va
+  garantito il gruppo minimo (stalla, taverna, mercato o armeria, cappella).
+- [Ipotesi] La formula dello Slancio (`js/combat.js`) non è mai stata provata con un giocatore: il
+  bilanciamento del primo combattimento chiederà qualche giro.
+
+### Decise con l'utente (novembre 2026)
+
+- Durata della Veglia: ~60 minuti reali.
+- **Durante la Veglia non si muore**: a Salute 0 il garzone sviene e si risveglia nel borgo, curato, con
+  qualche ora persa e senza l'oro che aveva addosso (confermato). **Dopo l'investitura la morte è vera**: la
+  partita Storia finisce e il suo salvataggio si cancella (confermato; un file JSON scaricato prima resta
+  del giocatore).
+- File nuovo approvato: `js/3d/interfaccia.js` (menu d'avvio, Carta del cronista, riquadro di
+  combattimento).

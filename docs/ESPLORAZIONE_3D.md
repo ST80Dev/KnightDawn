@@ -1638,7 +1638,7 @@ di luoghi generici.
 | **Castelli** con borgo | ~28 (dai 30–40) | come oggi | corte, fazioni, mercato, Veglia |
 | **Monasteri / abbazie** | 4–6 (dai 30–40) | collina, bosco, monte, isolati | Volontà, guarigione, lore; cripta → dungeon |
 | **Città** | 2–4 (dai 30–40) | pianura, fiumi, costa (porto) | commercio, notizie, contratti (ultimo passo) |
-| **Villaggi** | 60–80 (frazioni di 6–10 case, villaggi di 12–20 con pieve e locanda) | vicino all'acqua, pendii dolci, sulle strade | locanda (Forza), voci, missioni locali; la Veglia («il villaggio vicino») |
+| **Villaggi** | 250–300 (frazioni di 6–10 case, villaggi di 12–20 con pieve e locanda) | vicino all'acqua, pendii dolci, sulle strade | locanda (Forza), voci, missioni locali; la Veglia («il villaggio vicino») |
 | **Rovine** (castello diroccato, torre crollata, chiesa sventrata, villaggio abbandonato) | 15–20 | ovunque, anche in alto | esplorazione, dungeon, covi |
 | **Abbandonati** (torre isolata, maniero decaduto, casale) | 10–15 | margini, colline | candidati **covo** (GDD §3) |
 | **Grotte** | 10–15 | monti, rocce, valli strette | dungeon, tane, covo |
@@ -1739,7 +1739,7 @@ M7 (`edifici3d.js`, opzione `clima`, PR #201); qui si collega il clima del luogo
   di scandole sulla neve; villaggio arido (570549, 30900, 85100) cubi bianchi, terrazze e pergole fra le dune; rocca
   arida (33117, 103100, 81440) terrazze chiare dentro le mura; il borgo in foresta ora è temperato, a graticcio.
 
-### Passo 3 — monasteri ed eremi (fatto, da provare)
+### Passo 3 — monasteri ed eremi (fatto, provato dall'utente e unito: PR #209 e #213)
 
 Codice in `js/3d/villaggio3d.js` (come da piano: il file tiene villaggi, ovili, monasteri ed eremi), agganci in
 `main.js`. Nessun cambio al generatore: `VERSIONE_GENERATORE` invariata.
@@ -1778,6 +1778,56 @@ Codice in `js/3d/villaggio3d.js` (come da piano: il file tiene villaggi, ovili, 
   sette edifici nominati — chiesa, dormitorio, biblioteca, refettorio, foresteria, infermeria, pozzo — a 16–17
   chiamate e ~9.600 triangoli.
 - **Fuori dal passo**: monaci (abitanti3d.js di M7), campane, cimitero, chiostro a due piani.
+
+### Passo 4 — rovine e luoghi abbandonati (fatto, provato dall'utente e unito: PR #214)
+
+File nuovo `js/3d/rovine3d.js` (era già fra quelli approvati), agganci in `main.js`. Nessun cambio al generatore.
+- **Differenza fra i due tipi**, che guida tutto il modulo: una **rovina** non ha più tetti né solai (muri spezzati,
+  monconi di torre, macerie, e nessuna terra battuta: l'erba ha coperto tutto), e si costruisce con geometria propria,
+  non col kit, che fa case intere; un luogo **abbandonato** sta ancora in piedi, con il suo tetto, ma è vuoto: lì il
+  kit serve, e si aggiungono la cinta crollata, un corpo di fabbrica caduto di fianco e un'aia sbiadita.
+- **Rovine** (15–20 per mondo): *castello* (anello di muro spezzato di 11–17 m di raggio con due o tre monconi di
+  torre), *torre* (moncone con uno spigolo più alto e un pezzo di recinto), *chiesa* (i due muri lunghi, la facciata
+  e l'abside a semicerchio, senza tetto), *villaggio* (quattro-otto impronte di case a muri bassi).
+- **Abbandonati** (10–15): *torre* (muri interi fino a 11 m, senza tetto), *maniero* (il `corpo` del kit senza
+  comignolo), *casale* (la casa rurale del kit). Tutti con la cinta crollata e il corpo caduto.
+- **Muro spezzato**: tratti di 1,8 m con l'altezza da un profilo che ondeggia lungo il muro; dove scende sotto la
+  soglia il tratto è crollato, e le due estremità di ogni tratto hanno quote diverse, così la cima non è mai dritta.
+- **Invecchiamento**: dopo l'unione, il colore per vertice vira al verde al piede (edera) e sulle rotture in piano
+  (muschio). Due tarature sbagliate prima di quella buona: con la forza all'80 % la pietra sembrava dipinta di verde,
+  e misurando l'altezza da un piano unico **in pendenza tutta la parte a valle restava verde**; ora l'altezza si
+  misura dal terreno sotto ogni vertice e la forza è al 38 %, con sfumatura quadratica.
+- **Vegetazione**: cerchio d'esclusione più stretto che per i villaggi (0,45 invece di 0,7 del raggio): gli alberi
+  stanno fuori dai muri, ma il bosco si riprende la rovina.
+- **Misure** [Certo, Chromium headless, seme 570549, nessun errore]: una rovina è **una sola chiamata** (324–1.560
+  triangoli), perché tutta la pietra si unisce; la torre abbandonata 2; maniero e casale 10–12, perché usano il kit.
+  Il budget del piano (≤ 8 chiamate per un luogo speciale) vale per i luoghi senza kit; con il kit si arriva a 12,
+  come già l'eremo del passo 3 (11).
+- **Attenzione per le prove**: le coordinate dei siti **non** si possono ricavare da una pipeline ridotta in Node
+  (generaCarta → aggiungiLuoghi → aggiungiSiti): saltando `fiumiFini` i punteggi cambiano e i siti si spostano. Vanno
+  letti da `window.kd.carta.siti` nel browser.
+
+### Passo 5 — grotte e luoghi del fantastico (fatto, da provare)
+
+Nello stesso `js/3d/rovine3d.js`. Nessun cambio al generatore.
+- **Materiale nuovo**: una grotta e un cerchio di pietre sono roccia viva, non muratura, e la texture a corsi di
+  `materialeMuro` le farebbe sembrare costruite. Accanto alla mesh di muratura c'è quindi una seconda mesh a facce
+  piatte con il colore per vertice, che tiene roccia, terra del tumulo, legno e panni. **Il buio dentro la grotta è
+  lo stesso materiale col colore quasi nero: non costa una chiamata in più.**
+- **Grotta** (10–15 per mondo, sul punto più ripido della cella): una fascia di roccia attraversa il pendio, con il
+  vano aperto in mezzo; stipiti e architrave sono blocchi a facce piatte, così il vuoto è davvero un vuoto, e i massi
+  irregolari si appoggiano dopo. Tutto su **una sola quota di riferimento**: appoggiando ogni pezzo al terreno sotto
+  di sé, su un pendio ripido i pezzi di monte salivano sopra l'architrave e il vano si chiudeva a fessura.
+- **Luoghi del fantastico** (8–12): *cerchio di pietre* (7–12 lastre infisse e storte, una o due cadute), *tumulo*
+  (cupola d'erba, cordolo di massi, porta di tre lastre a valle col buio dietro), *albero sacro* (tronco grosso,
+  chioma a grappolo di blocchi, sassi d'offerta e pali con i panni), *rovine antiche* (basamento a due gradini,
+  sei-nove colonne spezzate, una o due colonne a terra in rocchi).
+- **Misure** [Certo, Chromium headless, seme 570549, nessun errore]: **una chiamata per luogo**, 120–604 triangoli.
+  Il più leggero di tutti i passi di M8.
+- **Punto debole dichiarato**: la **grotta** è l'unica delle cinque che non convince ancora. Quattro tentativi: massi
+  tondi (sembrava un mucchio di sassi), architrave da terra (tappava il vano), quote per pezzo (fessura), parete a
+  blocchi (letta come un bunker). Quella consegnata ha il vano visibile e la scala giusta, ma la parete resta
+  squadrata. Da rivedere con l'utente: serve una forma di roccia più ricca, o un imbocco scavato invece che costruito.
 
 ### Decisioni tecniche
 
@@ -2278,6 +2328,23 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      secondo solo entro 18 m, punta) con l'ultimo ciuffo centrato un po' sotto la punta; cime più corte (faggio 5,2 m,
      pioppo 3 m). Bosco fitto: 568 000 triangoli contro 553 000.
      Bosco fitto in headless: ~550 000 triangoli (prima delle chiome nuove 458 000): da misurare sulla scheda.
+     *La variante è la specie* (richiesta dell'utente: «da una certa distanza vedo una forma di albero, arbusto e altro,
+     poi avvicinandomi la forma si stravolge del tutto e rende incoerente quello che vedo attorno»; proposta sua di una
+     figura standard per tipo a ogni distanza). Ogni istanza sceglie la variante una volta sola (`varia`) e la ritrova
+     a ogni livello con `floor(varia · numero di varianti del livello)`: ma i livelli avevano numeri diversi di
+     varianti (latifoglia 3 vicine, 2 medie, 2 sagome; conifera 2 e 1; pino 2 e 1; cespuglio 2 e 1; masso 3 e 1), quindi
+     un castagno a 200 m era la forma generica n° 1 e avvicinandosi diventava un'altra pianta. Non era un salto di
+     dettaglio ma di identità. Ora ogni livello ha una forma per specie, costruita dalle misure di quella vicina:
+     `latMedio(a, b, y, corteccia, foglia)` per quercia, faggio (corteccia e foglie chiare) e castagno, `abeteMedio
+     (largo, alto)` per i due abeti, `pinoDomestico(seme, 0)` per i due pini, due cespugli medi, tre massi lontani.
+     Verde misurato, vicino contro medio: quercia 3,0–8,4 m r 3,2 contro 2,7–8,2 r 3,4; faggio 2,7–9,3 r 2,9 contro
+     2,6–9,0 r 3,3; castagno 2,5–8,1 r 3,6 contro 2,7–8,3 r 3,7. Sagome: una tessera per specie (`SAGOME` cresce in coda
+     con `latifogliaCastagno` e `coniferaSlanciata`, l'atlante usa 8 tessere su 8; `SAGOME_LATIFOGLIA` e
+     `SAGOME_CONIFERA` le scelgono anche negli anelli dell'orizzonte). Un livello può avere o tante varianti quante il
+     vicino, o una sola condivisa (forma più povera ma identità ferma): `controllaVarianti` lo verifica al caricamento e
+     scrive un errore in console se qualcuno rompe la regola. Costo nel bosco fitto del percorso di prova (headless):
+     chiamate di disegno della vegetazione 28 → 32 (budget 35; +6 nel caso peggiore, con anche conifere e pini in vista),
+     triangoli 1 014 596 → 1 015 516 (+0,1 %), nessun triangolo in più per istanza.
      *Fondi, carrarecce e case collegate* (richiesta dell'utente: vista dall'alto «più organizzata», niente texture
      sovrapposte a casaccio e sfumate; confini così numerosi vogliono o una stradina o siepi e muretti; orti attorno al
      castello troppo fitti; doppia riga parallela alla strada). L'unità è il *fondo*, come nella campagna medievale:
@@ -2920,7 +2987,16 @@ si resta sotto 1,5 ms e ≤ 10 chiamate (cupola 1, stelle 1, precipitazioni 1). 
    altezza; disco del sole di 0,75° (più grande del vero, per vederlo dalla vista di gioco) con due aloni; luna di 0,6°
    nella direzione della luce lunare (fissa, alta a sud-est), solo di notte. Nel percorso di prova la cupola finisce in
    «resto» finché non entra in `main` il gruppo «cielo» di M1.
-2. **Stelle di notte.**
+2. **Stelle di notte.** **Stato: fatto, da provare dall'utente.** `creaStelle` in `cielo.js`: 2400 punti (`cielo-stelle`,
+   una chiamata di disegno, nessuna texture) su una sfera di 120 km dentro la cupola, disegnati dopo di lei e con il test
+   di profondità (il terreno le copre). Luminosità con curva ripida (poche luminose, molte deboli) e colore per stella
+   (bianco-azzurro → giallo-arancio); **fascia più fitta** come la Via Lattea, inclinata di 62°; sempre le stesse (sorteggio
+   da un seme fisso). Si spengono verso l'orizzonte (foschia) e sotto non ci sono. Si accendono col buio
+   (`uNotte` da −12° a +2° di altezza del sole, curva 1,4: prima le più luminose) e **tutto il cielo ruota** attorno alla
+   polare, alta 44° a nord, un giro in 24 ore: le costellazioni sorgono e tramontano. La dimensione in pixel segue la
+   risoluzione vera (`renderer.getPixelRatio()`), quindi non cambia con la qualità né con la risoluzione adattiva.
+   Verificato in headless (nessun errore; giorno senza stelle, notte con stelle e cielo diverso tra le ore; mondo generato
+   e Tavullia; profondità invertita e logaritmica; qualità bassa). Costo da misurare sulla UHD 730 col percorso di prova.
 3. **Meteo a periodi senza nuvole disegnate:** scala, periodi, regione, foschia standard al posto di quella per giorno,
    luci, `?meteo=`, F3. Qui si provano con M7 le mura col cielo coperto e con Vegetazione le ombre finte.
 4. **Nuvole ferme** per stato, illuminate dall'ora, ricotte a strisce al cambio di periodo.
@@ -3110,10 +3186,31 @@ legge senza ricalcolare. Due mappe: da qualsiasi acqua e solo da acqua dolce (fi
 e un mulino sul mare non esiste]. Provato su 163 punti di costa: nell'88 % l'acqua dolce risulta oltre 500 m più
 lontana del mare.
 
-**Da decidere con l'utente** (numeri bersaglio, poi il lavoro è di M8 per i siti e di M7/Vegetazione per le case):
-villaggi e frazioni da 78 a ~250–300 (uno ogni 35–40 km², mediana ~2,5 km); case isolate e cascine anche fuori dalla
-campagna dei borghi (1–3 per blocco in pianura e collina coltivata, nessuna in alta montagna); ovili e stazzi da 29 a
-~60–80; mulini sull'acqua (tipo nuovo); villaggi quasi tutti entro 400–600 m dall'acqua.
+**Fatto da M8** (siti sulla Carta, `js/mondo/siti.js`; `VERSIONE_GENERATORE` + `densita-1`, le Carte si rigenerano):
+villaggi **253–297** (uno ogni 33–38 km², mediana dal più vicino 2,2–2,5 km), ovili **64–81**, **mulini 36–50** (tipo
+nuovo, sempre sull'acqua dolce: mediana 31 m, mai oltre 140 m). Misure su otto semi, verifica automatica 8/8.
+- **Vicino all'acqua**: la distanza si misura sul punto, non sulla cella, con la mappa fine di M6. Mediana **128 m**.
+  Non bastava sceglierne la cella: la cella è larga 1 km e il punto finiva lo stesso a mezzo chilometro dal fiume.
+  Tre cose insieme: griglia di ricerca a 9×9 **che sconfina un poco nelle celle vicine** (se il fiume scorre in quella
+  accanto), filtro sul punto scelto (la cella si scarta e se ne prova un'altra), e il divieto di stare *dentro* l'acqua.
+- **Difetto trovato dalla verifica**: sconfinando, il punto finiva in mare o in un lago. Cinque semi su otto avevano un
+  villaggio o un mulino «in acqua». Ora le celle d'acqua si saltano anche fuori dalla cella di partenza.
+- **Montagna** (richiesta dell'utente: «in montagna non ci sarà sempre quasi nulla, non rendiamo il mondo troppo
+  realistico a scapito della giocabilità»). Misurato: i villaggi stavano al 3 % sopra i 600 m, contro il 22–27 % della
+  terra. Non era la quota a frenarli, ma **l'acqua**: i fiumi del generatore nascono dove il bacino è grande, cioè in
+  basso, e sopra i 600 m solo 29 celle su 1875 hanno acqua dolce entro 400 m. Tre interventi: il limite dell'acqua
+  **cresce con la quota** (650 m in pianura, 2.200 m sopra i 900 m: un paese di montagna vive di sorgenti, che la
+  Carta non disegna), montagna e roccia diventano abitabili sopra i 600 m, e **un quarto dei villaggi è riservato alla
+  terra alta e si sceglie per primo** — senza la riserva le celle di pianura vincevano comunque tutti i posti.
+  Risultato: **9–20 % dei villaggi sopra i 600 m**, mediana della quota da 160 a 183–216 m, i più alti a 1.700–1.800 m.
+- **Tempo**: la generazione è 6,1–8,2 s; `precalcolaStrade` passa da 8 a **15–19 s** con 295 villaggi (misura in Node),
+  oltre i ~15 s accettati. Riferito a M6 con i numeri, come d'accordo: la ricerca delle strade è sua.
+- **3D**: nessun aggravio per blocco. Con la distanza minima di 1,8 km non capitano due villaggi nello stesso blocco di
+  2 km; il blocco più affollato del seme 570549 ne ha uno solo, a 11 chiamate, e si carica in 2,3 s.
+
+**Da decidere con l'utente**: case isolate e cascine anche fuori dalla campagna dei borghi (1–3 per blocco in pianura
+e collina coltivata, nessuna in alta montagna) — lavoro di M7/Vegetazione; e il mulino in 3D (edificio sull'acqua con
+la ruota), che è un passo a sé.
 
 ## Fuori dal prototipo (non farlo ora)
 

@@ -15,7 +15,7 @@ instabile durante lo sviluppo. In alternativa in locale con `python -m http.serv
 
 ## Struttura
 - `index.html` + `style.css` — canvas WebGL + overlay HUD in HTML/CSS + importmap
-- `js/3d/` — moduli ES del motore 3D: `main.js` (renderer, luci, loop, input, F3), `terrain.js`, `orizzonte.js`, `acqua.js`, `knight3d.js`, `camera.js`, `cielo.js` (giorno/notte, nebbia, meteo), `castle3d.js` (Tavullia), `rocca3d.js` e `borgo3d.js` (mondo generato), `minimappa.js`
+- `js/3d/` — moduli ES del motore 3D: `main.js` (renderer, luci, loop, input, F3), `terrain.js`, `orizzonte.js`, `acqua.js`, `knight3d.js`, `camera.js`, `cielo.js` (giorno/notte, nebbia, meteo), `castle3d.js` (Tavullia), `rocca3d.js` e `borgo3d.js` (mondo generato), `minimappa.js`, `interfaccia.js` (menu d'avvio, Carta del cronista, combattimento)
 - `js/mondo/` — generatore del mondo, moduli ES senza grafica né DOM (`rumore.js`, `carta.js`, `verifica.js`,
   `scena.js`, `fiumi.js`, `luoghi.js`, `strade.js`, `siti.js`; `lavoratore.js` = Web Worker con cache IndexedDB, `generatore.js` = lato pagina); la vista di
   sviluppo della Carta è `js/3d/cartaVista.js`. Cambiando le Carte generate: aggiornare `VERSIONE_GENERATORE`
@@ -66,6 +66,7 @@ architettura: quelle stanno in `docs/`. Aggiornare la fase corrente a ogni cambi
 
 ## Fase corrente
 
-**M7, rocca e borgo sul mondo generato** (`docs/ESPLORAZIONE_3D.md`), ripresa. Milestone «Prestazioni» chiusa
-(nov. 2026): ogni contenuto disegnato rispetta budget e regole di `docs/PRESTAZIONI.md` e passa dal percorso di prova
-(`?seme=570549&prova`, anche `&centro=97042,80681` sul borgo). M0–M6 completate. La 2D resta nella cronologia git (`2c869fa`).
+**G1, Veglia giocabile e menu d'avvio** (`docs/EARLY_GAME.md` §7, piano da approvare): prima milestone di gioco,
+ordine delle successive in `docs/GDD.md` §5. La grafica (M7 7–8, M8 5–8, `docs/ESPLORAZIONE_3D.md`) prosegue quando un
+passo di gioco la richiede; contenuti nuovi sempre nel budget di `docs/PRESTAZIONI.md` e provati con `?seme=570549&prova`.
+M0–M6 e «Prestazioni» completate. La 2D resta nella cronologia git (`2c869fa`).

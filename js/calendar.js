@@ -16,6 +16,9 @@ const CALENDAR = {
   DIARI_PER_STAGIONE:  3,
   STAGIONI_PER_LUCE:   4,
   LUCI_PER_ERA:        5,
+  // Stagioni ferme [deciso con l'utente, novembre 2026, docs/GDD.md §3]: il mondo resta in Primavera e i Diari
+  // si contano da 1 a 12 dentro la Luce; la data non nomina la stagione. true riattiva lo scorrimento.
+  STAGIONI_ATTIVE:     false,
 
   PASSI_PER_STAGIONE:  600,   // 200 × 3
   PASSI_PER_LUCE:      2400,  // 600 × 4
@@ -152,12 +155,17 @@ const Calendar = {
       this.passo = 1;
       this.diario++;
     }
-    if (this.diario > CALENDAR.DIARI_PER_STAGIONE) {
+    if (CALENDAR.STAGIONI_ATTIVE) {
+      if (this.diario > CALENDAR.DIARI_PER_STAGIONE) {
+        this.diario = 1;
+        this.stagione++;
+      }
+      if (this.stagione >= CALENDAR.STAGIONI_PER_LUCE) {
+        this.stagione = 0;
+        this.luce++;
+      }
+    } else if (this.diario > CALENDAR.DIARI_PER_STAGIONE * CALENDAR.STAGIONI_PER_LUCE) {
       this.diario = 1;
-      this.stagione++;
-    }
-    if (this.stagione >= CALENDAR.STAGIONI_PER_LUCE) {
-      this.stagione = 0;
       this.luce++;
     }
     if (this.luce > CALENDAR.LUCI_PER_ERA) {
@@ -196,18 +204,17 @@ const Calendar = {
     if (this.inVeglia) return 'Veglia · giorno ' + this.giornoVeglia;
     return 'Passo ' + this.passo +
            ' del Diario ' + this.diario +
-           ', ' + this.nomeStagione() +
-           ' della ' + this.nomeLuce() +
+           (CALENDAR.STAGIONI_ATTIVE ? ', ' + this.nomeStagione() + ' della ' : ' della ') + this.nomeLuce() +
            ', ' + this.nomeEra();
   },
 
-  // Forma compatta HUD: "I · I · Pri 1.5" (era · luce · stagione diario.passo)
+  // Forma compatta HUD: "I · I · 7.5" (era · luce · diario.passo); con le stagioni attive "I · I · Pri 1.5"
   formatCompatto() {
     if (this.inVeglia) return 'Veglia · g' + this.giornoVeglia;
-    const stagAbbr = this.nomeStagione().substring(0, 3);
+    const stagAbbr = CALENDAR.STAGIONI_ATTIVE ? this.nomeStagione().substring(0, 3) + ' ' : '';
     return this._romano(this.era) + ' · ' +
            this._romano(this.luce) + ' · ' +
-           stagAbbr + ' ' + this.diario + '.' + this.passo;
+           stagAbbr + this.diario + '.' + this.passo;
   },
 
   _romano(n) {
@@ -242,7 +249,7 @@ const Calendar = {
     this.frazione     = data.frazione     || 0;
     this.era          = data.era          || 1;
     this.luce         = data.luce         || 1;
-    this.stagione     = data.stagione     || 0;
+    this.stagione     = CALENDAR.STAGIONI_ATTIVE ? (data.stagione || 0) : 0;
     this.diario       = data.diario       || 1;
     this.passo        = data.passo        || 1;
     this.inVeglia     = data.inVeglia !== undefined ? data.inVeglia : true;
