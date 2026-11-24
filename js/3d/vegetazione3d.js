@@ -8,7 +8,7 @@
 // deformate a codice, colori per vertice, un materiale per livello; nessun asset esterno (regola 6).
 
 import * as THREE from 'three';
-import { STRIDE, SAGOME, boscoLontanoAPezzi, finisci, LATO_FONDI } from '../mondo/vegetazione.js';
+import { STRIDE, SAGOME, SAGOME_LATIFOGLIA, SAGOME_CONIFERA, boscoLontanoAPezzi, finisci, LATO_FONDI } from '../mondo/vegetazione.js';
 
 // ─── Costruzione delle geometrie ─────────────────────────────────────────
 
@@ -481,9 +481,30 @@ function felce(rnd, fronde = 7) {
  * dispose() (se lo fa, Three.js le ricarica sulla scheda al primo uso: funziona, ma costa).
  */
 let _modelli = null;
+/**
+ * Ogni istanza sceglie la variante una volta sola (`varia`, 0–1) e la ritrova a ogni livello con
+ * `floor(varia · numero di varianti del livello)`: perché sia sempre la stessa pianta, ogni livello di un tipo deve
+ * avere tante varianti quante il livello vicino, oppure una sola, condivisa da tutte (allora la forma è più povera ma
+ * non cambia identità). Con numeri diversi (prima: 3 latifoglie vicine, 2 forme medie) un castagno diventava un'altra
+ * pianta avvicinandosi: è il difetto segnalato dall'utente. Questo controllo impedisce che torni.
+ */
+function controllaVarianti(M) {
+  for (const [nome, livelli] of Object.entries(M)) {
+    if (nome === 'sorgentiSagome' || !Array.isArray(livelli)) continue;
+    const n = livelli[0].varianti?.length || 1;
+    for (const L of livelli) {
+      const k = (L.varianti || L.sagoma || []).length;
+      if (k !== n && k !== 1) {
+        console.error(`vegetazione: ${nome}, livello fino a ${L.fino} m ha ${k} varianti invece di ${n} o 1: `
+          + 'l\'oggetto cambia forma con la distanza');
+      }
+    }
+  }
+}
 function modelliCondivisi() {
   if (_modelli) return _modelli;
   _modelli = creaModelli();
+  controllaVarianti(_modelli);
   for (const [k, v] of Object.entries(_modelli)) {
     if (k === 'sorgentiSagome') continue;
     for (const L of v) for (const g of L.varianti || []) g.userData.condivisa = true;
@@ -526,9 +547,12 @@ function creaModelli() {
   // Chioma alla stessa altezza e larghezza di quella vicina (richiesta dell'utente: oltre i 50 m «pali con ciuffi di
   // cespuglio in cima»: le 3 masse staccate stavano 3–6 m più su della chioma vicina, verde misurato 2,3–9,5 m contro
   // 5,8–13,8). Sette ciuffi a ottaedro che si toccano (8 triangoli l'uno): ~64 triangoli come prima.
-  const latMedio = (a, b, y) => unisci([
-    fusto(0.4, 0.05, y + b * 0.3, 4, COL.corteccia),     // si assottiglia dentro la chioma, niente moncone in vista
-    ...chioma({ y, a, b, ciuffi: 7, raggio: [1.55, 1.95], dettaglio: 0, scuro: F[0], chiaro: F[1], rnd, pieno: 0.2, sotto: 0.6,
+  // Una forma media per specie (richiesta dell'utente: «da una certa distanza vedo una forma, poi avvicinandomi si
+  // stravolge del tutto e rende incoerente quello che vedo»): misure e colori presi da quella vicina, così un castagno
+  // resta un castagno e perde solo definizione.
+  const latMedio = (a, b, y, cor, fog) => unisci([
+    fusto(0.4, 0.05, y + b * 0.3, 4, cor),               // si assottiglia dentro la chioma, niente moncone in vista
+    ...chioma({ y, a, b, ciuffi: 7, raggio: [1.55, 1.95], dettaglio: 0, scuro: fog[0], chiaro: fog[1], rnd, pieno: 0.2, sotto: 0.6,
       morbido: 0.7, leggero: true }),
   ]);
   M.latifoglia = [
@@ -539,8 +563,11 @@ function creaModelli() {
     { fino: 50, varianti: [quercia(0), faggio(0), castagno(0)] },
     // Medio fino a 200 m (prima 300; misura nel bosco fitto dopo la Carta rigenerata: vegetazione 7,2 ms contro 6,5 di
     // budget, ~4400 latifoglie medie per ~300 000 triangoli); oltre, sagome.
-    { fino: 200, varianti: [latMedio(3.0, 2.6, 5.1), latMedio(2.6, 3.0, 5.5)] },
-    { fino: Infinity, sagoma: [SAGOME.latifogliaTonda, SAGOME.latifogliaOvale] },
+    // Una forma media e una sagoma per specie, nello stesso ordine delle varianti vicine (quercia, faggio, castagno):
+    // l'istanza sceglie la specie una volta sola e la tiene a tutte le distanze.
+    { fino: 200, varianti: [latMedio(2.4, 2.9, 5.7, COL.corteccia, F), latMedio(1.5, 3.6, 6.2, COL.cortecciaChiara, FF),
+      latMedio(2.5, 2.9, 4.9, COL.corteccia, F)] },
+    { fino: Infinity, sagoma: SAGOME_LATIFOGLIA },
   ];
 
   // Conifere: abete (largo, a palchi) e abete slanciato.
@@ -551,12 +578,16 @@ function creaModelli() {
       return palco(r, h, 1.6 + t * (alto - 2.2), COL.ago[0], COL.ago[1], rnd);
     }),
   ]);
+  // Media: due palchi con le misure del vicino (stessa larghezza e stessa cima), una forma per variante.
+  const abeteMedio = (largo, alto) => unisci([
+    fusto(0.3, 0.15, alto * 0.22, 3, COL.corteccia),
+    palco(largo, alto * 0.55, 1.4, COL.ago[0], COL.ago[1], rnd, { lati: 6, segmenti: 1, punte: 0.15 }),
+    palco(largo * 0.56, alto * 0.6, alto * 0.47, COL.ago[0], COL.ago[1], rnd, { lati: 6, segmenti: 1, punte: 0.15 }),
+  ]);
   M.conifera = [
     { fino: 60, varianti: [abete(8, 3.2, 14), abete(10, 2.3, 17)] },
-    { fino: 300, varianti: [unisci([fusto(0.3, 0.15, 3, 3, COL.corteccia),
-      palco(3.0, 7.5, 1.4, COL.ago[0], COL.ago[1], rnd, { lati: 6, segmenti: 1, punte: 0.15 }),
-      palco(1.8, 7.0, 6.5, COL.ago[0], COL.ago[1], rnd, { lati: 6, segmenti: 1, punte: 0.15 })])] },
-    { fino: Infinity, sagoma: [SAGOME.conifera] },
+    { fino: 300, varianti: [abeteMedio(3.2, 14), abeteMedio(2.3, 17)] },
+    { fino: Infinity, sagoma: SAGOME_CONIFERA },
   ];
 
   // Pino domestico (richiesta dell'utente: «pali con ciuffi di cespuglio in cima»; prima un fusto dritto di 9 m e 3–18
@@ -588,7 +619,7 @@ function creaModelli() {
   };
   M.pino = [
     { fino: 60, varianti: [pinoDomestico(411, 1), pinoDomestico(412, 1)] },
-    { fino: 300, varianti: [pinoDomestico(411, 0)] },
+    { fino: 300, varianti: [pinoDomestico(411, 0), pinoDomestico(412, 0)] },
     { fino: Infinity, sagoma: [SAGOME.pino] },
   ];
 
@@ -642,7 +673,7 @@ function creaModelli() {
   };
   M.cespuglio = [
     { fino: 35, varianti: [cesp(6, 0.9, 0.9, 2, 1), cesp(5, 0.75, 1.0, 2, 1)] },
-    { fino: 160, varianti: [cesp(4, 0.8, 0.8, 1, 0)] },
+    { fino: 160, varianti: [cesp(4, 0.9, 0.9, 1, 0), cesp(4, 0.75, 1.0, 1, 0)] },
   ];
   M['arbusto alto'] = [
     { fino: 35, varianti: [unisci(chioma({ y: 0.35, a: 1.4, b: 0.45, ciuffi: 8, raggio: [0.4, 0.6], scuro: MG[0], chiaro: MG[1], rnd, sotto: 0, pieno: 0.3 }))] },
@@ -674,7 +705,12 @@ function creaModelli() {
       unisci([R1(1.1, { tagli: 8, y: 0.25, sx: 1.45, sy: 0.55 }), R1(0.6, { dettaglio: 0, tagli: 5, x: 1.2, y: 0.15, z: 0.6, sy: 0.7 })]),
       unisci([R1(1.15, { tagli: 10, y: 0.45, sx: 0.85, sy: 1.05, sz: 0.9, profondita: [0.45, 0.75] })]),
     ] },
-    { fino: Infinity, piatto: true, varianti: [unisci([R1(1.2, { dettaglio: 0, tagli: 6, y: 0.3, sy: 0.75 })])] },
+    // Una forma lontana per variante, con le proporzioni della vicina: un masso non cambia sagoma avvicinandosi.
+    { fino: Infinity, piatto: true, varianti: [
+      unisci([R1(1.2, { dettaglio: 0, tagli: 6, y: 0.3, sy: 0.72 })]),
+      unisci([R1(1.15, { dettaglio: 0, tagli: 6, y: 0.25, sx: 1.5, sy: 0.6 })]),
+      unisci([R1(1.15, { dettaglio: 0, tagli: 6, y: 0.45, sx: 0.85, sy: 1.05, sz: 0.9 })]),
+    ] },
   ];
   M.affioramento = [{ fino: Infinity, piatto: true, varianti: [
     unisci([R1(1.0, { tagli: 9, y: 0.1, sx: 3.6, sy: 0.8, sz: 2.2 }), R1(0.8, { tagli: 7, x: 2.0, y: 0.25, z: 0.6, sx: 1.6, sy: 1.1, sz: 1.3 }),
@@ -719,9 +755,10 @@ function creaModelli() {
     { fino: 220, piatto: true, varianti: [colora(blocco, (c) => c.set(COL.roccia[0]).lerp(new THREE.Color(COL.roccia[1]), 0.35))] },
   ];
 
-  // Sorgenti dell'atlante delle sagome (nell'ordine di SAGOME): i modelli vicini.
+  // Sorgenti dell'atlante delle sagome (nell'ordine di SAGOME): i modelli vicini, uno per specie.
   M.sorgentiSagome = [M.latifoglia[0].varianti[0], M.latifoglia[0].varianti[1], M.conifera[0].varianti[0],
-    M.pino[0].varianti[0], M.riva[0].varianti[0], M.secco[0].varianti[0]];
+    M.pino[0].varianti[0], M.riva[0].varianti[0], M.secco[0].varianti[0],
+    M.latifoglia[0].varianti[2], M.conifera[0].varianti[1]];
   return M;
 }
 

@@ -2328,6 +2328,23 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      secondo solo entro 18 m, punta) con l'ultimo ciuffo centrato un po' sotto la punta; cime più corte (faggio 5,2 m,
      pioppo 3 m). Bosco fitto: 568 000 triangoli contro 553 000.
      Bosco fitto in headless: ~550 000 triangoli (prima delle chiome nuove 458 000): da misurare sulla scheda.
+     *La variante è la specie* (richiesta dell'utente: «da una certa distanza vedo una forma di albero, arbusto e altro,
+     poi avvicinandomi la forma si stravolge del tutto e rende incoerente quello che vedo attorno»; proposta sua di una
+     figura standard per tipo a ogni distanza). Ogni istanza sceglie la variante una volta sola (`varia`) e la ritrova
+     a ogni livello con `floor(varia · numero di varianti del livello)`: ma i livelli avevano numeri diversi di
+     varianti (latifoglia 3 vicine, 2 medie, 2 sagome; conifera 2 e 1; pino 2 e 1; cespuglio 2 e 1; masso 3 e 1), quindi
+     un castagno a 200 m era la forma generica n° 1 e avvicinandosi diventava un'altra pianta. Non era un salto di
+     dettaglio ma di identità. Ora ogni livello ha una forma per specie, costruita dalle misure di quella vicina:
+     `latMedio(a, b, y, corteccia, foglia)` per quercia, faggio (corteccia e foglie chiare) e castagno, `abeteMedio
+     (largo, alto)` per i due abeti, `pinoDomestico(seme, 0)` per i due pini, due cespugli medi, tre massi lontani.
+     Verde misurato, vicino contro medio: quercia 3,0–8,4 m r 3,2 contro 2,7–8,2 r 3,4; faggio 2,7–9,3 r 2,9 contro
+     2,6–9,0 r 3,3; castagno 2,5–8,1 r 3,6 contro 2,7–8,3 r 3,7. Sagome: una tessera per specie (`SAGOME` cresce in coda
+     con `latifogliaCastagno` e `coniferaSlanciata`, l'atlante usa 8 tessere su 8; `SAGOME_LATIFOGLIA` e
+     `SAGOME_CONIFERA` le scelgono anche negli anelli dell'orizzonte). Un livello può avere o tante varianti quante il
+     vicino, o una sola condivisa (forma più povera ma identità ferma): `controllaVarianti` lo verifica al caricamento e
+     scrive un errore in console se qualcuno rompe la regola. Costo nel bosco fitto del percorso di prova (headless):
+     chiamate di disegno della vegetazione 28 → 32 (budget 35; +6 nel caso peggiore, con anche conifere e pini in vista),
+     triangoli 1 014 596 → 1 015 516 (+0,1 %), nessun triangolo in più per istanza.
      *Fondi, carrarecce e case collegate* (richiesta dell'utente: vista dall'alto «più organizzata», niente texture
      sovrapposte a casaccio e sfumate; confini così numerosi vogliono o una stradina o siepi e muretti; orti attorno al
      castello troppo fitti; doppia riga parallela alla strada). L'unità è il *fondo*, come nella campagna medievale:
