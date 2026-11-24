@@ -148,7 +148,10 @@ Nel codice di oggi [Probabile, da confermare con le misure del passo 1]:
 ## Dove stanno i parametri (dalle sessioni proprietarie)
 
 - *Vegetazione* (`js/3d/vegetazione3d.js`, `js/mondo/vegetazione.js`): livelli e distanze in `creaModelli` (alberi
-  60 / 300 / oltre; cespugli 35 / 160 m) e `VICINO` (erba 70 m, felci 70, ciottoli 50); densità in `VEGETAZIONE`; ombre
+  60 / 300 / oltre; cespugli 35 / 160 m). **Regola delle varianti**: ogni livello di un tipo ha o tante varianti quante
+  il livello vicino (una per specie, stessa forma a ogni distanza) o una sola condivisa; con numeri diversi l'oggetto
+  cambia identità avvicinandosi. `controllaVarianti` lo verifica al caricamento. Aggiungere una specie costa una
+  chiamata di disegno per livello, non triangoli per istanza: nel bosco fitto la vegetazione è a 32 chiamate su 35 e `VICINO` (erba 70 m, felci 70, ciottoli 50); densità in `VEGETAZIONE`; ombre
   finte in `OMBRE` (sole 1024², piede 2048²); micro-rilievo del prato in `materialeSuolo` (`wPrato`, entro 80 m).
 - *Strade e fiumi* (`js/3d/acqua.js`, sessione M6): nastro delle strade (`creaNastroStrada`) alzato di 0,25 m sul terreno
   disegnato con `polygonOffset`; nastri dei fiumi a +0,03 m sul pelo. **Cambiando la profondità** (invertita o due

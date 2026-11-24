@@ -1248,7 +1248,14 @@ export function* posizionaVegetazioneAPezzi(o, budget = 2.5) {
 // ─── Bosco lontano (sagome negli anelli dell'orizzonte) ──────────────────
 
 /** Tessere dell'atlante delle sagome (js/3d/vegetazione3d.js): una per forma d'albero. */
-export const SAGOME = { latifogliaTonda: 0, latifogliaOvale: 1, conifera: 2, pino: 3, riva: 4, secco: 5 };
+// Una tessera per specie (richiesta dell'utente: «da una certa distanza vedo una forma, avvicinandomi si stravolge
+// del tutto»): la sagoma lontana di un albero è la stessa pianta che si vede da vicino. I numeri nuovi vanno in coda
+// per non rinumerare i vecchi. `latifogliaTonda` = quercia, `latifogliaOvale` = faggio.
+export const SAGOME = { latifogliaTonda: 0, latifogliaOvale: 1, conifera: 2, pino: 3, riva: 4, secco: 5,
+  latifogliaCastagno: 6, coniferaSlanciata: 7 };
+/** Le tre latifoglie e le due conifere, nell'ordine delle varianti dei modelli (vegetazione3d.js). */
+export const SAGOME_LATIFOGLIA = [SAGOME.latifogliaTonda, SAGOME.latifogliaOvale, SAGOME.latifogliaCastagno];
+export const SAGOME_CONIFERA = [SAGOME.conifera, SAGOME.coniferaSlanciata];
 
 /** Parametri del bosco lontano ([Ipotesi] da tarare guardando e misurando). */
 export const BOSCO_LONTANO = {
@@ -1347,8 +1354,8 @@ export function* boscoLontanoAPezzi(carta, cx, cz, half, quota, stagione = 0, bu
         const wl = Math.max(0, 1 - wc - wp);
         const h2 = hash2(ix, iz, sA ^ 0x68e31da4);
         let v = (h2 / 4294967296) * (wl + wc + wp + ws);
-        const tessera = (v -= ws) < 0 ? SAGOME.secco : (v -= wc) < 0 ? SAGOME.conifera : (v -= wp) < 0 ? SAGOME.pino
-          : (h2 & 1 ? SAGOME.latifogliaTonda : SAGOME.latifogliaOvale);
+        const tessera = (v -= ws) < 0 ? SAGOME.secco : (v -= wc) < 0 ? SAGOME_CONIFERA[h2 & 1] : (v -= wp) < 0 ? SAGOME.pino
+          : SAGOME_LATIFOGLIA[h2 % 3];
         // Stessa distribuzione di taglie del blocco (TIPI: [0,45, 1,45] con curva 1,4) e stesso limite degli alberi.
         const eta = 0.45 + 1.0 * (((h2 >>> 8) & 0xff) / 256) ** 1.4;
         const scala = eta * (0.55 + 0.45 * campo(lim, x, z));
@@ -1388,7 +1395,7 @@ export function* boscoLontanoAPezzi(carta, cx, cz, half, quota, stagione = 0, bu
               if (Number.isNaN(y) || y < 0.5 || !Number.isNaN(livelloLago(carta, cx + x, cz + z))) continue;
               const eta = 0.6 + 0.9 * (((h >>> 8) & 0xff) / 256) ** 1.4;
               out.push(x + ((h >>> 16) & 0xff) / 255 * 4 - 2, y, z, eta * (0.55 + 0.45 * campo(lim, x, z)),
-                h & 1 ? SAGOME.riva : SAGOME.latifogliaTonda);
+                h & 1 ? SAGOME.riva : SAGOME_LATIFOGLIA[h % 3]);
             }
           });
         }
