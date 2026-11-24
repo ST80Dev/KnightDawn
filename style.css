@@ -372,8 +372,13 @@ html, body {
 }
 #menu-avvio button { cursor: pointer; }
 #menu-avvio button:hover, #menu-avvio button:focus-visible { background: #3a2410; border-color: #c8a030; outline: none; }
-#menu-avvio .continua { display: block; width: 100%; text-align: left; margin-bottom: 8px; }
-#menu-avvio .continua:last-child { margin-bottom: 0; }
+#menu-avvio .partita { display: flex; gap: 8px; margin-bottom: 8px; }
+#menu-avvio .partita:last-child { margin-bottom: 0; }
+#menu-avvio .continua { display: block; flex: 1; min-width: 0; text-align: left; }
+#menu-avvio .scarica { flex: none; font-size: 13px; }
+#menu-avvio .carica { width: 100%; }
+#menu-avvio .errore { color: #e08a50; font-size: 13px; margin-top: 8px; }
+#menu-avvio .errore[hidden] { display: none; }
 #menu-avvio .continua b, #menu-avvio .modo b { display: block; color: #e8c860; font-weight: normal; }
 #menu-avvio .continua span, #menu-avvio .modo span { display: block; font-size: 13px; color: #b8a880; margin-top: 2px; }
 #menu-avvio .modi { display: grid; gap: 8px; margin-bottom: 12px; }

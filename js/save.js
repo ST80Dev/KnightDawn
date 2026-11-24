@@ -149,6 +149,40 @@ const Save = {
     return row ? this.applyBlob(row.data) : false;
   },
 
+  // ─── File JSON (G1: il giocatore scarica e ricarica le partite dal menu d'avvio) ─────────────────
+  // Il file è la riga dello slot così com'è ({ slot, player_name, label, updated_at, data }).
+
+  /** Testo JSON della partita salvata di una modalità, per scaricarla; null se non c'è. */
+  esporta(modalita) {
+    const row = this._leggi(this.slotAutosave(modalita));
+    return row ? JSON.stringify(row, null, 1) : null;
+  },
+
+  /**
+   * Legge il testo di un file di salvataggio. Ritorna { modalita, row }; lancia un Error con un messaggio per il
+   * giocatore se il file non è un salvataggio di questa versione del gioco.
+   */
+  leggiFile(testo) {
+    let row;
+    try { row = JSON.parse(testo); } catch (e) { throw new Error('Il file non è un JSON valido.'); }
+    const d = row && row.data;
+    if (!d || !d.knight || !d.calendar) throw new Error('Il file non è un salvataggio di Knight Dawn.');
+    if (d.version !== SAVE_VERSION) throw new Error(`Salvataggio di un'altra versione (${d.version}, serve ${SAVE_VERSION}).`);
+    return { modalita: d.modalita === 'storia' ? 'storia' : 'libera', row };
+  },
+
+  /** Scrive una partita letta da file nello slot della sua modalità (sostituisce quella salvata). */
+  importa(modalita, row) {
+    const slot = this.slotAutosave(modalita);
+    try {
+      localStorage.setItem(this._key(slot), JSON.stringify({ ...row, slot }));
+      return true;
+    } catch (e) {
+      console.error('Importazione fallita:', e);
+      return false;
+    }
+  },
+
   async delete(slot) {
     if (slot == null) return false;
     try {

@@ -297,10 +297,10 @@ In più:
    imprecise (§3 *Propagazione delle informazioni*).
 3. **Il fantastico**: creature, maledizioni e luoghi leggendari.
 
-Il mondo ha **stagioni** che influenzano il gameplay. **Rinviate** [deciso con l'utente, novembre 2026]:
-nelle prime milestone di gioco (G1–G2 e oltre, finché non si riprendono) il mondo resta in **Primavera**
-(colori, limite delle nevi, costi di viaggio, eventi); il calendario continua a contare Diari e Stagioni.
-Quando si riprendono:
+Il mondo ha **stagioni** che influenzano il gameplay. **Ferme** [deciso con l'utente, novembre 2026]: le
+stagioni non scorrono; il mondo resta in **Primavera** (colori, limite delle nevi). La varietà di clima la danno
+i biomi della Carta, dal freddo all'arido. Il calendario non nomina la stagione: i Diari si contano da 1 a 12
+dentro la Luce (`CALENDAR.STAGIONI_ATTIVE = false` in `js/calendar.js`). Se un giorno si riattivano:
 - Primavera: viaggio facile, commercio attivo
 - Estate: siccità possibili, ribellioni contadine
 - Autunno: raccolto, feste, diplomazia
@@ -331,7 +331,8 @@ Era → Luce → Stagione → Diario → Passo
   può generare eventi, consumare Forza, avviare combattimenti. Velocità di scorrimento sulla
   Carta regolabile (vedi sotto).
 - **Diario** — **200 Passi** (~25 giorni in-fiction, "un mese"). Unità di cronaca,
-  cadenza per eventi di fazione, tributi, consigli. Numerato dentro la Stagione (1-3).
+  cadenza per eventi di fazione, tributi, consigli. Numerato dentro la Stagione (1-3); con le stagioni
+  ferme (oggi) numerato dentro la Luce (1-12).
 - **Stagione** — **3 Diari = 600 Passi** (~2,5 mesi). Quattro per Luce, nell'ordine:
   Primavera, Estate, Autunno, Inverno. Modulano viaggio, eventi, raccolti.
 - **Luce** — **4 Stagioni = 12 Diari = 2.400 Passi** (~10 mesi, "un anno").

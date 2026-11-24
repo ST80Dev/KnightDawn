@@ -983,15 +983,21 @@ async function entraTavullia() {
 }
 
 /**
- * Scelta d'avvio (G1, passo 1): menu prima della generazione del mondo. ?storia o ?libera lo saltano (continua la
- * partita di quella modalità, o ne comincia una se non c'è); ?seme= precompila il seme di una partita nuova.
+ * Scelta d'avvio (G1, passo 1): menu prima della generazione del mondo, con le partite salvate, i file JSON da
+ * scaricare o caricare e la partita nuova (seme casuale se non scritto). ?storia o ?libera lo saltano (continua la
+ * partita di quella modalità, o ne comincia una se non c'è, sul ?seme= dell'indirizzo se c'è).
  */
 async function sceltaDiAvvio() {
   const partite = { storia: Save.infoPartita('storia'), libera: Save.infoPartita('libera') };
-  const seme = PARAMETRI.get('seme') ?? '';
   const diretta = PARAMETRI.has('storia') ? 'storia' : PARAMETRI.has('libera') ? 'libera' : null;
-  if (diretta) return { modalita: diretta, nuova: !partite[diretta], seme, luogo: TAVULLIA ? 'tavullia' : 'partenza' };
-  return mostraMenuAvvio({ partite, seme });
+  if (diretta) {
+    return { modalita: diretta, nuova: !partite[diretta], seme: PARAMETRI.get('seme') ?? '', luogo: TAVULLIA ? 'tavullia' : 'partenza' };
+  }
+  return mostraMenuAvvio({
+    partite,
+    esporta: (m) => Save.esporta(m),
+    leggiFile: (testo) => Save.leggiFile(testo),
+  });
 }
 
 async function init() {
@@ -1003,7 +1009,9 @@ async function init() {
     : await sceltaDiAvvio();
   modalita = scelta.modalita;
   const slot = Save.slotAutosave(modalita);
-  const ripresa = !scelta.nuova && await Save.load(slot);
+  // Partita da file: entra nello slot della sua modalità (se localStorage lo permette) e si riprende da lì.
+  if (scelta.importa) Save.importa(modalita, scelta.importa);
+  const ripresa = scelta.importa ? Save.applyBlob(scelta.importa.data) : !scelta.nuova && await Save.load(slot);
   if (!ripresa) {
     if (!PROVA_PRESTAZIONI) await Save.delete(slot);
     nuovaPartitaDati(modalita);

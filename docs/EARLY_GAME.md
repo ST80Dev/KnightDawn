@@ -224,7 +224,10 @@ lavorando.
 3. Si comincia dalla Veglia, ma resta sempre una **modalità libera** senza storia, per provare la grafica
    e il resto senza ripassare dall'inizio.
 4. La **scelta del tipo di partita viene prima della generazione del mondo** (menu d'avvio).
-5. **Niente stagioni per ora**: il mondo resta in Primavera (`docs/GDD.md` §2 *Scoperta*, stagioni).
+5. **Stagioni ferme**: il mondo resta in Primavera e la data non nomina la stagione (`docs/GDD.md` §2
+   *Scoperta*, stagioni).
+6. **Salvataggi in file JSON** che il giocatore scarica e ricarica dal menu d'avvio, prima della generazione del
+   mondo; il seme di una partita nuova è casuale se non lo si scrive.
 
 **Obiettivo.** Da una partita nuova in modalità Storia si gioca la Veglia dall'inizio all'investitura:
 lavori nel borgo per i primi oro, mercato, maestro d'armi, un incarico fuori porta con il primo
@@ -263,8 +266,14 @@ poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un
    3D accanto (`Knight.cavallo` resta vuoto finché la milestone Cavallo non corregge `isMounted`, che oggi darebbe lo
    sconto di Forza anche a piedi). Provato in headless: menu, Storia nuova su seme scritto, `T` rifiutato, F8 al menu
    con *Continua*, Libera nuova su seme casuale, ricarica con due *Continua*, ripresa della Storia, `?prova` senza menu;
-   nessun errore. Dopo una ricarica normale l'indirizzo contiene `?seme=` del mondo in corso, quindi il campo del seme
-   di una partita nuova arriva precompilato con quel seme (per un mondo nuovo: «Casuale»).
+   nessun errore.
+   *Seconda parte (dopo la prima lettura dell'utente):* **file JSON**. Nel menu ogni partita salvata ha «Scarica»
+   (file `knightdawn-<modalità>-seme<N>-<data>.json`, la riga del salvataggio così com'è) e «Carica una partita da
+   file…» riprende una partita da un file: entra nello slot della sua modalità (con conferma se ce n'è già una) e si
+   gioca da lì, anche se il browser non permette localStorage. Un file che non è un salvataggio, o di un'altra versione,
+   dà un messaggio e non tocca nulla. In gioco: F8 salva e porta al menu, da lì si scarica. Il campo del seme parte
+   vuoto (casuale). Provato in headless: scarica, file non valido rifiutato, caricamento in un browser pulito con
+   oro, data e seme identici.
 2. **Carta del cronista vera.** Riquadro con titolo, testo, pulsanti tematici, prerequisiti visibili
    («Richiede…») ed esito; usa il motore di `js/events.js` così com'è. Effetto di tempo nuovo
    `{ type:'tempo', minuti:N }` accanto a `passi` (`Calendar.avanzaMinuti`); i costi della Veglia passano
@@ -313,7 +322,8 @@ dal menu e conserva la sua partita a parte; il percorso di prova funziona come p
 
 - Durata della Veglia: ~60 minuti reali.
 - **Durante la Veglia non si muore**: a Salute 0 il garzone sviene e si risveglia nel borgo, curato, con
-  qualche ora persa e senza l'oro che aveva addosso. **Dopo l'investitura la morte è vera**: la partita
-  Storia finisce e il suo salvataggio si cancella.
+  qualche ora persa e senza l'oro che aveva addosso (confermato). **Dopo l'investitura la morte è vera**: la
+  partita Storia finisce e il suo salvataggio si cancella (confermato; un file JSON scaricato prima resta
+  del giocatore).
 - File nuovo approvato: `js/3d/interfaccia.js` (menu d'avvio, Carta del cronista, riquadro di
   combattimento).

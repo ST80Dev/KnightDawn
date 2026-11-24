@@ -20,13 +20,17 @@ function _quando(iso) {
  * Menu d'avvio. Si risolve con la scelta del giocatore; il chiamante genera il mondo dopo.
  * @param {{
  *   partite: { storia: object|null, libera: object|null },  // { label, updated_at, seme, terreno } o null
- *   seme?: string|null,                                       // precompila il campo (es. da ?seme=)
+ *   seme?: string|null,                                       // precompila il campo
+ *   esporta?: (modalita: string) => string|null,              // testo JSON della partita salvata, per scaricarla
+ *   leggiFile?: (testo: string) => { modalita: string, row: object },  // lancia un Error se il file non va
  * }} opzioni
- * @returns {Promise<{ modalita: 'storia'|'libera', nuova: boolean, seme: string, luogo: 'partenza'|'tavullia' }>}
- *   seme: testo scritto ('' = casuale); luogo vale solo per una partita Libera nuova.
+ * @returns {Promise<{ modalita: 'storia'|'libera', nuova: boolean, seme: string, luogo: 'partenza'|'tavullia',
+ *   importa?: object }>}
+ *   seme: testo scritto ('' = casuale); luogo vale solo per una partita Libera nuova; importa: la riga di salvataggio
+ *   letta da un file (la partita continua da lì).
  */
 export function mostraMenuAvvio(opzioni) {
-  const { partite, seme = '' } = opzioni;
+  const { partite, seme = '', esporta, leggiFile } = opzioni;
   return new Promise((risolvi) => {
     const el = document.createElement('div');
     el.id = 'menu-avvio';
@@ -34,12 +38,19 @@ export function mostraMenuAvvio(opzioni) {
       const p = partite[m];
       const dove = p.terreno === 'tavullia' ? 'Tavullia' : (Number.isFinite(p.seme) ? `seme ${p.seme}` : '');
       const det = [p.label, dove, _quando(p.updated_at) && `salvata il ${_quando(p.updated_at)}`].filter(Boolean).join(' · ');
-      return `<button type="button" class="continua" data-modalita="${m}"><b>Continua — ${MODALITA[m].nome}</b>`
-        + `<span>${_esc(det)}</span></button>`;
+      return `<div class="partita"><button type="button" class="continua" data-modalita="${m}"><b>Continua — ${MODALITA[m].nome}</b>`
+        + `<span>${_esc(det)}</span></button>`
+        + (esporta ? `<button type="button" class="scarica" data-modalita="${m}" title="Scarica questa partita in un file JSON">Scarica</button>` : '')
+        + '</div>';
     }).join('');
     el.innerHTML = `<div class="riquadro">
       <div class="titolo">Knight Dawn</div>
       ${continua ? `<div class="sezione">${continua}</div>` : ''}
+      ${leggiFile ? `<div class="sezione file">
+        <button type="button" class="carica">Carica una partita da file…</button>
+        <input type="file" class="file-partita" accept=".json,application/json" hidden>
+        <div class="errore" hidden></div>
+      </div>` : ''}
       <div class="sezione nuova">
         <div class="etichetta">Nuova partita</div>
         <div class="modi">
@@ -59,7 +70,8 @@ export function mostraMenuAvvio(opzioni) {
         <div class="avviso" hidden></div>
         <button type="button" class="comincia">Comincia</button>
       </div>
-      <div class="nota">Le due modalità hanno salvataggi separati: provare in Libera non tocca la Storia. F8 in gioco riporta qui.</div>
+      <div class="nota">Le due modalità hanno salvataggi separati: provare in Libera non tocca la Storia. F8 in gioco salva e
+        riporta qui, dove la partita si può scaricare in un file.</div>
     </div>`;
     document.body.appendChild(el);
 
@@ -84,6 +96,36 @@ export function mostraMenuAvvio(opzioni) {
     el.querySelectorAll('.continua').forEach((b) => b.addEventListener('click', () => {
       fine({ modalita: b.dataset.modalita, nuova: false, seme: '', luogo: 'partenza' });
     }));
+    el.querySelectorAll('.scarica').forEach((b) => b.addEventListener('click', () => {
+      const m = b.dataset.modalita, testo = esporta(m);
+      if (!testo) return;
+      const p = partite[m], d = p.updated_at ? new Date(p.updated_at) : new Date();
+      const due = (n) => String(n).padStart(2, '0');
+      const quando = `${d.getFullYear()}${due(d.getMonth() + 1)}${due(d.getDate())}-${due(d.getHours())}${due(d.getMinutes())}`;
+      const dove = p.terreno === 'tavullia' ? 'tavullia' : `seme${p.seme ?? ''}`;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([testo], { type: 'application/json' }));
+      a.download = `knightdawn-${m}-${dove}-${quando}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }));
+    const inFile = el.querySelector('.file-partita'), errore = el.querySelector('.errore');
+    el.querySelector('.carica')?.addEventListener('click', () => inFile.click());
+    inFile?.addEventListener('change', async () => {
+      const f = inFile.files && inFile.files[0];
+      inFile.value = '';
+      if (!f) return;
+      try {
+        const { modalita: m, row } = leggiFile(await f.text());
+        if (partite[m] && !window.confirm(`Il file contiene una partita ${MODALITA[m].nome}: sostituirà quella salvata. Continuare?`)) return;
+        fine({ modalita: m, nuova: false, seme: '', luogo: 'partenza', importa: row });
+      } catch (err) {
+        errore.textContent = `«${f.name}»: ${err.message}`;
+        errore.hidden = false;
+      }
+    });
     el.querySelector('.casuale').addEventListener('click', () => { inSeme.value = ''; inSeme.focus(); });
     const comincia = () => {
       const m = modoScelto();
