@@ -48,6 +48,7 @@ export const LAGO = [104, 150, 178];
 export const COLORE_FIUME = '#2f6690';
 export const COLORE_STRADA = 'rgba(122, 74, 38, 0.95)';   // strade di terra battuta
 export const COLORE_TRAGHETTO = 'rgba(243, 248, 252, 0.92)';   // rotte dei traghetti sugli specchi d'acqua interni
+export const COLORE_TRAGHETTO_ALONE = 'rgba(26, 48, 68, 0.55)';   // linea scura sotto, per leggerle sull'acqua
 export const COLORE_SENTIERO = 'rgba(150, 40, 30, 0.9)';
 // [classe, spessore (come i fiumi), tratteggio]: dalla più importante.
 export const STILE_STRADE = [['maestra', 1.6, []], ['carrareccia', 1.2, []], ['mulattiera', 1.0, [3, 2]], ['sentiero', 0.9, [1.5, 2]]];
@@ -798,15 +799,23 @@ export function createCartaVista(contenitore, opzioni = {}) {
     }
     // Traghetti: rotte sull'acqua fra due approdi (richiesta dell'utente, novembre 2026). Tratteggio chiaro, per
     // distinguerle subito da una strada: sono un passaggio, non un percorso che si cammina.
-    for (const t of carta.traghetti ?? []) {
+    if ((carta.traghetti ?? []).length) {
+      const w = Math.max(1.6 * dpr / s, 0.12);
+      const rotta = (t) => {
+        ctx.beginPath();
+        ctx.moveTo(t.a.rx, t.a.ry);
+        if (t.rotta) for (let i = 0; i < t.rotta.x.length; i++) ctx.lineTo(t.rotta.x[i], t.rotta.y[i]);
+        ctx.lineTo(t.b.rx, t.b.ry);
+        ctx.stroke();
+      };
+      // Sotto una linea scura continua, sopra il tratteggio chiaro: sull'acqua azzurra il solo chiaro si perde.
+      ctx.strokeStyle = COLORE_TRAGHETTO_ALONE;
+      ctx.lineWidth = w * 2.2;
+      for (const t of carta.traghetti) rotta(t);
       ctx.strokeStyle = COLORE_TRAGHETTO;
-      ctx.lineWidth = Math.max(1.6 * dpr / s, 0.12);
-      ctx.setLineDash([3 * Math.max(1.6 * dpr / s, 0.12), 2.2 * Math.max(1.6 * dpr / s, 0.12)]);
-      ctx.beginPath();
-      ctx.moveTo(t.a.rx, t.a.ry);
-      if (t.rotta) for (let i = 0; i < t.rotta.x.length; i++) ctx.lineTo(t.rotta.x[i], t.rotta.y[i]);
-      ctx.lineTo(t.b.rx, t.b.ry);
-      ctx.stroke();
+      ctx.lineWidth = w;
+      ctx.setLineDash([3 * w, 2.2 * w]);
+      for (const t of carta.traghetti) rotta(t);
       ctx.setLineDash([]);
     }
     // Segni in pixel dello schermo, indipendenti dallo zoom.
