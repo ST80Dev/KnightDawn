@@ -71,6 +71,7 @@ function trasferibili(carta) {
   for (const v of Object.values(carta)) if (ArrayBuffer.isView(v)) b.push(v.buffer);
   for (const f of carta.fiumi) b.push(f.buffer);
   if (carta.griglia) b.push(carta.griglia.h.buffer, carta.griglia.acqua.buffer);
+  if (carta.acquaVicina) b.push(carta.acquaVicina.d.buffer, carta.acquaVicina.dolce.buffer);   // distanza dall'acqua (5,6 MB)
   for (const f of carta.stradeFini ?? []) if (f) b.push(f.x.buffer, f.z.buffer, f.h.buffer, f.tipo.buffer);   // griglia fine (G1): ~22 MB, trasferita
   return b;
 }

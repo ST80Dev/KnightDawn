@@ -3137,6 +3137,36 @@ bacino 0,05 s. Prototipo: i corsi d'acqua che ne escono seguono le valli del ril
 Budget: generazione ≤ ~15 s con l'avanzamento a schermo; `VERSIONE_GENERATORE` cambia a ogni passo che cambia le Carte.
 Le mesh 3D restano per blocco (tutta la mappa a 7,8 m sarebbe centinaia di milioni di vertici).
 
+## Densità degli insediamenti e vicinanza all'acqua (novembre 2026) — misure e piano, da approvare
+
+> Richiesta dell'utente: «villaggi e borghi castelli si trovavano per necessità nelle vicinanze di un fiume»; e
+> «il mondo è troppo spoglio: una strada ogni 5/10 km, un villaggio lo stesso, castelli a 20/30 km… manca tutto il
+> corollario di case isolate, villaggi e altro». I castelli in numero vanno bene.
+
+**Misure di partenza** (seme 570549, terra 9849 km²):
+
+| | Quanti | Uno ogni | Distanza mediana dal più vicino |
+|---|---|---|---|
+| Rocche, città e monasteri | 35 | 281 km² | 6,9 km |
+| Villaggi | 78 | 126 km² | 4,9 km |
+| Villaggi e ovili | 107 | 92 km² | 4,1 km |
+| Tutti i luoghi (anche grotte, eremi, rovine) | 232 | 42 km² | 2,7 km |
+
+Case isolate: solo nella campagna di rocche e borghi (10 e 4 per blocco di 2×2 km con una rocca, **0** nei blocchi
+senza). Distanza dall'acqua: rocche 2,9 km mediana (97 % oltre 1 km), villaggi 1,7 km (65 % oltre 1 km).
+
+**Fatto**: `mappaAcqua` e `distanzaAcqua(carta, x, z, dolce)` in `js/mondo/scena.js`: distanza dall'acqua a 125 m su
+tutta la Carta, calcolata con i fiumi fini (5,5 MB, nessun costo di tempo apprezzabile), così chi sceglie i siti la
+legge senza ricalcolare. Due mappe: da qualsiasi acqua e solo da acqua dolce (fiumi, torrenti, laghi interni)
+[chiesto dalla sessione M8: un villaggio a 500 m da un fiume è normale, uno a 500 m dal mare su una costa a picco no,
+e un mulino sul mare non esiste]. Provato su 163 punti di costa: nell'88 % l'acqua dolce risulta oltre 500 m più
+lontana del mare.
+
+**Da decidere con l'utente** (numeri bersaglio, poi il lavoro è di M8 per i siti e di M7/Vegetazione per le case):
+villaggi e frazioni da 78 a ~250–300 (uno ogni 35–40 km², mediana ~2,5 km); case isolate e cascine anche fuori dalla
+campagna dei borghi (1–3 per blocco in pianura e collina coltivata, nessuna in alta montagna); ovili e stazzi da 29 a
+~60–80; mulini sull'acqua (tipo nuovo); villaggi quasi tutti entro 400–600 m dall'acqua.
+
 ## Fuori dal prototipo (non farlo ora)
 
 Multiplayer, server/VPS, NPC con IA, mobile/touch, modelli esterni, combattimento in 3D, ombre di
