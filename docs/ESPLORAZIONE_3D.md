@@ -3150,6 +3150,13 @@ bacino 0,05 s. Prototipo: i corsi d'acqua che ne escono seguono le valli del ril
   base cerca anche i percorsi dei fiumi su tutta la mappa prima di partire: misurando non cambia nulla (dopo G2 alla
   vecchia raffinatura resta poco da correggere), ma è la base di tutto il resto e non deve dipendere da quel caso.
 
+  **Nel browser, la misura che conta** (Chromium headless, tre semi, con la densità di M8 in `main`): la sola
+  generazione della Carta, somma delle fasi, passa da **15,4–17,9 s a 12,3–13,9 s**. Senza il terreno base la densità
+  di M8 sfondava il budget di 15 s su tutti e tre i semi; con esso ci sta su tutti e tre. L'avvio completo (fino alla
+  scena giocabile, quindi comprese mesh, vegetazione e orizzonte) passa da 20,6–23,5 s a 17,5–19,7 s: lì il guadagno
+  è del 12 %, perché la parte 3D non è toccata. Nel browser il precalcolo delle strade rende meno che in Node
+  (8,8 s contro 7,8 sul seme 570549): [ipotesi] la griglia è 22 MB e nel Worker leggerla rende meno che ricalcolare.
+
   Misure (Node). Seme 570549 con 78 villaggi: precalcolo 7,1 → 5,4 s, griglia 3,2 → 0,25 s, terrenoBase 1,0 s, e nel
   browser il mondo è pronto in 20,5 s invece di 24,2. Con la densità di M8 (264–298 villaggi), **sei semi, generazione
   completa da zero**: totale **16,6–19,0 s → 11,9–13,7 s**, cioè 4,7–5,3 s in meno sempre, e anche il seme peggiore
