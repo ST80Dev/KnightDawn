@@ -50,6 +50,7 @@ async function generaQui(seme, avanzamento) {
   completaSiti(aggiungiStrade(aggiungiSiti(carta)));
   precalcolaStrade(carta);                          // tracciato fine di tutte le strade (G6), come nel Worker
   carta.griglia = grigliaMondo(carta);              // griglia fine (G1), come nel Worker
+  carta.statistiche.msTerrenoBase = carta.terrenoBase.ms;   // prima di liberarlo: serve al conto delle fasi
   carta.terrenoBase = null;                         // servito a strade e griglia: 25 MB da liberare
   carta.verifiche = { fiumi: verificaFiumi(carta), panorami: verificaPanorami(carta), varieta: verificaVarieta(carta),
     luoghi: verificaLuoghi(carta), siti: verificaSiti(carta) };

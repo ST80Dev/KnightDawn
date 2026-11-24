@@ -125,6 +125,7 @@ self.onmessage = async (e) => {
       precalcolaStrade(carta);
       // Griglia del rilievo fine su tutta la mappa (piano «Mondo generato in anticipo», passo G1).
       carta.griglia = grigliaMondo(carta, (f) => avanzamento('Rilievo fine di tutta la mappa', 0.97 + 0.025 * f));
+      carta.statistiche.msTerrenoBase = carta.terrenoBase.ms;   // prima di liberarlo: serve al conto delle fasi
       carta.terrenoBase = null;         // servito a strade e griglia: 25 MB che non vanno né in cache né alla pagina
       const t0 = performance.now();
       carta.verifiche = { fiumi: verificaFiumi(carta), panorami: verificaPanorami(carta), varieta: verificaVarieta(carta),
