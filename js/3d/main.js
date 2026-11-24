@@ -21,7 +21,7 @@ import { createRoccaAPezzi } from './rocca3d.js';
 import { creaCaseCampagna, quotaFinestre } from './edifici3d.js';
 import { createBorgoAPezzi } from './borgo3d.js';
 import { createVillaggioAPezzi, createMonasteroAPezzi, createEremoAPezzi, pianoDelSito } from './villaggio3d.js';
-import { createRovinaAPezzi } from './rovine3d.js';
+import { createRovinaAPezzi, createMisteroAPezzi } from './rovine3d.js';
 import { raggioSito, climaDelLuogo } from '../mondo/siti.js';
 import { createCartaVista } from './cartaVista.js';
 import { creaMinimappa } from './minimappa.js';
@@ -607,10 +607,12 @@ function* costruisciVillaggi(cx, cz, ter) {
   };
   for (const s of carta?.siti ?? []) {
     const eremo = s.tipo === 'eremo', rovina = s.tipo === 'rovina' || s.tipo === 'abbandonato';
-    if (s.tipo !== 'villaggio' && s.tipo !== 'ovile' && !eremo && !rovina) continue;
+    const mistero = s.tipo === 'grotta' || s.tipo === 'fantastico';
+    if (s.tipo !== 'villaggio' && s.tipo !== 'ovile' && !eremo && !rovina && !mistero) continue;
     const x = s.x - cx, z = s.z - cz, m = raggioSito(s) + 50;
     if (Math.abs(x) > half + m || Math.abs(z) > half + m) continue;
-    if (rovina) out.push(yield* createRovinaAPezzi(suoloMondo, s, x, z, carta));          // M8, passo 4
+    if (mistero) out.push(yield* createMisteroAPezzi(suoloMondo, s, x, z, carta));        // M8, passo 5
+    else if (rovina) out.push(yield* createRovinaAPezzi(suoloMondo, s, x, z, carta));     // M8, passo 4
     else out.push(eremo ? yield* createEremoAPezzi(suoloMondo, s, x, z, carta)
       : yield* createVillaggioAPezzi(suoloMondo, s, x, z, carta, cx, cz));
   }
@@ -675,7 +677,9 @@ function* preparaMondo(desc) {
     piani: [...(carta.luoghi || []).flatMap((l) => l.piani || []),
       ...(carta.siti || []).filter((s) => s.tipo === 'villaggio' || s.tipo === 'ovile' || s.tipo === 'eremo').map((s) => pianoDelSito(s)),
       // Rovine e abbandonati: cerchio più stretto, gli alberi stanno fuori dai muri ma il bosco se li riprende.
-      ...(carta.siti || []).filter((s) => s.tipo === 'rovina' || s.tipo === 'abbandonato').map((s) => pianoDelSito(s, 0.45))], mare: true,
+      ...(carta.siti || []).filter((s) => s.tipo === 'rovina' || s.tipo === 'abbandonato').map((s) => pianoDelSito(s, 0.45)),
+      // Grotte e luoghi del fantastico: cerchio ancora più stretto, stanno dentro il paesaggio che li circonda.
+      ...(carta.siti || []).filter((s) => s.tipo === 'grotta' || s.tipo === 'fantastico').map((s) => pianoDelSito(s, 0.4))], mare: true,
   }, MS_PEZZO);
   yield 'posizione vegetazione';
   const veg = yield* creaVegetazioneAPezzi(posVeg, ter, renderer, MS_PEZZO);   // il terreno nuovo, mai quello in scena
