@@ -1739,7 +1739,7 @@ M7 (`edifici3d.js`, opzione `clima`, PR #201); qui si collega il clima del luogo
   di scandole sulla neve; villaggio arido (570549, 30900, 85100) cubi bianchi, terrazze e pergole fra le dune; rocca
   arida (33117, 103100, 81440) terrazze chiare dentro le mura; il borgo in foresta ora è temperato, a graticcio.
 
-### Passo 3 — monasteri ed eremi (fatto, da provare)
+### Passo 3 — monasteri ed eremi (fatto, provato dall'utente e unito: PR #209 e #213)
 
 Codice in `js/3d/villaggio3d.js` (come da piano: il file tiene villaggi, ovili, monasteri ed eremi), agganci in
 `main.js`. Nessun cambio al generatore: `VERSIONE_GENERATORE` invariata.
@@ -1778,6 +1778,56 @@ Codice in `js/3d/villaggio3d.js` (come da piano: il file tiene villaggi, ovili, 
   sette edifici nominati — chiesa, dormitorio, biblioteca, refettorio, foresteria, infermeria, pozzo — a 16–17
   chiamate e ~9.600 triangoli.
 - **Fuori dal passo**: monaci (abitanti3d.js di M7), campane, cimitero, chiostro a due piani.
+
+### Passo 4 — rovine e luoghi abbandonati (fatto, provato dall'utente e unito: PR #214)
+
+File nuovo `js/3d/rovine3d.js` (era già fra quelli approvati), agganci in `main.js`. Nessun cambio al generatore.
+- **Differenza fra i due tipi**, che guida tutto il modulo: una **rovina** non ha più tetti né solai (muri spezzati,
+  monconi di torre, macerie, e nessuna terra battuta: l'erba ha coperto tutto), e si costruisce con geometria propria,
+  non col kit, che fa case intere; un luogo **abbandonato** sta ancora in piedi, con il suo tetto, ma è vuoto: lì il
+  kit serve, e si aggiungono la cinta crollata, un corpo di fabbrica caduto di fianco e un'aia sbiadita.
+- **Rovine** (15–20 per mondo): *castello* (anello di muro spezzato di 11–17 m di raggio con due o tre monconi di
+  torre), *torre* (moncone con uno spigolo più alto e un pezzo di recinto), *chiesa* (i due muri lunghi, la facciata
+  e l'abside a semicerchio, senza tetto), *villaggio* (quattro-otto impronte di case a muri bassi).
+- **Abbandonati** (10–15): *torre* (muri interi fino a 11 m, senza tetto), *maniero* (il `corpo` del kit senza
+  comignolo), *casale* (la casa rurale del kit). Tutti con la cinta crollata e il corpo caduto.
+- **Muro spezzato**: tratti di 1,8 m con l'altezza da un profilo che ondeggia lungo il muro; dove scende sotto la
+  soglia il tratto è crollato, e le due estremità di ogni tratto hanno quote diverse, così la cima non è mai dritta.
+- **Invecchiamento**: dopo l'unione, il colore per vertice vira al verde al piede (edera) e sulle rotture in piano
+  (muschio). Due tarature sbagliate prima di quella buona: con la forza all'80 % la pietra sembrava dipinta di verde,
+  e misurando l'altezza da un piano unico **in pendenza tutta la parte a valle restava verde**; ora l'altezza si
+  misura dal terreno sotto ogni vertice e la forza è al 38 %, con sfumatura quadratica.
+- **Vegetazione**: cerchio d'esclusione più stretto che per i villaggi (0,45 invece di 0,7 del raggio): gli alberi
+  stanno fuori dai muri, ma il bosco si riprende la rovina.
+- **Misure** [Certo, Chromium headless, seme 570549, nessun errore]: una rovina è **una sola chiamata** (324–1.560
+  triangoli), perché tutta la pietra si unisce; la torre abbandonata 2; maniero e casale 10–12, perché usano il kit.
+  Il budget del piano (≤ 8 chiamate per un luogo speciale) vale per i luoghi senza kit; con il kit si arriva a 12,
+  come già l'eremo del passo 3 (11).
+- **Attenzione per le prove**: le coordinate dei siti **non** si possono ricavare da una pipeline ridotta in Node
+  (generaCarta → aggiungiLuoghi → aggiungiSiti): saltando `fiumiFini` i punteggi cambiano e i siti si spostano. Vanno
+  letti da `window.kd.carta.siti` nel browser.
+
+### Passo 5 — grotte e luoghi del fantastico (fatto, da provare)
+
+Nello stesso `js/3d/rovine3d.js`. Nessun cambio al generatore.
+- **Materiale nuovo**: una grotta e un cerchio di pietre sono roccia viva, non muratura, e la texture a corsi di
+  `materialeMuro` le farebbe sembrare costruite. Accanto alla mesh di muratura c'è quindi una seconda mesh a facce
+  piatte con il colore per vertice, che tiene roccia, terra del tumulo, legno e panni. **Il buio dentro la grotta è
+  lo stesso materiale col colore quasi nero: non costa una chiamata in più.**
+- **Grotta** (10–15 per mondo, sul punto più ripido della cella): una fascia di roccia attraversa il pendio, con il
+  vano aperto in mezzo; stipiti e architrave sono blocchi a facce piatte, così il vuoto è davvero un vuoto, e i massi
+  irregolari si appoggiano dopo. Tutto su **una sola quota di riferimento**: appoggiando ogni pezzo al terreno sotto
+  di sé, su un pendio ripido i pezzi di monte salivano sopra l'architrave e il vano si chiudeva a fessura.
+- **Luoghi del fantastico** (8–12): *cerchio di pietre* (7–12 lastre infisse e storte, una o due cadute), *tumulo*
+  (cupola d'erba, cordolo di massi, porta di tre lastre a valle col buio dietro), *albero sacro* (tronco grosso,
+  chioma a grappolo di blocchi, sassi d'offerta e pali con i panni), *rovine antiche* (basamento a due gradini,
+  sei-nove colonne spezzate, una o due colonne a terra in rocchi).
+- **Misure** [Certo, Chromium headless, seme 570549, nessun errore]: **una chiamata per luogo**, 120–604 triangoli.
+  Il più leggero di tutti i passi di M8.
+- **Punto debole dichiarato**: la **grotta** è l'unica delle cinque che non convince ancora. Quattro tentativi: massi
+  tondi (sembrava un mucchio di sassi), architrave da terra (tappava il vano), quote per pezzo (fessura), parete a
+  blocchi (letta come un bunker). Quella consegnata ha il vano visibile e la scala giusta, ma la parete resta
+  squadrata. Da rivedere con l'utente: serve una forma di roccia più ricca, o un imbocco scavato invece che costruito.
 
 ### Decisioni tecniche
 
