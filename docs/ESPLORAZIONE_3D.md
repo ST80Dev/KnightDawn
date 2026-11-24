@@ -3056,6 +3056,21 @@ bacino 0,05 s. Prototipo: i corsi d'acqua che ne escono seguono le valli del ril
   punto) e il totale è 8 s. Strade nel blocco: da 300–550 ms a ~40 ms. Carta zoomata: strade vere subito. Costo: la
   generazione di una mappa nuova in headless passa da ~15 a ~22 s (si può scendere leggendo il terreno dalla griglia
   nella ricerca, ~4 s, o con più Worker). `VERSIONE_GENERATORE` `+strade-fini-1`.
+  **Terreno base, fatto** (novembre 2026, dopo la segnalazione di M8: con 295 villaggi il precalcolo saliva a 14,6 s).
+  `terrenoBase` (scena.js) calcola una volta, subito dopo le rocche, il terreno «senza strade» di tutta la Carta sulla
+  stessa griglia di 62,5 m dei fiumi fini — rilievo, alvei e terrapieni, cioè `quotaFinale` meno lo spianamento delle
+  strade — più il livello dell'acqua e una mappa dei versanti ripidi. Serve a due cose:
+  - la ricerca dei tracciati legge la quota dalla griglia invece di ricalcolare il rilievo cella per cella (era il 58 %
+    del suo tempo). Sui versanti oltre il 12 %, dove la griglia appiattisce dossi e incisioni e la strada ci finirebbe
+    dentro, la quota si ricalcola esatta: senza questo le strade oltre il 25 % di pendenza passavano da 27 a 36 km e
+    compariva una maestra al 38 %; con esso la qualità è la stessa di prima (27,5 km oltre il 25 %, 3,0 km oltre il 40 %);
+  - la griglia del mondo (G1) parte da lì e aggiunge solo i ripiani delle strade — identica cella per cella (scarto
+    massimo 0,00 m su 2,77 milioni di celle, acqua uguale), ma da 3,2 s a 0,25 s. Le celle dentro i terrapieni, dove
+    `quotaFinale` applica strade e terrapieni nell'ordine inverso, si rifanno esatte: sono poche centinaia.
+
+  Misure (seme 570549, 78 villaggi): precalcolo delle strade 7,1 → 5,3 s, griglia 3,2 → 0,25 s, terrenoBase 1,0 s;
+  nel browser il mondo è pronto in 20,7 s invece di 24,2. Il terreno base (25 MB) viene liberato dopo la griglia: non
+  va in cache né alla pagina. `VERSIONE_GENERATORE` `+terreno-base-1` (i tracciati cambiano di poco: 1346 → 1341 km).
 - **G7 — Orizzonte** dalla griglia (oggi ~650 ms a ogni cambio di blocco): con la sessione M1.
 
 Budget: generazione ≤ ~15 s con l'avanzamento a schermo; `VERSIONE_GENERATORE` cambia a ogni passo che cambia le Carte.

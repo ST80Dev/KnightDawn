@@ -15,7 +15,8 @@
 // oltre la pendenza massima conta come la strada a tornanti che servirebbe: dislivello / p_max × `tornanti`.
 
 import { BIOMA, ACQUA } from './carta.js';
-import { quotaMondo, scavaFiumi, livelloLago, distanzaPiano, raffinaZona, quotaPiano, spianaLuoghi } from './scena.js';
+import { quotaMondo, scavaFiumi, livelloLago, distanzaPiano, raffinaZona, quotaPiano, spianaLuoghi, quotaBase,
+  terrenoRipido, distanzaAcqua } from './scena.js';
 import { smoothstep, completa } from './rumore.js';
 import { RAMPA_PORTA } from './luoghi.js';   // import circolare (luoghi → scena → strade): usata solo dentro le funzioni
 
@@ -68,6 +69,7 @@ export const STRADE = {
     guado: 4,
     passo: 5,                   // m tra i punti del tracciato finale
     liscia: [3, 2],             // media mobile ±3 punti, 2 passate (toglie i gradini senza tagliare i tornanti)
+    vicinoAcqua: 120,           // m: oltre questa distanza da un corso d'acqua il punto è asciutto (mappa dell'acqua)
     rampaMargine: 6,            // m: distanza minima del tracciato dai piani della rampa lungo le mura
     portaDritta: 12,            // m: tratto dritto lungo la normale della porta di un borgo, fino alla porta
     lisciaTerreno: 2,           // passate di media 3×3 sulle quote della griglia prima di cercare il percorso
@@ -666,6 +668,7 @@ function* tracciaTrattoAPezzi(carta, tr, W = STRADE.scena.corridoio) {
   const hq = new Float64Array(N).fill(NaN), acqua = new Float32Array(N);   // 0 asciutto, >0 metri d'acqua
   const mura = new Uint8Array(N);                                       // 1: scarpata di un terrapieno
   const esito = { quota: 0, livello: NaN };
+  const base = !!carta.terrenoBase;        // terreno della ricerca dalla griglia senza strade
   // Solo i piani dei luoghi vicini al tratto (prima tutti, per ogni cella: metà del tempo delle strade).
   const piani = [];
   for (const l of carta.luoghi ?? []) {
@@ -677,7 +680,15 @@ function* tracciaTrattoAPezzi(carta, tr, W = STRADE.scena.corridoio) {
     if (d2[k] > W * W) continue;
     if (k % PEZZO === 0) yield;
     const x = x0 + (k % nx) * g, z = z0 + ((k / nx) | 0) * g;
-    const h = terrenoLuoghi(carta, x, z, esito);
+    // Terreno della ricerca: dalla griglia senza strade dove il terreno è dolce (la ricerca liscia comunque le quote
+    // su ~60 m, quindi là il dettaglio sotto il passo della griglia non cambia il percorso). Sui versanti ripidi la
+    // griglia appiattisce dossi e incisioni e la strada ci finisce dentro: lì la quota si ricalcola esatta.
+    let h, preciso = !base;
+    if (!base) h = terrenoLuoghi(carta, x, z, esito);
+    else {
+      if (terrenoRipido(carta, x, z)) { h = terrenoLuoghi(carta, x, z, esito); preciso = true; }
+      else h = quotaBase(carta, x, z);
+    }
     const lago = livelloLago(carta, x, z);
     if (!Number.isNaN(lago) || h < 0) continue;                      // laghi e mare: fuori
     // Terrapieni di rocca e borgo: niente strada sui piani (le scarpate sì: la porta sta sul bordo del borgo,
@@ -697,7 +708,13 @@ function* tracciaTrattoAPezzi(carta, tr, W = STRADE.scena.corridoio) {
     // passaggio girano al largo, alla porta si arriva per la diramazione.
     if (!vicino && dp < sp + S.mura.oltre) mura[k] = 1;
     hq[k] = h;
-    acqua[k] = Number.isNaN(esito.livello) ? 0 : Math.max(0.01, esito.livello - h);
+    // L'acqua la dice scavaFiumi, che dalla griglia non si saprebbe; ma solo dove un alveo può esserci davvero, cioè
+    // vicino a un corso d'acqua (mappa delle distanze): altrove è asciutto e si risparmia il calcolo del terreno.
+    if (preciso) acqua[k] = Number.isNaN(esito.livello) ? 0 : Math.max(0.01, esito.livello - h);
+    else if (distanzaAcqua(carta, x, z) < S.vicinoAcqua) {
+      const hf = terreno(carta, x, z, esito);
+      if (!Number.isNaN(esito.livello)) acqua[k] = Math.max(0.01, esito.livello - hf);
+    }
   }
   const cellaDi = (x, z) => Math.min(nz - 1, Math.max(0, Math.round((z - z0) / g))) * nx + Math.min(nx - 1, Math.max(0, Math.round((x - x0) / g)));
   const sA = cellaDi(A.x, A.z), sB = cellaDi(B.x, B.z);
