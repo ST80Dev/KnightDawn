@@ -971,20 +971,20 @@ export function terrenoBase(carta, avanzamento = null) {
   // fino a 0,4 m di scarto dalla quota finale). È lavoro che pagherebbero comunque le strade e la griglia.
   raffinaZona(carta, carta.cols * carta.cella / 2, carta.rows * carta.cella / 2, Math.max(carta.cols, carta.rows) * carta.cella);
   const t0 = performance.now(), { passo: P, nx, nz, g } = R, n = nx * nz;
-  const h = new Float32Array(n), acqua = new Float32Array(n), esito = { quota: 0, livello: NaN };
+  const h = new Float32Array(n), acqua = new Float32Array(n), flag = new Uint8Array(n);
+  const esito = { quota: 0, livello: NaN };
   for (let r = 0; r < nz; r++) {
     if (avanzamento && r % 64 === 0) avanzamento(r / nz);
     for (let c = 0; c < nx; c++) {
       const i = r * nx + c, x = c * P, z = r * P;
       const q = spianaLuoghi(carta, x, z, scavaFiumi(carta, x, z, g[i], esito));
       let w = esito.livello;
-      if (Number.isNaN(w)) { const l = livelloLago(carta, x, z); if (l > q) w = l; }
+      if (Number.isNaN(w)) { const l = livelloLago(carta, x, z); if (l > q) { w = l; flag[i] = LAGO; } }
       h[i] = q; acqua[i] = w;
     }
   }
   // Dove il terreno è ripido la griglia appiattisce dossi e incisioni, e chi la legge per cercare un percorso ci
-  // finisce dentro: una mappa a parte dice quali celle non sono affidabili, così la ricerca ricalcola solo lì.
-  const ripido = new Uint8Array(n);
+  // finisce dentro: il secondo bit di `flag` dice quali celle non sono affidabili, così la ricerca ricalcola solo lì.
   for (let r = 0; r < nz; r++) {
     for (let c = 0; c < nx; c++) {
       const i = r * nx + c, q = h[i];
@@ -993,16 +993,18 @@ export function terrenoBase(carta, avanzamento = null) {
       if (c < nx - 1) d = Math.max(d, Math.abs(q - h[i + 1]));
       if (r > 0) d = Math.max(d, Math.abs(q - h[i - nx]));
       if (r < nz - 1) d = Math.max(d, Math.abs(q - h[i + nx]));
-      if (d > RIPIDO_BASE * P) ripido[i] = 1;
+      if (d > RIPIDO_BASE * P) flag[i] |= RIPIDO;
     }
   }
-  carta.terrenoBase = { passo: P, nx, nz, h, acqua, ripido, ms: Math.round(performance.now() - t0) };
+  carta.terrenoBase = { passo: P, nx, nz, h, acqua, flag, ms: Math.round(performance.now() - t0) };
   carta._rilievoFine = null;                               // la griglia di quotaMondo non serve più
   return carta.terrenoBase;
 }
 
 /** Pendenza oltre la quale la griglia del terreno base non è affidabile e la quota va ricalcolata esatta. */
 export const RIPIDO_BASE = 0.12;
+const LAGO = 1;        // flag del terreno base: l'acqua della cella è un lago, non l'alveo di un fiume
+const RIPIDO = 2;      // flag del terreno base: versante ripido, la quota interpolata non basta
 
 /** True se il punto sta su un versante ripido, dove `quotaBase` non basta (mappa calcolata con la griglia). */
 export function terrenoRipido(carta, x, z) {
@@ -1010,7 +1012,7 @@ export function terrenoRipido(carta, x, z) {
   if (!B) return true;
   const c = Math.round(x / B.passo), r = Math.round(z / B.passo);
   if (c < 0 || r < 0 || c >= B.nx || r >= B.nz) return true;
-  return B.ripido[r * B.nx + c] === 1;
+  return (B.flag[r * B.nx + c] & RIPIDO) !== 0;
 }
 
 /** Quota (m) del terreno senza strade nel punto (x, z), dalla griglia (bilineare); NaN se la Carta non ce l'ha. */
@@ -1125,9 +1127,12 @@ export function grigliaMondo(carta, avanzamento = null, passo = GRIGLIA.passo) {
       // spianamento delle strade: il rilievo non si ricalcola. Sui piani dei luoghi no, perché là l'ordine è
       // invertito (quotaFinale): quelle celle, poche, si rifanno esatte dopo il giro.
       if (B) {
-        esito.livello = B.acqua[i];
+        // `spianaStrade` guarda l'alveo dei fiumi (sotto un ponte il fiume resta), non i laghi: il livello di un lago
+        // non va passato come se fosse acqua corrente, o la strada non scaverebbe il suo ripiano.
+        const inLago = (B.flag[i] & LAGO) !== 0;
+        esito.livello = inLago ? NaN : B.acqua[i];
         h[i] = spianaStrade(carta, x, z, B.h[i], esito);
-        acqua[i] = B.acqua[i];
+        acqua[i] = inLago && !(B.acqua[i] > h[i]) ? NaN : B.acqua[i];
         continue;
       }
       const q = quotaFinale(carta, x, z, seme, esito);
