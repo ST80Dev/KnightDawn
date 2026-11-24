@@ -3068,9 +3068,16 @@ bacino 0,05 s. Prototipo: i corsi d'acqua che ne escono seguono le valli del ril
     massimo 0,00 m su 2,77 milioni di celle, acqua uguale), ma da 3,2 s a 0,25 s. Le celle dentro i terrapieni, dove
     `quotaFinale` applica strade e terrapieni nell'ordine inverso, si rifanno esatte: sono poche centinaia.
 
-  Misure (seme 570549, 78 villaggi): precalcolo delle strade 7,1 → 5,3 s, griglia 3,2 → 0,25 s, terrenoBase 1,0 s;
-  nel browser il mondo è pronto in 20,7 s invece di 24,2. Il terreno base (25 MB) viene liberato dopo la griglia: non
-  va in cache né alla pagina. `VERSIONE_GENERATORE` `+terreno-base-1` (i tracciati cambiano di poco: 1346 → 1341 km).
+  Due trappole trovate verificando l'uguaglianza cella per cella: il terreno base va calcolato **dopo** aver cercato i
+  percorsi veri dei fiumi su tutta la mappa (altrimenti fotografa alvei provvisori), e il livello dei **laghi** non va
+  passato a `spianaStrade` come se fosse alveo, o la strada non scava il suo ripiano in riva (un bit di `flag` lo
+  distingue; l'altro è il versante ripido). Entrambe valevano 0,4 m nel punto peggiore.
+
+  Misure (seme 570549, Node): con 78 villaggi precalcolo 7,1 → 5,4 s, griglia 3,2 → 0,25 s, terrenoBase 1,0 s, e nel
+  browser il mondo è pronto in 20,5 s invece di 24,2. Con i 295 villaggi di M8 (548 tratti, 1920 km): precalcolo
+  11,1 → 7,8 s, griglia 3,4 → 0,26 s, cioè **14,5 → 9,1 s** contando il terreno base. Il terreno base (25 MB) viene
+  liberato dopo la griglia: non va in cache né alla pagina. `VERSIONE_GENERATORE` `+terreno-base-1` (i tracciati
+  cambiano di poco: 1346 → 1341 km, stessa qualità di pendenze).
 - **G7 — Orizzonte** dalla griglia (oggi ~650 ms a ogni cambio di blocco): con la sessione M1.
 
 Budget: generazione ≤ ~15 s con l'avanzamento a schermo; `VERSIONE_GENERATORE` cambia a ogni passo che cambia le Carte.
