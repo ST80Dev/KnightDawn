@@ -3132,6 +3132,37 @@ bacino 0,05 s. Prototipo: i corsi d'acqua che ne escono seguono le valli del ril
   punto) e il totale è 8 s. Strade nel blocco: da 300–550 ms a ~40 ms. Carta zoomata: strade vere subito. Costo: la
   generazione di una mappa nuova in headless passa da ~15 a ~22 s (si può scendere leggendo il terreno dalla griglia
   nella ricerca, ~4 s, o con più Worker). `VERSIONE_GENERATORE` `+strade-fini-1`.
+  **Terreno base, fatto** (novembre 2026, dopo la segnalazione di M8: con 295 villaggi il precalcolo saliva a 14,6 s).
+  `terrenoBase` (scena.js) calcola una volta, subito dopo le rocche, il terreno «senza strade» di tutta la Carta sulla
+  stessa griglia di 62,5 m dei fiumi fini — rilievo, alvei e terrapieni, cioè `quotaFinale` meno lo spianamento delle
+  strade — più il livello dell'acqua e una mappa dei versanti ripidi. Serve a due cose:
+  - la ricerca dei tracciati legge la quota dalla griglia invece di ricalcolare il rilievo cella per cella (era il 58 %
+    del suo tempo). Sui versanti oltre il 12 %, dove la griglia appiattisce dossi e incisioni e la strada ci finirebbe
+    dentro, la quota si ricalcola esatta: senza questo le strade oltre il 25 % di pendenza passavano da 27 a 36 km e
+    compariva una maestra al 38 %; con esso la qualità è la stessa di prima (27,5 km oltre il 25 %, 3,0 km oltre il 40 %);
+  - la griglia del mondo (G1) parte da lì e aggiunge solo i ripiani delle strade — identica cella per cella (scarto
+    massimo 0,00 m su 2,77 milioni di celle, acqua uguale), ma da 3,2 s a 0,25 s. Le celle dentro i terrapieni, dove
+    `quotaFinale` applica strade e terrapieni nell'ordine inverso, si rifanno esatte: sono poche centinaia.
+
+  Trappola trovata verificando l'uguaglianza cella per cella (si vedeva solo con i villaggi fitti di M8): il livello
+  dei **laghi** non va passato a `spianaStrade` come se fosse alveo, o la strada non scava il suo ripiano in riva —
+  0,4 m nel punto peggiore. Ora un bit di `flag` distingue il lago dall'alveo; l'altro è il versante ripido. Il terreno
+  base cerca anche i percorsi dei fiumi su tutta la mappa prima di partire: misurando non cambia nulla (dopo G2 alla
+  vecchia raffinatura resta poco da correggere), ma è la base di tutto il resto e non deve dipendere da quel caso.
+
+  **Nel browser, la misura che conta** (Chromium headless, tre semi, con la densità di M8 in `main`): la sola
+  generazione della Carta, somma delle fasi, passa da **15,4–17,9 s a 12,3–13,9 s**. Senza il terreno base la densità
+  di M8 sfondava il budget di 15 s su tutti e tre i semi; con esso ci sta su tutti e tre. L'avvio completo (fino alla
+  scena giocabile, quindi comprese mesh, vegetazione e orizzonte) passa da 20,6–23,5 s a 17,5–19,7 s: lì il guadagno
+  è del 12 %, perché la parte 3D non è toccata. Nel browser il precalcolo delle strade rende meno che in Node
+  (8,8 s contro 7,8 sul seme 570549): [ipotesi] la griglia è 22 MB e nel Worker leggerla rende meno che ricalcolare.
+
+  Misure (Node). Seme 570549 con 78 villaggi: precalcolo 7,1 → 5,4 s, griglia 3,2 → 0,25 s, terrenoBase 1,0 s, e nel
+  browser il mondo è pronto in 20,5 s invece di 24,2. Con la densità di M8 (264–298 villaggi), **sei semi, generazione
+  completa da zero**: totale **16,6–19,0 s → 11,9–13,7 s**, cioè 4,7–5,3 s in meno sempre, e anche il seme peggiore
+  resta sotto i 15 s di budget. Per tratto il precalcolo scende da 20 a 14 ms. Il terreno base (25 MB) viene
+  liberato dopo la griglia: non va in cache né alla pagina. `VERSIONE_GENERATORE` `+terreno-base-1` (i tracciati
+  cambiano di poco: 1346 → 1341 km, stessa qualità di pendenze).
 - **G7 — Orizzonte** dalla griglia (oggi ~650 ms a ogni cambio di blocco): con la sessione M1.
 
 Budget: generazione ≤ ~15 s con l'avanzamento a schermo; `VERSIONE_GENERATORE` cambia a ogni passo che cambia le Carte.

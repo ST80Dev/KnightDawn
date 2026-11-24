@@ -6,7 +6,7 @@ import { generaCarta } from './carta.js';
 import { verificaFiumi, verificaPanorami, verificaVarieta, verificaLuoghi } from './verifica.js';
 import { aggiungiLuoghi } from './luoghi.js';
 import { aggiungiStrade, precalcolaStrade } from './strade.js';
-import { grigliaMondo, fiumiFini } from './scena.js';
+import { grigliaMondo, fiumiFini, terrenoBase } from './scena.js';
 import { aggiungiSiti, completaSiti, verificaSiti } from './siti.js';
 
 let lavoratore = null;
@@ -44,9 +44,14 @@ function avviaLavoratore() {
 async function generaQui(seme, avanzamento) {
   avanzamento?.('Generazione del mondo', 0);
   await new Promise((r) => setTimeout(r, 30));      // lascia disegnare la schermata
-  const carta = completaSiti(aggiungiStrade(aggiungiSiti(aggiungiLuoghi(fiumiFini(generaCarta(seme, { avanzamento }))))));
+  const carta = fiumiFini(generaCarta(seme, { avanzamento }));
+  aggiungiLuoghi(carta);
+  terrenoBase(carta);
+  completaSiti(aggiungiStrade(aggiungiSiti(carta)));
   precalcolaStrade(carta);                          // tracciato fine di tutte le strade (G6), come nel Worker
   carta.griglia = grigliaMondo(carta);              // griglia fine (G1), come nel Worker
+  carta.statistiche.msTerrenoBase = carta.terrenoBase.ms;   // prima di liberarlo: serve al conto delle fasi
+  carta.terrenoBase = null;                         // servito a strade e griglia: 25 MB da liberare
   carta.verifiche = { fiumi: verificaFiumi(carta), panorami: verificaPanorami(carta), varieta: verificaVarieta(carta),
     luoghi: verificaLuoghi(carta), siti: verificaSiti(carta) };
   carta.daCache = false;

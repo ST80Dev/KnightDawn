@@ -30,7 +30,7 @@ export const CARTA_PREDEFINITA = { cols: 120, rows: 90, cella: 1000 };
 // regione-2: punti panoramici solo alture (verifiche in cache); m7-terrapieno: terrapieni di rocca e borgo;
 // siti-1: villaggi e luoghi speciali, monasteri e città dalle rocche (M8, js/mondo/siti.js), villaggi nella rete.
 // strade: rete delle strade e dei sentieri (js/mondo/strade.js); strade-2: costo del rilievo dentro la cella.
-export const VERSIONE_GENERATORE = 'regione-2+m7-forme-5+luoghi-36+strade-3+mare-1+valli-1+valichi-2+siti-1+corte-1+porta-2+rampa-4+sorgenti-1+griglia-1+fiumi-fini-1+strade-fini-1+foci-1+imbuto-1+densita-1';
+export const VERSIONE_GENERATORE = 'regione-2+m7-forme-5+luoghi-36+strade-3+mare-1+valli-1+valichi-2+siti-1+corte-1+porta-2+rampa-4+sorgenti-1+griglia-1+fiumi-fini-1+strade-fini-1+foci-1+imbuto-1+densita-1+terreno-base-1';
 
 // Parametri della forma (km dove non indicato). Valori di partenza, da tarare guardando le Carte.
 const FORMA = {
