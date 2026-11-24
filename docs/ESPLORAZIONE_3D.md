@@ -3068,14 +3068,16 @@ bacino 0,05 s. Prototipo: i corsi d'acqua che ne escono seguono le valli del ril
     massimo 0,00 m su 2,77 milioni di celle, acqua uguale), ma da 3,2 s a 0,25 s. Le celle dentro i terrapieni, dove
     `quotaFinale` applica strade e terrapieni nell'ordine inverso, si rifanno esatte: sono poche centinaia.
 
-  Due trappole trovate verificando l'uguaglianza cella per cella: il terreno base va calcolato **dopo** aver cercato i
-  percorsi veri dei fiumi su tutta la mappa (altrimenti fotografa alvei provvisori), e il livello dei **laghi** non va
-  passato a `spianaStrade` come se fosse alveo, o la strada non scava il suo ripiano in riva (un bit di `flag` lo
-  distingue; l'altro è il versante ripido). Entrambe valevano 0,4 m nel punto peggiore.
+  Trappola trovata verificando l'uguaglianza cella per cella (si vedeva solo con i villaggi fitti di M8): il livello
+  dei **laghi** non va passato a `spianaStrade` come se fosse alveo, o la strada non scava il suo ripiano in riva —
+  0,4 m nel punto peggiore. Ora un bit di `flag` distingue il lago dall'alveo; l'altro è il versante ripido. Il terreno
+  base cerca anche i percorsi dei fiumi su tutta la mappa prima di partire: misurando non cambia nulla (dopo G2 alla
+  vecchia raffinatura resta poco da correggere), ma è la base di tutto il resto e non deve dipendere da quel caso.
 
-  Misure (seme 570549, Node): con 78 villaggi precalcolo 7,1 → 5,4 s, griglia 3,2 → 0,25 s, terrenoBase 1,0 s, e nel
-  browser il mondo è pronto in 20,5 s invece di 24,2. Con i 295 villaggi di M8 (548 tratti, 1920 km): precalcolo
-  11,1 → 7,8 s, griglia 3,4 → 0,26 s, cioè **14,5 → 9,1 s** contando il terreno base. Il terreno base (25 MB) viene
+  Misure (Node). Seme 570549 con 78 villaggi: precalcolo 7,1 → 5,4 s, griglia 3,2 → 0,25 s, terrenoBase 1,0 s, e nel
+  browser il mondo è pronto in 20,5 s invece di 24,2. Con la densità di M8 (264–298 villaggi), **sei semi, generazione
+  completa da zero**: totale **16,6–19,0 s → 11,9–13,7 s**, cioè 4,7–5,3 s in meno sempre, e anche il seme peggiore
+  resta sotto i 15 s di budget. Per tratto il precalcolo scende da 20 a 14 ms. Il terreno base (25 MB) viene
   liberato dopo la griglia: non va in cache né alla pagina. `VERSIONE_GENERATORE` `+terreno-base-1` (i tracciati
   cambiano di poco: 1346 → 1341 km, stessa qualità di pendenze).
 - **G7 — Orizzonte** dalla griglia (oggi ~650 ms a ogni cambio di blocco): con la sessione M1.

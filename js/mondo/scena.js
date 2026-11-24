@@ -967,8 +967,9 @@ export function terrenoBase(carta, avanzamento = null) {
   const R = carta._rilievoFine;
   if (!R) return null;
   // Prima i percorsi definitivi dei fiumi su tutta la mappa: finché un tratto non è cercato, `scavaFiumi` usa il
-  // tracciato della Carta e l'alveo cade altrove. Senza questo il terreno base fotografa alvei provvisori (misurato:
-  // fino a 0,4 m di scarto dalla quota finale). È lavoro che pagherebbero comunque le strade e la griglia.
+  // tracciato grezzo della Carta. Misurando, oggi le due strade danno la stessa quota (dopo G2 i fiumi seguono già il
+  // rilievo fine e alla raffinatura resta poco da correggere), ma il terreno base è la base di tutto il resto e non
+  // deve dipendere da quel caso: il lavoro lo pagherebbero comunque le strade e la griglia un attimo dopo.
   raffinaZona(carta, carta.cols * carta.cella / 2, carta.rows * carta.cella / 2, Math.max(carta.cols, carta.rows) * carta.cella);
   const t0 = performance.now(), { passo: P, nx, nz, g } = R, n = nx * nz;
   const h = new Float32Array(n), acqua = new Float32Array(n), flag = new Uint8Array(n);
