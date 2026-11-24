@@ -966,6 +966,10 @@ export function spianaPiani(P, x, z, h) {
 export function terrenoBase(carta, avanzamento = null) {
   const R = carta._rilievoFine;
   if (!R) return null;
+  // Prima i percorsi definitivi dei fiumi su tutta la mappa: finché un tratto non è cercato, `scavaFiumi` usa il
+  // tracciato della Carta e l'alveo cade altrove. Senza questo il terreno base fotografa alvei provvisori (misurato:
+  // fino a 0,4 m di scarto dalla quota finale). È lavoro che pagherebbero comunque le strade e la griglia.
+  raffinaZona(carta, carta.cols * carta.cella / 2, carta.rows * carta.cella / 2, Math.max(carta.cols, carta.rows) * carta.cella);
   const t0 = performance.now(), { passo: P, nx, nz, g } = R, n = nx * nz;
   const h = new Float32Array(n), acqua = new Float32Array(n), esito = { quota: 0, livello: NaN };
   for (let r = 0; r < nz; r++) {
