@@ -11,8 +11,9 @@
   giocatore: continuare, fuggire, arrendersi, o azioni speciali contestuali
 - **Non istantaneo** — durata variabile in Round, scala con la complessità del
   nemico (ladro 1, cavaliere 4-6, battaglia in esercito 10-20)
-- **Un Round di combattimento = un Passo del calendario** (~3 ore in-fiction):
-  stessa griglia temporale del viaggio, niente sotto-unità tattiche
+- **Un Round di combattimento costa minuti di gioco** [rivisto con l'utente, novembre 2026: prima
+  valeva un Passo, ~3 ore; nelle Scene il tempo è continuo e un duello di 5 Round avrebbe saltato
+  15 ore]. Battaglie e assedi restano a fasi narrative di ore
 - Il **risultato del singolo Round** è automatico (formula su attributi /
   equipaggiamento / terreno); il **percorso dello scontro** è scelto dal giocatore
 - Le decisioni pregresse contano: equipaggiamento, seguito, ferite, preparazione
@@ -20,21 +21,20 @@
 
 ## 2. Lunghezza dello scontro
 
-**Unità di tempo:** un Round di combattimento = un **Passo del calendario**
-(~3 ore in-fiction, vedi GDD §3). Non esistono sotto-unità tattiche: la
-stessa griglia temporale del viaggio governa anche lo scontro.
+**Unità di tempo** [rivista con l'utente, novembre 2026]: ogni Round costa i
+suoi **minuti di gioco** (`Calendar.avanzaMinuti`), secondo il tipo di scontro;
+prima valeva un Passo (~3 ore). Per battaglie e assedi un Round è una fase
+narrativa di ore. Valori [DA BILANCIARE]:
 
-Numero indicativo di Round totali per archetipo (N):
-
-| Tipo scontro                                  | N Round | In-fiction      |
-|-----------------------------------------------|--------:|-----------------|
-| Ladro disarmato, animale piccolo              |    1    | ~3 ore          |
-| Bandito armato, lupo, predone                 |   2–3   | mezza giornata  |
-| Cavaliere singolo, orso, creatura selvatica   |   4–6   | un giorno       |
-| Boss di fazione, creatura mitica              |   6–10  | 1–2 giorni      |
-| Scaramuccia con piccolo seguito               |   4–6   | un giorno       |
-| Battaglia in esercito                         |  10–20  | 1–3 giorni      |
-| Assedio prolungato                            |  30–60  | 4–8 giorni      |
+| Tipo scontro                                  | N Round | Minuti per Round | In-fiction      |
+|-----------------------------------------------|--------:|-----------------:|-----------------|
+| Ladro disarmato, animale piccolo              |    1    |   ~2             | pochi minuti    |
+| Bandito armato, lupo, predone                 |   2–3   |   ~3             | ~10 minuti      |
+| Cavaliere singolo, orso, creatura selvatica   |   4–6   |   ~4             | ~20 minuti      |
+| Boss di fazione, creatura mitica              |   6–10  |   ~5             | ~30–50 minuti   |
+| Scaramuccia con piccolo seguito               |   4–6   |   ~10            | ~1 ora          |
+| Battaglia in esercito                         |  10–20  |   ~60 (fase)     | 1–2 giorni      |
+| Assedio prolungato                            |  30–60  |   ~180 (fase)    | 4–8 giorni      |
 
 **Nessuno scontro si auto-risolve** al posto del giocatore: anche uno scontro
 da 1 Round apre la scena di combattimento e richiede almeno un'azione (es.
@@ -58,9 +58,8 @@ Ogni Round esegue, in ordine:
    altrimenti).
 3. **Scelte del Round**: presentate al giocatore (§4). Una scelta consuma il
    Round successivo o termina lo scontro in anticipo.
-4. **Costo tempo**: ogni Round avanza il calendario di esattamente **1
-   Passo**. Una scaramuccia (1 Round) costa 1 Passo, una battaglia (10–20
-   Round) costa 1–3 Diari di gioco.
+4. **Costo tempo**: ogni Round avanza il calendario dei **minuti del suo
+   tipo di scontro** (§2); le scadenze si spuntano se il Passo scatta davvero.
 
 Per battaglie/assedi lunghi conviene prevedere in S9 un meccanismo di
 **fast-forward intra-combat** (passa N Round in blocco con resoconto
@@ -165,11 +164,13 @@ poi applicare gli effetti del ramo-esito al ritorno. Schema dettagliato in
 
 ## 9. Visualizzazione
 
-Overlay di combattimento sulla mappa, attivo per **ogni** scontro (anche da
-1 Round). Layout desktop a tre colonne:
+**Riquadro a sé sopra la scena 3D ferma** [deciso con l'utente, novembre 2026;
+il combattimento animato in 3D resta escluso], attivo per **ogni** scontro
+(anche da 1 Round). Mentre è aperto il tempo reale non scorre: avanzano solo i
+minuti dei Round confermati. Layout desktop a tre colonne:
 
-- **Sinistra** — il cavaliere: silhouette pixel (vedi `js/sprites.js`),
-  eventuali compagni, e le info che contano in combattimento (Salute, Forza,
+- **Sinistra** — il cavaliere: figura statica (non più le silhouette pixel del
+  2D), eventuali compagni, e le info che contano in combattimento (Salute, Forza,
   Volontà, equipaggiamento).
 - **Centro** — pulsantiera azioni del Round (sempre: Continua/Fuga/Resa;
   contestuali: Parlamento, Colpo disperato…) + indicatore **Slancio** come
