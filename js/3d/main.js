@@ -24,7 +24,7 @@ import { createVillaggioAPezzi, createMonasteroAPezzi, createEremoAPezzi, pianoD
 import { createRovinaAPezzi, createMisteroAPezzi } from './rovine3d.js';
 import { raggioSito, climaDelLuogo } from '../mondo/siti.js';
 import { createCartaVista } from './cartaVista.js';
-import { mostraMenuAvvio, creaCartaCronista } from './interfaccia.js';
+import { mostraMenuAvvio, creaCartaCronista, creaScrittoio, avvisoFoglio } from './interfaccia.js';
 import { creaMinimappa } from './minimappa.js';
 import { creaOrizzonteAPezzi } from './orizzonte.js';
 import { creaAcqueScena, creaPonti, suoloStrade } from './acqua.js';
@@ -512,7 +512,21 @@ function dormiNelBorgo({ dove, forza = 0, salute = 0 }) {
   if (typeof Events !== 'undefined') Events.tickDeadlines();
   return `Dormi ${dove} fino a Prima (${_ore(passi)})${_guadagno(prima)}`;
 }
-const contestoEventi = () => ({ casata: nomeCasata(), dormi: dormiNelBorgo });
+/** Una notizia diventa un foglio nello scrittoio (J), con l'avviso d'arrivo. */
+function annotaNotizia(doc) {
+  const quando = `${Calendar.oraCanonica()} del ${Calendar.inVeglia ? `giorno ${Calendar.giornoVeglia}` : `Diario ${Calendar.diario}`}`;
+  const d = { ...doc, fonte: doc.fonte ? `${doc.fonte}, a ${quando}` : null };
+  News.emit({ tipo: d.tipo === 'voce' ? 'rumor' : 'evento', tag: d.tag || d.tipo, testo: d.testo, doc: d }, true);
+  avvisoFoglio(d, d.tipo === 'voce' ? 'Una voce annotata nello scrittoio' : d.tipo === 'bando' ? 'Un bando è stato affisso' : 'Una lettera giunge da lontano');
+}
+const contestoEventi = () => ({ casata: nomeCasata(), dormi: dormiNelBorgo, notizia: annotaNotizia });
+
+// Scrittoio (J): i fogli delle notizie che il cavaliere ha ricevuto, dal più recente. Mentre è aperto il gioco è fermo.
+const scrittoio = creaScrittoio({
+  elenco: () => (typeof News === 'undefined' ? [] : News.ultime(200).filter((t) => t.doc).map((t) => ({ ...t.doc, id: t.id }))),
+  onApri: () => { cronista = true; tasti.clear(); if (_invitoPorta) _invitoPorta.hidden = true; },
+  onChiudi: () => { cronista = null; tasti.clear(); },
+});
 
 /** Evento della Veglia per la porta di un edificio del borgo di partenza, o null. */
 function eventoDellaPorta(e, luogo) {
@@ -1163,7 +1177,7 @@ async function init() {
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no · Spazio: scavalca'
     + ` · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: Carta${inStoria() ? '' : ' (clic: vai lì) · T: avanza'}`
-    + ' · N: minimappa grande · +/−: zoom minimappa'
+    + ' · N: minimappa grande · +/−: zoom minimappa · J: scrittoio'
     + ` · F2: qualità · F3: info · F8: menu · modalità ${inStoria() ? 'Storia' : 'Libera'}`,
   'aiuto');
 }
@@ -1296,9 +1310,11 @@ window.addEventListener('keydown', (e) => {
   if (cartaVista.aperta) return;
   if (cronista) {                                        // Carta del cronista aperta: scelte con 1–9, Esc o E per uscire
     if (e.repeat) return;
+    if (scrittoio.aperto) { scrittoio.tasto(e); return; }
     if (!cartaCronista.tasto(e) && e.code === PORTA.tasto) chiudiCronista();
     return;
   }
+  if (e.code === 'KeyJ' && !e.repeat && knight) { scrittoio.apri(); return; }
   if (e.code === PORTA.tasto && !e.repeat) {
     const azione = AZIONI_TASTO.find((a) => a.pronta());
     if (azione) { azione.esegui(); return; }

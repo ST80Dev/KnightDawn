@@ -125,7 +125,10 @@ Events.register({
         { type: 'oro', delta: 1 }, { type: 'forza', delta: -8 }, { type: 'tempo', minuti: 180 },
         ctx => {
           if (Math.random() < 0.5) { Knight.oro += 1; ctx.log('Un avventore generoso ti lascia una moneta in più.'); }
-          ctx.log('«' + VEGLIA_VOCI[(Math.random() * VEGLIA_VOCI.length) | 0] + '»');
+          const voce = VEGLIA_VOCI[(Math.random() * VEGLIA_VOCI.length) | 0];
+          // Con il motore 3D la voce diventa un ritaglio nello scrittoio (J); senza, resta una riga di cronaca.
+          if (ctx.notizia) ctx.notizia({ tipo: 'voce', testo: voce, fonte: 'sentito in taverna' });
+          ctx.log('«' + voce + '»');
         },
       ],
       reply: 'Tra un boccale e l\'altro raccogli mance e dicerie.',
