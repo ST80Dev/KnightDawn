@@ -288,6 +288,24 @@ poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un
    mercante alle porte dei loro edifici; le persone che camminano danno una riga e qualche voce.
    **Nome del garzone** nel menu (solo Storia, con «casuale») e **nome generato della casata di partenza** al posto
    della «Casata Vorn» scritta a mano: G3 lo riprenderà [deciso].
+   **Stato: fatto, da provare dall'utente.** `js/3d/interfaccia.js` (`creaCartaCronista`: pergamena con titolo, testo,
+   righe di cronaca e pulsanti; quelli non disponibili restano visibili, spenti, con il requisito; tasti 1–9, Esc o E
+   per uscire), `js/events.js` (`{ type:'tempo', minuti }`; campi `aperto`/`chiuso` e `text` come funzione),
+   `js/data/events_veglia.js` riscritto, `main.js` (porte → eventi, `dormiNelBorgo`, nome e oro nel pannello).
+   Edifici → eventi nel borgo di partenza: stalla (lavoro 3 ore, +2 oro, −12 Forza; dormire nel fienile da Vespri,
+   gratis, +5 Salute), pozzo, cucina e cantina (commissioni 2 ore, +1 oro), taverna (servire 3 ore, +1 oro e a volte
+   una mancia, una voce; pagliericcio da Vespri 2 oro, +15 Forza e +10 Salute oltre al sonno), sala d'armi (lezione
+   3 ore, 2 oro, −15 Forza, +4 Volontà; tre lezioni: Scudiero) — se la rocca non ha la sala d'armi il maestro sta
+   all'armeria, se manca anche quella nel palazzo —, armeria, fabbro e loggia (mercato: pulsante spento fino al
+   passo 3), guaritore e infermeria (cura 90 minuti, 2 oro, +30 Salute), palazzo del signore (la guardia non fa
+   entrare un garzone), cappella e chiesa (investitura con i requisiti di prima; pregare 30 minuti, +3 Volontà).
+   Orari: lavori, maestro, mercato e guaritore Prima–Nona; taverna e cappella fino a Vespri; poi la carta dice che
+   è chiuso. Fuori dal borgo di partenza o in Libera la carta ha il nome e una riga. Menu: «Nome del garzone» con
+   «Casuale» (solo Storia). Casata di partenza: `vegliaNomeCasata(seme)` (24 nomi, provvisorio fino a G3).
+   Provato in headless (seme 570549): stalla, esito con «Indietro», taverna, maestro all'armeria (la rocca non ha la
+   sala d'armi), palazzo con il nome della casata, taverna chiusa a Compieta, sonno nel fienile fino a Prima del
+   giorno 2, guaritore; in Libera la taverna dà solo la riga; nessun errore. Numeri [DA BILANCIARE]: oggi una
+   giornata di lavoro rende ~6–7 oro.
 3. **Mercato, equipaggiamento, zaino e pasti.** Compra e vendi dal catalogo `js/data/items.js` (rivendita al
    50 %), equipaggiamento indossato; **zaino** con pochi posti e **pasti** (uno al giorno, `docs/GDD.md` §2
    «Pasti e zaino»); il ronzino comprato compare accanto al cavaliere (milestone Cavallo,

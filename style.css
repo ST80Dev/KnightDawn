@@ -392,3 +392,47 @@ html, body {
 #menu-avvio .avviso { color: #e08a50; font-size: 13px; margin-bottom: 10px; }
 #menu-avvio .comincia { width: 100%; font-size: 17px; padding: 8px; color: #f0e0b8; }
 #menu-avvio .nota { font-size: 12px; color: #8a7a5a; text-align: center; }
+
+/* Carta del cronista (js/3d/interfaccia.js, G1 passo 2): pergamena al centro, sopra la scena ferma */
+.carta-cronista {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 60;
+  width: min(580px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  box-sizing: border-box;
+  background: #efe2c2;
+  color: #3a2412;
+  border: 3px double #7a4f22;
+  box-shadow: 0 0 0 6px #c9ad78, 0 12px 40px rgba(0, 0, 0, 0.6);
+  padding: 20px 26px;
+  font: 16px Georgia, 'Times New Roman', serif;
+  text-align: center;
+}
+.carta-cronista .titolo { font-size: 24px; letter-spacing: 1px; color: #6b1d10; margin-bottom: 4px; }
+.carta-cronista .fregio { color: #a07a3c; margin: 4px 0 12px; }
+.carta-cronista .testo { font-style: italic; line-height: 1.5; margin-bottom: 12px; }
+.carta-cronista .righe { font-size: 14px; line-height: 1.45; color: #4a3018; margin: 0 0 12px; padding: 8px 10px;
+  border-top: 1px solid #c9ad78; border-bottom: 1px solid #c9ad78; text-align: left; }
+.carta-cronista .nota { font-size: 12px; color: #7a6040; margin-bottom: 12px; }
+.carta-cronista .scelte { display: grid; gap: 6px; text-align: left; }
+.carta-cronista .scelte button {
+  font: 15px Georgia, 'Times New Roman', serif;
+  padding: 6px 12px;
+  background: #7a4f22;
+  color: #efe2c2;
+  border: 1px solid #3a2412;
+  cursor: pointer;
+  text-align: left;
+}
+.carta-cronista .scelte button:hover { background: #8e5e2a; }
+.carta-cronista .scelte button:disabled { background: #d9c8a0; color: #8a7050; border-color: #b09868; cursor: default; }
+.carta-cronista .scelte .n { display: inline-block; min-width: 1.4em; color: #e8c860; }
+.carta-cronista .scelte .req { font-size: 12px; font-style: italic; }
+#menu-avvio .nome-garzone { width: 16ch; margin-left: 6px; }
+
+/* Pannello di stato: nome, rango e oro (G1 passo 2) */
+#hud .stato .chi { font-size: 12px; color: #d8c8a0; margin: 2px 0 4px; }

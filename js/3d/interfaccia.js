@@ -7,6 +7,13 @@ const MODALITA = {
   libera: { nome: 'Libera', riga: 'Senza storia: cavaliere già armato, a cavallo, con gli strumenti di sviluppo (Carta con il clic, T).' },
 };
 
+// Nomi del garzone (registro italiano-medievale, docs/GDD.md §2 «Culture e nomi»): «casuale» nel menu d'avvio.
+const NOMI_GARZONE = [
+  'Aldo', 'Guido', 'Rinaldo', 'Bertoldo', 'Ugolino', 'Tebaldo', 'Gualtiero', 'Ansaldo', 'Corrado', 'Ottone',
+  'Lapo', 'Nello', 'Vanni', 'Cecco', 'Bindo', 'Ghino', 'Dino', 'Puccio', 'Arrigo', 'Folco', 'Manfredo', 'Oddo',
+];
+const nomeCasuale = () => NOMI_GARZONE[(Math.random() * NOMI_GARZONE.length) | 0];
+
 const _esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 function _quando(iso) {
@@ -25,7 +32,7 @@ function _quando(iso) {
  *   leggiFile?: (testo: string) => { modalita: string, row: object },  // lancia un Error se il file non va
  * }} opzioni
  * @returns {Promise<{ modalita: 'storia'|'libera', nuova: boolean, seme: string, luogo: 'partenza'|'tavullia',
- *   importa?: object }>}
+ *   importa?: object, nome?: string|null }>}
  *   seme: testo scritto ('' = casuale); luogo vale solo per una partita Libera nuova; importa: la riga di salvataggio
  *   letta da un file (la partita continua da lì).
  */
@@ -57,6 +64,10 @@ export function mostraMenuAvvio(opzioni) {
           ${Object.entries(MODALITA).map(([id, m], i) => `<label class="modo"><input type="radio" name="modalita" value="${id}"${i === 0 ? ' checked' : ''}>`
             + `<b>${m.nome}</b><span>${m.riga}</span></label>`).join('')}
         </div>
+        <div class="riga nome">
+          <label>Nome del garzone <input type="text" class="nome-garzone" maxlength="24" spellcheck="false"></label>
+          <button type="button" class="nome-casuale" title="Un altro nome a caso">Casuale</button>
+        </div>
         <div class="riga">
           <label>Seme del mondo <input type="text" class="seme" placeholder="casuale" value="${_esc(seme)}" spellcheck="false"></label>
           <button type="button" class="casuale" title="Svuota il campo: il seme si sceglie a caso">Casuale</button>
@@ -77,11 +88,15 @@ export function mostraMenuAvvio(opzioni) {
 
     const inSeme = el.querySelector('.seme');
     const rigaLuogo = el.querySelector('.luogo');
+    const rigaNome = el.querySelector('.riga.nome'), inNome = el.querySelector('.nome-garzone');
+    inNome.value = nomeCasuale();
+    el.querySelector('.nome-casuale').addEventListener('click', () => { inNome.value = nomeCasuale(); });
     const avviso = el.querySelector('.avviso');
     const modoScelto = () => el.querySelector('input[name="modalita"]:checked').value;
     const aggiorna = () => {
       const m = modoScelto();
       rigaLuogo.hidden = m !== 'libera';
+      rigaNome.hidden = m !== 'storia';
       avviso.hidden = !partite[m];
       avviso.textContent = partite[m] ? `La partita ${MODALITA[m].nome} salvata verrà sostituita.` : '';
     };
@@ -130,16 +145,68 @@ export function mostraMenuAvvio(opzioni) {
     const comincia = () => {
       const m = modoScelto();
       if (partite[m] && !window.confirm(`Cominciare una nuova partita ${MODALITA[m].nome}? Quella salvata verrà cancellata.`)) return;
-      fine({ modalita: m, nuova: true, seme: inSeme.value.trim(), luogo: m === 'libera' ? el.querySelector('.dove').value : 'partenza' });
+      fine({ modalita: m, nuova: true, seme: inSeme.value.trim(), luogo: m === 'libera' ? el.querySelector('.dove').value : 'partenza',
+        nome: m === 'storia' ? (inNome.value.trim() || nomeCasuale()) : null });
     };
     el.querySelector('.comincia').addEventListener('click', comincia);
     // Invio nel campo del seme comincia (sui pulsanti fa il loro clic); nessun tasto arriva al gioco mentre il menu
     // è aperto (ascolto in cattura sul documento: i tasti di main.js stanno su window e non li ricevono).
     function suTasto(e) {
-      if ((e.code === 'Enter' || e.code === 'NumpadEnter') && e.target === inSeme) { e.preventDefault(); comincia(); }
+      if ((e.code === 'Enter' || e.code === 'NumpadEnter') && (e.target === inSeme || e.target === inNome)) { e.preventDefault(); comincia(); }
       if (e.code !== 'Tab') e.stopPropagation();
     }
     document.addEventListener('keydown', suTasto, true);
     (el.querySelector('.continua') ?? el.querySelector('.comincia')).focus();
   });
+}
+
+/**
+ * Carta del cronista (G1, passo 2): riquadro in stile manoscritto al centro dello schermo, sopra la scena ferma.
+ * Mostra un titolo, un testo, righe di cronaca (esito) e una lista di pulsanti tematici; un pulsante non disponibile
+ * resta visibile, spento, con l'etichetta del requisito («Richiede…»). Tasti: 1–9 scelgono, Esc chiude.
+ * @param {{ onApri?: () => void, onChiudi?: () => void }} [opzioni]
+ */
+export function creaCartaCronista(opzioni = {}) {
+  let el = null, scelte = [];
+  function chiudi() {
+    if (!el) return;
+    el.remove();
+    el = null;
+    scelte = [];
+    opzioni.onChiudi?.();
+  }
+  /**
+   * @param {{ titolo: string, testo?: string, righe?: string[], nota?: string,
+   *   opzioni: { testo: string, etichetta?: string, disponibile?: boolean, scegli: () => void }[] }} c
+   */
+  function mostra(c) {
+    const nuova = !el;
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'carta-cronista';
+      document.body.appendChild(el);
+    }
+    scelte = c.opzioni.filter((o) => o.disponibile !== false);
+    let n = 0;
+    el.innerHTML = `<div class="titolo">${_esc(c.titolo)}</div><div class="fregio">✦ ✦ ✦</div>`
+      + (c.testo ? `<div class="testo">${_esc(c.testo)}</div>` : '')
+      + (c.righe?.length ? `<div class="righe">${c.righe.map((r) => `<div>${_esc(r)}</div>`).join('')}</div>` : '')
+      + (c.nota ? `<div class="nota">${_esc(c.nota)}</div>` : '')
+      + `<div class="scelte">${c.opzioni.map((o, i) => {
+        const ok = o.disponibile !== false;
+        return `<button type="button" data-i="${i}"${ok ? '' : ' disabled'}>${ok ? `<span class="n">${++n}</span>` : ''}`
+          + `${_esc(o.testo)}${o.etichetta && !ok ? ` <span class="req">${_esc(o.etichetta)}</span>` : ''}</button>`;
+      }).join('')}</div>`;
+    el.querySelectorAll('.scelte button').forEach((b) => b.addEventListener('click', () => c.opzioni[+b.dataset.i].scegli()));
+    if (nuova) opzioni.onApri?.();
+  }
+  /** Tasti mentre la carta è aperta: true se il tasto è stato usato. */
+  function tasto(e) {
+    if (!el) return false;
+    if (e.code === 'Escape') { chiudi(); return true; }
+    const m = /^(Digit|Numpad)([1-9])$/.exec(e.code);
+    if (m) { scelte[+m[2] - 1]?.scegli(); return true; }
+    return false;
+  }
+  return { mostra, chiudi, tasto, get aperta() { return !!el; } };
 }
