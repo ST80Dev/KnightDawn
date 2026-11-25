@@ -85,7 +85,16 @@ Cavaliere Errante → di Ventura → Campione/Bannerale). I ranghi sbloccano
 niente albero abilità. Dettaglio completo (apertura, azioni, mercato) in
 `docs/EARLY_GAME.md`.
 
-[TBD] Equipaggiamento e inventario (pesi, slot, durabilità?)
+**Pasti e zaino** [deciso con l'utente, novembre 2026, in stile Lupo Solitario; numeri da bilanciare]:
+- uno **zaino** con pochi posti (proposta: 8) per le cose che si consumano: pasti, bende, torce, oggetti
+  trovati; l'equipaggiamento indossato (arma, armatura, scudo) non occupa posti;
+- **un pasto al giorno**: si compra in taverna e al mercato, si trova negli eventi; mangiare in taverna non
+  consuma lo zaino. Se il giorno passa senza mangiare: niente recupero di Forza nel sonno e un poco di Salute
+  persa (proposta: −3), come la Resistenza persa nel librogame. Il pasto si consuma da sé al risveglio, se
+  ce n'è uno nello zaino, con un messaggio: niente micro-gestione;
+- più avanti caccia e pesca come scelte (eventi), non come sistema a sé.
+
+[TBD] Equipaggiamento: pesi, durabilità (resta il principio di `docs/EARLY_GAME.md` §4: nessuna usura)
 [TBD] Arti magiche / abilità speciali
 [TBD] Sistema di titoli emergenti (condizioni di trigger)
 
@@ -271,7 +280,7 @@ Regole **nuove** per il 3D e per la varietà ravvicinata:
 roccia, palude, sabbia/deserto, neve, ghiaccio, fiume, acqua): eventi e costi già scritti restano
 validi.
 
-**Culture e nomi** [proposta]. Nel 2D i nomi di castelli, torri, villaggi e regione si sceglievano a
+**Culture e nomi** [approvato dall'utente, novembre 2026]. Nel 2D i nomi di castelli, torri, villaggi e regione si sceglievano a
 caso per seme da liste fisse, in tre registri (anglo-medievale, cavalleresco italiano,
 tolkieniano). Le fazioni invece **non** erano generate: in `js/knight.js` ce ne sono quattro scritte
 a mano (Casata Vorn, Ordine del Cervo, Mercanti Liberi, Banditi del Sud) e `docs/FACTIONS.md` è
@@ -601,7 +610,12 @@ Dettaglio architettura testi → `docs/TEXT_SYSTEM.md`
 [TBD] Lista tipi di luogo con relativa miniatura
 [TBD] Sistema di interazione NPC
 [TBD] Sistema di commercio
-[TBD] Sistema di quest/missioni locali
+**Missioni** [principio deciso con l'utente, novembre 2026; tipologie, durata e ricompense da discutere
+prima di G4]: niente schema fisso «incarico → ritorno». Il cavaliere ha più missioni aperte insieme, di
+tipi, obiettivi e destinazioni diversi, e sceglie lui quali portare avanti e in che ordine, intrecciando le
+trame a piacere. Ogni missione ha **obiettivi parziali** che danno già qualcosa (oro, notizie, reputazione,
+esperienza) anche se la missione non si chiude; chiuderla dà il premio maggiore. Il ritorno dal committente
+è solo uno dei tipi possibili.
 
 ### Compagnia e covi
 

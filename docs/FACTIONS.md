@@ -1,6 +1,6 @@
 # Knight Dawn — Fazioni, territori e fedeltà
 
-> **Stato: proposta da approvare** (novembre 2026), dallo spunto dell'utente: scegliere quando si vuole
+> **Stato: approvato dall'utente** (novembre 2026; i numeri restano da tarare giocando), dallo spunto dell'utente: scegliere quando si vuole
 > se giurare fedeltà a una casata o restare libero e mercenario, con conseguenze sull'Onore; casate con
 > territorio attorno al castello, terre di nessuno in mezzo, unioni di casate («stile Trono di spade») e
 > alleanze, visibili sulla Carta a colori; un mondo che si muove da solo a periodi medi, legato a notizie,

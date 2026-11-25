@@ -24,7 +24,7 @@ import { createVillaggioAPezzi, createMonasteroAPezzi, createEremoAPezzi, pianoD
 import { createRovinaAPezzi, createMisteroAPezzi } from './rovine3d.js';
 import { raggioSito, climaDelLuogo } from '../mondo/siti.js';
 import { createCartaVista } from './cartaVista.js';
-import { mostraMenuAvvio } from './interfaccia.js';
+import { mostraMenuAvvio, creaCartaCronista } from './interfaccia.js';
 import { creaMinimappa } from './minimappa.js';
 import { creaOrizzonteAPezzi } from './orizzonte.js';
 import { creaAcqueScena, creaPonti, suoloStrade } from './acqua.js';
@@ -191,13 +191,14 @@ const pannelloStato = document.createElement('div');
 pannelloStato.className = 'stato';
 pannelloStato.hidden = true;
 const ATTRIBUTI = [['forza', 'Forza'], ['salute', 'Salute'], ['volonta', 'Volontà']];
-pannelloStato.innerHTML = '<div class="data"></div>'
+pannelloStato.innerHTML = '<div class="data"></div><div class="chi"></div>'
   + ATTRIBUTI.map(([id, nome]) => `<div class="attr ${id}"><span class="nome">${nome}</span>`
     + '<span class="barra"><i></i></span><span class="val"></span></div>').join('')
   + '<div class="onore"></div>';
 hud.appendChild(pannelloStato);
 const elData = pannelloStato.querySelector('.data');
 const elOnore = pannelloStato.querySelector('.onore');
+const elChi = pannelloStato.querySelector('.chi');
 const elAttr = Object.fromEntries(ATTRIBUTI.map(([id]) => {
   const riga = pannelloStato.querySelector('.attr.' + id);
   return [id, { riga, barra: riga.querySelector('i'), val: riga.querySelector('.val') }];
@@ -219,6 +220,7 @@ function aggiornaStato() {
     imposta(id + '.v', (v) => { el.val.textContent = v; }, String(Math.ceil(a.cur)));
     imposta(id + '.b', (v) => { el.riga.classList.toggle('basso', v); }, pct < 20);
   }
+  imposta('chi', (v) => { elChi.textContent = v; }, `${Knight.nome} · ${Knight.titolo} · ${Knight.oro} oro`);
   imposta('onore', (v) => { elOnore.textContent = v; },
     `Onore ${Knight.onore > 0 ? '+' : ''}${Knight.onore}`);
 }
@@ -309,8 +311,8 @@ const inStoria = () => modalita === 'storia';
 let nonSalvare = false;                   // true mentre si torna al menu dopo aver salvato, o nel percorso di prova
 
 /** Stato di una partita nuova. Storia: il garzone della Veglia. Libera: Cavaliere Errante già armato, fuori Veglia. */
-function nuovaPartitaDati(m) {
-  Knight.init();
+function nuovaPartitaDati(m, nome) {
+  Knight.init(nome || undefined);
   Calendar.init();
   if (typeof Events !== 'undefined' && Events.reset) Events.reset();
   if (typeof News !== 'undefined' && News.reset) News.reset();
@@ -408,9 +410,8 @@ function cambiaPausa() {
 
 // ─── Porte degli edifici → Carta del cronista (M7, passo 6) ─────────────
 // Vicino alla porta di un edificio nominato (taverna, stalla, cappella…), a piedi e rivolto verso di essa, compare
-// «E: entra — Taverna»; E apre la Carta del cronista segnaposto (nome, una riga, «Esci»). Mentre è aperta il tempo
-// non scorre e il cavaliere non si muove; per ora entrare non costa tempo (le azioni con la loro durata arrivano con
-// la Veglia, GDD §3). Niente interni 3D. Il tasto è provvisorio: la scelta dei tasti è rinviata dall'utente.
+// «E: entra — Taverna»; E apre la Carta del cronista (più sotto). Entrare non costa tempo; costano le azioni scelte,
+// con la loro durata (GDD §3). Niente interni 3D. Il tasto è provvisorio: la scelta dei tasti è rinviata dall'utente.
 const PORTA = { distanza: 2.4, rivolto: 0.35, tasto: 'KeyE', nomeTasto: 'E' };
 const RIGHE_CRONISTA = {
   stalla: 'Odore di fieno e di cavalli; lo stalliere alza appena gli occhi dal lavoro.',
@@ -446,10 +447,11 @@ let personaVicina = null;                  // abitante a portata di «E: parla»
 // sessioni aggiungono qui la loro voce invece di un proprio keydown (persona vicina in testa, cavallo in fondo).
 const AZIONI_TASTO = [
   { nome: 'parla', pronta: () => personaVicina,
-    esegui: () => apriCronista({ nome: personaVicina.nome, riga: abitanti.riga(personaVicina), nota: 'Dialogo segnaposto: le conversazioni arriveranno con la Veglia.' }) },
-  { nome: 'porta', pronta: () => portaVicina, esegui: () => apriCronista(portaVicina) },
+    esegui: () => apriCronista({ nome: personaVicina.nome, riga: abitanti.riga(personaVicina) }) },
+  { nome: 'porta', pronta: () => portaVicina, esegui: () => apriCronista(portaVicina, portaLuogo) },
 ];
 let portaVicina = null;                    // { nome, tipo, porta } dell'edificio vicino, o null
+let portaLuogo = null;                     // il luogo (carta.luoghi) dell'edificio vicino: la Veglia vale nel borgo di partenza
 let _invitoPorta = null;
 function cercaPortaVicina() {
   portaVicina = null;
@@ -468,6 +470,7 @@ function cercaPortaVicina() {
       if (-(dx0 * p.nx + dz0 * p.nz) < PORTA.rivolto) continue;        // rivolto verso la porta
       migliore = d;
       portaVicina = e;
+      portaLuogo = r.luogo ?? null;
     }
   }
   if (!_invitoPorta) _invitoPorta = avvisoHud('', 'messaggio');
@@ -487,40 +490,81 @@ function cercaScavalcoVicino(dt) {
   _invitoScavalco.hidden = !p || portaVicina || personaVicina;
   if (p) _invitoScavalco.textContent = `Spazio: ${p.tipo === 'sali' ? 'sali' : 'scavalca'}`;
 }
-function apriCronista(e) {
-  chiudiCronista();
-  tasti.clear();
-  const box = document.createElement('div');
-  box.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:60;width:min(560px,90vw);'
-    + 'background:#efe2c2;color:#3a2412;border:3px double #7a4f22;box-shadow:0 0 0 6px #c9ad78,0 12px 40px rgba(0,0,0,.6);'
-    + 'padding:22px 26px;font:16px Georgia,serif;text-align:center';
-  const titolo = document.createElement('div');
-  titolo.textContent = e.nome;
-  titolo.style.cssText = 'font-size:24px;letter-spacing:1px;color:#6b1d10;margin-bottom:6px';
-  const miniatura = document.createElement('div');
-  miniatura.textContent = '✦ ✦ ✦';
-  miniatura.style.cssText = 'color:#a07a3c;margin:6px 0 12px';
-  const riga = document.createElement('div');
-  riga.textContent = e.riga ?? RIGHE_CRONISTA[e.tipo] ?? 'Qui finisce la strada e comincia il racconto.';
-  riga.style.cssText = 'font-style:italic;line-height:1.5;margin-bottom:10px';
-  const nota = document.createElement('div');
-  nota.textContent = e.nota ?? 'Carta del cronista (segnaposto): le azioni arriveranno con la Veglia.';
-  nota.style.cssText = 'font-size:12px;color:#7a6040;margin-bottom:14px';
-  const esci = document.createElement('button');
-  esci.textContent = 'Esci';
-  esci.style.cssText = 'font:16px Georgia,serif;padding:4px 22px;background:#7a4f22;color:#efe2c2;border:1px solid #3a2412;cursor:pointer';
-  esci.onclick = chiudiCronista;
-  box.append(titolo, miniatura, riga, nota, esci);
-  document.body.appendChild(box);
-  cronista = box;
-  if (_invitoPorta) _invitoPorta.hidden = true;
+// Carta del cronista (G1, passo 2, interfaccia.js): mentre è aperta il tempo non scorre e il cavaliere non si muove.
+// Nel borgo di partenza, durante la Veglia, le porte aprono gli eventi `veglia.*` (js/data/events_veglia.js) con le
+// azioni che costano la loro durata in minuti; altrove (e in Libera) la carta ha il nome e una riga.
+const cartaCronista = creaCartaCronista({
+  onApri: () => { cronista = true; tasti.clear(); if (_invitoPorta) _invitoPorta.hidden = true; },
+  onChiudi: () => { cronista = null; tasti.clear(); salvaOra(); },
+});
+const ESCI = { testo: 'Esci', scegli: () => cartaCronista.chiudi() };
+
+/** Nome della casata della rocca di partenza (dal seme; G3 lo riprenderà). */
+const nomeCasata = () => (typeof vegliaNomeCasata === 'function' ? vegliaNomeCasata(carta?.seme ?? 0) : 'la casata');
+
+/** Dormire fino a Prima in un luogo del borgo (stalla, taverna): come R di sera, più i bonus del letto. */
+function dormiNelBorgo({ dove, forza = 0, salute = 0 }) {
+  const prima = Knight.forza.cur;
+  const passi = Calendar.avanzaFinoA(0);
+  Knight.riposaPassi(passi);
+  Knight.forza.cur = Math.min(Knight.forza.max, Knight.forza.cur + forza);
+  Knight.salute.cur = Math.min(Knight.salute.max, Knight.salute.cur + salute);
+  if (typeof Events !== 'undefined') Events.tickDeadlines();
+  return `Dormi ${dove} fino a Prima (${_ore(passi)})${_guadagno(prima)}`;
 }
-function chiudiCronista() {
-  if (!cronista) return;
-  cronista.remove();
-  cronista = null;
-  tasti.clear();
+const contestoEventi = () => ({ casata: nomeCasata(), dormi: dormiNelBorgo });
+
+/** Evento della Veglia per la porta di un edificio del borgo di partenza, o null. */
+function eventoDellaPorta(e, luogo) {
+  if (!Calendar.inVeglia || !luogo?.partenza || typeof vegliaEventoPer !== 'function') return null;
+  const presenti = new Set();
+  for (const r of rocche) if (r.luogo?.partenza) for (const ed of r.edifici ?? []) presenti.add(ed.tipo);
+  const id = vegliaEventoPer(e.tipo, presenti);
+  return id ? Events.getById(id) : null;
 }
+
+function mostraEvento(ev, luogo) {
+  const ctx = Events._ctx(contestoEventi());
+  const titolo = ev.title;
+  if (ev.aperto && !ev.aperto(ctx)) {
+    cartaCronista.mostra({ titolo, testo: ev.chiuso ?? 'Chiuso.', opzioni: [ESCI] });
+    return;
+  }
+  cartaCronista.mostra({
+    titolo,
+    testo: typeof ev.text === 'function' ? ev.text(ctx) : ev.text,
+    nota: `${Calendar.oraCanonica()} · ${Knight.oro} oro · Forza ${Math.ceil(Knight.forza.cur)}`,
+    opzioni: ev.options.map((o) => ({
+      testo: o.text, etichetta: o.prereqLabel,
+      disponibile: !o.prereq || !!o.prereq(ctx),
+      scegli: () => scegliOpzione(ev, o, luogo),
+    })),
+  });
+}
+
+function scegliOpzione(ev, o, luogo) {
+  if (!o.effects?.length && !o.reply) { cartaCronista.chiudi(); return; }
+  const righe = Events.applyEffects(o.effects, contestoEventi());
+  Events.markSeen(ev);
+  salvaOra();
+  // Dopo l'investitura la Veglia è finita: la carta non torna agli eventi della Veglia.
+  const ancora = Calendar.inVeglia ? [{ testo: 'Indietro', scegli: () => mostraEvento(ev, luogo) }] : [];
+  cartaCronista.mostra({ titolo: ev.title, testo: o.reply ?? '', righe, opzioni: [...ancora, ESCI] });
+}
+
+function apriCronista(e, luogo = null) {
+  const ev = eventoDellaPorta(e, luogo);
+  if (ev) { mostraEvento(ev, luogo); return; }
+  const nota = Calendar.inVeglia && e.porta
+    ? 'Qui nessuno ha lavoro per un garzone che non conosce.'
+    : e.nota ?? (e.porta ? 'Le azioni di questo luogo arriveranno con le missioni.' : null);
+  cartaCronista.mostra({
+    titolo: e.nome,
+    testo: e.riga ?? RIGHE_CRONISTA[e.tipo] ?? 'Qui finisce la strada e comincia il racconto.',
+    nota, opzioni: [ESCI],
+  });
+}
+function chiudiCronista() { cartaCronista.chiudi(); }
 
 // ─── Luci vicine (M7, passo 7) ──────────────────────────────────────────
 // Le sorgenti di borghi, rocche e campagna (torce, forge) sono molte; PointLight vere solo per le LUCI_VICINE più
@@ -1014,7 +1058,7 @@ async function init() {
   const ripresa = scelta.importa ? Save.applyBlob(scelta.importa.data) : !scelta.nuova && await Save.load(slot);
   if (!ripresa) {
     if (!PROVA_PRESTAZIONI) await Save.delete(slot);
-    nuovaPartitaDati(modalita);
+    nuovaPartitaDati(modalita, scelta.nome);
   }
   Save.modalita = modalita;
   const sc = ripresa ? Save.scenaSalvata : null;
@@ -1074,6 +1118,10 @@ async function init() {
     }
     scriviIndirizzo();
   }
+
+  // La casata della rocca di partenza ha un nome generato dal seme (G1, passo 2): la reputazione lo mostra.
+  const repCasata = Knight.reputazione.find((r) => r.id === 'vorn');
+  if (repCasata) repCasata.nome = nomeCasata();
 
   Save.statoScena = () => {
     const k = knight.stato;
@@ -1246,8 +1294,9 @@ window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;      // si sta scrivendo (es. il seme della Carta)
   if (e.code === 'KeyM' && !e.repeat) { cartaVista.alterna(); return; }
   if (cartaVista.aperta) return;
-  if (cronista) {                                        // Carta del cronista aperta: solo uscire
-    if ((e.code === 'Escape' || e.code === PORTA.tasto) && !e.repeat) chiudiCronista();
+  if (cronista) {                                        // Carta del cronista aperta: scelte con 1–9, Esc o E per uscire
+    if (e.repeat) return;
+    if (!cartaCronista.tasto(e) && e.code === PORTA.tasto) chiudiCronista();
     return;
   }
   if (e.code === PORTA.tasto && !e.repeat) {
