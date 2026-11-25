@@ -21,7 +21,7 @@ instabile durante lo sviluppo. In alternativa in locale con `python -m http.serv
   sviluppo della Carta è `js/3d/cartaVista.js`. Cambiando le Carte generate: aggiornare `VERSIONE_GENERATORE`
 - `js/` — logica di gioco ereditata, script classici senza grafica (`config` `calendar` `knight`
   `combat` `events` `news` `save` + `data/`). I moduli 3D li leggono come globali.
-- `assets/terrain/` — heightmap reali (`.bin` + `.json`)
+- `assets/terrain/` — heightmap reali (`.bin` + `.json`); `assets/fonts/` — font dell'interfaccia (SIL OFL, `README.md`)
 - `tools/dem/` — script Python per generare le heightmap (istruzioni nel suo `README.md`)
 - `lib/three/` — Three.js r187 vendorizzato (`three.module.js` + `three.core.js` + `LICENSE`, addon usati
   in `addons/`, importati come `three/addons/...`): NON modificare
@@ -48,7 +48,7 @@ instabile durante lo sviluppo. In alternativa in locale con `python -m http.serv
    Unica eccezione (solo **modalità reale**, dopo M6): scaricare dati di terreno da fonti che lo
    permettono dal browser, con cache e avviso se non rispondono. Il mondo generato non scarica nulla
 6. Grafica procedurale: mesh costruite via codice con primitive Three.js, niente modelli `.glb` esterni
-   (per ora). Unici asset ammessi: dati di terreno
+   (per ora). Unici asset ammessi: dati di terreno e i font di `assets/fonts/` (approvati, licenza OFL)
 7. Test incrementale: ogni milestone deve essere provata nel browser (anche su Pages) prima di passare avanti
 8. Prestazioni: obiettivo 60 FPS su PC medio; contatore FPS sempre attivabile con il tasto `F3`
 9. La logica di gioco (`js/*.js` senza grafica) non deve dipendere da Three.js
@@ -66,7 +66,7 @@ architettura: quelle stanno in `docs/`. Aggiornare la fase corrente a ogni cambi
 
 ## Fase corrente
 
-**G1, Veglia giocabile e menu d'avvio** (`docs/EARLY_GAME.md` §7; passo 1 unito, prossimo il passo 2): prima milestone di gioco,
+**G1, Veglia giocabile e menu d'avvio** (`docs/EARLY_GAME.md` §7; passi 1–2 uniti, prossimo il passo 3): prima milestone di gioco,
 ordine delle successive in `docs/GDD.md` §5. La grafica (M7 7–8, M8 5–8, `docs/ESPLORAZIONE_3D.md`) prosegue quando un
 passo di gioco la richiede; contenuti nuovi sempre nel budget di `docs/PRESTAZIONI.md` e provati con `?seme=570549&prova`.
 M0–M6 e «Prestazioni» completate. La 2D resta nella cronologia git (`2c869fa`).

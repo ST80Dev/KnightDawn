@@ -43,6 +43,7 @@ const News = {
       x:       (payload.x != null) ? payload.x : null,
       y:       (payload.y != null) ? payload.y : null,
       faction: payload.faction || null,
+      doc:     payload.doc     || null,   // foglio da mostrare nello scrittoio (G1: { tipo, testo, fonte, quando… })
       turno,
     };
     this.tokens.push(token);

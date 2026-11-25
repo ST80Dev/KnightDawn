@@ -92,6 +92,30 @@ limpida 110–150 km (25 %); tra un giorno e il successivo cambia con continuit�
 contrasto, a 50 km ~85 %. Il valore del momento è nel pannello `F3` (riga «tempo»). Quando ci sarà il meteo, il tiro del
 giorno verrà da lì (pioggia e vento → limpida). Curvatura ed esagerazione dei rilievi lontani: `orizzonte.js` (M6).
 
+## Riquadri e testi (HTML sopra la scena) — approvato con l'utente, novembre 2026
+
+Tono da manoscritto e da opera incorniciata, senza esagerare. Codice in `js/3d/interfaccia.js`, regole in `style.css`
+(sezione «Stile dei riquadri»), font in `assets/fonts/` (SIL OFL, vedi il `README.md` lì).
+- **Caratteri**: Cinzel (titoli, date, numeri dei tasti), EB Garamond (testo e pulsanti), UnifrakturMaguntia (solo
+  iniziali miniate e sigilli: mai frasi intere), Fondamento (scrittura a mano di voci e lettere).
+- **Carta del cronista**: pergamena invecchiata con bordo strappato in una cornice di legno intagliato, disegnata in
+  SVG alla misura vera (`cornice`): venatura orizzontale sopra e sotto e verticale ai lati, arco in alto con bottone
+  rosso, filetti e intarsi d'oro curvi, quattro fregi diversi agli angoli (voluta, giglio, nodo, rosa) con scala e
+  dettagli variati. Deterministica dal titolo: la stessa porta ha sempre la stessa cornice. Il contorno esterno resta
+  solido (un contorno storto sopra la scena sembrerebbe un errore). Iniziale miniata oro su rosso; testi in bruno scuro
+  (la nota e le scelte non disponibili restano leggibili sulla pergamena).
+- **Fogli delle notizie** (`foglio`): la forma dice quanto fidarsi. *Voce*: ritaglio di carta povera, strappato,
+  scrittura frettolosa, nessun sigillo. *Lettera*: pergamena piegata in tre, scrittura a mano, destinatario e firma,
+  sigillo di ceralacca con l'iniziale e i nastri, del colore di chi scrive. *Bando*: foglio affisso con i chiodi,
+  intestazione incisa, iniziale miniata, sigillo. `usura` 0–1 (distanza e tempo del viaggio) scurisce, macchia e
+  sgualcisce. Arrivo: avviso in alto al centro che sparisce da solo (non ferma il gioco); i fogli restano nello
+  **scrittoio** (`J`).
+- **Pannello di stato, messaggi, minimappa**: sobri, legno scuro con un filetto d'oro, così i numeri restano leggibili.
+- **Menu d'avvio**: titolo inciso in oro e sottotitolo.
+- **Tecnica**: gli id dentro gli SVG hanno un prefisso per istanza (due SVG nella stessa pagina non si rubano i
+  ritagli); lo sfondo si rifà quando il riquadro cambia misura (`ResizeObserver`). Niente immagini. La Carta di
+  sviluppo (M) e il pannello F3 restano come sono.
+
 ## Prestazioni
 
 Budget, misure, cause note e piano della milestone «Prestazioni»: `docs/PRESTAZIONI.md` (scheda di riferimento:
