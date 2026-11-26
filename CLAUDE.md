@@ -9,7 +9,7 @@ Il movimento di esplorazione è in tempo reale; il combattimento **resta a turni
 ## Stack
 Vanilla JS (ES modules) / HTML / CSS + **Three.js r187 copiato in `lib/three/`**.
 Nessun bundler, nessun npm in produzione, nessun CDN: Three.js si carica via `importmap` da file locali.
-Deploy GitHub Pages. Single-player, localStorage. UI in italiano. Target: desktop, mouse + tastiera.
+Deploy GitHub Pages. Single-player, localStorage. UI in italiano. Target: desktop a 1920×1080, mouse + tastiera (schermo di riferimento: `docs/GRAFICA_3D.md`).
 Test: su GitHub Pages dopo il merge in `main` (ricaricare con Ctrl+F5, cache ~10 min); `main` può essere
 instabile durante lo sviluppo. In alternativa in locale con `python -m http.server` (no doppio clic sull'HTML).
 

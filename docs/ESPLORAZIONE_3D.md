@@ -3254,6 +3254,94 @@ nuovo, sempre sull'acqua dolce: mediana 31 m, mai oltre 140 m). Misure su otto s
 e collina coltivata, nessuna in alta montagna) — lavoro di M7/Vegetazione; e il mulino in 3D (edificio sull'acqua con
 la ruota), che è un passo a sé.
 
+## Porti e traghetti sugli specchi d'acqua interni (novembre 2026) — meccanismo scelto dall'utente, in corso
+
+> Richiesta dell'utente: «ci vogliono villaggi che siano porti anche su specchi d'acqua interni, soprattutto dato che
+> in vari semi ci sono isole grandi interne con villaggi e castelli, altrimenti non raggiungibili»; e poi «mi andrebbe
+> bene che ci siano villaggi e rocche o città su grandi isole: qualche villaggio porto che permetta di sbarcare nelle
+> isole dello specchio d'acqua oppure in altri villaggi porti sull'altra sponda, per magari accelerare il viaggio».
+
+**Meccanismo scelto (dall'utente, fra tre proposti): passaggio sulla Carta.** Il traghetto è una tratta della rete di
+viaggio come una strada; nella Scena 3D il molo offre «imbarcati», che riporta alla Carta e sbarca all'altro approdo.
+Niente barca da guidare in tempo reale: quella scelta è stata scartata perché richiede veicolo, acqua navigabile e
+caricamento dei blocchi via acqua.
+
+**Misure di partenza** (7 semi, con la densità dei villaggi di M8):
+
+| | valore |
+|---|---|
+| laghi per mondo | 10,8, di cui 3,6 da 10 km² in su; i maggiori 170–330 km² |
+| villaggi già in riva a un lago | 5,7 % (≈17 per mondo), 1–8 per ciascun lago grande |
+| villaggi fuori dalla rete delle strade | **0 su 2011** |
+| rocche su isole interne | 1 in 7 mondi |
+| isole da 2 km² in su | 0–4 per mondo; la maggiore trovata 40 km², **vuota** |
+
+Quindi **non è la riparazione di un difetto**: oggi nessun villaggio è irraggiungibile, e le isole grandi esistono ma
+sono disabitate. È una funzione nuova, e va costruita in quest'ordine, perché mettere insediamenti su un'isola prima
+di saper sbarcare creerebbe il difetto che oggi non c'è.
+
+**Pezzi e sessioni.**
+1. **Approdi** (M6, `strade.js`): per ogni lago da una soglia in su, i punti di riva dove arriva una strada o sta un
+   villaggio entro ~2 km. Un lago senza almeno due approdi utili non ne ha nessuno.
+2. **Tratte via acqua** (M6, `strade.js`): archi di classe `traghetto` fra approdi dello stesso lago. Sempre quando
+   collegano terre altrimenti separate; altrimenti quando accorciano il giro di almeno 1,6× (la regola già usata per
+   gli anelli). Entrano nella rete come archi veri, così il calcolo dei percorsi li usa.
+3. **Porti** (M8, `siti.js`): i villaggi scelti come approdo diventano porti; sulle isole grandi raggiunte da un
+   traghetto si possono allora mettere villaggi, rocche e città, che è ciò che l'utente chiede.
+4. **Viaggio** (sessione di gioco): costo in tempo (e forse denaro) della traversata sulla Carta; nella Scena il molo
+   offre «imbarcati». Senza questo pezzo i traghetti restano linee sulla Carta.
+5. **Grafica** (M7): molo, barche ormeggiate, magari una chiatta in movimento.
+
+Vincoli: il traghetto non deve diventare la scorciatoia universale (una traversata è lenta e, in futuro, chiusa dal
+maltempo); la generazione resta dentro il budget di ~15 s, rimisurata sui semi 570549, 8899 e 42424.
+
+## Città: quali rocche lo diventano (novembre 2026) — fatto, misurato, da provare
+
+> Richiesta dell'utente a M7: «le città siano più grandi delle rocche normali». La taglia è lavoro di M7 (classe
+> `citta`, borgo più largo, `ripianificaLuogo`); **qui c'è solo la scelta di quali rocche diventano città**, che sta in
+> `classiRocche` (`js/mondo/siti.js`), cioè nella sessione M8.
+
+**Due difetti misurati prima di toccare il codice** (`luoghi` per seme, città scelte):
+
+| seme | città prima del cambio |
+|---|---|
+| 12345 | 2 maggiori, 2 casate, **una a 1201 m** |
+| 570549 | 1 maggiore, 1 casata, **2 minori** |
+| 42424 | 2 maggiori, 1 casata, **1 minore** |
+
+1. **Città di classe minore.** Il punteggio arriva a 4,0 (quota 1,5 + acqua 1,2 + classe 1,0 + rumore 0,3): la classe
+   pesa un quarto, quindi una minore in pianura sull'acqua (fino a 3,0) batte una maggiore nell'interno (1,0).
+2. **Città in alta quota.** La quota entrava come rampa che si esaurisce a `SITI.citta.quota` = 500 m: sopra, il termine
+   vale 0 e **non esclude**. Nessun tetto esisteva.
+
+**Cambiato** (`SITI.citta`): `classi: ['casata', 'maggiore']` e `tetto: 1000`.
+
+- Le classi ammesse sono due e non una: le maggiori sono 4–5 per mondo e le città devono stare a ≥ 30 km, quindi con
+  «solo maggiore» ne uscirebbero spesso 2 invece di 4. Con casata + maggiore i candidati sono 13–17.
+- Il tetto è a **1000 m per scelta dell'utente** («possiamo permettere anche formazione di città arroccate magari fino
+  ai 1000 m»), **con ripiego**: due passate sui candidati, prima quelli sotto il tetto, poi — solo se non bastano —
+  quelli sopra, nello stesso ordine di punteggio. Così il tetto non costa città. Fra 500 e 1000 m la penalità della
+  quota resta, quindi lassù si va solo con una posizione davvero buona.
+- `pesoClasse` ha ora anche `citta: 1`: chi ricalcola le misure di una città può scriverle `classe = 'citta'`, e un
+  `undefined` lì diventerebbe un `NaN` silenzioso.
+
+**Misure dopo il cambio, 10 semi** (570549, 12345, 8899, 42424, 101, 20314, 777777, 1234, 31337, 99):
+
+| | |
+|---|---|
+| città | 36 in tutto, 3,6 per mondo (2–4, come chiede `numero`) |
+| **città perse per i filtri** | **0 su 10 semi** (confronto diretto col numero chiesto da ogni seme) |
+| di classe minore | **0** (prima 3 su 4 semi) |
+| sopra 1000 m | **0**; la più alta è a 748 m, mediana 457 m, la più bassa 189 m |
+| ripiego sopra il tetto | mai scattato: i candidati bassi bastano sempre |
+| `verificaSiti` e `verificaLuoghi` | 10/10 |
+
+**Confini col resto.** La chiamata a `ripianificaLuogo(carta, luogo, 'citta')` dentro `classiRocche` **è di M7** (loro
+branch): se il terreno non regge il borgo più largo, il candidato viene saltato e si prova il successivo. Il filtro di
+classe e il tetto stanno **sopra** quella riga. Da rimisurare quando le due parti si uniscono: i tre filtri si
+moltiplicano (classe × terreno che regge × distanza di 30 km) e il numero di città potrebbe calare — è il caso che il
+ripiego non copre, perché il salto di M7 non dipende dalla quota.
+
 ## Fuori dal prototipo (non farlo ora)
 
 Multiplayer, server/VPS, NPC con IA, mobile/touch, modelli esterni, combattimento in 3D, ombre di

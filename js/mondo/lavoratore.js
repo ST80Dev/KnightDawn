@@ -14,7 +14,7 @@
 import { generaCarta, VERSIONE_GENERATORE } from './carta.js';
 import { verificaFiumi, verificaPanorami, verificaVarieta, verificaLuoghi } from './verifica.js';
 import { aggiungiLuoghi } from './luoghi.js';
-import { aggiungiStrade, precalcolaStrade } from './strade.js';
+import { aggiungiStrade, precalcolaStrade, aggiungiTraghetti } from './strade.js';
 import { grigliaMondo, fiumiFini, terrenoBase } from './scena.js';
 import { aggiungiSiti, completaSiti, verificaSiti } from './siti.js';
 
@@ -120,6 +120,7 @@ self.onmessage = async (e) => {
       avanzamento('Strade e sentieri', 0.97);
       aggiungiStrade(carta);
       completaSiti(carta);
+      aggiungiTraghetti(carta);        // tratte via acqua fra approdi dello stesso lago (richiesta dell'utente)
       // Tracciato fine di tutte le strade (passo G6), prima della griglia (che ne contiene i ripiani).
       avanzamento('Tracciato delle strade', 0.965);
       precalcolaStrade(carta);
