@@ -54,6 +54,7 @@ const Save = {
       calendar: Calendar.toJSON(),
       events: (typeof Events !== 'undefined' && Events.toJSON) ? Events.toJSON() : null,
       news: (typeof News !== 'undefined' && News.toJSON) ? News.toJSON() : null,
+      conoscenza: (typeof Conoscenza !== 'undefined') ? Conoscenza.toJSON() : null,
       scena: (typeof this.statoScena === 'function') ? this.statoScena() : null,
     };
   },
@@ -103,6 +104,7 @@ const Save = {
     Calendar.fromJSON(blob.calendar);
     if (typeof Events !== 'undefined' && Events.fromJSON) Events.fromJSON(blob.events);
     if (typeof News   !== 'undefined' && News.fromJSON)   News.fromJSON(blob.news);
+    if (typeof Conoscenza !== 'undefined') Conoscenza.fromJSON(blob.conoscenza);
 
     this.modalita = blob.modalita || 'libera';
     this.scenaSalvata = blob.scena || null;
