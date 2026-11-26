@@ -68,6 +68,7 @@ export function creaPersonaSegnaposto({ ruolo, colori, seme = 1 }) {
     testa.translate(0, 1.5, 0);
     _geoSegnaposto = { corpo, testa };
     _matSegnaposto = new THREE.MeshLambertMaterial({ vertexColors: true });
+    _matSegnaposto.userData.condivisa = true;   // vive quanto la pagina: libera() in main.js non deve disporlo
   }
   const { corpo, testa } = _geoSegnaposto;
   const n0 = corpo.attributes.position.count, n1 = testa.attributes.position.count;

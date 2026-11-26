@@ -634,9 +634,12 @@ function contaPercorso() {
 
 function libera(oggetto) {
   oggetto.traverse((o) => {
-    // Modelli della vegetazione condivisi tra i blocchi (userData.condivisa): li usa già il blocco nuovo.
+    // Geometrie e materiali condivisi tra i blocchi (userData.condivisa): li usa già il blocco nuovo. Disporli
+    // qui non libera niente (restano referenziati) e costringe a ricompilare lo shader al cambio di blocco.
     if (!o.geometry?.userData.condivisa) o.geometry?.dispose();
-    for (const m of Array.isArray(o.material) ? o.material : o.material ? [o.material] : []) m.dispose();
+    for (const m of Array.isArray(o.material) ? o.material : o.material ? [o.material] : []) {
+      if (!m.userData.condivisa) m.dispose();
+    }
   });
 }
 
