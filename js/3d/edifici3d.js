@@ -119,8 +119,16 @@ const SEGNI = {
     tinta: [1.14, 1.12, 1.06] },                       // pietra più chiara del muro: lo stipite si stacca
   insegna: { alta: 2.6, braccio: 1.3, tavola: [1.15, 0.88], spessore: 0.08, catena: 0.18, simbolo: 1.45,
     ferro: [0.26, 0.28, 0.31] },
-  // Tinte della tavola (moltiplicano l'intonaco): forti, perché in ombra scuriscono.
-  tinte: { rosso: [1.5, 0.42, 0.3], bruno: [1.0, 0.62, 0.34], grigio: [0.8, 0.84, 0.88], verde: [0.5, 0.95, 0.45] },
+  // Tinte della tavola (moltiplicano l'intonaco): forti, perché in ombra scuriscono, e lontane dal colore del muro
+  // (una tavola grigia su pietra grigia non si vede). `chiaro`: simbolo chiaro, per le tavole scure.
+  tinte: {
+    rosso: { t: [1.5, 0.42, 0.3], chiaro: true },        // taverna: boccale chiaro su rosso
+    ocra:  { t: [1.5, 1.05, 0.4] },                      // stalla: ferro scuro su ocra
+    ferro: { t: [0.22, 0.24, 0.28], chiaro: true },      // fabbro: martello chiaro su quasi nero
+    verde: { t: [0.5, 0.95, 0.45] },                     // guaritore
+    chiara: { t: [1.18, 1.16, 1.1] },                    // armeria: spada scura su tavola chiara
+  },
+  simboloChiaro: [1.3, 1.32, 1.34],
 };
 
 // Piede degli edifici: fascia di terra larga `largo` m, un sasso ogni ~passoSassi m con probabilità `sassi`, sassi
@@ -139,11 +147,11 @@ export const TIPI_CASA = {
 /** Edifici nominati: misure (largo × fondo, m), piani, materiale delle pareti. */
 export const EDIFICI = {
   stalla:    { nome: 'Stalla', largo: 14, fondo: 7, piani: 1, intonaco: false, recinto: 8, copertura: 'paglia',
-    insegna: { tinta: 'bruno', simbolo: 'ferro' } },
+    insegna: { tinta: 'ocra', simbolo: 'ferro' } },
   taverna:   { nome: 'Taverna', largo: 11, fondo: 9, piani: 2, intonaco: true, graticcio: true, copertura: 'scandole',
     insegna: { tinta: 'rosso', simbolo: 'boccale' } },
   fabbro:    { nome: 'Fabbro', largo: 9, fondo: 7, piani: 1, intonaco: false, tettoia: 4,
-    insegna: { tinta: 'grigio', simbolo: 'martello' } },
+    insegna: { tinta: 'ferro', simbolo: 'martello' } },
   guaritore: { nome: 'Guaritore', largo: 7, fondo: 7, piani: 2, intonaco: true, graticcio: true,
     insegna: { tinta: 'verde', simbolo: 'mortaio' } },
   loggia:    { nome: 'Loggia del mercato', largo: 10, fondo: 6, loggia: true },
@@ -152,7 +160,7 @@ export const EDIFICI = {
   cappella:  { nome: 'Cappella', largo: 6, fondo: 10, piani: 2, intonaco: false, campanile: 1.8, copertura: 'lastre' },
   salaArmi:  { nome: "Sala d'armi", largo: 16, fondo: 9, piani: 2, intonaco: false, copertura: 'lastre' },
   armeria:   { nome: 'Armeria', largo: 8, fondo: 6, piani: 1, intonaco: false,
-    insegna: { tinta: 'grigio', simbolo: 'spada' } },
+    insegna: { tinta: 'chiara', simbolo: 'spada' } },
   // Pertinenze della corte del signore (M7, passo 10c).
   cucina:    { nome: 'Cucina', largo: 8, fondo: 6, piani: 1, intonaco: false, copertura: 'coppi', comignolone: 1.8 },
   cantina:   { nome: 'Cantina', largo: 7, fondo: 5.5, piani: 1, intonaco: false, copertura: 'lastre', bassa: true },
@@ -745,8 +753,8 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
   }
 
   /** Simbolo del mestiere in rilievo sulla tavola dell'insegna, nel piano di normale (nu, nv). */
-  function simbolo(nome, u, v, y, nu, nv) {
-    const ferro = { tinta: SEGNI.insegna.ferro }, g = [], K = SEGNI.insegna.simbolo;
+  function simbolo(nome, u, v, y, nu, nv, chiaro = false) {
+    const ferro = { tinta: chiaro ? SEGNI.simboloChiaro : SEGNI.insegna.ferro }, g = [], K = SEGNI.insegna.simbolo;
     const box = (lx, ly, lz, du, dy) => { const b = new THREE.BoxGeometry(lx, ly, lz); b.translate(du, dy, 0); return b; };
     if (nome === 'boccale') {                           // boccale con manico e schiuma
       const c = new THREE.CylinderGeometry(0.115, 0.125, 0.26, 10);
@@ -799,14 +807,15 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
       parti.pietra.push(segna(prisma(q4(Rc), q4(Rc), yT, y), ferro));
     }
     const cT = [base[0] + f[0] * (I.braccio - tl / 2 + 0.02), base[1] + f[1] * (I.braccio - tl / 2 + 0.02)];
+    const col = SEGNI.tinte[tinta] ?? SEGNI.tinte.chiara;
     const Rt = rett(cT, s, f, I.spessore / 2, tl / 2);
-    parti.intonaco.push(segna(prisma(q4(Rt), q4(Rt), yT - tw, yT), { tinta: SEGNI.tinte[tinta] }));
+    parti.intonaco.push(segna(prisma(q4(Rt), q4(Rt), yT - tw, yT), { tinta: col.t }));
     const Rc2 = rett(cT, s, f, I.spessore / 2 + 0.012, tl / 2 + 0.03);       // cornice di legno attorno
     parti.legno.push(prisma(q4(Rc2), q4(Rc2), yT - tw - 0.03, yT - tw + 0.05),
       prisma(q4(Rc2), q4(Rc2), yT - 0.05, yT + 0.03));
     for (const n of [1, -1]) {
       const uu = cT[0] + s[0] * n * (I.spessore / 2 + 0.03), vv = cT[1] + s[1] * n * (I.spessore / 2 + 0.03);
-      simbolo(sim, uu, vv, yT - tw / 2, s[0] * n, s[1] * n);
+      simbolo(sim, uu, vv, yT - tw / 2, s[0] * n, s[1] * n, col.chiaro);
     }
   }
 
