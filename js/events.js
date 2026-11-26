@@ -25,6 +25,9 @@
 //     options: [Option]    // ≥ 2 scelte (linea guida)
 //   }
 // Option = { text, prereq(ctx), prereqLabel, effects:[Effect], reply }
+// Effetto tempo: { type:'tempo', minuti:N } (azioni di persona nelle Scene) o { type:'tempo', passi:N } (Carta).
+// Campi facoltativi dell'evento per le porte delle Scene (G1): aperto(ctx) → bool e chiuso (testo se è chiuso);
+// text può essere una funzione(ctx) → stringa.
 // Effect = function(ctx) | { type:'forza'|'volonta'|'salute'|'onore'|'oro'|
 //                                 'tempo'|'log'|'reputazione'|'rivela'|
 //                                 'deadlineAdd'|'deadlineDone'|'news'|'combat', ... }
@@ -216,8 +219,10 @@ const Events = {
       case 'onore':   Knight.modificaOnore(eff.delta); break;
       case 'oro':     Knight.oro = Math.max(0, Knight.oro + eff.delta); break;
       case 'tempo':
+        // { minuti } nelle Scene 3D (azioni di persona, GDD §3); { passi } per il viaggio sulla Carta.
         if (typeof Calendar !== 'undefined') {
-          Calendar.avanza(eff.passi || 1);
+          if (eff.minuti != null) Calendar.avanzaMinuti(eff.minuti);
+          else Calendar.avanza(eff.passi || 1);
           this.tickDeadlines();
         }
         break;

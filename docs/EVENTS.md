@@ -117,8 +117,8 @@ Due meccanismi distinti, entrambi minimali.
    con prereq stagione + `once=true` (festa del raccolto, veglia d'inverno,
    mercato di primavera, calura estiva).
 
-Niente sistema viveri separato: la Forza che cala più rapidamente nel
-bioma+stagione cattivo è già il segnale di gestione.
+~~Niente sistema viveri separato~~ [rivisto con l'utente, novembre 2026]: un minimo di **pasti** in stile
+Lupo Solitario, da comprare e portare nello zaino (`docs/GDD.md` §2 *Il cavaliere*, «Pasti e zaino»).
 
 **Scadenze.** Registro globale dentro `Events`:
 

@@ -210,7 +210,7 @@ lavorando.
 
 ---
 
-## 7. Milestone G1 — Veglia giocabile e menu d'avvio (piano da approvare)
+## 7. Milestone G1 — Veglia giocabile e menu d'avvio
 
 > Prima milestone di **gioco** (non di grafica), decisa con l'utente a novembre 2026: oggi nel 3D sono
 > collegati solo `Knight`, `Calendar` e `Save`; `Events`, `Combat`, `News`, `Items` ed `Enemies` sono
@@ -274,6 +274,17 @@ poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un
    dà un messaggio e non tocca nulla. In gioco: F8 salva e porta al menu, da lì si scarica. Il campo del seme parte
    vuoto (casuale). Provato in headless: scarica, file non valido rifiutato, caricamento in un browser pulito con
    oro, data e seme identici.
+1b. **Nebbia della conoscenza, versione base** [anticipata da G2 su richiesta dell'utente, novembre 2026: a inizio
+   Storia minimappa e Carta mostravano tutto il mondo]. **Stato: fatto, da provare dall'utente.** `Conoscenza` in
+   `js/news.js` (griglia del mondo a celle di 100 m: ignoto, intravisto, percorso; nel salvataggio e nei file JSON
+   come corse di valori, ~1–3 KB); in `main.js` `preparaConoscenza`, `rivelaInizio`, `aggiornaConoscenza` (costanti in
+   `CONOSCENZA`); nella minimappa uno strato di pergamena che copre l'ignoto e sbiadisce l'intravisto, sopra rilievo,
+   fiumi e strade, e i luoghi mai visti non compaiono. All'inizio il garzone conosce il borgo e ~1,5 km attorno
+   (intravisto fino a 2,2 km) e la strada fino al villaggio più vicino; camminando scopre ~250 m attorno (intravisto
+   ~700 m; di notte 120 e 200 m). In Storia `M` apre la minimappa grande (la Carta di sviluppo resta della Libera);
+   in Libera si vede tutto. Provato in headless (seme 570549): 0,16 % del mondo noto all'inizio, cresce camminando,
+   resta uguale dopo salvataggio e ripresa; Libera senza nebbia; nessun errore. Con G2: linea di vista dalle alture,
+   notte e meteo, luoghi sentiti dire.
 2. **Carta del cronista vera.** Riquadro con titolo, testo, pulsanti tematici, prerequisiti visibili
    («Richiede…») ed esito; usa il motore di `js/events.js` così com'è. Effetto di tempo nuovo
    `{ type:'tempo', minuti:N }` accanto a `passi` (`Calendar.avanzaMinuti`); i costi della Veglia passano
@@ -281,18 +292,49 @@ poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un
    o scuderia, taverna → taverna, mercato → loggia del mercato o armeria, sala d'armi → cortile della
    rocca, portale → porta del borgo, cappella → cappella o chiesa. Mentre è aperta il tempo è fermo.
    Pannello di stato con oro, rango ed equipaggiamento.
-3. **Mercato ed equipaggiamento.** Compra e vendi dal catalogo `js/data/items.js` (rivendita al 50 %),
-   equipaggiamento indossato; il ronzino comprato compare accanto al cavaliere (milestone Cavallo,
+   **Orari** [deciso]: mercato, fabbro e lavori da Prima a Vespri; taverna fino a Compieta; di notte le porte
+   sono chiuse. **Sonno** [deciso]: in stalla gratis (recupero di oggi), in taverna a pagamento (più Forza);
+   `R` all'aperto resta, fuori dal borgo più rischioso. **Cure** [deciso]: la Salute torna piano dormendo, più in
+   fretta pagando il guaritore o l'infermeria. **Con chi si parla** [deciso]: maestro d'armi, stalliere, oste e
+   mercante alle porte dei loro edifici; le persone che camminano danno una riga e qualche voce.
+   **Nome del garzone** nel menu (solo Storia, con «casuale») e **nome generato della casata di partenza** al posto
+   della «Casata Vorn» scritta a mano: G3 lo riprenderà [deciso].
+   **Stato: fatto, da provare dall'utente.** `js/3d/interfaccia.js` (`creaCartaCronista`: pergamena con titolo, testo,
+   righe di cronaca e pulsanti; quelli non disponibili restano visibili, spenti, con il requisito; tasti 1–9, Esc o E
+   per uscire), `js/events.js` (`{ type:'tempo', minuti }`; campi `aperto`/`chiuso` e `text` come funzione),
+   `js/data/events_veglia.js` riscritto, `main.js` (porte → eventi, `dormiNelBorgo`, nome e oro nel pannello).
+   Edifici → eventi nel borgo di partenza: stalla (lavoro 3 ore, +2 oro, −12 Forza; dormire nel fienile da Vespri,
+   gratis, +5 Salute), pozzo, cucina e cantina (commissioni 2 ore, +1 oro), taverna (servire 3 ore, +1 oro e a volte
+   una mancia, una voce; pagliericcio da Vespri 2 oro, +15 Forza e +10 Salute oltre al sonno), sala d'armi (lezione
+   3 ore, 2 oro, −15 Forza, +4 Volontà; tre lezioni: Scudiero) — se la rocca non ha la sala d'armi il maestro sta
+   all'armeria, se manca anche quella nel palazzo —, armeria, fabbro e loggia (mercato: pulsante spento fino al
+   passo 3), guaritore e infermeria (cura 90 minuti, 2 oro, +30 Salute), palazzo del signore (la guardia non fa
+   entrare un garzone), cappella e chiesa (investitura con i requisiti di prima; pregare 30 minuti, +3 Volontà).
+   Orari: lavori, maestro, mercato e guaritore Prima–Nona; taverna e cappella fino a Vespri; poi la carta dice che
+   è chiuso. Fuori dal borgo di partenza o in Libera la carta ha il nome e una riga. Menu: «Nome del cavaliere» con
+   «Casuale» (solo Storia; 30 nomi anglo-fantasy, `docs/GDD.md` §2 «Culture e nomi»). Casata di partenza: `vegliaNomeCasata(seme)` (30 nomi anglo-fantasy, provvisorio fino a G3).
+   Provato in headless (seme 570549): stalla, esito con «Indietro», taverna, maestro all'armeria (la rocca non ha la
+   sala d'armi), palazzo con il nome della casata, taverna chiusa a Compieta, sonno nel fienile fino a Prima del
+   giorno 2, guaritore; in Libera la taverna dà solo la riga; nessun errore. Numeri [DA BILANCIARE]: oggi una
+   giornata di lavoro rende ~6–7 oro.
+3. **Mercato, equipaggiamento, zaino e pasti.** Compra e vendi dal catalogo `js/data/items.js` (rivendita al
+   50 %), equipaggiamento indossato; **zaino** con pochi posti e **pasti** (uno al giorno, `docs/GDD.md` §2
+   «Pasti e zaino»); il ronzino comprato compare accanto al cavaliere (milestone Cavallo,
    `docs/ESPLORAZIONE_3D.md`). In Storia si parte a piedi, in Libera con il cavallo.
 4. **Combattimento nel riquadro.** Tre colonne (cavaliere, scelte e Slancio, nemico) e cronaca dei Round;
    la scena dietro è ferma. Ogni Round confermato avanza il calendario dei suoi minuti; i rami di esito
    tornano all'evento. In Veglia a Salute 0 si sviene; dopo l'investitura **schermata di morte** con
    ritorno al menu. In Libera un comando di prova apre un
    combattimento con un nemico a scelta.
-5. **Incarico fuori porta: i lupi all'ovile.** Si accetta nel borgo; l'ovile vero più vicino (M8, entro
-   2–4 km) si segna sulla minimappa; ci si va di persona (il blocco segue il cavaliere); vicino al recinto
-   parte l'evento con il combattimento; la paga si ritira tornando al borgo. Le altre missioni (bestia
-   smarrita, pacco al villaggio) si aggiungono con lo stesso schema se il tempo della Veglia lo chiede.
+5. **Incontri fuori porta con gli animali** [rivisto con l'utente, novembre 2026: non i lupi sempre e solo
+   all'ovile]. Camminando fuori dal borgo, soprattutto lontano dalle strade, di sera e di notte, può capitare un
+   incontro casuale con un animale **scelto per bioma** (lupi e cinghiali nei boschi e in collina, orsi in
+   montagna, vipere e rapaci sulle rocce, branchi in pianura aperta…), ognuno con **caratteristiche di
+   combattimento proprie** (veloce: fuga difficile; in branco: più Round; carica; veleno: Salute persa dopo;
+   timido: fugge se lo Slancio gira). Si gioca **solo nel riquadro di combattimento**: niente animali in 3D per
+   ora. Serve ampliare il catalogo `js/data/enemies.js` (oggi 4 bestie). Il primo scontro sopravvissuto vale come
+   «prima battaglia» per l'investitura. Gli incarichi del borgo (bestia smarrita, pacco al villaggio, guardia
+   all'ovile) restano possibili, con l'animale pescato allo stesso modo.
 6. **Investitura e fine della Veglia.** Requisiti come oggi (rango scudiero, prima battaglia, oro);
    cerimonia nella Carta del cronista, con la prima scelta tra **giurare fedeltà** alla casata del
    castello o **partire libero** (`docs/FACTIONS.md` §3; in G1 è solo la scelta registrata, gli effetti
@@ -327,3 +369,6 @@ dal menu e conserva la sua partita a parte; il percorso di prova funziona come p
   del giocatore).
 - File nuovo approvato: `js/3d/interfaccia.js` (menu d'avvio, Carta del cronista, riquadro di
   combattimento).
+- Orari, sonno, cure, nome del garzone, casata di partenza generata, interlocutori alle porte (passo 2), pasti e
+  zaino (passo 3), incontri casuali con animali per bioma solo nel riquadro (passo 5); numeri proposti da Claude e
+  tarati dopo la prova.

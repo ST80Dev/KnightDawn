@@ -85,7 +85,16 @@ Cavaliere Errante → di Ventura → Campione/Bannerale). I ranghi sbloccano
 niente albero abilità. Dettaglio completo (apertura, azioni, mercato) in
 `docs/EARLY_GAME.md`.
 
-[TBD] Equipaggiamento e inventario (pesi, slot, durabilità?)
+**Pasti e zaino** [deciso con l'utente, novembre 2026, in stile Lupo Solitario; numeri da bilanciare]:
+- uno **zaino** con pochi posti (proposta: 8) per le cose che si consumano: pasti, bende, torce, oggetti
+  trovati; l'equipaggiamento indossato (arma, armatura, scudo) non occupa posti;
+- **un pasto al giorno**: si compra in taverna e al mercato, si trova negli eventi; mangiare in taverna non
+  consuma lo zaino. Se il giorno passa senza mangiare: niente recupero di Forza nel sonno e un poco di Salute
+  persa (proposta: −3), come la Resistenza persa nel librogame. Il pasto si consuma da sé al risveglio, se
+  ce n'è uno nello zaino, con un messaggio: niente micro-gestione;
+- più avanti caccia e pesca come scelte (eventi), non come sistema a sé.
+
+[TBD] Equipaggiamento: pesi, durabilità (resta il principio di `docs/EARLY_GAME.md` §4: nessuna usura)
 [TBD] Arti magiche / abilità speciali
 [TBD] Sistema di titoli emergenti (condizioni di trigger)
 
@@ -271,14 +280,16 @@ Regole **nuove** per il 3D e per la varietà ravvicinata:
 roccia, palude, sabbia/deserto, neve, ghiaccio, fiume, acqua): eventi e costi già scritti restano
 validi.
 
-**Culture e nomi** [proposta]. Nel 2D i nomi di castelli, torri, villaggi e regione si sceglievano a
-caso per seme da liste fisse, in tre registri (anglo-medievale, cavalleresco italiano,
-tolkieniano). Le fazioni invece **non** erano generate: in `js/knight.js` ce ne sono quattro scritte
-a mano (Casata Vorn, Ordine del Cervo, Mercanti Liberi, Banditi del Sud) e `docs/FACTIONS.md` è
-ancora uno schema. Proposta: **aree culturali legate al clima** (centro di registro italiano e
-medievale come lo stile attuale; nord di registro anglo-germanico; sud di registro
-mediterraneo-orientale). Ogni area dà nomi, fazioni generate per seme e, più avanti, il proprio
-stile di architettura.
+**Culture e nomi** [rivisto con l'utente, novembre 2026: prima il centro aveva un registro italiano-medievale].
+**Tutto il mondo ha nomi anglo-fantasy** (cavaliere, casate, luoghi, persone), con l'impronta del Signore degli
+Anelli, delle Cronache del ghiaccio e del fuoco (Trono di spade), degli Anelli del Potere, di House of the Dragon e di
+Lupo Solitario: per lo più **varianti di nomi secondari** (es. Tarlow, Karstane, Mormount; Elfwine, Halbard, Rhygar),
+pochi identici, mai i protagonisti. La lingua dell'interfaccia resta l'italiano («Casata Tarlow», «la taverna»),
+come in una traduzione italiana di quei romanzi. Restano le **aree culturali legate al clima**, ora come sfumature
+dello stesso registro: nord aspro e nordico (Rohan, il Nord di Westeros, Holmgard), centro cavalleresco (Gondor,
+l'Altopiano, le Terre dei fiumi, Sommerlund), sud più caldo e antico (Dorne, Númenor, Durenor). Ogni area dà nomi,
+fazioni generate per seme (G3) e, più avanti, il proprio stile di architettura. Oggi esistono solo le liste del
+nome del cavaliere (`js/3d/interfaccia.js`) e della casata di partenza (`js/data/events_veglia.js`).
 
 **Strutture:** castelli, villaggi, città, rovine, dungeon, porti, monasteri, accampamenti, torri,
 valichi, ponti, guadi
@@ -601,7 +612,12 @@ Dettaglio architettura testi → `docs/TEXT_SYSTEM.md`
 [TBD] Lista tipi di luogo con relativa miniatura
 [TBD] Sistema di interazione NPC
 [TBD] Sistema di commercio
-[TBD] Sistema di quest/missioni locali
+**Missioni** [principio deciso con l'utente, novembre 2026; tipologie, durata e ricompense da discutere
+prima di G4]: niente schema fisso «incarico → ritorno». Il cavaliere ha più missioni aperte insieme, di
+tipi, obiettivi e destinazioni diversi, e sceglie lui quali portare avanti e in che ordine, intrecciando le
+trame a piacere. Ogni missione ha **obiettivi parziali** che danno già qualcosa (oro, notizie, reputazione,
+esperienza) anche se la missione non si chiude; chiuderla dà il premio maggiore. Il ritorno dal committente
+è solo uno dei tipi possibili.
 
 ### Compagnia e covi
 
@@ -769,7 +785,8 @@ Dettagli in `docs/UI_GUIDE.md`.
 >    `docs/EARLY_GAME.md` §7.
 > 2. **G2 — Viaggio sulla Carta**: la Carta di sviluppo diventa di gioco (percorso, tempo e Forza,
 >    eventi di viaggio, «fermati qui» che porta nella Scena) e **nebbia della conoscenza** rivelata da
->    ciò che il cavaliere vede dalle alture.
+>    ciò che il cavaliere vede dalle alture. (La versione base della nebbia, per vicinanza, è già in G1:
+>    `docs/EARLY_GAME.md` §7, passo 1b.)
 > 3. **G3 — Fazioni e nomi generati** (S5, prima parte).
 > 4. **G4 — Incarichi per tipo di luogo, reputazione, notizie che si propagano** (S3, S5, S6).
 > 5. **G5 — Seguito e covi** (S7). 6. **G6 — Archi narrativi e titoli** (S8).
