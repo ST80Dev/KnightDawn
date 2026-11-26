@@ -24,7 +24,7 @@ import { createVillaggioAPezzi, createMonasteroAPezzi, createEremoAPezzi, pianoD
 import { createRovinaAPezzi, createMisteroAPezzi } from './rovine3d.js';
 import { raggioSito, climaDelLuogo } from '../mondo/siti.js';
 import { createCartaVista } from './cartaVista.js';
-import { mostraMenuAvvio, creaCartaCronista, creaScrittoio, avvisoFoglio } from './interfaccia.js';
+import { mostraMenuAvvio, creaCartaCronista, creaScrittoio, avvisoFoglio, nomeCasuale } from './interfaccia.js';
 import { creaMinimappa } from './minimappa.js';
 import { creaOrizzonteAPezzi } from './orizzonte.js';
 import { creaAcqueScena, creaPonti, suoloStrade } from './acqua.js';
@@ -312,7 +312,7 @@ let nonSalvare = false;                   // true mentre si torna al menu dopo a
 
 /** Stato di una partita nuova. Storia: il garzone della Veglia. Libera: Cavaliere Errante già armato, fuori Veglia. */
 function nuovaPartitaDati(m, nome) {
-  Knight.init(nome || undefined);
+  Knight.init(nome || nomeCasuale());
   Calendar.init();
   if (typeof Events !== 'undefined' && Events.reset) Events.reset();
   if (typeof News !== 'undefined' && News.reset) News.reset();

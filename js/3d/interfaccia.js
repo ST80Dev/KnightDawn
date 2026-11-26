@@ -7,12 +7,15 @@ const MODALITA = {
   libera: { nome: 'Libera', riga: 'Senza storia: cavaliere già armato, a cavallo, con gli strumenti di sviluppo (Carta con il clic, T).' },
 };
 
-// Nomi del garzone (registro italiano-medievale, docs/GDD.md §2 «Culture e nomi»): «casuale» nel menu d'avvio.
-const NOMI_GARZONE = [
-  'Aldo', 'Guido', 'Rinaldo', 'Bertoldo', 'Ugolino', 'Tebaldo', 'Gualtiero', 'Ansaldo', 'Corrado', 'Ottone',
-  'Lapo', 'Nello', 'Vanni', 'Cecco', 'Bindo', 'Ghino', 'Dino', 'Puccio', 'Arrigo', 'Folco', 'Manfredo', 'Oddo',
+// Nomi del cavaliere: registro anglo-fantasy (docs/GDD.md §2 «Culture e nomi»), con l'impronta del Signore degli
+// Anelli, delle Cronache del ghiaccio e del fuoco, degli Anelli del Potere, di House of the Dragon e di Lupo Solitario:
+// per lo più varianti di nomi secondari. «Casuale» nel menu d'avvio; anche il nome della modalità Libera.
+const NOMI_CAVALIERE = [
+  'Elfwine', 'Grimbald', 'Erkenwald', 'Hirgan', 'Beregar', 'Forlan', 'Halbard', 'Damrel', 'Imrahel', 'Dervaric',
+  'Jorren', 'Rodrick', 'Brynden', 'Harwin', 'Hallis', 'Torren', 'Quenric', 'Arthor', 'Vardis', 'Edric',
+  'Cristan', 'Erryk', 'Lyonel', 'Gerold', 'Halbrin', 'Valandor', 'Arondel', 'Rhygar', 'Banedor', 'Aldric',
 ];
-const nomeCasuale = () => NOMI_GARZONE[(Math.random() * NOMI_GARZONE.length) | 0];
+export const nomeCasuale = () => NOMI_CAVALIERE[(Math.random() * NOMI_CAVALIERE.length) | 0];
 
 const _esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -65,7 +68,7 @@ export function mostraMenuAvvio(opzioni) {
             + `<b>${m.nome}</b><span>${m.riga}</span></label>`).join('')}
         </div>
         <div class="riga nome">
-          <label>Nome del garzone <input type="text" class="nome-garzone" maxlength="24" spellcheck="false"></label>
+          <label>Nome del cavaliere <input type="text" class="nome-garzone" maxlength="24" spellcheck="false"></label>
           <button type="button" class="nome-casuale" title="Un altro nome a caso">Casuale</button>
         </div>
         <div class="riga">

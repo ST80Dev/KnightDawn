@@ -300,8 +300,8 @@ poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un
    passo 3), guaritore e infermeria (cura 90 minuti, 2 oro, +30 Salute), palazzo del signore (la guardia non fa
    entrare un garzone), cappella e chiesa (investitura con i requisiti di prima; pregare 30 minuti, +3 Volontà).
    Orari: lavori, maestro, mercato e guaritore Prima–Nona; taverna e cappella fino a Vespri; poi la carta dice che
-   è chiuso. Fuori dal borgo di partenza o in Libera la carta ha il nome e una riga. Menu: «Nome del garzone» con
-   «Casuale» (solo Storia). Casata di partenza: `vegliaNomeCasata(seme)` (24 nomi, provvisorio fino a G3).
+   è chiuso. Fuori dal borgo di partenza o in Libera la carta ha il nome e una riga. Menu: «Nome del cavaliere» con
+   «Casuale» (solo Storia; 30 nomi anglo-fantasy, `docs/GDD.md` §2 «Culture e nomi»). Casata di partenza: `vegliaNomeCasata(seme)` (30 nomi anglo-fantasy, provvisorio fino a G3).
    Provato in headless (seme 570549): stalla, esito con «Indietro», taverna, maestro all'armeria (la rocca non ha la
    sala d'armi), palazzo con il nome della casata, taverna chiusa a Compieta, sonno nel fienile fino a Prima del
    giorno 2, guaritore; in Libera la taverna dà solo la riga; nessun errore. Numeri [DA BILANCIARE]: oggi una

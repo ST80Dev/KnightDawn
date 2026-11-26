@@ -49,16 +49,17 @@ function vegliaEventoPer(tipo, presenti) {
   return VEGLIA_EDIFICI[tipo] || null;
 }
 
-// Nome della casata della rocca di partenza, dal seme del mondo (registro italiano-medievale dell'area centrale,
-// docs/GDD.md §2 «Culture e nomi»). Provvisorio: G3 genera tutte le casate e riprende questo nome.
+// Nome della casata della rocca di partenza, dal seme del mondo: registro anglo-fantasy (docs/GDD.md §2 «Culture e
+// nomi»), varianti di casate minori dei romanzi e delle serie di riferimento. Provvisorio: G3 genera tutte le casate
+// (con i nomi divisi per area: nord, centro, sud) e riprende questo nome.
 const VEGLIA_CASATE = [
-  'Malvicini', 'Ardenghi', 'Gualandi', 'Ubertini', 'Montaguti', 'Rainaldi', 'Ildebrandeschi', 'Cattanei',
-  'Lambertazzi', 'Guidalotti', 'Orlandini', 'Brancaleoni', 'Aldobrandi', 'Tedaldi', 'Ottobuoni', 'Gherardeschi',
-  'Visdomini', 'Bonaccorsi', 'Ranieri', 'Faggiolani', 'Sassoferrati', 'Corbizzi', 'Uguccioni', 'Manfredini',
+  'Ashford', 'Blackmoor', 'Caswold', 'Daynor', 'Dustane', 'Fossway', 'Glovern', 'Hornwold', 'Karstane', 'Mallistor',
+  'Manderlane', 'Mormount', 'Redwynne', 'Ryswold', 'Swanmere', 'Tarlow', 'Westerlyn', 'Whentmoor', 'Cargill', 'Strongharrow',
+  'Morthane', 'Valdris', 'Amrothe', 'Lossarn', 'Eorling', 'Durenhall', 'Sommerlane', 'Torane', 'Holmgarde', 'Vancel',
 ];
 function vegliaNomeCasata(seme) {
   const n = Math.abs(Math.floor(seme || 0)) % VEGLIA_CASATE.length;
-  return 'Casata dei ' + VEGLIA_CASATE[n];
+  return 'Casata ' + VEGLIA_CASATE[n];
 }
 
 // Voci raccolte servendo in taverna (aggancio col sistema News, S6/G4: per ora solo cronaca).
