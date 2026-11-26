@@ -113,10 +113,14 @@ export function quotaFinestre(ora) {
  * simbolo del mestiere in rilievo, lanterna accanto alla porta. Misure in m.
  */
 const SEGNI = {
-  cornice: { stipite: 0.26, sporto: 0.09, architrave: 0.3, gradino: { fuori: 0.5, alto: 0.14 } },
-  insegna: { alta: 2.95, braccio: 0.95, tavola: [0.78, 0.62], spessore: 0.07, catena: 0.16, ferro: [0.28, 0.3, 0.33] },
-  // Tinte della tavola (moltiplicano l'intonaco) e colore del simbolo.
-  tinte: { rosso: [1.05, 0.42, 0.33], bruno: [0.78, 0.56, 0.38], grigio: [0.62, 0.64, 0.66], verde: [0.45, 0.72, 0.42] },
+  // Misure scelte guardando le immagini: a 11 m l'insegna deve leggersi senza fermarsi. Tavola grande come una porta
+  // stretta, braccio lungo (si vede anche di taglio camminando lungo la via), appesa ad altezza dello sguardo.
+  cornice: { stipite: 0.34, sporto: 0.13, architrave: 0.36, gradino: { fuori: 0.55, alto: 0.15 },
+    tinta: [1.14, 1.12, 1.06] },                       // pietra più chiara del muro: lo stipite si stacca
+  insegna: { alta: 2.6, braccio: 1.3, tavola: [1.15, 0.88], spessore: 0.08, catena: 0.18, simbolo: 1.45,
+    ferro: [0.26, 0.28, 0.31] },
+  // Tinte della tavola (moltiplicano l'intonaco): forti, perché in ombra scuriscono.
+  tinte: { rosso: [1.5, 0.42, 0.3], bruno: [1.0, 0.62, 0.34], grigio: [0.8, 0.84, 0.88], verde: [0.5, 0.95, 0.45] },
 };
 
 // Piede degli edifici: fascia di terra larga `largo` m, un sasso ogni ~passoSassi m con probabilità `sassi`, sassi
@@ -729,10 +733,10 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     for (const lato of [-1, 1]) {                       // stipiti
       const t = lato * (largo / 2 + st / 2);
       const R = rett([fr[0] + s[0] * t + f[0] * C.sporto / 2, fr[1] + s[1] * t + f[1] * C.sporto / 2], s, f, st / 2, C.sporto);
-      parti.pietra.push(segna(prisma(q4(R), q4(R), soglia - 0.4, soglia + alt), { sporco: 0.6 }));
+      parti.pietra.push(segna(prisma(q4(R), q4(R), soglia - 0.4, soglia + alt), { sporco: 0.6, tinta: C.tinta }));
     }
     const Ra = rett([fr[0] + f[0] * C.sporto / 2, fr[1] + f[1] * C.sporto / 2], s, f, largo / 2 + st, C.sporto);
-    parti.pietra.push(prisma(q4(Ra), q4(Ra), soglia + alt, soglia + alt + C.architrave));
+    parti.pietra.push(segna(prisma(q4(Ra), q4(Ra), soglia + alt, soglia + alt + C.architrave), { tinta: C.tinta }));
     const Rg = rett([fr[0] + f[0] * (C.gradino.fuori / 2 + 0.05), fr[1] + f[1] * (C.gradino.fuori / 2 + 0.05)], s, f,
       largo / 2 + st, C.gradino.fuori / 2);
     parti.pietra.push(segna(prisma(q4(Rg), q4(Rg), soglia - 0.5, soglia + C.gradino.alto), { sporco: 1 }));
@@ -742,7 +746,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
 
   /** Simbolo del mestiere in rilievo sulla tavola dell'insegna, nel piano di normale (nu, nv). */
   function simbolo(nome, u, v, y, nu, nv) {
-    const ferro = { tinta: SEGNI.insegna.ferro }, g = [];
+    const ferro = { tinta: SEGNI.insegna.ferro }, g = [], K = SEGNI.insegna.simbolo;
     const box = (lx, ly, lz, du, dy) => { const b = new THREE.BoxGeometry(lx, ly, lz); b.translate(du, dy, 0); return b; };
     if (nome === 'boccale') {                           // boccale con manico e schiuma
       const c = new THREE.CylinderGeometry(0.115, 0.125, 0.26, 10);
@@ -750,7 +754,8 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
       g.push(c, box(0.045, 0.16, 0.045, 0.12, -0.02));                       // manico
       const sc = new THREE.CylinderGeometry(0.125, 0.115, 0.06, 10);
       sc.translate(-0.03, 0.14, 0);
-      parti.intonaco.push(nelPiano(sc, u, v, y, nu, nv));                    // schiuma, chiara
+      sc.scale(K, K, K);
+      parti.intonaco.push(segna(nelPiano(sc, u, v, y, nu, nv), { tinta: [1.1, 1.08, 1.0] }));   // schiuma, chiara
     } else if (nome === 'ferro') {                      // ferro di cavallo
       const t = new THREE.TorusGeometry(0.15, 0.038, 5, 9, Math.PI * 1.45);
       t.rotateZ(-Math.PI * 0.73);
@@ -768,7 +773,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     } else {                                            // spada
       g.push(box(0.07, 0.42, 0.045, 0, 0.04), box(0.26, 0.055, 0.055, 0, -0.14), box(0.05, 0.12, 0.05, 0, -0.24));
     }
-    for (const b of g) parti.pietra.push(segna(nelPiano(b, u, v, y, nu, nv), ferro));
+    for (const b of g) { b.scale(K, K, K); parti.pietra.push(segna(nelPiano(b, u, v, y, nu, nv), ferro)); }
   }
 
   /**
