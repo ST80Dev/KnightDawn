@@ -831,10 +831,10 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     for (const i of [-1, 1]) {
       const t = i * (largo / 2 + 0.2);
       const Rm = rett([fr[0] + s[0] * t + f[0] * sp * 0.45, fr[1] + s[1] * t + f[1] * sp * 0.45], s, f, 0.06, sp * 0.45);
-      parti.legno.push(prisma(q4(Rm), q4(Rm), [y - 0.5, y - 0.5, y - 0.05, y - 0.05], [y - 0.38, y - 0.38, y + 0.07, y + 0.07]));
+      parti.legno.push(prisma(q4(Rm), q4(Rm), y - 0.62, [y - 0.08, y - 0.08, y - 0.5, y - 0.5]));   // mensola a cuneo
     }
     const Rp = rett([fr[0] + f[0] * (sp / 2 + 0.05), fr[1] + f[1] * (sp / 2 + 0.05)], s, f, largo / 2 + 0.35, sp / 2);
-    parti.paglia.push(segna(prisma(q4(Rp), q4(Rp), [y - 0.38, y - 0.38, y + 0.04, y + 0.04], [y - 0.18, y - 0.18, y + 0.24, y + 0.24]), { muschio: 0.3 }));
+    parti.paglia.push(segna(prisma(q4(Rp), q4(Rp), y - 0.55, [y + 0.06, y + 0.06, y - 0.34, y - 0.34]), { muschio: 0.3 }));   // falda in pendenza
   }
 
   /** Abbeveratoio di pietra (stalla): vasca scavata, con l'acqua. */
@@ -894,7 +894,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
   /** Porta del fienile al piano alto, con la trave e la carrucola (stalla). */
   function fienile(c, f, b, pav, piani) {
     const s = [-f[1], f[0]], fr = [c[0] + f[0] * b, c[1] + f[1] * b], y = pav + piani * PIANO - 0.2;
-    dettagli.push({ tipo: 'porta', u: fr[0] + f[0] * 0.05, v: fr[1] + f[1] * 0.05, y: y - 1.9, fu: f[0], fv: f[1], sx: 1.1, sy: 0.85 });
+    dettagli.push({ tipo: 'porta', u: fr[0] + f[0] * 0.05, v: fr[1] + f[1] * 0.05, y: y - 1.9, fu: f[0], fv: f[1], sx: 1.1, sy: 0.85, alta: true });
     const Rt = rett([fr[0] + f[0] * 0.45, fr[1] + f[1] * 0.45], s, f, 0.08, 0.5);
     parti.legno.push(prisma(q4(Rt), q4(Rt), y, y + 0.16));                                    // trave sporgente
     const Rc = rett([fr[0] + f[0] * 0.82, fr[1] + f[1] * 0.82], s, f, 0.03, 0.03);
@@ -1570,7 +1570,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     // Diagnostica (prove): porte la cui soglia sta più di 40 cm sopra il terreno davanti, e il distacco massimo.
     let porteAlte = 0, distaccoMax = 0, porteAlteV = 0, distaccoMaxV = 0;
     for (const d of dettagli) {
-      if (d.tipo !== 'porta') continue;
+      if (d.tipo !== 'porta' || d.alta) continue;   // la porta del fienile sta in alto apposta
       const q = terreno(d.u + d.fu * 0.5, d.v + d.fv * 0.5), dist = d.y - q;
       if (dist > 0.4) porteAlte++;
       if (dist > distaccoMax) distaccoMax = dist;
