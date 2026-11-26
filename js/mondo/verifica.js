@@ -377,3 +377,57 @@ export function verificaLuoghi(carta, limiti = { asprezza: 0.2, bordo: 7, fiume:
       + ` · valichi ${V.length}, con sentinella ${V.filter((v) => v.presidio).length}`,
   };
 }
+
+/**
+ * «Nessun luogo dove non si sbarca» [regola decisa dall'utente, novembre 2026]: ogni pezzo di terra separato dal
+ * continente che abbia una rocca, un villaggio o anche solo un sito speciale deve essere toccato da almeno una
+ * tratta via acqua (traghetto, rotta per mare o barcaiolo). Da chiamare dopo `aggiungiTraghetti`.
+ *
+ * Sta qui, e non in un accordo fra chi genera i luoghi e chi genera le rotte, perché è una proprietà del mondo
+ * finito: se un domani nascono luoghi in posti nuovi, questa verifica lo dice subito invece di lasciare un castello
+ * irraggiungibile in una partita (com'era prima delle rotte per mare: un'isola di 181 km² con due villaggi).
+ */
+export function verificaAccessi(carta) {
+  const { cols, rows, cella, mare, acque } = carta, n = cols * rows, errori = [];
+  if (!carta.traghetti) return { ok: true, testo: 'rotte non calcolate', errori: [] };
+  const terra = (i) => !mare[i] && acque[i] === ACQUA.TERRA;
+  const comp = new Int32Array(n).fill(-1), dim = [], coda = new Int32Array(n);
+  let k = 0;
+  for (let s = 0; s < n; s++) {
+    if (!terra(s) || comp[s] >= 0) continue;
+    let t = 0, f = 0; coda[f++] = s; comp[s] = k; let m = 0;
+    while (t < f) {
+      const i = coda[t++]; m++;
+      const x = i % cols, y = (i - x) / cols;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const xx = x + dx, yy = y + dy;
+        if (xx < 0 || yy < 0 || xx >= cols || yy >= rows) continue;
+        const j = yy * cols + xx;
+        if (terra(j) && comp[j] < 0) { comp[j] = k; coda[f++] = j; }
+      }
+    }
+    dim.push(m); k++;
+  }
+  if (!dim.length) return { ok: true, testo: 'nessuna terra', errori: [] };
+  let principale = 0;
+  for (let i = 1; i < dim.length; i++) if (dim[i] > dim[principale]) principale = i;
+  const cellaDi = (x, z) => Math.min(rows - 1, Math.max(0, Math.floor(z / cella))) * cols
+    + Math.min(cols - 1, Math.max(0, Math.floor(x / cella)));
+  const servite = new Set([principale]);
+  for (const t of carta.traghetti) for (const a of [t.a, t.b]) {
+    const c = comp[cellaDi(a.rx * cella, a.ry * cella)];
+    if (c >= 0) servite.add(c);
+  }
+  const visto = new Set();
+  const guarda = (x, z, che) => {
+    const c = comp[cellaDi(x, z)];
+    if (c < 0 || servite.has(c) || visto.has(c)) return;
+    visto.add(c);
+    errori.push(`${che} su un'isola di ${dim[c]} km² senza alcun accesso`);
+  };
+  for (const l of carta.luoghi ?? []) guarda(l.x, l.z, l.tipo === 'borgo' ? 'borgo' : 'rocca');
+  for (const s of carta.siti ?? []) guarda(s.x, s.z, s.tipo);
+  const isolate = carta.traghetti.filter((t) => t.isolata).length;
+  return { ok: !errori.length, errori,
+    testo: errori.length ? errori[0] : `${carta.traghetti.length} tratte via acqua (${isolate} uniche vie d'accesso), nessun luogo irraggiungibile` };
+}
