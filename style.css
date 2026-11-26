@@ -356,7 +356,7 @@ html, body {
   color: #d8c8a0;
   font-size: 15px;
 }
-#menu-avvio .riquadro { width: min(640px, 100%); }
+#menu-avvio .riquadro { width: min(720px, 100%); }
 #menu-avvio .titolo { color: #c8a030; font-size: 34px; letter-spacing: 0.08em; text-align: center; margin-bottom: 22px; }
 #menu-avvio .sezione { border: 1px solid #5a4020; border-radius: 4px; padding: 12px 14px; margin-bottom: 14px; }
 #menu-avvio .etichetta { color: #c8a030; font-size: 17px; margin-bottom: 10px; }
@@ -375,12 +375,12 @@ html, body {
 #menu-avvio .partita { display: flex; gap: 8px; margin-bottom: 8px; }
 #menu-avvio .partita:last-child { margin-bottom: 0; }
 #menu-avvio .continua { display: block; flex: 1; min-width: 0; text-align: left; }
-#menu-avvio .scarica { flex: none; font-size: 15px; }
+#menu-avvio .scarica { flex: none; font-size: 17px; }
 #menu-avvio .carica { width: 100%; }
-#menu-avvio .errore { color: #e8a070; font-size: 15px; margin-top: 8px; }
+#menu-avvio .errore { color: #e8a070; font-size: 17px; margin-top: 8px; }
 #menu-avvio .errore[hidden] { display: none; }
 #menu-avvio .continua b, #menu-avvio .modo b { display: block; color: #e8c860; font-weight: normal; }
-#menu-avvio .continua span, #menu-avvio .modo span { display: block; font-size: 16px; line-height: 1.45; color: #cdbb92; margin-top: 4px; }
+#menu-avvio .continua span, #menu-avvio .modo span { display: block; font-size: 18px; line-height: 1.45; color: #cdbb92; margin-top: 5px; }
 #menu-avvio .modi { display: grid; gap: 8px; margin-bottom: 12px; }
 #menu-avvio .modo { display: block; position: relative; padding: 6px 8px 6px 30px; border: 1px solid #3a2810; border-radius: 3px; cursor: pointer; }
 #menu-avvio .modo:has(input:checked) { border-color: #8a6030; background: #24160a; }
@@ -389,9 +389,9 @@ html, body {
 #menu-avvio .riga[hidden], #menu-avvio .avviso[hidden] { display: none; }
 #menu-avvio .seme { width: 14ch; margin-left: 6px; }
 #menu-avvio .dove { margin-left: 6px; max-width: 100%; }
-#menu-avvio .avviso { color: #e8a070; font-size: 15px; margin-bottom: 10px; }
+#menu-avvio .avviso { color: #e8a070; font-size: 17px; margin-bottom: 10px; }
 #menu-avvio .comincia { width: 100%; font-size: 17px; padding: 8px; color: #f0e0b8; }
-#menu-avvio .nota { font-size: 15px; color: #ab9970; text-align: center; }
+#menu-avvio .nota { font-size: 16px; color: #ab9970; text-align: center; }
 
 #menu-avvio .nome-garzone { width: 16ch; margin-left: 6px; }
 
@@ -512,16 +512,16 @@ html, body {
   box-shadow: inset 0 0 0 1px rgba(243, 217, 140, .2), 0 6px 18px rgba(0, 0, 0, .45); font-family: var(--kd-testo); }
 
 /* ── Menu d'avvio ── */
-#menu-avvio { font-family: var(--kd-testo); font-size: 16px; }
+#menu-avvio { font-family: var(--kd-testo); font-size: 18px; }
 #menu-avvio .titolo { font: 700 60px var(--kd-titolo); letter-spacing: .12em; margin-bottom: 0; color: transparent;
   background: linear-gradient(180deg, #fff1bf, #e2bb5c 45%, #8a6424 55%, #f0d48a); -webkit-background-clip: text; background-clip: text;
   filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .8)); }
-#menu-avvio .titolo::after { content: 'Cronache del cavaliere errante'; display: block; font: 400 15px var(--kd-titolo); letter-spacing: .4em;
+#menu-avvio .titolo::after { content: 'Cronache del cavaliere errante'; display: block; font: 400 17px var(--kd-titolo); letter-spacing: .4em;
   color: var(--kd-oro-chiaro); -webkit-text-fill-color: var(--kd-oro-chiaro); margin: -2px 0 22px; }
 #menu-avvio .sezione { border-color: var(--kd-oro-scuro); border-radius: 0; background: rgba(40, 22, 8, .5);
   box-shadow: inset 0 0 0 1px rgba(243, 217, 140, .12); }
-#menu-avvio .etichetta { font: 600 16px var(--kd-titolo); letter-spacing: .08em; color: var(--kd-oro-chiaro); }
-#menu-avvio .continua b, #menu-avvio .modo b { font: 600 15px var(--kd-titolo); letter-spacing: .05em; }
-#menu-avvio button, #menu-avvio input, #menu-avvio select { font-family: var(--kd-testo); font-size: 16px; border-radius: 0; }
-#menu-avvio .comincia { font: 600 18px var(--kd-titolo); letter-spacing: .12em; }
-#menu-avvio .nota { font: italic 15px/1.5 var(--kd-testo); color: #ab9970; }
+#menu-avvio .etichetta { font: 600 19px var(--kd-titolo); letter-spacing: .08em; color: var(--kd-oro-chiaro); }
+#menu-avvio .continua b, #menu-avvio .modo b { font: 600 19px var(--kd-titolo); letter-spacing: .05em; }
+#menu-avvio button, #menu-avvio input, #menu-avvio select { font-family: var(--kd-testo); font-size: 18px; border-radius: 0; }
+#menu-avvio .comincia { font: 600 22px var(--kd-titolo); letter-spacing: .12em; }
+#menu-avvio .nota { font: italic 16px/1.55 var(--kd-testo); color: #ab9970; }
