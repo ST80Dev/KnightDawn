@@ -3219,6 +3219,47 @@ nuovo, sempre sull'acqua dolce: mediana 31 m, mai oltre 140 m). Misure su otto s
 e collina coltivata, nessuna in alta montagna) — lavoro di M7/Vegetazione; e il mulino in 3D (edificio sull'acqua con
 la ruota), che è un passo a sé.
 
+## Porti e traghetti sugli specchi d'acqua interni (novembre 2026) — meccanismo scelto dall'utente, in corso
+
+> Richiesta dell'utente: «ci vogliono villaggi che siano porti anche su specchi d'acqua interni, soprattutto dato che
+> in vari semi ci sono isole grandi interne con villaggi e castelli, altrimenti non raggiungibili»; e poi «mi andrebbe
+> bene che ci siano villaggi e rocche o città su grandi isole: qualche villaggio porto che permetta di sbarcare nelle
+> isole dello specchio d'acqua oppure in altri villaggi porti sull'altra sponda, per magari accelerare il viaggio».
+
+**Meccanismo scelto (dall'utente, fra tre proposti): passaggio sulla Carta.** Il traghetto è una tratta della rete di
+viaggio come una strada; nella Scena 3D il molo offre «imbarcati», che riporta alla Carta e sbarca all'altro approdo.
+Niente barca da guidare in tempo reale: quella scelta è stata scartata perché richiede veicolo, acqua navigabile e
+caricamento dei blocchi via acqua.
+
+**Misure di partenza** (7 semi, con la densità dei villaggi di M8):
+
+| | valore |
+|---|---|
+| laghi per mondo | 10,8, di cui 3,6 da 10 km² in su; i maggiori 170–330 km² |
+| villaggi già in riva a un lago | 5,7 % (≈17 per mondo), 1–8 per ciascun lago grande |
+| villaggi fuori dalla rete delle strade | **0 su 2011** |
+| rocche su isole interne | 1 in 7 mondi |
+| isole da 2 km² in su | 0–4 per mondo; la maggiore trovata 40 km², **vuota** |
+
+Quindi **non è la riparazione di un difetto**: oggi nessun villaggio è irraggiungibile, e le isole grandi esistono ma
+sono disabitate. È una funzione nuova, e va costruita in quest'ordine, perché mettere insediamenti su un'isola prima
+di saper sbarcare creerebbe il difetto che oggi non c'è.
+
+**Pezzi e sessioni.**
+1. **Approdi** (M6, `strade.js`): per ogni lago da una soglia in su, i punti di riva dove arriva una strada o sta un
+   villaggio entro ~2 km. Un lago senza almeno due approdi utili non ne ha nessuno.
+2. **Tratte via acqua** (M6, `strade.js`): archi di classe `traghetto` fra approdi dello stesso lago. Sempre quando
+   collegano terre altrimenti separate; altrimenti quando accorciano il giro di almeno 1,6× (la regola già usata per
+   gli anelli). Entrano nella rete come archi veri, così il calcolo dei percorsi li usa.
+3. **Porti** (M8, `siti.js`): i villaggi scelti come approdo diventano porti; sulle isole grandi raggiunte da un
+   traghetto si possono allora mettere villaggi, rocche e città, che è ciò che l'utente chiede.
+4. **Viaggio** (sessione di gioco): costo in tempo (e forse denaro) della traversata sulla Carta; nella Scena il molo
+   offre «imbarcati». Senza questo pezzo i traghetti restano linee sulla Carta.
+5. **Grafica** (M7): molo, barche ormeggiate, magari una chiatta in movimento.
+
+Vincoli: il traghetto non deve diventare la scorciatoia universale (una traversata è lenta e, in futuro, chiusa dal
+maltempo); la generazione resta dentro il budget di ~15 s, rimisurata sui semi 570549, 8899 e 42424.
+
 ## Fuori dal prototipo (non farlo ora)
 
 Multiplayer, server/VPS, NPC con IA, mobile/touch, modelli esterni, combattimento in 3D, ombre di

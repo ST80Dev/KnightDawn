@@ -5,7 +5,7 @@
 import { generaCarta } from './carta.js';
 import { verificaFiumi, verificaPanorami, verificaVarieta, verificaLuoghi } from './verifica.js';
 import { aggiungiLuoghi } from './luoghi.js';
-import { aggiungiStrade, precalcolaStrade } from './strade.js';
+import { aggiungiStrade, precalcolaStrade, aggiungiTraghetti } from './strade.js';
 import { grigliaMondo, fiumiFini, terrenoBase } from './scena.js';
 import { aggiungiSiti, completaSiti, verificaSiti } from './siti.js';
 
@@ -48,6 +48,7 @@ async function generaQui(seme, avanzamento) {
   aggiungiLuoghi(carta);
   terrenoBase(carta);
   completaSiti(aggiungiStrade(aggiungiSiti(carta)));
+  aggiungiTraghetti(carta);                         // tratte via acqua fra approdi dello stesso lago
   precalcolaStrade(carta);                          // tracciato fine di tutte le strade (G6), come nel Worker
   carta.griglia = grigliaMondo(carta);              // griglia fine (G1), come nel Worker
   carta.statistiche.msTerrenoBase = carta.terrenoBase.ms;   // prima di liberarlo: serve al conto delle fasi

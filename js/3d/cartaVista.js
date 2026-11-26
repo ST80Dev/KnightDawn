@@ -47,6 +47,8 @@ export const MARE_BASSO = [122, 158, 168], MARE_FONDO = [40, 70, 92];
 export const LAGO = [104, 150, 178];
 export const COLORE_FIUME = '#2f6690';
 export const COLORE_STRADA = 'rgba(122, 74, 38, 0.95)';   // strade di terra battuta
+export const COLORE_TRAGHETTO = 'rgba(243, 248, 252, 0.92)';   // rotte dei traghetti sugli specchi d'acqua interni
+export const COLORE_TRAGHETTO_ALONE = 'rgba(26, 48, 68, 0.55)';   // linea scura sotto, per leggerle sull'acqua
 export const COLORE_SENTIERO = 'rgba(150, 40, 30, 0.9)';
 // [classe, spessore (come i fiumi), tratteggio]: dalla più importante.
 export const STILE_STRADE = [['maestra', 1.6, []], ['carrareccia', 1.2, []], ['mulattiera', 1.0, [3, 2]], ['sentiero', 0.9, [1.5, 2]]];
@@ -91,7 +93,7 @@ const COLORE_PONTE = 'rgba(52, 34, 20, 0.96)';
 const COLORE_GUADO = 'rgba(32, 72, 124, 0.95)';
 // Luoghi maggiori che non sono rocche (M8): stesso segno della rocca, altro colore e altra lettera.
 // Misure dei segni in pixel CSS (× dpr): più grandi di prima per leggerli sopra il rilievo (richiesta dell'utente).
-export const SEGNI = { valico: 6.5, ponte: 5.5, sito: [3.4, 4.4], panorama: 4.2, forcella: 4 };
+export const SEGNI = { valico: 6.5, ponte: 5.5, sito: [3.4, 4.4], panorama: 4.2, forcella: 4, approdo: 4.6 };
 export const TIPI_LUOGO = { rocca: [COLORE_ROCCA, 'R'], monastero: ['#4b2f7a', 'M'], citta: ['#1d4f86', 'C'] };
 // Siti di villaggi e luoghi speciali (M8, js/mondo/siti.js): colore del segno.
 export const COLORI_SITI = { villaggio: '#5a3416', ovile: '#6f8f3a', rovina: '#6b6359', abbandonato: '#3c3833', grotta: '#1d1a17',
@@ -120,6 +122,20 @@ export function segnoValico(ctx, px, py, m, presidio) {
 }
 
 /** Ponte: due archetti contrapposti lungo la strada (angolo `a`). */
+/** Approdo di un traghetto: un'ancora (fusto, ceppo e marre). */
+export function segnoApprodo(ctx, px, py, m) {
+  ctx.lineWidth = Math.max(1.4, m * 0.3);
+  ctx.beginPath();
+  ctx.moveTo(px, py - m);
+  ctx.lineTo(px, py + m * 0.75);
+  ctx.moveTo(px - m * 0.55, py - m * 0.45);
+  ctx.lineTo(px + m * 0.55, py - m * 0.45);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(px, py + m * 0.1, m * 0.78, Math.PI * 0.18, Math.PI * 0.82);
+  ctx.stroke();
+}
+
 export function segnoPonte(ctx, px, py, m, a = 0) {
   ctx.save(); ctx.translate(px, py); ctx.rotate(a);
   ctx.strokeStyle = COLORE_PONTE; ctx.lineWidth = m * 0.42;
@@ -391,6 +407,11 @@ export function createCartaVista(contenitore, opzioni = {}) {
     voce('valico con sentinella', (g, x, y) => segnoValico(g, x, y, SEGNI.valico, true));
     voce('ponte', (g, x, y) => segnoPonte(g, x, y, SEGNI.ponte));
     voce('guado', (g, x, y) => segnoGuado(g, x, y, SEGNI.ponte));
+    voce('approdo', (g, x, y) => segnoApprodo(g, x, y, SEGNI.approdo));
+    voce('traghetto', (g, x, y) => {
+      g.strokeStyle = COLORE_TRAGHETTO; g.lineWidth = 1.8;
+      g.setLineDash([5, 3.5]); g.beginPath(); g.moveTo(x - 12, y); g.lineTo(x + 12, y); g.stroke(); g.setLineDash([]);
+    });
     titolo('strade');
     for (const [classe, , trattino] of STILE_STRADE) {
       voce(classe, (g, x, y) => {
@@ -776,9 +797,36 @@ export function createCartaVista(contenitore, opzioni = {}) {
       }
       ctx.setLineDash([]);
     }
+    // Traghetti: rotte sull'acqua fra due approdi (richiesta dell'utente, novembre 2026). Tratteggio chiaro, per
+    // distinguerle subito da una strada: sono un passaggio, non un percorso che si cammina.
+    if ((carta.traghetti ?? []).length) {
+      const w = Math.max(1.6 * dpr / s, 0.12);
+      const rotta = (t) => {
+        ctx.beginPath();
+        ctx.moveTo(t.a.rx, t.a.ry);
+        if (t.rotta) for (let i = 0; i < t.rotta.x.length; i++) ctx.lineTo(t.rotta.x[i], t.rotta.y[i]);
+        ctx.lineTo(t.b.rx, t.b.ry);
+        ctx.stroke();
+      };
+      // Sotto una linea scura continua, sopra il tratteggio chiaro: sull'acqua azzurra il solo chiaro si perde.
+      ctx.strokeStyle = COLORE_TRAGHETTO_ALONE;
+      ctx.lineWidth = w * 2.2;
+      for (const t of carta.traghetti) rotta(t);
+      ctx.strokeStyle = COLORE_TRAGHETTO;
+      ctx.lineWidth = w;
+      ctx.setLineDash([3 * w, 2.2 * w]);
+      for (const t of carta.traghetti) rotta(t);
+      ctx.setLineDash([]);
+    }
     // Segni in pixel dello schermo, indipendenti dallo zoom.
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const P = (x, y) => [x * s + tx, y * s + ty];
+    // Approdi dei traghetti: un'ancora stilizzata sulla riva.
+    for (const t of carta.traghetti ?? []) for (const a of [t.a, t.b]) {
+      const [px, py] = P(a.rx, a.ry);
+      if (px < -14 || py < -14 || px > canvas.width + 14 || py > canvas.height + 14) continue;
+      conAlone(ctx, () => segnoApprodo(ctx, px, py, SEGNI.approdo * dpr), 3 * dpr);
+    }
     // Ponti e guadi delle strade: nella Carta zoomata quelli delle Scene, altrimenti i ponti della rete (celle).
     {
       const segni = [];

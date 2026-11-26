@@ -18,6 +18,10 @@ import { BIOMA, ACQUA } from './carta.js';
 import { quotaMondo, scavaFiumi, livelloLago, distanzaPiano, raffinaZona, quotaPiano, spianaLuoghi, quotaBase,
   terrenoRipido, distanzaAcqua } from './scena.js';
 import { smoothstep, completa } from './rumore.js';
+
+// Otto vicini della Carta (come in carta.js e scena.js): spostamenti e distanze.
+const V8X = [1, -1, 0, 0, 1, 1, -1, -1], V8Y = [0, 0, 1, -1, 1, -1, 1, -1];
+const V8D = [1, 1, 1, 1, Math.SQRT2, Math.SQRT2, Math.SQRT2, Math.SQRT2];
 import { RAMPA_PORTA } from './luoghi.js';   // import circolare (luoghi → scena → strade): usata solo dentro le funzioni
 
 export const STRADE = {
@@ -1162,4 +1166,201 @@ export function attraversamentiBlocco(carta, cx, cz, half) {
     }
   }
   return out;
+}
+
+/**
+ * Traghetti sugli specchi d'acqua interni [richiesta dell'utente, novembre 2026: «villaggi che siano porti anche su
+ * specchi d'acqua interni… per sbarcare nelle isole o sull'altra sponda, per accelerare il viaggio»]. Meccanismo
+ * scelto dall'utente: passaggio sulla Carta, non barca guidabile.
+ *
+ * Due approdi si collegano quando girare il lago costa molto più che attraversarlo, e **sempre** quando le loro rive
+ * non si toccano (isole): la distanza lungo la riva si misura con un'onda sulle celle di riva, che per costruzione
+ * non passa da una riva all'altra. Niente ricerche di percorso in più: la generazione non rallenta.
+ */
+export const TRAGHETTI = {
+  lago: 10,                 // km² minimi dello specchio d'acqua
+  daRiva: 2.5,              // km: distanza massima di un villaggio dalla riva per essere un approdo
+  traversata: [0.8, 25],    // km: traversata più corta e più lunga ammesse
+  attesa: 3,                // km equivalenti di imbarco e attesa: il giro a piedi deve costare almeno traversata + questo
+  perLago: 3,               // tratte al più per ogni specchio d'acqua (oltre a quelle che raggiungono rive isolate)
+  traApprodi: 4,            // km: due approdi dello stesso lago più vicini di così sono lo stesso scalo
+};
+
+/** Rotta (coordinate della Carta, km) ricostruita dai predecessori dell'onda sull'acqua, dall'inizio alla fine. */
+function rottaDa(carta, prima, fine) {
+  const { cols } = carta, x = [], y = [];
+  for (let i = fine; i >= 0; i = prima[i]) { x.push((i % cols) + 0.5); y.push(((i / cols) | 0) + 0.5); }
+  return { x: Float32Array.from(x.reverse()), y: Float32Array.from(y.reverse()) };
+}
+
+/** Specchi d'acqua interni della Carta: componenti di celle LAGO, con dimensione in km². */
+function specchi(carta) {
+  const { cols, rows, acque } = carta, n = cols * rows;
+  const lago = (i) => acque[i] === ACQUA.LAGO || acque[i] === ACQUA.LAGO_COSTIERO;
+  const id = new Int32Array(n).fill(-1), dim = [], coda = new Int32Array(n);
+  let k = 0;
+  for (let s = 0; s < n; s++) {
+    if (!lago(s) || id[s] >= 0) continue;
+    let t = 0, f = 0; coda[f++] = s; id[s] = k; let m = 0;
+    while (t < f) {
+      const i = coda[t++]; m++;
+      const x = i % cols, y = (i - x) / cols;
+      for (let d = 0; d < 8; d++) {
+        const xx = x + V8X[d], yy = y + V8Y[d];
+        if (xx < 0 || yy < 0 || xx >= cols || yy >= rows) continue;
+        const j = yy * cols + xx;
+        if (lago(j) && id[j] < 0) { id[j] = k; coda[f++] = j; }
+      }
+    }
+    dim.push(m); k++;
+  }
+  return { id, dim };
+}
+
+/** Celle di riva di uno specchio (terra che tocca l'acqua di `s`). */
+function celleRiva(carta, idLago, s) {
+  const { cols, rows } = carta, n = cols * rows, riva = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    if (idLago[i] !== s) continue;
+    const x = i % cols, y = (i - x) / cols;
+    for (let d = 0; d < 8; d++) {
+      const xx = x + V8X[d], yy = y + V8Y[d];
+      if (xx < 0 || yy < 0 || xx >= cols || yy >= rows) continue;
+      const j = yy * cols + xx;
+      if (idLago[j] < 0) riva[j] = 1;
+    }
+  }
+  return riva;
+}
+
+/** Distanza (km) lungo la riva dalle celle `sorgenti`: onda a 8 direzioni sulle sole celle di riva. */
+function ondaRiva(carta, riva, sorgenti) {
+  const { cols, rows, cella } = carta, n = cols * rows;
+  const dist = new Float64Array(n).fill(Infinity), coda = [];
+  for (const i of sorgenti) if (riva[i]) { dist[i] = 0; coda.push(i); }
+  for (let t = 0; t < coda.length; t++) {
+    const i = coda[t], x = i % cols, y = (i - x) / cols;
+    for (let d = 0; d < 8; d++) {
+      const xx = x + V8X[d], yy = y + V8Y[d];
+      if (xx < 0 || yy < 0 || xx >= cols || yy >= rows) continue;
+      const j = yy * cols + xx;
+      if (!riva[j]) continue;                       // da una riva all'altra non si passa: le isole restano a ∞
+      const nd = dist[i] + V8D[d] * cella / 1000;
+      if (nd < dist[j] - 1e-9) { dist[j] = nd; coda.push(j); }
+    }
+  }
+  return dist;
+}
+
+/**
+ * Aggiunge `carta.traghetti`: tratte via acqua fra approdi dello stesso specchio. Da chiamare dopo `aggiungiStrade`
+ * (gli approdi stanno sui villaggi, che la rete ha già collegato). Ogni tratta:
+ * `{ lago, km, a: { sito, x, y, rx, ry }, b: {...}, isolata }` — x, y del villaggio e rx, ry della cella di riva
+ * (coordinate della Carta, in km come i fiumi); `isolata` se le due rive non si toccano, cioè è l'unico accesso.
+ */
+export function aggiungiTraghetti(carta) {
+  const t0 = performance.now(), T = TRAGHETTI;
+  const { cols, rows, cella } = carta;
+  const { id: idLago, dim } = specchi(carta);
+  const cellaDi = (x, y) => Math.min(rows - 1, Math.max(0, Math.floor(y))) * cols + Math.min(cols - 1, Math.max(0, Math.floor(x)));
+  // Approdi possibili: villaggi e rocche. Le rocche contano perché una rocca su un'isola, senza villaggi attorno,
+  // resterebbe altrimenti senza alcun collegamento (misurato: capita in un mondo su sette).
+  const villaggi = [...(carta.siti ?? []).filter((v) => v.tipo === 'villaggio').map((v) => ({ ...v, sorta: 'villaggio' })),
+    ...(carta.luoghi ?? []).map((l) => ({ id: l.id, x: l.x, z: l.z, sorta: 'rocca' }))];
+  const tratte = [];
+  _scartate.length = 0;
+  for (let s = 0; s < dim.length; s++) {
+    if (dim[s] < T.lago) continue;
+    const riva = celleRiva(carta, idLago, s);
+    // Approdi: villaggi vicini alla riva, uno per scalo (due villaggi vicini non fanno due approdi).
+    const vicini = [];
+    for (const v of villaggi) {
+      const x = v.x / cella, y = v.z / cella;
+      let miglior = -1, md = Infinity;
+      const raggio = Math.ceil(T.daRiva);
+      for (let dy = -raggio; dy <= raggio; dy++) for (let dx = -raggio; dx <= raggio; dx++) {
+        const xx = Math.floor(x) + dx, yy = Math.floor(y) + dy;
+        if (xx < 0 || yy < 0 || xx >= cols || yy >= rows) continue;
+        const j = yy * cols + xx;
+        if (!riva[j]) continue;
+        const d = Math.hypot(xx + 0.5 - x, yy + 0.5 - y);
+        if (d < md) { md = d; miglior = j; }
+      }
+      if (miglior < 0 || md * cella / 1000 > T.daRiva) continue;
+      vicini.push({ sito: v.id, sorta: v.sorta, x, y, cella: miglior, rx: (miglior % cols) + 0.5, ry: ((miglior / cols) | 0) + 0.5, d: md });
+    }
+    vicini.sort((a, b) => a.d - b.d);
+    const approdi = [];
+    for (const a of vicini) {
+      if (approdi.some((b) => Math.hypot(b.rx - a.rx, b.ry - a.ry) * cella / 1000 < T.traApprodi)) continue;
+      approdi.push(a);
+    }
+    if (approdi.length < 2) continue;
+    // Per ogni approdo: quanto costa girare il lago a piedi (onda sulla riva) e quanto navigare (onda sull'acqua).
+    for (const a of approdi) a.imbarco = imbarco(carta, idLago, s, a.cella);
+    const perRiva = approdi.map((a) => ondaRiva(carta, riva, [a.cella]));
+    const perAcqua = approdi.map((a) => (a.imbarco >= 0 ? ondaAcqua(carta, idLago, s, a.imbarco) : null));
+    const coppie = [];
+    for (let i = 0; i < approdi.length; i++) for (let j = i + 1; j < approdi.length; j++) {
+      const A = approdi[i], B = approdi[j];
+      if (!perAcqua[i] || B.imbarco < 0) continue;
+      const km = perAcqua[i].dist[B.imbarco];
+      if (!(km >= T.traversata[0]) || km > T.traversata[1]) { _scartate.push({ lago: s, km, motivo: 'lunghezza' }); continue; }
+      const giro = perRiva[i][B.cella];
+      const isolata = !Number.isFinite(giro);
+      const utile = isolata || giro >= km + T.attesa;
+      _scartate.push({ lago: s, km, giro, isolata, motivo: utile ? '' : 'giro corto' });
+      if (!utile) continue;                 // girare a piedi costa poco più che imbarcarsi: niente traghetto
+      coppie.push({ lago: s, km, giro: isolata ? Infinity : giro, isolata,
+        rotta: rottaDa(carta, perAcqua[i].prima, B.imbarco),
+        a: { sito: A.sito, sorta: A.sorta, x: A.x, y: A.y, rx: A.rx, ry: A.ry },
+        b: { sito: B.sito, sorta: B.sorta, x: B.x, y: B.y, rx: B.rx, ry: B.ry } });
+    }
+    // Prima le rive isolate (unico accesso), poi le scorciatoie migliori; al più `perLago` di queste.
+    const isolate = coppie.filter((c) => c.isolata);
+    const scorciatoie = coppie.filter((c) => !c.isolata).sort((u, v) => v.giro / v.km - u.giro / u.km);
+    tratte.push(...isolate, ...scorciatoie.slice(0, T.perLago));
+  }
+  carta.traghetti = tratte;
+  carta.statistiche = { ...(carta.statistiche ?? {}), traghetti: { tratte: tratte.length, ms: Math.round(performance.now() - t0) } };
+  return carta;
+}
+
+const _scartate = [];
+/** Solo per gli script di prova in Node: le coppie di approdi esaminate, con il motivo dello scarto. */
+export function _coppiePerProve() { return _scartate; }
+
+/**
+ * Distanza navigabile (km) sull'acqua dello specchio `s` dalla cella `da`, con il predecessore di ogni cella: i laghi
+ * hanno bracci e penisole, e una rotta in linea retta finirebbe sulla terra (misurato: 15 coppie di approdi su 18
+ * scartate per questo). La barca gira attorno agli ostacoli come farebbe davvero.
+ */
+function ondaAcqua(carta, idLago, s, da) {
+  const { cols, rows, cella } = carta, n = cols * rows;
+  const dist = new Float64Array(n).fill(Infinity), prima = new Int32Array(n).fill(-1), coda = [da];
+  dist[da] = 0;
+  for (let t = 0; t < coda.length; t++) {
+    const i = coda[t], x = i % cols, y = (i - x) / cols;
+    for (let d = 0; d < 8; d++) {
+      const xx = x + V8X[d], yy = y + V8Y[d];
+      if (xx < 0 || yy < 0 || xx >= cols || yy >= rows) continue;
+      const j = yy * cols + xx;
+      if (idLago[j] !== s) continue;
+      const nd = dist[i] + V8D[d] * cella / 1000;
+      if (nd < dist[j] - 1e-9) { dist[j] = nd; prima[j] = i; coda.push(j); }
+    }
+  }
+  return { dist, prima };
+}
+
+/** Cella d'acqua dello specchio `s` adiacente alla cella di riva `i` (la più vicina al centro del lago). */
+function imbarco(carta, idLago, s, i) {
+  const { cols, rows } = carta, x = i % cols, y = (i - x) / cols;
+  for (let d = 0; d < 8; d++) {
+    const xx = x + V8X[d], yy = y + V8Y[d];
+    if (xx < 0 || yy < 0 || xx >= cols || yy >= rows) continue;
+    const j = yy * cols + xx;
+    if (idLago[j] === s) return j;
+  }
+  return -1;
 }
