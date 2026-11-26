@@ -529,6 +529,21 @@ Durante la Veglia:
   - un **porto** nasce solo dove serve: almeno un altro porto raggiungibile per mare e una rotta che fa risparmiare
     tempo rispetto al viaggio a piedi. Uno specchio d'acqua piccolo e isolato non ha porti (al più un villaggio di
     pescatori).
+- **Isole e traghetti** [segnalato dall'utente, novembre 2026; misurato su 28 semi]. Ci sono isole abitate sia
+  nei laghi (seme 19: isola di 52 km² con una rocca; seme 17: un villaggio) sia nel mare (seme 6: 181 km² con un
+  monastero e due villaggi; seme 23: 127 km² con una rocca); quasi un seme su due ha isole con soli luoghi speciali
+  (rovine, luoghi del fantastico, accampamenti). Oggi solo le isole di lago con un approdo hanno il traghetto
+  (`carta.traghetti`, `docs/ESPLORAZIONE_3D.md` «Porti e traghetti»); le isole di mare e quelle di soli luoghi
+  speciali **non si raggiungono**. Casi che il viaggio (G2) deve trattare, tutti con lo stesso meccanismo del
+  **passaggio sulla Carta** (nessuna barca da guidare; al molo della Scena «imbarcati» riporta alla Carta e sbarca
+  all'altro approdo):
+  1. *traghetto di lago* fra due sponde o verso un'isola del lago (esiste);
+  2. *rotta per mare* dai porti della costa verso le isole di mare e gli altri porti (questa sezione, da generare);
+  3. *barcaiolo* [proposta]: da un villaggio di riva, una barca a noleggio verso un'isola senza approdo (luoghi
+     speciali), più cara e solo di giorno.
+  Regola proposta per il generatore: **nessun luogo dove non si sbarca** (ogni isola con un luogo ha almeno uno
+  dei tre accessi). Costo della traversata [da decidere in G2]: tempo alla velocità della barca (2–2,5× a piedi),
+  un'attesa d'imbarco, qualche moneta (di più per mare e per il barcaiolo).
 - Durante il viaggio possono scattare eventi (incontri, meteo, scoperte). Il giocatore può fermarsi
   quando vuole: fermarsi vuol dire entrare nella scena 3D di quel punto. Un evento (imboscata,
   incontro) può fermare il viaggio e portare in 3D lì.
@@ -787,6 +802,7 @@ Dettagli in `docs/UI_GUIDE.md`.
 >    eventi di viaggio, «fermati qui» che porta nella Scena) e **nebbia della conoscenza** rivelata da
 >    ciò che il cavaliere vede dalle alture. (La versione base della nebbia, per vicinanza, è già in G1:
 >    `docs/EARLY_GAME.md` §7, passo 1b.)
+>    Comprende traghetti, rotte per mare e isole (§3 *Viaggio*, «Isole e traghetti»).
 > 3. **G3 — Fazioni e nomi generati** (S5, prima parte).
 > 4. **G4 — Incarichi per tipo di luogo, reputazione, notizie che si propagano** (S3, S5, S6).
 > 5. **G5 — Seguito e covi** (S7). 6. **G6 — Archi narrativi e titoli** (S8).
