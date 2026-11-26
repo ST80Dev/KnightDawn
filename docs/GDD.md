@@ -540,21 +540,22 @@ Durante la Veglia:
   - un **porto** nasce solo dove serve: almeno un altro porto raggiungibile per mare e una rotta che fa risparmiare
     tempo rispetto al viaggio a piedi. Uno specchio d'acqua piccolo e isolato non ha porti (al più un villaggio di
     pescatori).
-- **Isole e traghetti** [segnalato dall'utente, novembre 2026; misurato su 28 semi]. Ci sono isole abitate sia
-  nei laghi (seme 19: isola di 52 km² con una rocca; seme 17: un villaggio) sia nel mare (seme 6: 181 km² con un
-  monastero e due villaggi; seme 23: 127 km² con una rocca); quasi un seme su due ha isole con soli luoghi speciali
-  (rovine, luoghi del fantastico, accampamenti). Oggi solo le isole di lago con un approdo hanno il traghetto
-  (`carta.traghetti`, `docs/ESPLORAZIONE_3D.md` «Porti e traghetti»); le isole di mare e quelle di soli luoghi
-  speciali **non si raggiungono**. Casi che il viaggio (G2) deve trattare, tutti con lo stesso meccanismo del
-  **passaggio sulla Carta** (nessuna barca da guidare; al molo della Scena «imbarcati» riporta alla Carta e sbarca
-  all'altro approdo):
-  1. *traghetto di lago* fra due sponde o verso un'isola del lago (esiste);
-  2. *rotta per mare* dai porti della costa verso le isole di mare e gli altri porti (questa sezione, da generare);
-  3. *barcaiolo* [proposta]: da un villaggio di riva, una barca a noleggio verso un'isola senza approdo (luoghi
-     speciali), più cara e solo di giorno.
-  Regola proposta per il generatore: **nessun luogo dove non si sbarca** (ogni isola con un luogo ha almeno uno
-  dei tre accessi). Costo della traversata [da decidere in G2]: tempo alla velocità della barca (2–2,5× a piedi),
-  un'attesa d'imbarco, qualche moneta (di più per mare e per il barcaiolo).
+- **Isole e traghetti** [segnalato dall'utente, novembre 2026; misurato su 28 semi]. Le isole abitate stanno nel mare
+  (seme 6: 181 km² con un monastero e due villaggi) e nelle lagune costiere (seme 19: 52 km² con una città); nei
+  laghi interni solo isolette (seme 17: un villaggio su 1 km²). Decisioni dell'utente: **nessun luogo dove non si
+  sbarca** (sorvegliato da `verificaAccessi` nel generatore: zero luoghi irraggiungibili su 30 semi), **rotte per mare
+  subito**, **barcaiolo** approvato. Il generatore (M6, `carta.traghetti`) dà un solo elenco di tratte con
+  `tipo: 'traghetto' | 'mare' | 'barcaiolo'`, `km` navigati, `giro` (km a piedi per lo stesso tragitto, `Infinity`
+  se non c'è), `isolata` (unica via d'accesso), `rotta`, e due capi `a`/`b` con `sorta` `'villaggio' | 'rocca' |
+  'approdo'` (`'approdo'` = riva senza insediamento, capolinea del barcaiolo, `sito: -1`; gli id non sono unici fra
+  `carta.siti` e `carta.luoghi`: guardare `sorta`) e la cella di riva `rx, ry` dove sta il molo. Numeri su 10 semi:
+  ~8 tratte per mondo (metà traghetti, metà mare, pochi barcaioli); traghetti 2–21 km, mare fino a ~70 km, barcaioli
+  ≤ 14 km. Il viaggio (G2) le tratta tutte con il **passaggio sulla Carta** (al molo della Scena «imbarcati» riporta
+  alla Carta e sbarca all'altro capo; nessuna barca da guidare). **Regole per i costi** (da fissare in G2): tempo
+  alla velocità della barca (2–2,5× a piedi), un'attesa d'imbarco, qualche moneta (di più per mare e per il
+  barcaiolo, che va solo di giorno); una tratta `isolata` non deve mai diventare impossibile (troppo cara o chiusa
+  dal maltempo renderebbe irraggiungibile un luogo); le altre sono scorciatoie e devono costare meno del `giro`,
+  altrimenti non servono.
 - Durante il viaggio possono scattare eventi (incontri, meteo, scoperte). Il giocatore può fermarsi
   quando vuole: fermarsi vuol dire entrare nella scena 3D di quel punto. Un evento (imboscata,
   incontro) può fermare il viaggio e portare in 3D lì.
