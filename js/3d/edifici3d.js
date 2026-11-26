@@ -780,9 +780,11 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
    * Insegna a bandiera: braccio di ferro con puntone, due catenelle e la tavola dipinta appesa, col simbolo in
    * rilievo sulle due facce. Sporge dalla facciata, sopra la porta.
    */
-  function insegna(c, f, b, pav, lato, { tinta, simbolo: sim }) {
-    const I = SEGNI.insegna, s = [-f[1], f[0]], y = pav + I.alta;
-    const t0 = lato * (1.35 + rnd() * 0.3);                                   // di fianco alla porta
+  function insegna(c, f, b, pav, lato, { tinta, simbolo: sim }, gronda = Infinity) {
+    const I = SEGNI.insegna, s = [-f[1], f[0]];
+    // Sotto la gronda, o il tetto la nasconde: negli edifici a un piano scende a ~2 m.
+    const y = Math.min(pav + I.alta, gronda - 0.9);
+    const t0 = lato * (1.95 + rnd() * 0.35);                                  // di fianco alla porta, oltre la pensilina
     const base = [c[0] + f[0] * b + s[0] * t0, c[1] + f[1] * b + s[1] * t0];
     const ferro = { tinta: I.ferro };
     const Rb = rett([base[0] + f[0] * I.braccio / 2, base[1] + f[1] * I.braccio / 2], s, f, 0.035, I.braccio / 2);
@@ -1246,7 +1248,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     const largoPorta = (tipo === 'stalla' || tipo === 'fabbro' || tipo === 'scuderia') ? 2.6 : 1.3;
     if (r.soglia !== undefined) {
       cornicePorta(c, f, E.fondo / 2, r.soglia, largoPorta);
-      if (E.insegna) insegna(c, f, E.fondo / 2, r.pavimento, rnd() < 0.5 ? -1 : 1, E.insegna);
+      if (E.insegna) insegna(c, f, E.fondo / 2, r.pavimento, rnd() < 0.5 ? -1 : 1, E.insegna, r.gronda);
     }
     // Carattere proprio del mestiere.
     if (tipo === 'taverna') {
