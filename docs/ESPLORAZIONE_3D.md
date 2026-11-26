@@ -3281,6 +3281,54 @@ di saper sbarcare creerebbe il difetto che oggi non c'è.
 Vincoli: il traghetto non deve diventare la scorciatoia universale (una traversata è lenta e, in futuro, chiusa dal
 maltempo); la generazione resta dentro il budget di ~15 s, rimisurata sui semi 570549, 8899 e 42424.
 
+<<<<<<< HEAD
+## Rotte per mare e barcaiolo (novembre 2026) — deciso dall'utente, fatto, da provare
+
+> Dopo i traghetti di lago, una misura su **30 semi** ha mostrato che la premessa da cui eravamo partiti era
+> sbagliata: isole abitate senza alcun accesso **esistono**, in circa un seme su dieci. Erano tutte sul mare aperto,
+> mentre quelle su acqua chiusa i traghetti già le servivano. Decisioni dell'utente: «nessun luogo dove non si
+> sbarca», rotte per mare **subito**, e il **barcaiolo** per i posti che non meritano un porto.
+
+| seme | isola | sopra | acqua attorno | prima | ora |
+|---|---|---|---|---|---|
+| 6 | 181 km² | 1 rocca, 2 villaggi, 6 siti | mare aperto | nessun accesso | rotta ✓ |
+| 23 | 127 km² | 1 rocca, 2 siti | mare aperto | nessun accesso | rotta ✓ |
+| 999 | 3 km² | 1 rocca | mare aperto | nessun accesso | rotta ✓ |
+| 19 | 52 km² | 1 rocca, 3 siti | laguna | traghetto ✓ | traghetto ✓ |
+| 17 | 1 km² | 1 villaggio | laguna | traghetto ✓ | traghetto ✓ |
+
+**Le tre tratte stanno tutte in `carta.traghetti`**, distinte da `tipo`:
+- `'traghetto'` — specchi d'acqua chiusi (laghi e lagune), come prima;
+- `'mare'` — porti costieri. Il mare che tocca il bordo prosegue oltre la mappa (`docs/GDD.md` §3), quindi le celle
+  di bordo sono collegate fra loro lungo il perimetro esterno e due tratti di costa separati restano raggiungibili.
+  **Misurato: in tutti i semi provati ogni mare tocca il bordo, e di mari interni non ce n'è nessuno.**
+  Due obblighi e una comodità: ogni pezzo di terra con una rocca o un villaggio va collegato (a qualunque distanza);
+  le altre rotte nascono solo se fanno risparmiare strada, al più cinque per mondo;
+- `'barcaiolo'` — una barca a noleggio dal villaggio di riva più vicino verso un'isola di **soli siti speciali**
+  (rovine, grotte, accampamenti): nessun molo, nessun orario, al più 14 km.
+
+**Una trappola trovata provando**: un villaggio su un isolotto diventava il capolinea di **diciannove** traghetti,
+perché ogni coppia di approdi che lo tocca conta come «unico accesso». Ora fra due rive separate si tiene **una sola**
+tratta, la più corta: quel seme è passato da 31 tratte a 13.
+
+**La regola è sorvegliata, non concordata.** `verificaAccessi` (verifica.js) gira a ogni generazione, come le
+verifiche su fiumi e luoghi: controlla che ogni pezzo di terra separato con una rocca, un villaggio o anche solo una
+rovina sia toccato da una tratta. **Su 30 semi: zero luoghi irraggiungibili.** Così nessuno deve rimuovere luoghi a
+posteriori, e se un domani ne nascono in posti nuovi la verifica lo dice subito invece di lasciare un castello
+irraggiungibile in una partita.
+
+Il barcaiolo ha richiesto due correzioni, trovate misurando: conta la **traversata** da riva a riva (al più 14 km),
+non quanto dista il villaggio — nessuno rema 18 km, ma un pescatore attraversa un braccio di mare di tre; e la riva
+di partenza e il villaggio che noleggia si scelgono **insieme**, perché scegliendo prima la riva più vicina e poi chi
+noleggia, un'isola restava scoperta se quella riva non aveva villaggi.
+
+Misure su 10 semi: **83 tratte** (40 traghetti, 40 rotte di mare, 3 barcaioli), **14 ms** per mondo, nessuna rotta
+fuori dall'acqua giusta e nessun approdo che non sia su terra. `VERSIONE_GENERATORE` `+mare-rotte-1`.
+
+**Resta da fare, non mio**: il viaggio vero (costi in tempo e denaro, comando «imbarcati») è della sessione di gioco,
+in G2; la regola «niente luoghi dove nessuna rotta arriva» è di M8 in `siti.js`, e va scritta **dopo** queste rotte,
+non prima, o vieterebbe isole che ora sono raggiungibili.
+=======
 ## Città: quali rocche lo diventano (novembre 2026) — fatto, misurato, da provare
 
 > Richiesta dell'utente a M7: «le città siano più grandi delle rocche normali». La taglia è lavoro di M7 (classe
@@ -3327,6 +3375,7 @@ branch): se il terreno non regge il borgo più largo, il candidato viene saltato
 classe e il tetto stanno **sopra** quella riga. Da rimisurare quando le due parti si uniscono: i tre filtri si
 moltiplicano (classe × terreno che regge × distanza di 30 km) e il numero di città potrebbe calare — è il caso che il
 ripiego non copre, perché il salto di M7 non dipende dalla quota.
+>>>>>>> origin/main
 
 ## Fuori dal prototipo (non farlo ora)
 
