@@ -464,7 +464,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
   }
 
   /** Finestre e porte su una facciata (lungo s, normale `n`), `piani` piani da `pavimento`. */
-  function facciata(c, s, n, a, piani, pavimento, { porta = 0, finestre = true, bottega = false, daPiano = 0, posti = null, scalaPorta = 1 } = {}) {
+  function facciata(c, s, n, a, piani, pavimento, { porta = 0, finestre = true, bottega = false, daPiano = 0, posti = null, scalaPorta = 1, quotaPorta = null, quotaVecchia = 0 } = {}) {
     // Finestre piccole e poche, non allineate al millimetro; qualcuna con le imposte di legno aperte.
     const passo = 2.8, k = Math.max(1, Math.floor((2 * a - 1) / passo));
     for (let p = daPiano; p < piani; p++) {
@@ -487,7 +487,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
       }
     }
     if (porta) {
-      dettagli.push({ tipo: 'porta', u: c[0] + n[0] * 0.05, v: c[1] + n[1] * 0.05, y: pavimento, fu: n[0], fv: n[1],
+      dettagli.push({ tipo: 'porta', u: c[0] + n[0] * 0.05, v: c[1] + n[1] * 0.05, y: quotaPorta ?? pavimento, yV: quotaVecchia, fu: n[0], fv: n[1],
         ...(bottega ? { sx: 2.17, sy: 1.18 } : { sx: 0.9 + rnd() * 0.2, sy: (0.92 + rnd() * 0.12) * (CL.porta ?? 1) * scalaPorta }) });   // portone: la stessa porta più grande
     }
   }
@@ -521,7 +521,14 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
   function corpo({ c, f, largo, fondo, piani, intonaco, quota = null, porta = true, bottega = false, comignolo = true, finestre = true, retro = true, legno = null, copertura, tinta = null, scalaPorta = 1 }) {
     const s = [-f[1], f[0]], a = largo / 2, b = fondo / 2;
     const { mn, mx } = quote(c, s, f, a, b);
-    const pavimento = (quota ?? mx) + 0.15;
+    // In pendio il pavimento non sta sul punto più alto della pianta, o sul lato a valle la porta resterebbe sospesa
+    // in aria (fino a un paio di metri): segue il terreno davanti alla facciata e la casa si interra a monte, come
+    // nei borghi veri. L'interro cresce coi piani: una casa bassa non può sparire nel pendio.
+    const qFronte = terreno(c[0] + f[0] * (b + 0.4), c[1] + f[1] * (b + 0.4));
+    const interro = Math.min(2.2, 0.5 + (piani - 1) * 1.1);
+    const pavimento = quota ?? clamp(qFronte + 0.15, mx + 0.15 - interro, mx + 0.15);
+    // Quel che resta del dislivello lo prende la soglia: la porta sta sempre sul terreno, non sopra lo zoccolo.
+    const sogliaPorta = Math.min(pavimento, qFronte + 0.1);
     const R = rett(c, s, f, a, b);
     const umido = rnd() < 0.45 ? 1.2 + rnd() * 1.8 : 0;   // edera e muffa al piede (m)
     parti.pietra.push(segna(prisma(q4(R), q4(R), Math.min(mn, pavimento) - 0.6, pavimento + 0.5), { edera: umido, sporco: 1 }));   // zoccolo
@@ -551,7 +558,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
         facciata([c[0] + f[0] * bT, c[1] + f[1] * bT], s, f, a, p + 1, pavimento, { finestre, daPiano: p, posti: pf });
         if (retro) facciata([c[0] - f[0] * bT, c[1] - f[1] * bT], s, [-f[0], -f[1]], a, p + 1, pavimento, { finestre, daPiano: p, posti: pr });
       }
-      facciata(fr, s, f, a, 1, pavimento, { porta, finestre, bottega });
+      facciata(fr, s, f, a, 1, pavimento, { porta, finestre, bottega, quotaPorta: sogliaPorta, quotaVecchia: mx + 0.15 });
     } else if (aTronchi) {
       // Piano terra in pietra, piani alti in tronchi scuri che sporgono un poco; a volte un ballatoio sul davanti.
       parti.pietra.push(segna(prisma(q4(storto(R)), q4(storto(R)), pavimento + 0.5, pavimento + PIANO), { edera: umido }));
@@ -560,7 +567,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
       parti.legno.push(segna(prisma(q4(storto(Rj)), q4(storto(Rj)), pavimento + PIANO - 0.1, gronda), { tinta: [tn * 1.75, tn * 1.5, tn * 1.25] }));
       facciata([c[0] + f[0] * bT, c[1] + f[1] * bT], s, f, a, piani, pavimento, { finestre, daPiano: 1 });
       if (retro) facciata([c[0] - f[0] * bT, c[1] - f[1] * bT], s, [-f[0], -f[1]], a, piani, pavimento, { finestre, daPiano: 1 });
-      facciata(fr, s, f, a, 1, pavimento, { porta, finestre, bottega });
+      facciata(fr, s, f, a, 1, pavimento, { porta, finestre, bottega, quotaPorta: sogliaPorta, quotaVecchia: mx + 0.15 });
       if (rnd() < (CL.ballatoio ?? 0)) {
         const y = pavimento + PIANO, L = a * (0.55 + rnd() * 0.3), t0 = (rnd() - 0.5) * (a - L), d = 1.0;
         const cb = [c[0] + s[0] * t0 + f[0] * (bT + d / 2), c[1] + s[1] * t0 + f[1] * (bT + d / 2)];
@@ -574,7 +581,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     } else {
       (intonaco ? parti.intonaco : parti.pietra).push(segna(prisma(q4(storto(R)), q4(storto(R)), pavimento + 0.5, gronda), intonaco ? { edera: 0, tinta } : { edera: umido }));
       cantonali(c, s, f, a, b, pavimento + 0.5, gronda);
-      facciata(fr, s, f, a, piani, pavimento, { porta, finestre, bottega, scalaPorta });
+      facciata(fr, s, f, a, piani, pavimento, { porta, finestre, bottega, scalaPorta, quotaPorta: sogliaPorta, quotaVecchia: mx + 0.15 });
       if (retro) facciata(rt, s, [-f[0], -f[1]], a, piani, pavimento, { finestre });
     }
     const { colmo, falda } = tetto(c, s, f, a, bT, gronda, aTronchi ? parti.legno : aGraticcio || intonaco ? parti.intonaco : parti.pietra, copertura);
@@ -1328,7 +1335,16 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
       const p = e.porta;
       Object.assign(p, { x: X(p.u, p.v), z: Z(p.u, p.v), nx: ux * p.fu - uz * p.fv, nz: uz * p.fu + ux * p.fv });
     }
-    return { object, solidi, scatole, edifici, sorgenti, aggiornaLuci, misure: { case: case_, edifici: edifici.length, istanze, zone: zone.size, chiamate, triangoli } };
+    // Diagnostica (prove): porte la cui soglia sta più di 40 cm sopra il terreno davanti, e il distacco massimo.
+    let porteAlte = 0, distaccoMax = 0, porteAlteV = 0, distaccoMaxV = 0;
+    for (const d of dettagli) {
+      if (d.tipo !== 'porta') continue;
+      const q = terreno(d.u + d.fu * 0.5, d.v + d.fv * 0.5), dist = d.y - q;
+      if (dist > 0.4) porteAlte++;
+      if (dist > distaccoMax) distaccoMax = dist;
+      if (d.yV) { const dv = d.yV - q; if (dv > 0.4) porteAlteV++; if (dv > distaccoMaxV) distaccoMaxV = dv; }
+    }
+    return { object, solidi, scatole, edifici, sorgenti, aggiornaLuci, misure: { case: case_, edifici: edifici.length, istanze, zone: zone.size, chiamate, triangoli, porteAlte, distacco: +distaccoMax.toFixed(2), porteAlteV, distaccoV: +distaccoMaxV.toFixed(2) } };
   }
 
   const chiudi = () => completaPezzi(chiudiAPezzi());
