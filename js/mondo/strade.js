@@ -1410,7 +1410,9 @@ export const MARE = {
   attesa: 6,                // km equivalenti di imbarco e attesa: più di un traghetto di lago
   utili: 5,                 // rotte di sola scorciatoia al più per mondo
   traPorti: 6,              // km: due porti più vicini di così sono lo stesso scalo
-  barcaiolo: 14,            // km: distanza massima di un'isola senza porto dal villaggio che noleggia la barca
+  // Barcaiolo: conta la traversata, non quanto dista il villaggio. Nessuno rema 18 km, ma un pescatore ti porta
+  // dall'altra parte di un braccio di mare di tre; il villaggio che noleggia può stare un po' nell'entroterra.
+  barcaiolo: { traversata: 14, dalVillaggio: 12 },
 };
 
 /** Pezzi di terra della Carta (4 vicini): id per cella, dimensioni, e l'indice del continente (il più grande). */
@@ -1617,45 +1619,52 @@ function imbarcoMare(carta, i) {
  * di riva più vicino si noleggia una barca. Nessun molo, nessun orario.
  */
 function barcaioli(carta, tratte, terre, riva, cellaDi) {
-  const M = MARE, { cols, cella } = carta;
-  const giaServite = new Set();
+  const M = MARE, { cols, rows, cella } = carta, n = cols * rows;
+  const servite = new Set([terre.principale]);
   for (const t of tratte) for (const a of [t.a, t.b]) {
     const i = cellaDi(a.rx * cella, a.ry * cella);
-    if (terre.id[i] >= 0) giaServite.add(terre.id[i]);
+    if (terre.id[i] >= 0) servite.add(terre.id[i]);
   }
-  // Che cosa sta su ogni pezzo di terra.
+  // Che cosa sta su ogni pezzo di terra non servito.
   const sopra = new Map();
-  const segna = (x, z, chiave) => {
+  const segna = (x, z, abitato) => {
     const t = terre.id[cellaDi(x, z)];
-    if (t < 0 || t === terre.principale) return;
+    if (t < 0 || servite.has(t)) return;
     const r = sopra.get(t) ?? { abitato: false, siti: 0 };
-    if (chiave === 'abitato') r.abitato = true; else r.siti++;
+    if (abitato) r.abitato = true; else r.siti++;
     sopra.set(t, r);
   };
-  for (const l of carta.luoghi ?? []) segna(l.x, l.z, 'abitato');
-  for (const s of carta.siti ?? []) segna(s.x, s.z, s.tipo === 'villaggio' ? 'abitato' : 'sito');
-  // Villaggi di riva del continente, da cui si noleggia.
-  const noleggi = (carta.siti ?? []).filter((v) => v.tipo === 'villaggio').map((v) => {
-    const i = cellaDi(v.x, v.z);
-    return { sito: v.id, x: v.x / cella, y: v.z / cella, cella: i, terra: terre.id[i] };
-  }).filter((v) => v.terra === terre.principale);
+  for (const l of carta.luoghi ?? []) segna(l.x, l.z, true);
+  for (const s of carta.siti ?? []) segna(s.x, s.z, s.tipo === 'villaggio');
+  if (!sopra.size) return;
+  const villaggi = (carta.siti ?? []).filter((v) => v.tipo === 'villaggio')
+    .map((v) => ({ sito: v.id, x: v.x / cella, y: v.z / cella, terra: terre.id[cellaDi(v.x, v.z)] }));
   for (const [t, r] of sopra) {
-    if (giaServite.has(t) || !r.siti) continue;
-    // Punto di sbarco: la cella dell'isola più vicina a un villaggio di riva del continente.
+    if (!r.siti && !r.abitato) continue;
+    // Coppia di rive più vicina fra l'isola e una terra già servita: la traversata che un pescatore farebbe.
     let miglior = null;
-    for (let i = 0; i < terre.id.length; i++) {
+    for (let i = 0; i < n; i++) {
       if (terre.id[i] !== t) continue;
-      const rx = (i % cols) + 0.5, ry = ((i / cols) | 0) + 0.5;
-      for (const v of noleggi) {
-        const km = Math.hypot(rx - v.x, ry - v.y) * cella / 1000;
-        if (km <= M.barcaiolo && (!miglior || km < miglior.km)) miglior = { km, rx, ry, v };
+      const ix = (i % cols) + 0.5, iy = ((i / cols) | 0) + 0.5;
+      for (let j = 0; j < n; j++) {
+        if (terre.id[j] < 0 || !servite.has(terre.id[j])) continue;
+        const jx = (j % cols) + 0.5, jy = ((j / cols) | 0) + 0.5;
+        const km = Math.hypot(ix - jx, iy - jy) * cella / 1000;
+        if (km <= M.barcaiolo.traversata && (!miglior || km < miglior.km)) miglior = { km, ix, iy, jx, jy, terra: terre.id[j] };
       }
     }
     if (!miglior) continue;
-    const v = miglior.v;
+    // Il villaggio che noleggia: il più vicino a quella riva, sulla stessa terra.
+    let v = null, md = Infinity;
+    for (const w of villaggi) {
+      if (w.terra !== miglior.terra) continue;
+      const d = Math.hypot(w.x - miglior.jx, w.y - miglior.jy) * cella / 1000;
+      if (d < md) { md = d; v = w; }
+    }
+    if (!v || md > M.barcaiolo.dalVillaggio) continue;
     tratte.push({ tipo: 'barcaiolo', km: miglior.km, giro: Infinity, isolata: true,
-      rotta: { x: Float32Array.from([v.x, miglior.rx]), y: Float32Array.from([v.y, miglior.ry]) },
-      a: { sito: v.sito, sorta: 'villaggio', x: v.x, y: v.y, rx: v.x, ry: v.y },
-      b: { sito: -1, sorta: 'approdo', x: miglior.rx, y: miglior.ry, rx: miglior.rx, ry: miglior.ry } });
+      rotta: { x: Float32Array.from([miglior.jx, miglior.ix]), y: Float32Array.from([miglior.jy, miglior.iy]) },
+      a: { sito: v.sito, sorta: 'villaggio', x: v.x, y: v.y, rx: miglior.jx, ry: miglior.jy },
+      b: { sito: -1, sorta: 'approdo', x: miglior.ix, y: miglior.iy, rx: miglior.ix, ry: miglior.iy } });
   }
 }
