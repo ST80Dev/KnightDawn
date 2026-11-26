@@ -78,7 +78,7 @@ const Knight = {
   // docs/EARLY_GAME.md): nessun equipaggiamento, nessun cavallo, pochi spiccioli.
   // L'investitura (fine Veglia) promuove a 'errante' e consegna il primo kit.
   init(nome) {
-    this.nome   = nome || 'Aldric di Vorn';
+    this.nome   = nome || 'Aldric';
     this.titolo = 'Garzone';
     this.rango  = 'garzone';
 

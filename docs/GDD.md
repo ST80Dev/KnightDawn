@@ -280,14 +280,16 @@ Regole **nuove** per il 3D e per la varietà ravvicinata:
 roccia, palude, sabbia/deserto, neve, ghiaccio, fiume, acqua): eventi e costi già scritti restano
 validi.
 
-**Culture e nomi** [approvato dall'utente, novembre 2026]. Nel 2D i nomi di castelli, torri, villaggi e regione si sceglievano a
-caso per seme da liste fisse, in tre registri (anglo-medievale, cavalleresco italiano,
-tolkieniano). Le fazioni invece **non** erano generate: in `js/knight.js` ce ne sono quattro scritte
-a mano (Casata Vorn, Ordine del Cervo, Mercanti Liberi, Banditi del Sud) e `docs/FACTIONS.md` è
-ancora uno schema. Proposta: **aree culturali legate al clima** (centro di registro italiano e
-medievale come lo stile attuale; nord di registro anglo-germanico; sud di registro
-mediterraneo-orientale). Ogni area dà nomi, fazioni generate per seme e, più avanti, il proprio
-stile di architettura.
+**Culture e nomi** [rivisto con l'utente, novembre 2026: prima il centro aveva un registro italiano-medievale].
+**Tutto il mondo ha nomi anglo-fantasy** (cavaliere, casate, luoghi, persone), con l'impronta del Signore degli
+Anelli, delle Cronache del ghiaccio e del fuoco (Trono di spade), degli Anelli del Potere, di House of the Dragon e di
+Lupo Solitario: per lo più **varianti di nomi secondari** (es. Tarlow, Karstane, Mormount; Elfwine, Halbard, Rhygar),
+pochi identici, mai i protagonisti. La lingua dell'interfaccia resta l'italiano («Casata Tarlow», «la taverna»),
+come in una traduzione italiana di quei romanzi. Restano le **aree culturali legate al clima**, ora come sfumature
+dello stesso registro: nord aspro e nordico (Rohan, il Nord di Westeros, Holmgard), centro cavalleresco (Gondor,
+l'Altopiano, le Terre dei fiumi, Sommerlund), sud più caldo e antico (Dorne, Númenor, Durenor). Ogni area dà nomi,
+fazioni generate per seme (G3) e, più avanti, il proprio stile di architettura. Oggi esistono solo le liste del
+nome del cavaliere (`js/3d/interfaccia.js`) e della casata di partenza (`js/data/events_veglia.js`).
 
 **Strutture:** castelli, villaggi, città, rovine, dungeon, porti, monasteri, accampamenti, torri,
 valichi, ponti, guadi
