@@ -1210,7 +1210,10 @@ export function ripianificaLuogo(carta, luogo, classe = 'citta', L = LUOGHI) {
   if (!L.classi[classe]) return false;
   const r = pianifica(carta, luogo, classe, L);
   if (!r) return false;
-  Object.assign(luogo, r, { classe });
+  // `classe` dice quanto è grande il luogo e la leggono le misure del 3D; da quale classe veniva resta in
+  // `classeOrigine`, che un giorno servirà al racconto (una città nata da una casata non è una nata da una sede
+  // maggiore). Osservazione della sessione M8.
+  Object.assign(luogo, r, { classe, classeOrigine: luogo.classeOrigine ?? luogo.classe });
   return true;
 }
 

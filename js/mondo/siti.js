@@ -309,13 +309,14 @@ function classiRocche(carta, F, seme) {
       + pesoClasse[l.classe] + 0.3 * hashU(l.id, 3, seme) };
   }).sort((a, b) => b.s - a.s || a.l.id - b.l.id);
   const nC = conta(SITI.citta.numero, seme, 11), citta = [];
+  let cittaScartate = 0;                            // candidati saltati perché il terreno non regge il borgo grande
   for (const { l } of perCitta) {
     if (citta.length >= nC) break;
     if (!citta.every((c) => km(c, l) >= SITI.citta.distanza)) continue;
     // Una città è più grande di qualunque rocca (richiesta dell'utente): si rifanno i piani con la classe `citta`
     // (js/mondo/luoghi.js). Dove il terreno non regge il borgo più grande il luogo resta una rocca e si prova il
     // candidato dopo, così non esistono città piccole.
-    if (!ripianificaLuogo(carta, l, 'citta')) continue;
+    if (!ripianificaLuogo(carta, l, 'citta')) { cittaScartate++; continue; }
     l.tipo = 'citta';
     citta.push(l);
   }
@@ -330,7 +331,7 @@ function classiRocche(carta, F, seme) {
     if (monasteri.length >= nM) break;
     if (monasteri.every((m) => km(m, l) >= SITI.monasteri.distanza)) { l.tipo = 'monastero'; monasteri.push(l); }
   }
-  return { citta: citta.length, monasteri: monasteri.length };
+  return { citta: citta.length, cittaScartate, monasteri: monasteri.length };
 }
 
 /** Prima delle strade: classi delle rocche, villaggi e luoghi speciali. Scrive `carta.siti`. */
