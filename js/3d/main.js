@@ -31,7 +31,7 @@ import { creaAcqueScena, creaPonti, suoloStrade } from './acqua.js';
 import { vicinoAlBordo, trasla } from './blocchi.js';
 import { generaCartaAsincrona, verificaSemi } from '../mondo/generatore.js';
 import { generaScenaAPezzi, centroBlocco, quotaFinale } from '../mondo/scena.js';
-import { distanzaStrada } from '../mondo/strade.js';
+import { distanzaStrada, percorsiStrade } from '../mondo/strade.js';
 import { posizionaVegetazione, posizionaVegetazioneAPezzi, coperturaMondo, coperturaTavullia } from '../mondo/vegetazione.js';
 import { creaVegetazione, creaVegetazioneAPezzi } from './vegetazione3d.js';
 import { creaAbitanti } from './abitanti3d.js';
@@ -316,6 +316,7 @@ function nuovaPartitaDati(m, nome) {
   Calendar.init();
   if (typeof Events !== 'undefined' && Events.reset) Events.reset();
   if (typeof News !== 'undefined' && News.reset) News.reset();
+  if (typeof Conoscenza !== 'undefined') Conoscenza.reset();
   if (m === 'libera') {
     Knight.promuovi('errante');
     Object.assign(Knight.equip, { arma: 'Spada da arme', armatura: 'Cotta di maglia', scudo: 'Scudo di legno' });
@@ -1136,6 +1137,7 @@ async function init() {
   // La casata della rocca di partenza ha un nome generato dal seme (G1, passo 2): la reputazione lo mostra.
   const repCasata = Knight.reputazione.find((r) => r.id === 'vorn');
   if (repCasata) repCasata.nome = nomeCasata();
+  preparaConoscenza();
 
   Save.statoScena = () => {
     const k = knight.stato;
@@ -1245,6 +1247,77 @@ const cartaVista = createCartaVista(document.body, {
     entraTavullia().catch((err) => { console.error('[scena]', err); messaggio(`Errore: ${err.message}`); });
   },
 });
+// ─── Nebbia della conoscenza (versione base, G1; Conoscenza in js/news.js) ─────────────────────────────
+// In Storia il cavaliere conosce all'inizio la sua valle (il borgo e ~1,5 km attorno, la strada fino al villaggio più
+// vicino) e scopre camminando: percorso entro ~250 m, intravisto entro ~700 m (di notte molto meno). La minimappa copre
+// l'ignoto e nasconde i luoghi mai visti. In Libera si vede tutto. Con G2: linea di vista dalle alture e voci.
+const CONOSCENZA = { percorso: 250, intravisto: 700, percorsoNotte: 120, intravistoNotte: 200, ogni: 0.5, passo: 25,
+  inizio: { valle: 1500, intorno: 2200, villaggio: 400, corridoio: 1200, strada: 150, lungoStrada: 450 } };
+
+function preparaConoscenza() {
+  if (typeof Conoscenza === 'undefined') return;
+  Conoscenza.attiva = inStoria() && !!carta;
+  if (!Conoscenza.attiva) return;
+  const W = carta.cols * carta.cella, H = carta.rows * carta.cella;
+  if (Conoscenza.dati && Conoscenza.w === Math.ceil(W / Conoscenza.CELLA) && Conoscenza.h === Math.ceil(H / Conoscenza.CELLA)) return;
+  Conoscenza.init(W, H);
+  rivelaInizio();
+}
+
+/** Ciò che il garzone sa all'inizio della Storia: la sua valle e la strada fino al villaggio più vicino. */
+function rivelaInizio() {
+  const I = CONOSCENZA.inizio, k = Conoscenza;
+  const sito = carta.luoghi?.find((l) => l.partenza);
+  if (sito) {
+    k.rivela(sito.x, sito.z, I.valle, 2);
+    k.rivela(sito.x, sito.z, I.intorno, 1);
+    let v = null, dv = Infinity;
+    for (const s of carta.siti ?? []) {
+      if (s.tipo !== 'villaggio') continue;
+      const d = Math.hypot(s.x - sito.x, s.z - sito.z);
+      if (d < dv) { dv = d; v = s; }
+    }
+    if (v) {
+      k.rivela(v.x, v.z, I.villaggio, 2);
+      // Strade nel corridoio tra la rocca e il villaggio: un punto ogni ~80 m, se vicino al segmento rocca–villaggio.
+      const ax = sito.x, az = sito.z, bx = v.x - ax, bz = v.z - az, L2 = bx * bx + bz * bz || 1, m = I.corridoio;
+      const strade = percorsiStrade(carta, Math.min(ax, v.x) - m, Math.min(az, v.z) - m, Math.max(ax, v.x) + m, Math.max(az, v.z) + m);
+      for (const f of strade) {
+        let lx = NaN, lz = NaN;
+        for (let i = 0; i < f.x.length; i++) {
+          const x = f.x[i], z = f.z[i];
+          if (Math.hypot(x - lx, z - lz) < 80) continue;
+          const t = Math.max(0, Math.min(1, ((x - ax) * bx + (z - az) * bz) / L2));
+          if (Math.hypot(x - ax - t * bx, z - az - t * bz) > m) continue;
+          k.rivela(x, z, I.strada, 2);
+          k.rivela(x, z, I.lungoStrada, 1);
+          lx = x; lz = z;
+        }
+      }
+    }
+  }
+  // Partita ripresa senza conoscenza (salvataggi di prima): anche il punto dove si trova.
+  if (knight && scenaAttuale?.tipo === 'mondo') {
+    k.rivela(scenaAttuale.cx + knight.stato.x, scenaAttuale.cz + knight.stato.z, CONOSCENZA.intravisto, 1);
+  }
+}
+
+let _tConoscenza = 0;
+const _ultimaRivelazione = { x: NaN, z: NaN };
+/** Ogni ~0,5 s, se il cavaliere si è spostato: percorso attorno e intravisto più in là (di notte poco). */
+function aggiornaConoscenza(dt) {
+  if (typeof Conoscenza === 'undefined' || !Conoscenza.attiva || !Conoscenza.dati) return;
+  if (!knight || scenaAttuale?.tipo !== 'mondo' || inPausa || cronista) return;
+  if ((_tConoscenza += dt) < CONOSCENZA.ogni) return;
+  _tConoscenza = 0;
+  const x = scenaAttuale.cx + knight.stato.x, z = scenaAttuale.cz + knight.stato.z;
+  if (Math.hypot(x - _ultimaRivelazione.x, z - _ultimaRivelazione.z) < CONOSCENZA.passo) return;
+  _ultimaRivelazione.x = x; _ultimaRivelazione.z = z;
+  const notte = Calendar.eNotte();
+  Conoscenza.rivela(x, z, notte ? CONOSCENZA.percorsoNotte : CONOSCENZA.percorso, 2);
+  Conoscenza.rivela(x, z, notte ? CONOSCENZA.intravistoNotte : CONOSCENZA.intravisto, 1);
+}
+
 // Minimappa (js/3d/minimappa.js): in basso a destra durante il gioco di persona, solo nel mondo generato.
 const nelMondo = () => scenaAttuale?.tipo === 'mondo' && knight && carta;
 const minimappa = creaMinimappa(document.body, {
@@ -1253,6 +1326,8 @@ const minimappa = creaMinimappa(document.body, {
     direzione: knight.stato.direzione } : null),
   cavallo: () => (nelMondo() && cavallo ? { x: scenaAttuale.cx + cavallo.stato.x, z: scenaAttuale.cz + cavallo.stato.z } : null),
   blocco: () => (nelMondo() ? { x: scenaAttuale.cx, z: scenaAttuale.cz, half: terrain.size / 2 } : null),
+  conoscenza: () => (typeof Conoscenza !== 'undefined' && Conoscenza.attiva ? Conoscenza : null),
+  prove: () => !inStoria(),
   onVai: (x, z) => {
     if (!soloInLibera('Il clic sulla minimappa che porta lì')) return;
     vaiA(x, z).catch((err) => { console.error('[minimappa]', err); messaggio(`Errore: ${err.message}`); });
@@ -1306,7 +1381,8 @@ const premuto = (azione) => TASTI_MOVIMENTO[azione].some((k) => tasti.has(k));
 
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;      // si sta scrivendo (es. il seme della Carta)
-  if (e.code === 'KeyM' && !e.repeat) { cartaVista.alterna(); return; }
+  // M: in Storia la minimappa grande (la Carta di gioco arriva con G2); in Libera la Carta di sviluppo.
+  if (e.code === 'KeyM' && !e.repeat) { if (inStoria() && !cartaVista.aperta) minimappa.alterna(); else cartaVista.alterna(); return; }
   if (cartaVista.aperta) return;
   if (cronista) {                                        // Carta del cronista aperta: scelte con 1–9, Esc o E per uscire
     if (e.repeat) return;
@@ -1838,6 +1914,7 @@ function frame(now) {
     aggiornaIndicatoreAndatura();
     tt = segna('interfaccia', tt);
     minimappa.nascondi(!!percorso);        // percorso di prova: misure confrontabili con quelle di prima
+    aggiornaConoscenza(dtReale);
     minimappa.aggiorna(now);
     tt = segna('minimappa', tt);
     if (percorso) {
@@ -1886,7 +1963,7 @@ function frame(now) {
 
 camera.position.set(0, 300, 900);          // vista provvisoria mentre il terreno si carica
 init().then(() => {
-  if (PARAMETRI.has('carta')) cartaVista.apri();
+  if (PARAMETRI.has('carta') && !inStoria()) cartaVista.apri();
 }).catch((err) => {
   console.error('[init]', err);
   avvisoHud(`Errore di avvio: ${err.message}`);

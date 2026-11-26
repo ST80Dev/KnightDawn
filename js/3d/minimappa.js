@@ -38,6 +38,8 @@ const COLORE_CAVALLO = '#6b4a2a';
  *   cavallo?: () => ({x:number, z:number}|null),                  // il cavallo, se è lontano dal cavaliere
  *   blocco?: () => ({x:number, z:number, half:number}|null),      // blocco disegnato in 3D (m del mondo)
  *   onVai?: (x: number, z: number) => void,                       // clic sulla minimappa grande (prova)
+ *   conoscenza?: () => (object|null),   // Conoscenza (js/news.js) se attiva (Storia): ignoto coperto, intravisto sbiadito
+ *   prove?: () => boolean,              // true se il clic che porta lì è permesso (Libera): cambia la riga in basso
  * }} opzioni
  */
 export function creaMinimappa(contenitore, opzioni) {
@@ -90,6 +92,32 @@ export function creaMinimappa(contenitore, opzioni) {
     g.putImageData(img, 0, 0);
     colore = c.bioma ? coloreNaturale(c) : null;
     corrente = null; lavoro = null;
+    sporca = true;
+  }
+
+  // ─── Nebbia della conoscenza: uno strato di pergamena, una cella (100 m) per pixel ───
+  // Ignoto coperto del tutto, intravisto sbiadito, percorso libero. Si rifà solo il rettangolo cambiato.
+  const NEBBIA = { colore: [196, 172, 124], alfa: [255, 150, 0] };
+  let maschera = null, mImg = null, mGen = -1, mVer = -1;
+  function preparaMaschera(k) {
+    if (!maschera || mGen !== k.generazione || maschera.width !== k.w || maschera.height !== k.h) {
+      maschera = document.createElement('canvas');
+      maschera.width = k.w; maschera.height = k.h;
+      mImg = maschera.getContext('2d').createImageData(k.w, k.h);
+      mGen = k.generazione;
+    }
+    if (mVer === k.versione) return;
+    mVer = k.versione;
+    const r = k.prendiSporco();
+    if (!r) return;
+    const px = mImg.data, [R, G, B] = NEBBIA.colore;
+    for (let j = r.y0; j <= r.y1; j++) {
+      for (let i = r.x0; i <= r.x1; i++) {
+        const c = j * k.w + i, p = c * 4;
+        px[p] = R; px[p + 1] = G; px[p + 2] = B; px[p + 3] = NEBBIA.alfa[k.dati[c]] ?? 0;
+      }
+    }
+    maschera.getContext('2d').putImageData(mImg, 0, 0, r.x0, r.y0, r.x1 - r.x0 + 1, r.y1 - r.y0 + 1);
     sporca = true;
   }
 
@@ -188,7 +216,9 @@ export function creaMinimappa(contenitore, opzioni) {
     sporca = true;
   }
   function piede() {
-    elPiede.textContent = grande ? 'clic: porta lì il cavaliere (prova) · rotella o +/−: zoom · N: riduci' : '';
+    elPiede.textContent = !grande ? ''
+      : (opzioni.prove?.() ?? true) ? 'clic: porta lì il cavaliere (prova) · rotella o +/−: zoom · N: riduci'
+        : 'rotella o +/−: zoom · N o M: riduci';
   }
   window.addEventListener('resize', () => { if (!el.hidden) adatta(); });
 
@@ -231,8 +261,16 @@ export function creaMinimappa(contenitore, opzioni) {
       }
       ctx.setLineDash([]);
     }
+    // Nebbia della conoscenza (Storia): sopra rilievo, fiumi e strade, sotto i segni.
+    const k = opzioni.conoscenza?.() ?? null;
+    if (k && maschera) {
+      ctx.setTransform(s * k.CELLA, 0, 0, s * k.CELLA, tx, ty);
+      ctx.drawImage(maschera, 0, 0);
+      ctx.setTransform(s, 0, 0, s, tx, ty);
+    }
+    const noto = (x, z) => !k || k.livello(x, z) >= 1;
     // Blocco disegnato in 3D (solo allargata: dentro, il clic sposta senza ricaricare).
-    const b = grande ? opzioni.blocco?.() : null;
+    const b = grande && !k ? opzioni.blocco?.() : null;
     if (b) {
       ctx.strokeStyle = 'rgba(255, 246, 224, 0.55)';
       ctx.lineWidth = 1.2 * dpr / s;
@@ -249,7 +287,7 @@ export function creaMinimappa(contenitore, opzioni) {
       ctx.lineWidth = 1.3 * dpr;
       for (const st of c.siti) {
         const [x, y] = P(st.x, st.z);
-        if (!fuori(x, y, 10)) segnoSito(ctx, st, x, y, m);
+        if (!fuori(x, y, 10) && noto(st.x, st.z)) segnoSito(ctx, st, x, y, m);
       }
     }
     if (c.luoghi) {
@@ -257,7 +295,7 @@ export function creaMinimappa(contenitore, opzioni) {
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
       for (const l of c.luoghi) {
         const [x, y] = P(l.x, l.z), m = CLASSI_ROCCA[l.classe][1] * dpr * (grande ? 1 : 0.8);
-        if (fuori(x, y, 40)) continue;
+        if (fuori(x, y, 40) || !noto(l.x, l.z)) continue;
         const [col, lettera] = TIPI_LUOGO[l.tipo ?? 'rocca'];
         ctx.fillStyle = col; ctx.strokeStyle = '#f4ead0'; ctx.lineWidth = 1.2 * dpr;
         ctx.beginPath();                                      // torre con due merli, come sulla Carta
@@ -336,10 +374,12 @@ export function creaMinimappa(contenitore, opzioni) {
   canvas.addEventListener('pointermove', (e) => {
     if (!grande || !pos || !cartaFatta) return;
     const p = nelMondo(e), dx = p.x - pos.x, dz = p.z - pos.z, d = Math.hypot(dx, dz);
+    const k = opzioni.conoscenza?.();
+    if (k && k.livello(p.x, p.z) < 1) { elPiede.textContent = 'terre ignote · rotella o +/−: zoom'; return; }
     const verso = PUNTI[Math.round(((Math.atan2(dx, -dz) * 180 / Math.PI + 360) % 360) / 45) % 8];
     const q = quotaFinale(cartaFatta, p.x, p.z);
     elPiede.textContent = `${d >= 1000 ? `${(d / 1000).toLocaleString('it-IT', { maximumFractionDigits: 1 })} km` : `${Math.round(d)} m`}`
-      + ` a ${verso} · quota ${Math.round(q)} m · clic: porta lì il cavaliere (prova)`;
+      + ` a ${verso} · quota ${Math.round(q)} m${(opzioni.prove?.() ?? true) ? ' · clic: porta lì il cavaliere (prova)' : ''}`;
   });
   canvas.addEventListener('pointerleave', piede);
 
@@ -363,6 +403,8 @@ export function creaMinimappa(contenitore, opzioni) {
       }
       if (el.hidden) { el.hidden = false; adatta(); }
       preparaCarta(c);
+      const k = opzioni.conoscenza?.();
+      if (k && k.dati) preparaMaschera(k);
       if (!lavoro && daRifare(corrente)) nuovoLavoro();
       if (lavoro) avanzaLavoro();
       const spost = Math.hypot(pos.x - ultimo.x, pos.z - ultimo.z) / mpp();

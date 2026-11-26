@@ -785,7 +785,8 @@ Dettagli in `docs/UI_GUIDE.md`.
 >    `docs/EARLY_GAME.md` §7.
 > 2. **G2 — Viaggio sulla Carta**: la Carta di sviluppo diventa di gioco (percorso, tempo e Forza,
 >    eventi di viaggio, «fermati qui» che porta nella Scena) e **nebbia della conoscenza** rivelata da
->    ciò che il cavaliere vede dalle alture.
+>    ciò che il cavaliere vede dalle alture. (La versione base della nebbia, per vicinanza, è già in G1:
+>    `docs/EARLY_GAME.md` §7, passo 1b.)
 > 3. **G3 — Fazioni e nomi generati** (S5, prima parte).
 > 4. **G4 — Incarichi per tipo di luogo, reputazione, notizie che si propagano** (S3, S5, S6).
 > 5. **G5 — Seguito e covi** (S7). 6. **G6 — Archi narrativi e titoli** (S8).

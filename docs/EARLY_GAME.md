@@ -274,6 +274,17 @@ poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un
    dà un messaggio e non tocca nulla. In gioco: F8 salva e porta al menu, da lì si scarica. Il campo del seme parte
    vuoto (casuale). Provato in headless: scarica, file non valido rifiutato, caricamento in un browser pulito con
    oro, data e seme identici.
+1b. **Nebbia della conoscenza, versione base** [anticipata da G2 su richiesta dell'utente, novembre 2026: a inizio
+   Storia minimappa e Carta mostravano tutto il mondo]. **Stato: fatto, da provare dall'utente.** `Conoscenza` in
+   `js/news.js` (griglia del mondo a celle di 100 m: ignoto, intravisto, percorso; nel salvataggio e nei file JSON
+   come corse di valori, ~1–3 KB); in `main.js` `preparaConoscenza`, `rivelaInizio`, `aggiornaConoscenza` (costanti in
+   `CONOSCENZA`); nella minimappa uno strato di pergamena che copre l'ignoto e sbiadisce l'intravisto, sopra rilievo,
+   fiumi e strade, e i luoghi mai visti non compaiono. All'inizio il garzone conosce il borgo e ~1,5 km attorno
+   (intravisto fino a 2,2 km) e la strada fino al villaggio più vicino; camminando scopre ~250 m attorno (intravisto
+   ~700 m; di notte 120 e 200 m). In Storia `M` apre la minimappa grande (la Carta di sviluppo resta della Libera);
+   in Libera si vede tutto. Provato in headless (seme 570549): 0,16 % del mondo noto all'inizio, cresce camminando,
+   resta uguale dopo salvataggio e ripresa; Libera senza nebbia; nessun errore. Con G2: linea di vista dalle alture,
+   notte e meteo, luoghi sentiti dire.
 2. **Carta del cronista vera.** Riquadro con titolo, testo, pulsanti tematici, prerequisiti visibili
    («Richiede…») ed esito; usa il motore di `js/events.js` così com'è. Effetto di tempo nuovo
    `{ type:'tempo', minuti:N }` accanto a `passi` (`Calendar.avanzaMinuti`); i costi della Veglia passano
