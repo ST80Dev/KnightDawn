@@ -117,7 +117,7 @@ const SEGNI = {
   // stretta, braccio lungo (si vede anche di taglio camminando lungo la via), appesa ad altezza dello sguardo.
   cornice: { stipite: 0.34, sporto: 0.13, architrave: 0.36, gradino: { fuori: 0.55, alto: 0.15 },
     tinta: [1.14, 1.12, 1.06] },                       // pietra più chiara del muro: lo stipite si stacca
-  insegna: { alta: 2.6, braccio: 1.3, tavola: [1.15, 0.88], spessore: 0.08, catena: 0.18, simbolo: 1.45,
+  insegna: { alta: 2.6, braccio: 1.3, tavola: [1.15, 0.88], spessore: 0.08, catena: 0.18, simbolo: 1.15,
     ferro: [0.26, 0.28, 0.31] },
   // Tinte della tavola (moltiplicano l'intonaco): forti, perché in ombra scuriscono, e lontane dal colore del muro
   // (una tavola grigia su pietra grigia non si vede). `chiaro`: simbolo chiaro, per le tavole scure.
@@ -1257,7 +1257,9 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     const largoPorta = (tipo === 'stalla' || tipo === 'fabbro' || tipo === 'scuderia') ? 2.6 : 1.3;
     if (r.soglia !== undefined) {
       cornicePorta(c, f, E.fondo / 2, r.soglia, largoPorta);
-      if (E.insegna) insegna(c, f, E.fondo / 2, r.pavimento, rnd() < 0.5 ? -1 : 1, E.insegna, r.gronda);
+      // Dal lato libero: tettoia e recinto stanno a destra (+s), l'insegna va a sinistra.
+      const latoInsegna = (E.tettoia || E.recinto) ? -1 : (rnd() < 0.5 ? -1 : 1);
+      if (E.insegna) insegna(c, f, E.fondo / 2, r.pavimento, latoInsegna, E.insegna, r.gronda);
     }
     // Carattere proprio del mestiere.
     if (tipo === 'taverna') {
