@@ -1641,7 +1641,9 @@ function barcaioli(carta, tratte, terre, riva, cellaDi) {
     .map((v) => ({ sito: v.id, x: v.x / cella, y: v.z / cella, terra: terre.id[cellaDi(v.x, v.z)] }));
   for (const [t, r] of sopra) {
     if (!r.siti && !r.abitato) continue;
-    // Coppia di rive più vicina fra l'isola e una terra già servita: la traversata che un pescatore farebbe.
+    // Riva dell'isola e riva di una terra già servita **che abbia un villaggio a portata**: le due condizioni vanno
+    // valutate insieme. Prima sceglievo la riva più vicina e poi cercavo chi noleggia: se quella riva non aveva
+    // villaggi, l'isola restava scoperta anche quando poco più in là ce n'era una servita e abitata.
     let miglior = null;
     for (let i = 0; i < n; i++) {
       if (terre.id[i] !== t) continue;
@@ -1650,18 +1652,19 @@ function barcaioli(carta, tratte, terre, riva, cellaDi) {
         if (terre.id[j] < 0 || !servite.has(terre.id[j])) continue;
         const jx = (j % cols) + 0.5, jy = ((j / cols) | 0) + 0.5;
         const km = Math.hypot(ix - jx, iy - jy) * cella / 1000;
-        if (km <= M.barcaiolo.traversata && (!miglior || km < miglior.km)) miglior = { km, ix, iy, jx, jy, terra: terre.id[j] };
+        if (km > M.barcaiolo.traversata || (miglior && km >= miglior.km)) continue;
+        let v = null, md = Infinity;
+        for (const w of villaggi) {
+          if (w.terra !== terre.id[j]) continue;
+          const d = Math.hypot(w.x - jx, w.y - jy) * cella / 1000;
+          if (d < md) { md = d; v = w; }
+        }
+        if (!v || md > M.barcaiolo.dalVillaggio) continue;
+        miglior = { km, ix, iy, jx, jy, v };
       }
     }
     if (!miglior) continue;
-    // Il villaggio che noleggia: il più vicino a quella riva, sulla stessa terra.
-    let v = null, md = Infinity;
-    for (const w of villaggi) {
-      if (w.terra !== miglior.terra) continue;
-      const d = Math.hypot(w.x - miglior.jx, w.y - miglior.jy) * cella / 1000;
-      if (d < md) { md = d; v = w; }
-    }
-    if (!v || md > M.barcaiolo.dalVillaggio) continue;
+    const v = miglior.v;
     tratte.push({ tipo: 'barcaiolo', km: miglior.km, giro: Infinity, isolata: true,
       rotta: { x: Float32Array.from([miglior.jx, miglior.ix]), y: Float32Array.from([miglior.jy, miglior.iy]) },
       a: { sito: v.sito, sorta: 'villaggio', x: v.x, y: v.y, rx: miglior.jx, ry: miglior.jy },
