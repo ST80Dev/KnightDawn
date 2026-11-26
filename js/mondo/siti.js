@@ -61,6 +61,11 @@ export const SITI = {
   villaggioQuota: [250, 900],       // m: fra queste due quote il limite passa dall'uno all'altro
   villaggioMonti: 600,              // m: sopra, anche montagna e roccia ospitano villaggi (alpeggi), e c'è la riserva
   mulinoAcqua: 140,                 // m: oltre questa distanza dall'acqua dolce la cella non è da mulino
+  // Il mulino ad acqua ha bisogno di un **corso** d'acqua, non di uno specchio: la ruota sta sulla corrente.
+  // `mulinoCorso` si misura sulle polilinee dei fiumi, non sulla mappa a 125 m, perché nel 3D la ruota va messa
+  // sulla riva vera. Misurato su 4 semi: con 60 m restano ~32 mulini per mondo (dentro `numero`), e spariscono
+  // i mulini di solo lago (4 su 178) e quelli fino a 145 m dal corso d'acqua.
+  mulinoCorso: 60,
   riempi: 5,                        // km: vuoti da riempire con i luoghi speciali avanzati
   ospizio: 0.6,                     // probabilità di un ospizio a un valico (oltre alla sentinella, se presidiato)
   rumore: 0.35,                     // peso del caso nel punteggio delle celle (0 = sempre le stesse)
@@ -290,6 +295,36 @@ function scegliTipo(carta, insieme, F, tipo, numero, seme, extra = null, variant
   return presi;
 }
 
+/**
+ * Distanza esatta (m) dal corso d'acqua più vicino, sui punti delle polilinee di `carta.fiumi` (celle → metri).
+ * Griglia a 200 m costruita una volta: i mulini sono poche decine e il controllo guarda nove celle.
+ */
+function corsiDacqua(carta) {
+  const P = 200, g = new Map(), C = carta.cella;
+  for (const f of carta.fiumi ?? []) {
+    for (let k = 0; k < f.length / 4; k++) {
+      const x = f[k * 4] * C, z = f[k * 4 + 1] * C;
+      const chiave = Math.floor(x / P) * 100003 + Math.floor(z / P);
+      let a = g.get(chiave);
+      if (!a) g.set(chiave, (a = []));
+      a.push(x, z);
+    }
+  }
+  return (x, z) => {
+    let m = Infinity;
+    const cx = Math.floor(x / P), cz = Math.floor(z / P);
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) {
+      const a = g.get((cx + i) * 100003 + (cz + j));
+      if (!a) continue;
+      for (let k = 0; k < a.length; k += 2) {
+        const d = Math.hypot(a[k] - x, a[k + 1] - z);
+        if (d < m) m = d;
+      }
+    }
+    return m;
+  };
+}
+
 /** Distanza (km) dalla rocca più vicina, per cella (le rocche di ogni tipo). */
 function distanzaRocche(carta) {
   const { cols, rows, cella } = carta, celle = new Set();
@@ -384,8 +419,11 @@ export function aggiungiSiti(carta) {
   const fatti = insieme.siti.filter((s) => s.tipo === 'villaggio').length;
   scegliTipo(carta, insieme, F, 'villaggio', nVil - fatti, seme, null, null, acquaOk);
   // Un mulino lontano dall'acqua non è un mulino: se il punto migliore della cella non ce l'ha, la cella si scarta.
+  // Due controlli: la mappa a 125 m (grossolana, scarta subito) e poi il corso d'acqua vero, perché la ruota deve
+  // stare sulla corrente e non sulla riva di un lago.
+  const corso = corsiDacqua(carta);
   scegliTipo(carta, insieme, F, 'mulino', conta(T.mulino.numero, seme, 23), seme, null, null,
-    (p) => distanzaAcqua(carta, p.x, p.z, true) <= SITI.mulinoAcqua);
+    (p) => distanzaAcqua(carta, p.x, p.z, true) <= SITI.mulinoAcqua && corso(p.x, p.z) <= SITI.mulinoCorso);
   // Valichi: sentinella dove c'è il presidio, a volte un ospizio sul passo.
   for (const v of carta.valichi ?? []) {
     const c = Math.floor(v.x), r = Math.floor(v.y);
@@ -518,10 +556,11 @@ export function verificaSiti(carta, limiti = { vuoto: 9, oltre: 6, frazione: 0.0
   }
   // Villaggi e mulini devono stare sull'acqua dolce (richiesta dell'utente). Si misura sul punto, non sulla cella.
   let lontani = 0, vill = 0, mulLontani = 0;
+  const corso = corsiDacqua(carta);
   if (carta.acquaVicina) {
     for (const s of S) {
       if (s.tipo === 'villaggio') { vill++; if (distanzaAcqua(carta, s.x, s.z, true) > acquaDelVillaggio(s.quota) + 200) lontani++; }
-      else if (s.tipo === 'mulino' && distanzaAcqua(carta, s.x, s.z, true) > SITI.mulinoAcqua + 60) mulLontani++;
+      else if (s.tipo === 'mulino' && corso(s.x, s.z) > SITI.mulinoCorso + 10) mulLontani++;
     }
     if (vill && lontani / vill > 0.12) errori.push(`villaggi lontani dall'acqua: ${(100 * lontani / vill).toFixed(0)} %`);
     if (mulLontani) errori.push(`mulini lontani dall'acqua: ${mulLontani}`);
