@@ -6,6 +6,10 @@
 
 ## Convenzioni (valgono per tutti i modelli nuovi o rifatti)
 
+- **Schermo di riferimento: 1920×1080.** Il repo è pubblico, ma le scelte di misura si prendono
+  sull’esperienza di gioco dell’autore su quello schermo: non si rimpicciolisce né si comprime nulla per
+  formati minori. Gli schermi più piccoli devono restare **usabili** (niente parti irraggiungibili o tagliate),
+  non ottimali. Attenzione: su un monitor 1080p la finestra del browser è alta circa 900–950px, non 1080.
 - **Obiettivo:** proporzioni vere, materiali credibili, buona luce. Non fotorealismo. Il giudizio si dà dalla
   distanza di gioco (3–5 m dal cavaliere), non dal primo piano.
 - **Forme:** solidi di rotazione (`LatheGeometry`), calotte, superfici incurvate, normali lisce. Le scatole
@@ -111,7 +115,11 @@ Tono da manoscritto e da opera incorniciata, senza esagerare. Codice in `js/3d/i
   sgualcisce. Arrivo: avviso in alto al centro che sparisce da solo (non ferma il gioco); i fogli restano nello
   **scrittoio** (`J`).
 - **Pannello di stato, messaggi, minimappa**: sobri, legno scuro con un filetto d'oro, così i numeri restano leggibili.
-- **Menu d'avvio**: titolo inciso in oro e sottotitolo.
+- **Menu d’avvio**: titolo inciso in oro e sottotitolo. È la schermata di presentazione del gioco, quindi il
+  corpo è generoso: riquadro 860px, titolo 76px, titoli delle voci 21px, descrizioni 20px, «Comincia» 24px.
+  EB Garamond ha l’altezza della x bassa: sotto i 16px le righe lunghe diventano illeggibili su fondo scuro.
+  Il contenitore allinea in alto e il riquadro si centra con `margin: auto`: con `align-items: center` più
+  `overflow-y: auto` la parte alta esce a coordinate negative e lo scorrimento non la raggiunge.
 - **Tecnica**: gli id dentro gli SVG hanno un prefisso per istanza (due SVG nella stessa pagina non si rubano i
   ritagli); lo sfondo si rifà quando il riquadro cambia misura (`ResizeObserver`). Niente immagini. La Carta di
   sviluppo (M) e il pannello F3 restano come sono.
