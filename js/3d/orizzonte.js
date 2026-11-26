@@ -263,7 +263,7 @@ function* acqueOrizzonte(carta, cx, cz, anelli, colore) {
 const LONTANO = {
   pieno: 6000, mastio: 18000, luci: 10000, margine: 50,
   colore: { muro: '#a39883', mastio: '#968b77', tetti: '#8a5a44' }, tetti: 5, torre: 1.25,
-  luce: { colore: '#ffb46a', dimensione: 3, perBorgo: [4, 7, 11] },
+  luce: { colore: '#ffb46a', dimensione: 3, perBorgo: [4, 7, 11, 16] },
 };
 
 function sagomeLuoghi(carta, cx, cz, half, anelli) {
@@ -327,7 +327,7 @@ function sagomeLuoghi(carta, cx, cz, half, anelli) {
         quad([ax, ta, az], [cx2, tb, cz2], [bx, tc, bz], [bx, tc, bz], cT);
       }
       if (d <= L.luci) {
-        const quante = L.luce.perBorgo[{ minore: 0, casata: 1, maggiore: 2 }[l.classe] ?? 1];
+        const quante = L.luce.perBorgo[{ minore: 0, casata: 1, maggiore: 2, citta: 3 }[l.classe] ?? 1];
         for (let k = 0; k < quante; k++) {
           const a = (k * 2.399963) % (2 * Math.PI), f = 0.25 + 0.6 * ((k * 0.618034) % 1);
           const v = dentro[k % dentro.length], x = bx + (v[0] - bx) * f, z = bz + (v[1] - bz) * f;

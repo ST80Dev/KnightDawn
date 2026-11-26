@@ -1573,6 +1573,20 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
     fune e carrucola, abbeveratoio e pagliaio alla stalla; incudine su ceppo e mucchio di carbone dal fabbro; mazzi di
     erbe appesi dal guaritore; croce di ferro sul timpano di chiesa e cappella. Tutto con i materiali già in uso: i
     pezzi entrano negli stessi oggetti uniti, **nessuna chiamata di disegno in più**.
+13. **Città più grandi di ogni rocca** (richiesta dell'utente, nov. 2026: «ho visto città molto più piccole di rocche
+    con borghi grandi»). Fino a oggi «città» era solo `luogo.tipo`, messo da `siti.js` (M8) dopo che `luoghi.js` aveva
+    già fissato le misure: una città poteva essere una rocca minore. Ora in `luoghi.js` c'è la classe **`citta`** (rocca
+    96×86 m, raggio 32–45, borgo 180×270 contro 130×200 della sede maggiore) e `ripianificaLuogo(carta, luogo, classe)`,
+    che rifà i piani di un luogo con un'altra classe; `siti.js` la chiama su chi diventa città e, se il terreno non
+    regge il borgo più grande, **salta il candidato** e prova il successivo, così non escono città piccole
+    (`classiRocche` restituisce `cittaScartate`). La classe vecchia resta in `luogo.classeOrigine`, che servirà al
+    racconto delle casate. Nel 3D la classe `citta` ha mura più alte, 4 vicoli, fino a 110 case, piazza da 19 m con
+    loggia grande e chiesa, palazzo maggiore, giardino più grande, 14 popolani, 16 luci da lontano e il segno più
+    grande sulla Carta e sulla minimappa (senza queste voci la minimappa andava in errore a ogni fotogramma).
+    [Certo] Su 10 semi: città 2–4 per mondo, raggio dei piani 287–314 m contro 231–247 m di tutte le altre rocche,
+    `cittaScartate` 0, `verificaLuoghi` 10 su 10; il ricalcolo costa 35–54 ms l'uno, 0,36 s su tutta la generazione.
+    `VERSIONE_GENERATORE` `+citta-1+citta-2` (il primo è della PR di M8, il secondo questo): le Carte cambiano e i
+    mondi salvati si rigenerano. Restano a M8 il filtro di classe dei candidati e il tetto di quota a 1000 m.
 
 ### Accettazione
 

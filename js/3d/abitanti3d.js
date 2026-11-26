@@ -13,7 +13,7 @@ export const ABITANTI = {
   sosta: [2, 9],                           // s di sosta a fine tratto
   tratto: [6, 22],                         // punti della strada percorsi prima di fermarsi
   notte: 0.55,                             // buio oltre il quale restano fuori solo guardie e oste
-  popolani: { minore: 3, casata: 6, maggiore: 10 },
+  popolani: { minore: 3, casata: 6, maggiore: 10, citta: 14 },
   porta: { fuori: 1.2, lato: [1.8, 2.4] }, // m: chi lavora in un edificio sta accanto alla porta, non davanti
 };
 

@@ -89,7 +89,8 @@ const DISTANZE_CAVALIERE = [10, 20];   // km: cerchi attorno al cavaliere
 const MINUTI_PER_KM = typeof VIAGGIO !== 'undefined' ? 180 * 1000 / VIAGGIO.METRI_PER_PASSO : 37;
 const ORE_MARCIA_GIORNO = 9;           // ~3 Passi di marcia al giorno
 // Rocche (M7): segno più grande secondo la classe; candidati scartati come puntini (pulsante «Candidati»).
-export const CLASSI_ROCCA = { minore: ['rocca minore', 5], casata: ['castello di casata', 6.5], maggiore: ['sede maggiore', 8] };
+export const CLASSI_ROCCA = { minore: ['rocca minore', 5], casata: ['castello di casata', 6.5], maggiore: ['sede maggiore', 8],
+  citta: ['città', 9.5] };
 const COLORE_ROCCA = '#8c1c13';
 const COLORE_VALICHI = '#d9822b';
 const COLORE_PONTE = 'rgba(52, 34, 20, 0.96)';

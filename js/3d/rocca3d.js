@@ -17,6 +17,7 @@ export const MISURE_ROCCA = {
   minore:   { altezza: 7.5, spessore: 2.0, torre: 3.2, mastio: { lato: 9, altezza: 18 } },
   casata:   { altezza: 9, spessore: 2.2, torre: 3.6, mastio: { lato: 11, altezza: 22 } },
   maggiore: { altezza: 10, spessore: 2.4, torre: 4.2, mastio: { lato: 13, altezza: 26 } },
+  citta:    { altezza: 11, spessore: 2.6, torre: 4.6, mastio: { lato: 14, altezza: 28 } },
 };
 
 const PORTA = { larghezza: 3.4, imposta: 3.0, torreLarghezza: 8, sporgenza: 3.5, profondita: 6, sopraMura: 3 };
@@ -26,7 +27,7 @@ const PORTA = { larghezza: 3.4, imposta: 3.0, torreLarghezza: 8, sporgenza: 3.5,
 // degli edifici (armi davanti, signore dietro), il mastio si appoggia alla cinta sulla linea tra le due.
 const CORTI = { dietro: 0.46, muro: false, altezza: 5.5, spessore: 1.3, porta: 3.2, imposta: 3.4 };
 // Giardino murato della corte del signore (M7, passo 10c): [largo, fondo] in m per classe, e misure dell'orto.
-const GIARDINI = { minore: [15, 11], casata: [19, 14], maggiore: [23, 17] };
+const GIARDINI = { minore: [15, 11], casata: [19, 14], maggiore: [23, 17], citta: [25, 18] };
 const ORTO = [9, 7];
 // stacco: m tra la torre-porta e la rampa lungo il muro (così passa fuori dalle torri dei vertici).
 const RAMPA = { larghezza: 4.4, stacco: 2.5, pendenza: 0.22, minima: 3, massima: 40, parapetto: 0.5, muretto: 0.45 };
@@ -1084,7 +1085,8 @@ export function* createRoccaAPezzi(suolo, luogo, ox, oz, clima = 'temperato') {
       return !lotti.some((A) => siToccano(A, L, 0.8));
     };
     // Il palazzo per primo (è il più grande e la corte del signore è sua), poi gli altri.
-    const palazzo = luogo.classe === 'minore' ? 'palazzoMinore' : luogo.classe === 'maggiore' ? 'palazzoMaggiore' : 'palazzo';
+    const palazzo = luogo.classe === 'minore' ? 'palazzoMinore'
+      : luogo.classe === 'maggiore' || luogo.classe === 'citta' ? 'palazzoMaggiore' : 'palazzo';
     const tipi = luogo.classe === 'minore' ? [] : ['armeria'];   // dopo il giardino e le pertinenze
     const edificiFatti = new Set();
     let palazzoFatto = null;
