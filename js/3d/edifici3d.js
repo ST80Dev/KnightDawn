@@ -106,6 +106,19 @@ export function quotaFinestre(ora) {
   if (ora < 4.5) return 0.08;
   return 0.25;
 }
+/**
+ * Segni d'ingresso (richiesta dell'utente, nov. 2026: «i luoghi in un borgo con cui posso interagire dovrebbero essere
+ * più riconoscibili»). Linguaggio comune a tutti gli edifici in cui si entra, che le case anonime non hanno: cornice di
+ * pietra attorno alla porta con architrave e gradino, insegna a bandiera su braccio di ferro con la tavola dipinta e il
+ * simbolo del mestiere in rilievo, lanterna accanto alla porta. Misure in m.
+ */
+const SEGNI = {
+  cornice: { stipite: 0.26, sporto: 0.09, architrave: 0.3, gradino: { fuori: 0.5, alto: 0.14 } },
+  insegna: { alta: 2.95, braccio: 0.95, tavola: [0.78, 0.62], spessore: 0.07, catena: 0.16, ferro: [0.28, 0.3, 0.33] },
+  // Tinte della tavola (moltiplicano l'intonaco) e colore del simbolo.
+  tinte: { rosso: [1.05, 0.42, 0.33], bruno: [0.78, 0.56, 0.38], grigio: [0.62, 0.64, 0.66], verde: [0.45, 0.72, 0.42] },
+};
+
 // Piede degli edifici: fascia di terra larga `largo` m, un sasso ogni ~passoSassi m con probabilità `sassi`, sassi
 // di `sasso` m.
 const BASE = { largo: [0.35, 0.65], passoSassi: 1.1, sassi: 0.45, sasso: [0.18, 0.5] };
@@ -121,16 +134,21 @@ export const TIPI_CASA = {
 
 /** Edifici nominati: misure (largo × fondo, m), piani, materiale delle pareti. */
 export const EDIFICI = {
-  stalla:    { nome: 'Stalla', largo: 14, fondo: 7, piani: 1, intonaco: false, recinto: 8, copertura: 'paglia' },
-  taverna:   { nome: 'Taverna', largo: 11, fondo: 9, piani: 2, intonaco: true, graticcio: true, copertura: 'scandole' },
-  fabbro:    { nome: 'Fabbro', largo: 9, fondo: 7, piani: 1, intonaco: false, tettoia: 4 },
-  guaritore: { nome: 'Guaritore', largo: 7, fondo: 7, piani: 2, intonaco: true, graticcio: true },
+  stalla:    { nome: 'Stalla', largo: 14, fondo: 7, piani: 1, intonaco: false, recinto: 8, copertura: 'paglia',
+    insegna: { tinta: 'bruno', simbolo: 'ferro' } },
+  taverna:   { nome: 'Taverna', largo: 11, fondo: 9, piani: 2, intonaco: true, graticcio: true, copertura: 'scandole',
+    insegna: { tinta: 'rosso', simbolo: 'boccale' } },
+  fabbro:    { nome: 'Fabbro', largo: 9, fondo: 7, piani: 1, intonaco: false, tettoia: 4,
+    insegna: { tinta: 'grigio', simbolo: 'martello' } },
+  guaritore: { nome: 'Guaritore', largo: 7, fondo: 7, piani: 2, intonaco: true, graticcio: true,
+    insegna: { tinta: 'verde', simbolo: 'mortaio' } },
   loggia:    { nome: 'Loggia del mercato', largo: 10, fondo: 6, loggia: true },
   loggiaGrande: { nome: 'Loggia', largo: 16, fondo: 8, loggia: true },
   chiesa:    { nome: 'Chiesa', largo: 11, fondo: 22, piani: 3, intonaco: false, campanile: 4, copertura: 'lastre' },
   cappella:  { nome: 'Cappella', largo: 6, fondo: 10, piani: 2, intonaco: false, campanile: 1.8, copertura: 'lastre' },
   salaArmi:  { nome: "Sala d'armi", largo: 16, fondo: 9, piani: 2, intonaco: false, copertura: 'lastre' },
-  armeria:   { nome: 'Armeria', largo: 8, fondo: 6, piani: 1, intonaco: false },
+  armeria:   { nome: 'Armeria', largo: 8, fondo: 6, piani: 1, intonaco: false,
+    insegna: { tinta: 'grigio', simbolo: 'spada' } },
   // Pertinenze della corte del signore (M7, passo 10c).
   cucina:    { nome: 'Cucina', largo: 8, fondo: 6, piani: 1, intonaco: false, copertura: 'coppi', comignolone: 1.8 },
   cantina:   { nome: 'Cantina', largo: 7, fondo: 5.5, piani: 1, intonaco: false, copertura: 'lastre', bassa: true },
@@ -593,7 +611,7 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     // Sagoma per la camera e collisione.
     sagome.push(prisma(q4(R), q4(R), Math.min(mn, pavimento) - 0.5, colmo));
     scatole.push({ cu: c[0], cv: c[1], au: s[0], av: s[1], hl: a + 0.05, hw: b + 0.05 });
-    return { pavimento, gronda, colmo, s, a, b };
+    return { pavimento, gronda, colmo, s, a, b, soglia: sogliaPorta };
   }
 
   /**
@@ -691,6 +709,201 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     scatole.push({ cu: u, cv: v, au: 1, av: 0, hl: r0, hw: r0, cima: h0 + 0.65 + r0 });
     sagome.push(prisma(q4(rett([u, v], [1, 0], [0, 1], r0, r0)), q4(rett([u, v], [1, 0], [0, 1], r0, r0)), h0, h0 + 0.6 + r0));
   }
+  // ─── Segni d'ingresso (SEGNI): quello che distingue un edificio in cui si entra da una casa anonima ───
+
+  /** Porta una geometria piana (XY) nel piano verticale di normale (nx, nz) del blocco, centrata in (u, v, y). */
+  function nelPiano(g, u, v, y, nu, nv) {
+    const nx = ux * nu - uz * nv, nz = uz * nu + ux * nv;
+    g.rotateY(Math.atan2(nx, nz));
+    g.translate(X(u, v), y, Z(u, v));
+    return g;
+  }
+
+  /**
+   * Cornice della porta: stipiti e architrave di pietra che sporgono dal muro, e un gradino davanti alla soglia.
+   * c: centro dell'edificio; f: fronte; b: mezza profondità; soglia: quota della porta; largo: luce della porta.
+   */
+  function cornicePorta(c, f, b, soglia, largo) {
+    const C = SEGNI.cornice, s = [-f[1], f[0]], st = C.stipite, alt = 2.25;
+    const fr = [c[0] + f[0] * b, c[1] + f[1] * b];
+    for (const lato of [-1, 1]) {                       // stipiti
+      const t = lato * (largo / 2 + st / 2);
+      const R = rett([fr[0] + s[0] * t + f[0] * C.sporto / 2, fr[1] + s[1] * t + f[1] * C.sporto / 2], s, f, st / 2, C.sporto);
+      parti.pietra.push(segna(prisma(q4(R), q4(R), soglia - 0.4, soglia + alt), { sporco: 0.6 }));
+    }
+    const Ra = rett([fr[0] + f[0] * C.sporto / 2, fr[1] + f[1] * C.sporto / 2], s, f, largo / 2 + st, C.sporto);
+    parti.pietra.push(prisma(q4(Ra), q4(Ra), soglia + alt, soglia + alt + C.architrave));
+    const Rg = rett([fr[0] + f[0] * (C.gradino.fuori / 2 + 0.05), fr[1] + f[1] * (C.gradino.fuori / 2 + 0.05)], s, f,
+      largo / 2 + st, C.gradino.fuori / 2);
+    parti.pietra.push(segna(prisma(q4(Rg), q4(Rg), soglia - 0.5, soglia + C.gradino.alto), { sporco: 1 }));
+    scatole.push({ cu: Rg[0][0] * 0 + fr[0] + f[0] * 0.3, cv: fr[1] + f[1] * 0.3, au: s[0], av: s[1],
+      hl: largo / 2 + st, hw: 0.3, cima: soglia + C.gradino.alto });   // si sale camminando
+  }
+
+  /** Simbolo del mestiere in rilievo sulla tavola dell'insegna, nel piano di normale (nu, nv). */
+  function simbolo(nome, u, v, y, nu, nv) {
+    const ferro = { tinta: SEGNI.insegna.ferro }, g = [];
+    const box = (lx, ly, lz, du, dy) => { const b = new THREE.BoxGeometry(lx, ly, lz); b.translate(du, dy, 0); return b; };
+    if (nome === 'boccale') {                           // boccale con manico e schiuma
+      const c = new THREE.CylinderGeometry(0.115, 0.125, 0.26, 10);
+      c.translate(-0.03, -0.02, 0);
+      g.push(c, box(0.045, 0.16, 0.045, 0.12, -0.02));                       // manico
+      const sc = new THREE.CylinderGeometry(0.125, 0.115, 0.06, 10);
+      sc.translate(-0.03, 0.14, 0);
+      parti.intonaco.push(nelPiano(sc, u, v, y, nu, nv));                    // schiuma, chiara
+    } else if (nome === 'ferro') {                      // ferro di cavallo
+      const t = new THREE.TorusGeometry(0.15, 0.038, 5, 9, Math.PI * 1.45);
+      t.rotateZ(-Math.PI * 0.73);
+      g.push(t);
+      for (const i of [-1, 1]) g.push(box(0.05, 0.05, 0.05, i * 0.12, 0.12));
+    } else if (nome === 'martello') {                   // martello sopra l'incudine
+      g.push(box(0.05, 0.3, 0.05, 0.08, 0.02));                              // manico
+      const te = box(0.2, 0.09, 0.09, -0.02, 0.14); te.rotateZ(0.35); g.push(te);
+      g.push(box(0.3, 0.07, 0.1, 0, -0.16), box(0.12, 0.07, 0.1, 0, -0.22));  // incudine
+    } else if (nome === 'mortaio') {                    // mortaio e pestello
+      const m = new THREE.CylinderGeometry(0.15, 0.1, 0.17, 10);
+      m.translate(0, -0.08, 0);
+      g.push(m, box(0.26, 0.05, 0.05, 0, 0.03));
+      const pe = box(0.05, 0.26, 0.05, 0.06, 0.12); pe.rotateZ(-0.5); g.push(pe);
+    } else {                                            // spada
+      g.push(box(0.07, 0.42, 0.045, 0, 0.04), box(0.26, 0.055, 0.055, 0, -0.14), box(0.05, 0.12, 0.05, 0, -0.24));
+    }
+    for (const b of g) parti.pietra.push(segna(nelPiano(b, u, v, y, nu, nv), ferro));
+  }
+
+  /**
+   * Insegna a bandiera: braccio di ferro con puntone, due catenelle e la tavola dipinta appesa, col simbolo in
+   * rilievo sulle due facce. Sporge dalla facciata, sopra la porta.
+   */
+  function insegna(c, f, b, pav, lato, { tinta, simbolo: sim }) {
+    const I = SEGNI.insegna, s = [-f[1], f[0]], y = pav + I.alta;
+    const t0 = lato * (1.35 + rnd() * 0.3);                                   // di fianco alla porta
+    const base = [c[0] + f[0] * b + s[0] * t0, c[1] + f[1] * b + s[1] * t0];
+    const ferro = { tinta: I.ferro };
+    const Rb = rett([base[0] + f[0] * I.braccio / 2, base[1] + f[1] * I.braccio / 2], s, f, 0.035, I.braccio / 2);
+    parti.pietra.push(segna(prisma(q4(Rb), q4(Rb), y, y + 0.07), ferro));     // braccio
+    const Rs = rett([base[0] + f[0] * 0.03, base[1] + f[1] * 0.03], s, f, 0.05, 0.05);
+    parti.pietra.push(segna(prisma(q4(Rs), q4(Rs), y - 0.45, y + 0.16), ferro));   // piastra a muro
+    const Rp = rett([base[0] + f[0] * I.braccio * 0.33, base[1] + f[1] * I.braccio * 0.33], s, f, 0.03, I.braccio * 0.3);
+    parti.pietra.push(segna(prisma(q4(Rp), q4(Rp), y - 0.34, [y, y - 0.26, y - 0.26, y]), ferro));   // puntone obliquo
+    const [tl, tw] = I.tavola, yT = y - I.catena;
+    for (const d of [I.braccio - tl / 2 - 0.08, I.braccio - tl / 2 + tl - 0.16]) {   // catenelle
+      const Rc = rett([base[0] + f[0] * d, base[1] + f[1] * d], s, f, 0.018, 0.018);
+      parti.pietra.push(segna(prisma(q4(Rc), q4(Rc), yT, y), ferro));
+    }
+    const cT = [base[0] + f[0] * (I.braccio - tl / 2 + 0.02), base[1] + f[1] * (I.braccio - tl / 2 + 0.02)];
+    const Rt = rett(cT, s, f, I.spessore / 2, tl / 2);
+    parti.intonaco.push(segna(prisma(q4(Rt), q4(Rt), yT - tw, yT), { tinta: SEGNI.tinte[tinta] }));
+    const Rc2 = rett(cT, s, f, I.spessore / 2 + 0.012, tl / 2 + 0.03);       // cornice di legno attorno
+    parti.legno.push(prisma(q4(Rc2), q4(Rc2), yT - tw - 0.03, yT - tw + 0.05),
+      prisma(q4(Rc2), q4(Rc2), yT - 0.05, yT + 0.03));
+    for (const n of [1, -1]) {
+      const uu = cT[0] + s[0] * n * (I.spessore / 2 + 0.03), vv = cT[1] + s[1] * n * (I.spessore / 2 + 0.03);
+      simbolo(sim, uu, vv, yT - tw / 2, s[0] * n, s[1] * n);
+    }
+  }
+
+  /** Panca (e tavolo) di legno addossata alla facciata, verso f. */
+  function panca(u, v, fu, fv, conTavolo = false) {
+    const f = [fu, fv], s = [-fv, fu], h0 = terreno(u, v);
+    const R = rett([u, v], s, f, 0.95, 0.22);
+    parti.legno.push(segna(prisma(q4(R), q4(R), h0 + 0.38, h0 + 0.46), { tinta: [1.25, 1.1, 0.95] }));
+    for (const i of [-1, 1]) {
+      const Rp = rett([u + s[0] * i * 0.8, v + s[1] * i * 0.8], s, f, 0.07, 0.18);
+      parti.legno.push(prisma(q4(Rp), q4(Rp), h0 - 0.1, h0 + 0.38));
+    }
+    scatole.push({ cu: u, cv: v, au: s[0], av: s[1], hl: 0.95, hw: 0.25, cima: h0 + 0.46 });
+    if (!conTavolo) return;
+    const ct = [u + f[0] * 0.85, v + f[1] * 0.85];
+    const Rt = rett(ct, s, f, 0.85, 0.42);
+    parti.legno.push(segna(prisma(q4(Rt), q4(Rt), h0 + 0.68, h0 + 0.76), { tinta: [1.2, 1.05, 0.9] }));
+    for (const i of [-1, 1]) {
+      const Rp = rett([ct[0] + s[0] * i * 0.7, ct[1] + s[1] * i * 0.7], s, f, 0.08, 0.35);
+      parti.legno.push(prisma(q4(Rp), q4(Rp), h0 - 0.1, h0 + 0.68));
+    }
+    scatole.push({ cu: ct[0], cv: ct[1], au: s[0], av: s[1], hl: 0.85, hw: 0.45, cima: h0 + 0.76 });
+  }
+
+  /** Pensilina di frasche sopra la porta (taverna): due mensole e un piano inclinato di legno con la paglia sopra. */
+  function pensilina(c, f, b, pav, largo) {
+    const s = [-f[1], f[0]], y = pav + 2.75, sp = 1.15;
+    const fr = [c[0] + f[0] * b, c[1] + f[1] * b];
+    for (const i of [-1, 1]) {
+      const t = i * (largo / 2 + 0.2);
+      const Rm = rett([fr[0] + s[0] * t + f[0] * sp * 0.45, fr[1] + s[1] * t + f[1] * sp * 0.45], s, f, 0.06, sp * 0.45);
+      parti.legno.push(prisma(q4(Rm), q4(Rm), [y - 0.5, y - 0.5, y - 0.05, y - 0.05], [y - 0.38, y - 0.38, y + 0.07, y + 0.07]));
+    }
+    const Rp = rett([fr[0] + f[0] * (sp / 2 + 0.05), fr[1] + f[1] * (sp / 2 + 0.05)], s, f, largo / 2 + 0.35, sp / 2);
+    parti.paglia.push(segna(prisma(q4(Rp), q4(Rp), [y - 0.38, y - 0.38, y + 0.04, y + 0.04], [y - 0.18, y - 0.18, y + 0.24, y + 0.24]), { muschio: 0.3 }));
+  }
+
+  /** Abbeveratoio di pietra (stalla): vasca scavata, con l'acqua. */
+  function abbeveratoio(u, v, fu, fv) {
+    const f = [fu, fv], s = [-fv, fu], h0 = terreno(u, v), L = 1.9, W = 0.62, H = 0.55;
+    const R = rett([u, v], s, f, L / 2, W / 2);
+    parti.pietra.push(segna(prisma(q4(R), q4(R), h0 - 0.3, h0 + H), { sporco: 1, edera: 0.4 }));
+    const Ri = rett([u, v], s, f, L / 2 - 0.14, W / 2 - 0.13);
+    parti.pietra.push(segna(prisma(q4(Ri), q4(Ri), h0 + H - 0.12, h0 + H - 0.06), { tinta: [0.42, 0.5, 0.58] }));   // acqua
+    scatole.push({ cu: u, cv: v, au: s[0], av: s[1], hl: L / 2, hw: W / 2, cima: h0 + H });
+  }
+
+  /** Incudine su ceppo (fabbro), e il mucchio di carbone accanto. */
+  function incudine(u, v, fu, fv) {
+    const f = [fu, fv], s = [-fv, fu], h0 = terreno(u, v);
+    const cep = new THREE.CylinderGeometry(0.3, 0.34, 0.6, 9);
+    cep.translate(X(u, v), h0 + 0.3, Z(u, v));
+    parti.legno.push(segna(cep, { tinta: [0.85, 0.78, 0.7] }));
+    const ferro = { tinta: SEGNI.insegna.ferro };
+    const R1 = rett([u, v], s, f, 0.42, 0.17);
+    parti.pietra.push(segna(prisma(q4(R1), q4(R1), h0 + 0.6, h0 + 0.78), ferro));             // tavola
+    const R2 = rett([u, v], s, f, 0.2, 0.12);
+    parti.pietra.push(segna(prisma(q4(R2), q4(R2), h0 + 0.52, h0 + 0.6), ferro));             // strozzatura
+    const corno = new THREE.ConeGeometry(0.15, 0.4, 8);
+    corno.rotateZ(Math.PI / 2);
+    parti.pietra.push(segna(nelPiano(corno, u + s[0] * 0.58, v + s[1] * 0.58, h0 + 0.69, f[0], f[1]), ferro));
+    scatole.push({ cu: u, cv: v, au: s[0], av: s[1], hl: 0.5, hw: 0.3, cima: h0 + 0.78 });
+    const cu = u - f[0] * 1.3, cv2 = v - f[1] * 1.3, hc = terreno(cu, cv2);
+    const car = new THREE.ConeGeometry(0.55, 0.45, 8);
+    car.translate(X(cu, cv2), hc + 0.2, Z(cu, cv2));
+    parti.pietra.push(segna(car, { tinta: [0.2, 0.19, 0.18] }));                              // carbone
+  }
+
+  /** Mazzi di erbe appesi alla facciata (guaritore), tra la porta e la finestra. */
+  function erbeAppese(c, f, b, pav, largo) {
+    const s = [-f[1], f[0]], fr = [c[0] + f[0] * b, c[1] + f[1] * b];
+    for (let k = 0; k < 5; k++) {
+      const t = (k - 2) * 0.46 + (rnd() - 0.5) * 0.12;
+      if (Math.abs(t) < largo / 2 + 0.3) continue;
+      const y = pav + 2.1 + (rnd() - 0.5) * 0.2, h = 0.45 + rnd() * 0.25;
+      const cc = [fr[0] + s[0] * t + f[0] * 0.14, fr[1] + s[1] * t + f[1] * 0.14];
+      const Rf = rett(cc, s, f, 0.02, 0.02);
+      parti.legno.push(prisma(q4(Rf), q4(Rf), y, y + 0.12));                                  // chiodo
+      const Rm = rett(cc, s, f, 0.09, 0.07);
+      parti.verde.push(segna(prisma(q4(Rm), q4(Rm), y - h, y), { tinta: [0.8 + rnd() * 0.3, 0.95, 0.65 + rnd() * 0.3] }));
+    }
+  }
+
+  /** Croce di ferro sul colmo (chiesa, cappella). */
+  function croce(c, y) {
+    const ferro = { tinta: SEGNI.insegna.ferro }, R1 = rett(c, [1, 0], [0, 1], 0.05, 0.05);
+    parti.pietra.push(segna(prisma(q4(R1), q4(R1), y, y + 1.15), ferro));
+    const R2 = rett([c[0], c[1]], [1, 0], [0, 1], 0.3, 0.045);
+    parti.pietra.push(segna(prisma(q4(R2), q4(R2), y + 0.72, y + 0.82), ferro));
+  }
+
+  /** Porta del fienile al piano alto, con la trave e la carrucola (stalla). */
+  function fienile(c, f, b, pav, piani) {
+    const s = [-f[1], f[0]], fr = [c[0] + f[0] * b, c[1] + f[1] * b], y = pav + piani * PIANO - 0.2;
+    dettagli.push({ tipo: 'porta', u: fr[0] + f[0] * 0.05, v: fr[1] + f[1] * 0.05, y: y - 1.9, fu: f[0], fv: f[1], sx: 1.1, sy: 0.85 });
+    const Rt = rett([fr[0] + f[0] * 0.45, fr[1] + f[1] * 0.45], s, f, 0.08, 0.5);
+    parti.legno.push(prisma(q4(Rt), q4(Rt), y, y + 0.16));                                    // trave sporgente
+    const Rc = rett([fr[0] + f[0] * 0.82, fr[1] + f[1] * 0.82], s, f, 0.03, 0.03);
+    parti.legno.push(prisma(q4(Rc), q4(Rc), y - 0.5, y));                                     // fune
+    const ru = new THREE.CylinderGeometry(0.11, 0.11, 0.07, 9);
+    ru.rotateZ(Math.PI / 2);
+    parti.legno.push(nelPiano(ru, fr[0] + f[0] * 0.82, fr[1] + f[1] * 0.82, y - 0.1, s[0], s[1]));
+  }
+
   /** Pagliaio: covone tondo di paglia attorno a un palo. */
   function pagliaio(u, v) {
     const h0 = terreno(u, v), r0 = 1.4 + rnd() * 0.5, h = 1.2 + rnd() * 0.6;
@@ -1024,7 +1237,26 @@ export function creaKit({ X, Z, ux = 1, uz = 0, terreno, luogo = null, seme = 1,
     else if (E.torretta) r = torretta(c, f, E, quota);
     else r = corpo({ c, f, largo: E.largo, fondo: E.fondo, piani: E.piani, intonaco: E.intonaco, quota, bottega: tipo === 'stalla' || tipo === 'fabbro' || tipo === 'scuderia',
       comignolo: tipo !== 'chiesa' && tipo !== 'cappella', legno: E.graticcio ?? false, copertura: E.copertura, scalaPorta: E.bassa ? 0.78 : 1 });
-    if (tipo === 'taverna') { botte(u + s[0] * (E.largo / 2 - 1.5) + f[0] * (E.fondo / 2 + 0.55), v + s[1] * (E.largo / 2 - 1.5) + f[1] * (E.fondo / 2 + 0.55)); }
+    // Segni d'ingresso (SEGNI): cornice e gradino su ogni edificio in cui si entra, insegna dove c'è un mestiere.
+    const largoPorta = (tipo === 'stalla' || tipo === 'fabbro' || tipo === 'scuderia') ? 2.6 : 1.3;
+    if (r.soglia !== undefined) {
+      cornicePorta(c, f, E.fondo / 2, r.soglia, largoPorta);
+      if (E.insegna) insegna(c, f, E.fondo / 2, r.pavimento, rnd() < 0.5 ? -1 : 1, E.insegna);
+    }
+    // Carattere proprio del mestiere.
+    if (tipo === 'taverna') {
+      botte(u + s[0] * (E.largo / 2 - 1.5) + f[0] * (E.fondo / 2 + 0.55), v + s[1] * (E.largo / 2 - 1.5) + f[1] * (E.fondo / 2 + 0.55));
+      pensilina(c, f, E.fondo / 2, r.pavimento, largoPorta);
+      panca(u - s[0] * (E.largo / 2 - 1.6) + f[0] * (E.fondo / 2 + 0.75), v - s[1] * (E.largo / 2 - 1.6) + f[1] * (E.fondo / 2 + 0.75), -f[0], -f[1], true);
+    }
+    if (tipo === 'stalla') {
+      fienile(c, f, E.fondo / 2, r.pavimento, E.piani);
+      abbeveratoio(u - s[0] * (E.largo / 2 - 1.2) + f[0] * (E.fondo / 2 + 1), v - s[1] * (E.largo / 2 - 1.2) + f[1] * (E.fondo / 2 + 1), f[0], f[1]);
+      pagliaio(u + s[0] * (E.largo / 2 + 2.2) - f[0] * (E.fondo / 2 - 1), v + s[1] * (E.largo / 2 + 2.2) - f[1] * (E.fondo / 2 - 1));
+    }
+    if (tipo === 'fabbro') incudine(u + s[0] * (E.largo / 2 + 1.6) + f[0] * (E.fondo / 2 - 1.2), v + s[1] * (E.largo / 2 + 1.6) + f[1] * (E.fondo / 2 - 1.2), f[0], f[1]);
+    if (tipo === 'guaritore') erbeAppese(c, f, E.fondo / 2, r.pavimento, largoPorta);
+    if (E.campanile) croce([u + f[0] * (E.fondo / 2 - 0.5), v + f[1] * (E.fondo / 2 - 0.5)], r.colmo - 0.15);   // sul timpano
     if (E.comignolone) {                                // cucina: un comignolo grande sul colmo, e la legna accanto
       dettagli.push({ tipo: 'comignolo', u: c[0] - f[0] * E.fondo * 0.15, v: c[1] - f[1] * E.fondo * 0.15,
         y: r.colmo - 0.6, fu: f[0], fv: f[1], sx: E.comignolone, sy: E.comignolone * 1.1, sz: E.comignolone });
