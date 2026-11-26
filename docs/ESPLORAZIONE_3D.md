@@ -1552,6 +1552,27 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
       davanti al varco i giardini sarebbero 21 su 31, ma uno su 35 resterebbe chiuso: scelta la raggiungibilità.
       Cammino porta del borgo → cortile → dentro il giardino, su griglia di 0,5 m: 31/31 (12345) e 35/35 (570549).
       Da 16 a 18 chiamate di disegno, ≤ 17.510 triangoli. La Carta non cambia.
+11. **Porte delle case in pendio** (difetto segnalato dall'utente, nov. 2026: «la porta è più in alto del terreno anche
+    di un paio di metri»). Il pavimento stava sul punto più alto della pianta (`corpo`, `mx + 0,15`), quindi sul lato a
+    valle la soglia restava sospesa sopra lo zoccolo. Ora il pavimento segue il terreno **davanti alla facciata** e la
+    casa si interra a monte, con un limite che cresce coi piani (0,5 m a un piano, fino a 2,2 m), e quel che resta del
+    dislivello lo prende la soglia, che scende comunque fino al terreno. `misure.porteAlte` conta le porte oltre 40 cm
+    dal terreno (la porta del fienile è marcata `alta` e non conta). [Certo] In un borgo del seme 12345: con la regola
+    vecchia 23 porte sospese, fino a 1,80 m; con quella nuova nessuna.
+12. **Insegne e carattere degli edifici del borgo** (richiesta dell'utente, nov. 2026: «devo passare in rassegna
+    continuamente tutte le case del borgo per capire quelle utili al gioco»). Linguaggio comune a ogni edificio
+    nominato, che le case anonime non hanno: **cornice di pietra** attorno alla porta, in tinta più chiara del muro, con
+    architrave e **gradino** sulla soglia. Dove c'è un mestiere, **insegna a bandiera** (`SEGNI` in `edifici3d.js`):
+    piastra a muro, braccio di ferro con puntone, due catenelle, tavola dipinta 115×88 cm con cornice di legno e
+    **simbolo in rilievo sulle due facce**. Regole imparate guardando le immagini dalla via, a 9 m e all'altezza degli
+    occhi: tavola di colore lontano da quello del muro (una tavola grigia su pietra grigia non si vede), simbolo chiaro
+    sulle tavole scure e scuro su quelle chiare, insegna appesa sotto la gronda (negli edifici a un piano il tetto la
+    nascondeva) e dal lato libero da tettoie e recinti. Tinte: taverna boccale chiaro su rosso, stalla ferro di cavallo
+    scuro su ocra, fabbro martello chiaro su quasi nero, guaritore mortaio scuro su verde, armeria spada scura su
+    tavola chiara. Carattere proprio: pensilina di frasche, panca e tavolo alla taverna; porta del fienile con trave,
+    fune e carrucola, abbeveratoio e pagliaio alla stalla; incudine su ceppo e mucchio di carbone dal fabbro; mazzi di
+    erbe appesi dal guaritore; croce di ferro sul timpano di chiesa e cappella. Tutto con i materiali già in uso: i
+    pezzi entrano negli stessi oggetti uniti, **nessuna chiamata di disegno in più**.
 
 ### Accettazione
 
