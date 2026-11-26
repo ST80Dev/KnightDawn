@@ -515,6 +515,17 @@ Durante la Veglia:
 **Sulla Carta.**
 - Si sceglie la destinazione (o una strada o direzione, se il luogo è noto solo per sentito dire) →
   percorso sulle celle (A*), che preferisce strade, ponti, guadi e valichi → viaggio automatico.
+- **Scelta della meta** [deciso con l'utente, novembre 2026; si fa in G2, sulla Carta di gioco e sulla minimappa
+  grande]. Passando col mouse, un luogo si «aggancia» entro una ventina di pixel (vince il più vicino al puntatore):
+  il nome si ingrandisce, il segno si illumina, cambia il cursore. Al clic un riquadro nello stile della Carta del
+  cronista chiede conferma e dice il costo: «Viaggiare fino a Villaggio di Hornwold? 6 km per strada, ~4 ore a piedi,
+  arrivo a Vespri, Forza −20» (con l'eventuale traghetto o barcaiolo e il suo prezzo), «Parti» o «Annulla». In Storia è
+  un viaggio vero (tempo, Forza, eventi lungo la strada); in Libera sposta subito e gratis, per le prove. Si scelgono
+  solo luoghi conosciuti o intravisti (nebbia della conoscenza); sull'ignoto al più «cammina in quella direzione».
+  **Punto d'arrivo**: fuori dal luogo, a poche decine di metri, con il luogo in vista e il cavaliere rivolto verso di
+  esso, dal lato da cui si arriva (sulla strada percorsa): borgo e rocca ~35–40 m fuori dalla porta, sulla strada
+  d'accesso; villaggio, rovina, grotta, monastero 30–60 m fuori dall'ingombro, su terreno percorribile (mai in acqua o
+  contro un muro).
 - Celle di ~1 km. Il costo di ogni cella in tempo, Forza e
   vigore del cavallo dipende da bioma, pendenza e presenza di strade. La tabella per bioma del
   2D (`TRAVEL_COST`) resta come base.
