@@ -3289,6 +3289,17 @@ maltempo); la generazione resta dentro il budget di ~15 s, rimisurata sui semi 5
 perché ogni coppia di approdi che lo tocca conta come «unico accesso». Ora fra due rive separate si tiene **una sola**
 tratta, la più corta: quel seme è passato da 31 tratte a 13.
 
+**La regola è sorvegliata, non concordata.** `verificaAccessi` (verifica.js) gira a ogni generazione, come le
+verifiche su fiumi e luoghi: controlla che ogni pezzo di terra separato con una rocca, un villaggio o anche solo una
+rovina sia toccato da una tratta. **Su 30 semi: zero luoghi irraggiungibili.** Così nessuno deve rimuovere luoghi a
+posteriori, e se un domani ne nascono in posti nuovi la verifica lo dice subito invece di lasciare un castello
+irraggiungibile in una partita.
+
+Il barcaiolo ha richiesto due correzioni, trovate misurando: conta la **traversata** da riva a riva (al più 14 km),
+non quanto dista il villaggio — nessuno rema 18 km, ma un pescatore attraversa un braccio di mare di tre; e la riva
+di partenza e il villaggio che noleggia si scelgono **insieme**, perché scegliendo prima la riva più vicina e poi chi
+noleggia, un'isola restava scoperta se quella riva non aveva villaggi.
+
 Misure su 10 semi: **83 tratte** (40 traghetti, 40 rotte di mare, 3 barcaioli), **14 ms** per mondo, nessuna rotta
 fuori dall'acqua giusta e nessun approdo che non sia su terra. `VERSIONE_GENERATORE` `+mare-rotte-1`.
 
