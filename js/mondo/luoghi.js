@@ -77,6 +77,9 @@ export const LUOGHI = {
     minore: { rocca: [54, 48], raggio: [18, 27], borgo: [60, 80] },
     casata: { rocca: [68, 60], raggio: [23, 34], borgo: [90, 130] },
     maggiore: { rocca: [84, 74], raggio: [28, 41], borgo: [130, 200] },
+    // Città (richiesta dell'utente, nov. 2026: «voglio città che siano più grandi delle normali rocche»): la classe
+    // non si assegna qui, la chiede siti.js con `ripianificaLuogo` dopo aver scelto quali rocche diventano città.
+    citta: { rocca: [96, 86], raggio: [32, 45], borgo: [180, 270] },
   },
   forma: { cala: 5, vertici: [5, 8], ondula: 0.16, borgoOndula: 0.2, portaMin: 10 },
   // Arrivo alla porta del borgo: profilo del terreno fuori dalla porta (m), tratto più ripido su `finestra` m e pendenza
@@ -1198,6 +1201,19 @@ function sellaFine(carta, v) {
 }
 
 /** Aggiunge `carta.valichi`, `carta.luoghi`, `carta.candidatiLuoghi` e le statistiche alla Carta. */
+/**
+ * Ricalcola i piani di un luogo con un'altra classe (città: terrapieni, poligoni, porta e orientamento, tutto quello
+ * che `pianifica` produce). Torna true se la classe nuova ci sta: dove il terreno non la regge il luogo resta com'era.
+ * La chiama siti.js dopo aver scelto quali rocche diventano città.
+ */
+export function ripianificaLuogo(carta, luogo, classe = 'citta', L = LUOGHI) {
+  if (!L.classi[classe]) return false;
+  const r = pianifica(carta, luogo, classe, L);
+  if (!r) return false;
+  Object.assign(luogo, r, { classe });
+  return true;
+}
+
 export function aggiungiLuoghi(carta) {
   carta.valichi = valichiDaCarta(carta);
   const { luoghi, candidati, info } = scegliLuoghi(carta);

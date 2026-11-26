@@ -19,6 +19,7 @@ import { ACQUA, BIOMA } from './carta.js';
 import { quotaMondo, distanzaAcqua } from './scena.js';
 import { derivaSeme, hash2 } from './rumore.js';
 import { distanzaDa } from './verifica.js';
+import { ripianificaLuogo } from './luoghi.js';
 
 const B = BIOMA;
 const ABITABILI = [B.PIANURA, B.PIANURA_N, B.PIANURA_S, B.FORESTA, B.COLLINA];
@@ -310,7 +311,13 @@ function classiRocche(carta, F, seme) {
   const nC = conta(SITI.citta.numero, seme, 11), citta = [];
   for (const { l } of perCitta) {
     if (citta.length >= nC) break;
-    if (citta.every((c) => km(c, l) >= SITI.citta.distanza)) { l.tipo = 'citta'; citta.push(l); }
+    if (!citta.every((c) => km(c, l) >= SITI.citta.distanza)) continue;
+    // Una città è più grande di qualunque rocca (richiesta dell'utente): si rifanno i piani con la classe `citta`
+    // (js/mondo/luoghi.js). Dove il terreno non regge il borgo più grande il luogo resta una rocca e si prova il
+    // candidato dopo, così non esistono città piccole.
+    if (!ripianificaLuogo(carta, l, 'citta')) continue;
+    l.tipo = 'citta';
+    citta.push(l);
   }
   // Monasteri: isolati e in alto (dominanza, quota, lontano dalle altre rocche), le classi piccole prima.
   const nM = conta(SITI.monasteri.numero, seme, 13), monasteri = [];
