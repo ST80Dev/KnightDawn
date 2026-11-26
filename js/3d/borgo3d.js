@@ -870,6 +870,8 @@ export function* createBorgoAPezzi(suolo, luogo, ox, oz, rocca, clima = 'tempera
       strade: strade.length, torri, merli: merli.length, oggetti: oggettiMura + edificiBorgo.misure.chiamate,
       triangoli: triMura + edificiBorgo.misure.triangoli, case: edificiBorgo.misure.case,
       edifici: edificiBorgo.edifici.length, zone: edificiBorgo.misure.zone,
+      porteAlte: edificiBorgo.misure.porteAlte, distacco: edificiBorgo.misure.distacco,
+      porteAlteV: edificiBorgo.misure.porteAlteV, distaccoV: edificiBorgo.misure.distaccoV,
     },
   };
 }
