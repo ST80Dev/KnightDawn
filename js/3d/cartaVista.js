@@ -49,6 +49,9 @@ export const COLORE_FIUME = '#2f6690';
 export const COLORE_STRADA = 'rgba(122, 74, 38, 0.95)';   // strade di terra battuta
 export const COLORE_TRAGHETTO = 'rgba(243, 248, 252, 0.92)';   // rotte dei traghetti sugli specchi d'acqua interni
 export const COLORE_TRAGHETTO_ALONE = 'rgba(26, 48, 68, 0.55)';   // linea scura sotto, per leggerle sull'acqua
+export const COLORE_BARCAIOLO = 'rgba(250, 236, 198, 0.9)';     // barca a noleggio: niente molo, niente orario
+// Tratteggio per tipo di tratta (in multipli della larghezza della linea).
+const STILE_TRATTE = [['traghetto', [3, 2.2]], ['mare', [7, 3.5]], ['barcaiolo', [1.2, 2.4]]];
 export const COLORE_SENTIERO = 'rgba(150, 40, 30, 0.9)';
 // [classe, spessore (come i fiumi), tratteggio]: dalla più importante.
 export const STILE_STRADE = [['maestra', 1.6, []], ['carrareccia', 1.2, []], ['mulattiera', 1.0, [3, 2]], ['sentiero', 0.9, [1.5, 2]]];
@@ -408,10 +411,14 @@ export function createCartaVista(contenitore, opzioni = {}) {
     voce('ponte', (g, x, y) => segnoPonte(g, x, y, SEGNI.ponte));
     voce('guado', (g, x, y) => segnoGuado(g, x, y, SEGNI.ponte));
     voce('approdo', (g, x, y) => segnoApprodo(g, x, y, SEGNI.approdo));
-    voce('traghetto', (g, x, y) => {
-      g.strokeStyle = COLORE_TRAGHETTO; g.lineWidth = 1.8;
-      g.setLineDash([5, 3.5]); g.beginPath(); g.moveTo(x - 12, y); g.lineTo(x + 12, y); g.stroke(); g.setLineDash([]);
-    });
+    for (const [tipo, trattino] of STILE_TRATTE) {
+      voce(tipo === 'mare' ? 'rotta per mare' : tipo === 'barcaiolo' ? 'barcaiolo' : 'traghetto', (g, x, y) => {
+        g.strokeStyle = tipo === 'barcaiolo' ? COLORE_BARCAIOLO : COLORE_TRAGHETTO;
+        g.lineWidth = 1.8;
+        g.setLineDash(trattino.map((v) => v * 1.8));
+        g.beginPath(); g.moveTo(x - 12, y); g.lineTo(x + 12, y); g.stroke(); g.setLineDash([]);
+      });
+    }
     titolo('strade');
     for (const [classe, , trattino] of STILE_STRADE) {
       voce(classe, (g, x, y) => {
@@ -812,10 +819,13 @@ export function createCartaVista(contenitore, opzioni = {}) {
       ctx.strokeStyle = COLORE_TRAGHETTO_ALONE;
       ctx.lineWidth = w * 2.2;
       for (const t of carta.traghetti) rotta(t);
-      ctx.strokeStyle = COLORE_TRAGHETTO;
       ctx.lineWidth = w;
-      ctx.setLineDash([3 * w, 2.2 * w]);
-      for (const t of carta.traghetti) rotta(t);
+      // Tre tratteggi diversi: il traghetto di lago fitto, la rotta di mare a trattini lunghi, il barcaiolo punteggiato.
+      for (const [tipo, trattino] of STILE_TRATTE) {
+        ctx.strokeStyle = tipo === 'barcaiolo' ? COLORE_BARCAIOLO : COLORE_TRAGHETTO;
+        ctx.setLineDash(trattino.map((v) => v * w));
+        for (const t of carta.traghetti) if ((t.tipo ?? 'traghetto') === tipo) rotta(t);
+      }
       ctx.setLineDash([]);
     }
     // Segni in pixel dello schermo, indipendenti dallo zoom.

@@ -1233,6 +1233,27 @@ function celleRiva(carta, idLago, s) {
   return riva;
 }
 
+/** Pezzi di riva separati (le rive di un lago e quelle delle sue isole non si toccano): id per cella, -1 altrove. */
+function pezziDiRiva(carta, riva) {
+  const { cols, rows } = carta, n = cols * rows, id = new Int32Array(n).fill(-1), coda = new Int32Array(n);
+  let k = 0;
+  for (let s = 0; s < n; s++) {
+    if (!riva[s] || id[s] >= 0) continue;
+    let t = 0, f = 0; coda[f++] = s; id[s] = k;
+    while (t < f) {
+      const i = coda[t++], x = i % cols, y = (i - x) / cols;
+      for (let d = 0; d < 8; d++) {
+        const xx = x + V8X[d], yy = y + V8Y[d];
+        if (xx < 0 || yy < 0 || xx >= cols || yy >= rows) continue;
+        const j = yy * cols + xx;
+        if (riva[j] && id[j] < 0) { id[j] = k; coda[f++] = j; }
+      }
+    }
+    k++;
+  }
+  return id;
+}
+
 /** Distanza (km) lungo la riva dalle celle `sorgenti`: onda a 8 direzioni sulle sole celle di riva. */
 function ondaRiva(carta, riva, sorgenti) {
   const { cols, rows, cella } = carta, n = cols * rows;
@@ -1298,6 +1319,7 @@ export function aggiungiTraghetti(carta) {
     if (approdi.length < 2) continue;
     // Per ogni approdo: quanto costa girare il lago a piedi (onda sulla riva) e quanto navigare (onda sull'acqua).
     for (const a of approdi) a.imbarco = imbarco(carta, idLago, s, a.cella);
+    const rive = pezziDiRiva(carta, riva);
     const perRiva = approdi.map((a) => ondaRiva(carta, riva, [a.cella]));
     const perAcqua = approdi.map((a) => (a.imbarco >= 0 ? ondaAcqua(carta, idLago, s, a.imbarco) : null));
     const coppie = [];
@@ -1311,18 +1333,29 @@ export function aggiungiTraghetti(carta) {
       const utile = isolata || giro >= km + T.attesa;
       _scartate.push({ lago: s, km, giro, isolata, motivo: utile ? '' : 'giro corto' });
       if (!utile) continue;                 // girare a piedi costa poco più che imbarcarsi: niente traghetto
-      coppie.push({ lago: s, km, giro: isolata ? Infinity : giro, isolata,
+      coppie.push({ tipo: 'traghetto', lago: s, km, giro: isolata ? Infinity : giro, isolata,
+        cellaA: A.cella, cellaB: B.cella,
         rotta: rottaDa(carta, perAcqua[i].prima, B.imbarco),
         a: { sito: A.sito, sorta: A.sorta, x: A.x, y: A.y, rx: A.rx, ry: A.ry },
         b: { sito: B.sito, sorta: B.sorta, x: B.x, y: B.y, rx: B.rx, ry: B.ry } });
     }
-    // Prima le rive isolate (unico accesso), poi le scorciatoie migliori; al più `perLago` di queste.
-    const isolate = coppie.filter((c) => c.isolata);
+    // Rive separate: una sola tratta per coppia di rive, la più corta. Senza questo un villaggio su un isolotto
+    // diventava il capolinea di diciannove traghetti, perché ogni coppia che lo tocca è «unico accesso».
+    const miglioreTra = new Map();
+    for (const c of coppie) {
+      if (!c.isolata) continue;
+      const r1 = rive[c.cellaA], r2 = rive[c.cellaB], chiave = r1 < r2 ? `${r1}|${r2}` : `${r2}|${r1}`;
+      const avuta = miglioreTra.get(chiave);
+      if (!avuta || c.km < avuta.km) miglioreTra.set(chiave, c);
+    }
     const scorciatoie = coppie.filter((c) => !c.isolata).sort((u, v) => v.giro / v.km - u.giro / u.km);
-    tratte.push(...isolate, ...scorciatoie.slice(0, T.perLago));
+    tratte.push(...miglioreTra.values(), ...scorciatoie.slice(0, T.perLago));
   }
+  rotteDiMare(carta, tratte);
   carta.traghetti = tratte;
-  carta.statistiche = { ...(carta.statistiche ?? {}), traghetti: { tratte: tratte.length, ms: Math.round(performance.now() - t0) } };
+  const perTipo = {};
+  for (const t of tratte) perTipo[t.tipo] = (perTipo[t.tipo] ?? 0) + 1;
+  carta.statistiche = { ...(carta.statistiche ?? {}), traghetti: { tratte: tratte.length, ...perTipo, ms: Math.round(performance.now() - t0) } };
   return carta;
 }
 
@@ -1363,4 +1396,266 @@ function imbarco(carta, idLago, s, i) {
     if (idLago[j] === s) return j;
   }
   return -1;
+}
+
+/**
+ * Porti, rotte per mare e barcaioli [deciso dall'utente, novembre 2026, dopo che su 30 semi sono emerse isole
+ * abitate senza alcun accesso: un'isola di 181 km² con un monastero e due villaggi, una di 127 km² con una rocca].
+ * Regole di `docs/GDD.md` §3: il mare che tocca il bordo prosegue oltre la mappa, quindi tratti di costa diversi
+ * sono collegati da rotte esterne lungo il perimetro; un porto nasce solo dove serve.
+ */
+export const MARE = {
+  daRiva: 3,                // km: distanza massima di un villaggio o rocca dalla riva per essere un porto
+  traversata: [1, 70],      // km: rotta utile più corta e più lunga (le rotte obbligate non hanno tetto)
+  attesa: 6,                // km equivalenti di imbarco e attesa: più di un traghetto di lago
+  utili: 5,                 // rotte di sola scorciatoia al più per mondo
+  traPorti: 6,              // km: due porti più vicini di così sono lo stesso scalo
+  barcaiolo: 14,            // km: distanza massima di un'isola senza porto dal villaggio che noleggia la barca
+};
+
+/** Pezzi di terra della Carta (4 vicini): id per cella, dimensioni, e l'indice del continente (il più grande). */
+function terreFerme(carta) {
+  const { cols, rows, mare, acque } = carta, n = cols * rows;
+  const terra = (i) => !mare[i] && acque[i] === ACQUA.TERRA;
+  const id = new Int32Array(n).fill(-1), dim = [], coda = new Int32Array(n);
+  let k = 0;
+  for (let s = 0; s < n; s++) {
+    if (!terra(s) || id[s] >= 0) continue;
+    let t = 0, f = 0; coda[f++] = s; id[s] = k; let m = 0;
+    while (t < f) {
+      const i = coda[t++]; m++;
+      const x = i % cols, y = (i - x) / cols;
+      for (let d = 0; d < 4; d++) {
+        const xx = x + V8X[d], yy = y + V8Y[d];
+        if (xx < 0 || yy < 0 || xx >= cols || yy >= rows) continue;
+        const j = yy * cols + xx;
+        if (terra(j) && id[j] < 0) { id[j] = k; coda[f++] = j; }
+      }
+    }
+    dim.push(m); k++;
+  }
+  let principale = 0;
+  for (let i = 1; i < dim.length; i++) if (dim[i] > dim[principale]) principale = i;
+  return { id, dim, principale };
+}
+
+/** Posizione (km) lungo il perimetro della Carta di una cella di bordo; -1 se non sta sul bordo. */
+function suPerimetro(carta, i) {
+  const { cols, rows } = carta, x = i % cols, y = (i - x) / cols;
+  if (y === 0) return x;
+  if (x === cols - 1) return cols + y;
+  if (y === rows - 1) return cols + rows + (cols - 1 - x);
+  if (x === 0) return 2 * cols + rows + (rows - 1 - y);
+  return -1;
+}
+
+/**
+ * Distanza navigabile (km) sul mare dalla cella `da`, con i predecessori. Il mare che tocca il bordo prosegue
+ * oltre la mappa (GDD §3): le celle di bordo sono collegate fra loro lungo il perimetro esterno, così due tratti
+ * di costa separati sulla Carta restano raggiungibili — e in tutti i semi provati ogni mare tocca il bordo.
+ */
+function ondaMare(carta, da) {
+  const { cols, rows, acque, cella } = carta, n = cols * rows, km = cella / 1000;
+  const dist = new Float64Array(n).fill(Infinity), prima = new Int32Array(n).fill(-1);
+  const propaga = (coda) => {
+    for (let t = 0; t < coda.length; t++) {
+      const i = coda[t], x = i % cols, y = (i - x) / cols;
+      for (let d = 0; d < 8; d++) {
+        const xx = x + V8X[d], yy = y + V8Y[d];
+        if (xx < 0 || yy < 0 || xx >= cols || yy >= rows) continue;
+        const j = yy * cols + xx;
+        if (acque[j] !== ACQUA.MARE) continue;
+        const nd = dist[i] + V8D[d] * km;
+        if (nd < dist[j] - 1e-9) { dist[j] = nd; prima[j] = i; coda.push(j); }
+      }
+    }
+  };
+  dist[da] = 0;
+  propaga([da]);
+  // Anello esterno: le celle di bordo ordinate lungo il perimetro, due passate (avanti e indietro) sul ciclo.
+  const bordo = [];
+  for (let i = 0; i < n; i++) {
+    if (acque[i] !== ACQUA.MARE) continue;
+    const p = suPerimetro(carta, i);
+    if (p >= 0) bordo.push({ i, p });
+  }
+  if (bordo.length > 1) {
+    bordo.sort((a, b) => a.p - b.p);
+    const B = bordo.length, giroCarta = 2 * (cols + rows), aggiornate = [];
+    const passa = (verso) => {
+      // Due giri dell'anello per verso: al secondo il collegamento che «scavalca» l'inizio è già aggiornato.
+      for (let r = 0; r < 2; r++) for (let k = 0; k < B; k++) {
+        const iu = verso > 0 ? k : B - 1 - k;
+        const iv = (iu + verso + B) % B;
+        const u = bordo[iu], v = bordo[iv];
+        const avanti = (((verso > 0 ? v.p - u.p : u.p - v.p) % giroCarta) + giroCarta) % giroCarta;
+        const nd = dist[u.i] + avanti * km;
+        if (nd < dist[v.i] - 1e-9) { dist[v.i] = nd; prima[v.i] = u.i; aggiornate.push(v.i); }
+      }
+    };
+    passa(1);
+    passa(-1);
+    if (aggiornate.length) propaga(aggiornate);
+  }
+  return { dist, prima };
+}
+
+/** Celle di terra che toccano il mare. */
+function rivaMare(carta) {
+  const { cols, rows, acque, mare } = carta, n = cols * rows, riva = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    if (acque[i] !== ACQUA.MARE) continue;
+    const x = i % cols, y = (i - x) / cols;
+    for (let d = 0; d < 8; d++) {
+      const xx = x + V8X[d], yy = y + V8Y[d];
+      if (xx < 0 || yy < 0 || xx >= cols || yy >= rows) continue;
+      const j = yy * cols + xx;
+      if (!mare[j] && acque[j] === ACQUA.TERRA) riva[j] = 1;
+    }
+  }
+  return riva;
+}
+
+/**
+ * Aggiunge a `tratte` le rotte per mare e i barcaioli. Due obblighi e una comodità:
+ * 1. ogni pezzo di terra separato che ha una rocca o un villaggio va collegato al continente, a qualunque distanza
+ *    (è la regola «nessun luogo dove non si sbarca»);
+ * 2. un pezzo con soli siti speciali (rovine, grotte, accampamenti) ha un **barcaiolo**: una barca a noleggio dal
+ *    villaggio di riva più vicino, senza porto né rotta fissa;
+ * 3. fra i porti del continente, le rotte che fanno risparmiare strada, come per i traghetti di lago.
+ */
+function rotteDiMare(carta, tratte) {
+  const M = MARE, { cols, rows, cella, acque } = carta;
+  const terre = terreFerme(carta);
+  const riva = rivaMare(carta);
+  const cellaDi = (x, z) => Math.min(rows - 1, Math.max(0, Math.floor(z / cella))) * cols
+    + Math.min(cols - 1, Math.max(0, Math.floor(x / cella)));
+  const abitati = [...(carta.siti ?? []).filter((v) => v.tipo === 'villaggio').map((v) => ({ ...v, sorta: 'villaggio' })),
+    ...(carta.luoghi ?? []).map((l) => ({ id: l.id, x: l.x, z: l.z, sorta: 'rocca' }))];
+  // Candidati porto: abitati vicini alla riva del mare, con la loro cella di riva e il loro pezzo di terra.
+  const porti = [];
+  for (const v of abitati) {
+    const cx = Math.floor(v.x / cella), cz = Math.floor(v.z / cella);
+    const raggio = Math.ceil(M.daRiva);
+    let best = -1, md = Infinity;
+    for (let dy = -raggio; dy <= raggio; dy++) for (let dx = -raggio; dx <= raggio; dx++) {
+      const xx = cx + dx, yy = cz + dy;
+      if (xx < 0 || yy < 0 || xx >= cols || yy >= rows || !riva[yy * cols + xx]) continue;
+      const d = Math.hypot(xx + 0.5 - v.x / cella, yy + 0.5 - v.z / cella);
+      if (d < md) { md = d; best = yy * cols + xx; }
+    }
+    if (best < 0 || md * cella / 1000 > M.daRiva) continue;
+    porti.push({ sito: v.id, sorta: v.sorta, x: v.x / cella, y: v.z / cella, cella: best,
+      rx: (best % cols) + 0.5, ry: ((best / cols) | 0) + 0.5, terra: terre.id[best], d: md });
+  }
+  // Un porto per scalo: due abitati sulla stessa insenatura non fanno due porti.
+  porti.sort((a, b) => a.d - b.d);
+  const scali = [];
+  for (const p of porti) {
+    if (scali.some((q) => q.terra === p.terra && Math.hypot(q.rx - p.rx, q.ry - p.ry) * cella / 1000 < M.traPorti)) continue;
+    scali.push(p);
+  }
+  for (const p of scali) p.imbarco = imbarcoMare(carta, p.cella);
+  const utili = scali.filter((p) => p.imbarco >= 0);
+  if (utili.length < 2) { barcaioli(carta, tratte, terre, riva, cellaDi); return; }
+  const onde = utili.map((p) => ondaMare(carta, p.imbarco));
+  const rivaOnda = utili.map((p) => ondaRiva(carta, riva, [p.cella]));
+  const coppie = [];
+  for (let i = 0; i < utili.length; i++) for (let j = i + 1; j < utili.length; j++) {
+    const A = utili[i], B = utili[j];
+    const km = onde[i].dist[B.imbarco];
+    if (!Number.isFinite(km) || km < M.traversata[0]) continue;
+    const giro = rivaOnda[i][B.cella];
+    const separati = A.terra !== B.terra;
+    coppie.push({ tipo: 'mare', km, giro, separati, i, j,
+      rotta: rottaDa(carta, onde[i].prima, B.imbarco),
+      a: { sito: A.sito, sorta: A.sorta, x: A.x, y: A.y, rx: A.rx, ry: A.ry },
+      b: { sito: B.sito, sorta: B.sorta, x: B.x, y: B.y, rx: B.rx, ry: B.ry } });
+  }
+  // 1. Obbligo: ogni pezzo di terra con un porto, che non sia il continente, va collegato — la più corta che ha.
+  const collegate = new Set([terre.principale]);
+  for (const t of terre.dim.keys()) {
+    if (t === terre.principale) continue;
+    if (!utili.some((p) => p.terra === t)) continue;
+    const verso = coppie.filter((c) => (utili[c.i].terra === t) !== (utili[c.j].terra === t))
+      .sort((u, v) => u.km - v.km);
+    const scelta = verso.find((c) => utili[c.i].terra === terre.principale || utili[c.j].terra === terre.principale) ?? verso[0];
+    if (!scelta) continue;
+    scelta.obbligata = true;
+    collegate.add(t);
+  }
+  // 2. Comodità: rotte che accorciano davvero, fra porti già raggiungibili, con un tetto per mondo.
+  const scorciatoie = coppie.filter((c) => !c.obbligata && c.km <= M.traversata[1]
+      && (!Number.isFinite(c.giro) || c.giro >= c.km + M.attesa))
+    .sort((u, v) => (Number.isFinite(v.giro) ? v.giro / v.km : 99) - (Number.isFinite(u.giro) ? u.giro / u.km : 99));
+  for (const c of coppie) if (c.obbligata) tratte.push(ripulisci(c));
+  for (const c of scorciatoie.slice(0, M.utili)) tratte.push(ripulisci(c));
+  barcaioli(carta, tratte, terre, riva, cellaDi);
+}
+
+/** Toglie i campi di lavoro dalla tratta prima di salvarla nella Carta. */
+function ripulisci(c) {
+  const { i, j, separati, obbligata, ...resto } = c;
+  return { ...resto, isolata: !!separati };
+}
+
+/** Cella di mare adiacente a una cella di riva. */
+function imbarcoMare(carta, i) {
+  const { cols, rows, acque } = carta, x = i % cols, y = (i - x) / cols;
+  for (let d = 0; d < 8; d++) {
+    const xx = x + V8X[d], yy = y + V8Y[d];
+    if (xx < 0 || yy < 0 || xx >= cols || yy >= rows) continue;
+    const j = yy * cols + xx;
+    if (acque[j] === ACQUA.MARE) return j;
+  }
+  return -1;
+}
+
+/**
+ * Barcaioli: pezzi di terra separati che hanno **solo siti speciali** (rovine, grotte, accampamenti, luoghi del
+ * fantastico) e nessun porto. Non meritano una rotta fissa, ma non devono restare irraggiungibili: dal villaggio
+ * di riva più vicino si noleggia una barca. Nessun molo, nessun orario.
+ */
+function barcaioli(carta, tratte, terre, riva, cellaDi) {
+  const M = MARE, { cols, cella } = carta;
+  const giaServite = new Set();
+  for (const t of tratte) for (const a of [t.a, t.b]) {
+    const i = cellaDi(a.rx * cella, a.ry * cella);
+    if (terre.id[i] >= 0) giaServite.add(terre.id[i]);
+  }
+  // Che cosa sta su ogni pezzo di terra.
+  const sopra = new Map();
+  const segna = (x, z, chiave) => {
+    const t = terre.id[cellaDi(x, z)];
+    if (t < 0 || t === terre.principale) return;
+    const r = sopra.get(t) ?? { abitato: false, siti: 0 };
+    if (chiave === 'abitato') r.abitato = true; else r.siti++;
+    sopra.set(t, r);
+  };
+  for (const l of carta.luoghi ?? []) segna(l.x, l.z, 'abitato');
+  for (const s of carta.siti ?? []) segna(s.x, s.z, s.tipo === 'villaggio' ? 'abitato' : 'sito');
+  // Villaggi di riva del continente, da cui si noleggia.
+  const noleggi = (carta.siti ?? []).filter((v) => v.tipo === 'villaggio').map((v) => {
+    const i = cellaDi(v.x, v.z);
+    return { sito: v.id, x: v.x / cella, y: v.z / cella, cella: i, terra: terre.id[i] };
+  }).filter((v) => v.terra === terre.principale);
+  for (const [t, r] of sopra) {
+    if (giaServite.has(t) || !r.siti) continue;
+    // Punto di sbarco: la cella dell'isola più vicina a un villaggio di riva del continente.
+    let miglior = null;
+    for (let i = 0; i < terre.id.length; i++) {
+      if (terre.id[i] !== t) continue;
+      const rx = (i % cols) + 0.5, ry = ((i / cols) | 0) + 0.5;
+      for (const v of noleggi) {
+        const km = Math.hypot(rx - v.x, ry - v.y) * cella / 1000;
+        if (km <= M.barcaiolo && (!miglior || km < miglior.km)) miglior = { km, rx, ry, v };
+      }
+    }
+    if (!miglior) continue;
+    const v = miglior.v;
+    tratte.push({ tipo: 'barcaiolo', km: miglior.km, giro: Infinity, isolata: true,
+      rotta: { x: Float32Array.from([v.x, miglior.rx]), y: Float32Array.from([v.y, miglior.ry]) },
+      a: { sito: v.sito, sorta: 'villaggio', x: v.x, y: v.y, rx: v.x, ry: v.y },
+      b: { sito: -1, sorta: 'approdo', x: miglior.rx, y: miglior.ry, rx: miglior.rx, ry: miglior.ry } });
+  }
 }
