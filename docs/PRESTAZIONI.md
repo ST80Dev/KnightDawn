@@ -192,21 +192,31 @@ effetti 2,1 su 1,5 (cielo 1,2). Rimedi:
   ogni 8192 m;
 - **cupola del cielo** disegnata per ultima con il test di profondità (sessione Cielo e meteo).
 
-### In sospeso per decisione dell'utente: livelli di dettaglio delle latifoglie
+### In sospeso per decisione dell'utente: lo sforamento della vegetazione nel bosco fitto
 
 **Stato: sospeso a tempo indeterminato, 27 novembre 2026. Si riapre solo se lo chiede l'utente**, dopo aver provato
-di persona il bosco fitto e averci trovato rallentamenti. Nessuna sessione lo sta aspettando.
+di persona il bosco fitto e averci trovato rallentamenti. Nessuna sessione resta in attesa.
 
-Il problema misurato resta vero: nel bosco fitto la vegetazione sta a **8,1 ms su un budget di 6,5**, e tre gruppi di
-latifoglie a media distanza, con sole **120 piante**, fanno **219 mila triangoli**. Il fotogramma peggiore nel bosco
-arriva a 33,5 ms, cioè ogni tanto se ne perde uno.
+Il piano «+7 forme» **non è in sospeso: è già unito** (PR #218, 24/11, «Livelli di dettaglio: la variante è la
+specie»). Risolveva la *coerenza*, non il costo: un castagno a 200 m diventava un'altra pianta avvicinandosi, perché i
+livelli avevano numeri di varianti diversi. Le chiamate della vegetazione misurate dopo sono **32 su 35**, non le
+34-35 stimate.
 
-Il rimedio proposto dalla sessione «M7 - vegetazione» era **7 forme in più**, con le chiamate di disegno da 28 a
-**34-35 su un tetto di 35**. Il piano per esteso non è mai arrivato in questo documento e la sessione che lo aveva
-scritto non lo ha più in memoria: se si riapre, va rifatto e rimisurato su `main` di allora, non ripescato.
+Resta aperto lo **sforamento**: nel bosco fitto la vegetazione sta a **8,1 ms su 6,5** (misura dell'utente). Misura su
+`main` 611868f, `?seme=570549&prova&centro=99937,43289`: vegetazione 626 934 triangoli in 32 chiamate, scena
+1 015 516 in 149. Dentro, le **latifoglie fra 18 e 50 m sono 119 piante per 215 512 triangoli** (~1 800 l'una): più
+di tutte le 71 253 sagome messe insieme (142 506).
 
-Motivo della sospensione: il difetto non è stato giudicato fastidioso in gioco, e il margine sulle chiamate di
-disegno (34-35 su 35) è troppo sottile per spenderlo senza una ragione sentita.
+**Attenzione prima di tagliare triangoli.** La misura del 21/11 qui sotto dice che il costo segue i pixel coperti, non
+i triangoli: togliendo 187 mila triangoli la vegetazione scese solo da 7,2 a 7,0 ms, perché «veg. resto» calò da 4,9 a
+3,8 ma «veg. sagome» salì da 1,6 a 2,5. Se vale ancora, tagliare quei 215 mila triangoli vale ~0,2 ms su 1,6 di
+sforamento, peggiorando la resa degli alberi a 30 m.
+
+**Quando si riapre, il primo passo non è una decisione ma una misura**: i due valori `F3`/`F9` di «veg. sagome» e
+«veg. resto» nel bosco fitto.
+- se pesa «resto», il confine del livello ricco da 50 a 35 m porta la vegetazione a 513 302 triangoli (−18 %) senza
+  chiamate in più; un livello intermedio da ~500 triangoli costerebbe +3 chiamate, cioè 35 su 35, al tetto;
+- se pesano le sagome, i livelli degli alberi non c'entrano: si lavora su diradamento e misura delle sagome.
 
 ## Risultati del percorso di prova
 
