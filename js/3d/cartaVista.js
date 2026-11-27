@@ -477,6 +477,36 @@ export function createCartaVista(contenitore, opzioni = {}) {
   let mostraCandidati = false;                   // siti delle rocche validi ma non scelti
   let luoghiVerifica = null;                     // esito di verificaLuoghi
   let roccaSuccessiva = 0;
+  // Modalità di gioco (Storia, richiesta dell'utente): `opzioni.conoscenza()` dà la Conoscenza (js/news.js). Solo
+  // mappa e legenda: niente strumenti di sviluppo, nebbia sopra l'ignoto, luoghi solo se conosciuti, niente clic che
+  // sposta. Oltre il confine del mondo, in entrambe le modalità, niente terreno «a specchio».
+  let gioco = null;                              // la Conoscenza in modalità di gioco, o null
+  const NEBBIA = { colore: [196, 172, 124], alfa: [255, 150, 0], oltre: 'rgb(122, 100, 66)' };
+  let maschera = null, mImg = null, mGen = -1, mVer = -1;
+  /** Strato della nebbia: una cella della Conoscenza (100 m) per pixel; si rifà solo il rettangolo cambiato. */
+  function preparaMaschera(k) {
+    if (!maschera || mGen !== k.generazione || maschera.width !== k.w || maschera.height !== k.h) {
+      maschera = document.createElement('canvas');
+      maschera.width = k.w; maschera.height = k.h;
+      mImg = maschera.getContext('2d').createImageData(k.w, k.h);
+      mGen = k.generazione; mVer = -1;
+      const px = mImg.data;                       // tutto da rifare: la minimappa può aver già preso il rettangolo
+      for (let c = 0; c < k.w * k.h; c++) {
+        const p = c * 4;
+        px[p] = NEBBIA.colore[0]; px[p + 1] = NEBBIA.colore[1]; px[p + 2] = NEBBIA.colore[2]; px[p + 3] = NEBBIA.alfa[k.dati[c]] ?? 0;
+      }
+      maschera.getContext('2d').putImageData(mImg, 0, 0);
+      mVer = k.versione;
+      return;
+    }
+    if (mVer === k.versione) return;
+    mVer = k.versione;                           // la minimappa consuma il rettangolo cambiato: qui si rifà tutto
+    const px = mImg.data;
+    for (let c = 0; c < k.w * k.h; c++) px[c * 4 + 3] = NEBBIA.alfa[k.dati[c]] ?? 0;
+    maschera.getContext('2d').putImageData(mImg, 0, 0);
+  }
+  /** Il punto (km della Carta) è conosciuto? Sempre vero fuori dalla modalità di gioco. */
+  const noto = (x, y) => !gioco || gioco.livello(x * carta.cella, y * carta.cella) >= 1;
   let sitiVerifica = null;                       // esito di verificaSiti (M8)
   const prossimoSito = {};                       // tipo → indice del prossimo per «Vai a»
 
@@ -829,11 +859,29 @@ export function createCartaVista(contenitore, opzioni = {}) {
       }
       ctx.setLineDash([]);
     }
+    // Nebbia della conoscenza (modalità di gioco) e, sempre, niente terreno oltre il confine.
+    if (gioco) {
+      preparaMaschera(gioco);
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(maschera, 0, 0, carta.cols, carta.rows);
+    }
+    {
+      const m = Math.max(carta.cols, carta.rows) * 4;
+      ctx.fillStyle = gioco ? NEBBIA.oltre : '#1a0e04';
+      ctx.beginPath();
+      ctx.rect(-m, -m, carta.cols + 2 * m, carta.rows + 2 * m);
+      ctx.rect(0, 0, carta.cols, carta.rows);
+      ctx.fill('evenodd');
+      ctx.strokeStyle = gioco ? 'rgba(110, 76, 36, 0.8)' : 'rgba(216, 178, 90, 0.6)';
+      ctx.lineWidth = 1.5 * dpr / s;
+      ctx.strokeRect(0, 0, carta.cols, carta.rows);
+    }
     // Segni in pixel dello schermo, indipendenti dallo zoom.
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const P = (x, y) => [x * s + tx, y * s + ty];
     // Approdi dei traghetti: un'ancora stilizzata sulla riva.
     for (const t of carta.traghetti ?? []) for (const a of [t.a, t.b]) {
+      if (!noto(a.rx, a.ry)) continue;
       const [px, py] = P(a.rx, a.ry);
       if (px < -14 || py < -14 || px > canvas.width + 14 || py > canvas.height + 14) continue;
       conAlone(ctx, () => segnoApprodo(ctx, px, py, SEGNI.approdo * dpr), 3 * dpr);
@@ -844,6 +892,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
       if (stradeFini) for (const f of stradeFini) for (const at of f.attraversamenti ?? []) segni.push({ ...at, x: at.x / carta.cella, y: at.z / carta.cella });
       else for (const p of carta.strade?.ponti ?? []) segni.push({ ponte: true, x: p.x, y: p.y, dx: 1, dz: 0 });
       for (const g of segni) {
+        if (!noto(g.x, g.y)) continue;
         const [px, py] = P(g.x, g.y);
         if (px < -14 || py < -14 || px > canvas.width + 14 || py > canvas.height + 14) continue;
         const m = SEGNI.ponte * dpr;
@@ -856,6 +905,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
       ctx.font = `${Math.round(11 * dpr)}px Georgia, serif`;
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
       for (const g of carta.massicci) {
+        if (!noto(g.x, g.y)) continue;
         const [px, py] = P(g.x, g.y), m = 5 * dpr;
         if (px < -40 || py < -40 || px > larghezza + 40 || py > altezza + 40) continue;
         ctx.fillStyle = '#2a1a0c'; ctx.strokeStyle = '#f4ead0'; ctx.lineWidth = 1.2 * dpr;
@@ -868,7 +918,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
         }
       }
     }
-    if (panorami && mostraPanorami) {
+    if (panorami && mostraPanorami && !gioco) {
       const m = SEGNI.panorama * dpr;
       ctx.fillStyle = COLORE_PANORAMA;
       ctx.beginPath();
@@ -883,13 +933,14 @@ export function createCartaVista(contenitore, opzioni = {}) {
     if (carta.valichi) {
       const m = SEGNI.valico * dpr;
       for (const v of carta.valichi) {
+        if (!noto(v.x, v.y)) continue;
         const [px, py] = P(v.x, v.y);
         if (px < -3 * m || py < -3 * m || px > larghezza + 3 * m || py > altezza + 3 * m) continue;
         conAlone(ctx, () => segnoValico(ctx, px, py, m, v.presidio), 3.5 * dpr);
       }
     }
     // Rocche (M7): torre stilizzata, più grande secondo la classe; la partenza cerchiata.
-    if (mostraCandidati && carta.candidatiLuoghi?.length) {
+    if (mostraCandidati && !gioco && carta.candidatiLuoghi?.length) {
       const C = carta.cella, ps = carta.candidatiLuoghi.map((k) => k.punteggio);
       const pmin = Math.min(...ps), pmax = Math.max(...ps);
       for (const k of carta.candidatiLuoghi) {
@@ -904,6 +955,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
       const C = carta.cella, m = (vista.z >= 3 ? SEGNI.sito[1] : SEGNI.sito[0]) * dpr;
       ctx.lineWidth = 1.6 * dpr;
       for (const st of carta.siti) {
+        if (!noto(st.x / C, st.z / C)) continue;
         const [px, py] = P(st.x / C, st.z / C);
         if (px < -14 || py < -14 || px > larghezza + 14 || py > altezza + 14) continue;
         conAlone(ctx, () => segnoSito(ctx, st, px, py, m), 2.5 * dpr);
@@ -914,6 +966,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
       ctx.font = `${Math.round(11 * dpr)}px Georgia, serif`;
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
       for (const l of carta.luoghi) {
+        if (!noto(l.x / C, l.z / C)) continue;
         const [px, py] = P(l.x / C, l.z / C), m = CLASSI_ROCCA[l.classe][1] * dpr;
         const lettera = TIPI_LUOGO[l.tipo ?? 'rocca'][1];
         segnoRocca(ctx, px, py, m, l.tipo ?? 'rocca');     // torre con due merli (misura della classe)
@@ -964,6 +1017,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
       ctx.beginPath(); ctx.arc(px, py, 4.5 * dpr, 0, Math.PI * 2); ctx.fill();
     }
     const st = carta.statistiche;
+    if (gioco) { elInfo.textContent = `${carta.cols}×${carta.rows} km · zoom ×${fmt(vista.z, 1)}`; chiediDettaglio(); return; }
     elInfo.textContent = `seme ${carta.seme} · ${carta.cols}×${carta.rows} km · zoom ×${fmt(vista.z, 1)}`
       + (vista.z < DETTAGLIO.da || !conDettaglio() ? '' : dettaglio?.chiave === chiaveVista()
         ? ` · curve ogni ${dettaglio.eq} m` : ' · calcolo del rilievo…');
@@ -1038,6 +1092,13 @@ export function createCartaVista(contenitore, opzioni = {}) {
 
   function apri() {
     if (!el.hidden) return;
+    gioco = opzioni.conoscenza?.() ?? null;
+    el.classList.toggle('gioco', !!gioco);
+    el.querySelector('.barra .titolo').textContent = gioco ? 'Carta del mondo' : 'Carta · sviluppo';
+    el.querySelector('.barra .tasto').textContent = gioco ? 'rotella: zoom · trascina: sposta · M o Esc: torna alla scena'
+      : 'rotella: zoom · trascina: sposta · clic sulla terra: vai lì · M: torna alla scena';
+    if (gioco && livello !== 'naturale') { livello = selLivello.value = 'naturale'; legenda(); }
+    if (gioco) { elDati.hidden = true; mostraPanorami = false; mostraCandidati = false; }
     el.hidden = false;
     const attuale = opzioni.cartaAttuale?.();
     if (attuale) mostra(attuale);                // ogni volta: la posizione del cavaliere cambia
@@ -1171,8 +1232,15 @@ export function createCartaVista(contenitore, opzioni = {}) {
     }
     const [xf, yf] = inKm(e);
     const x = Math.floor(xf), y = Math.floor(yf);
-    if (x < 0 || y < 0 || x >= carta.cols || y >= carta.rows) { elCursore.innerHTML = '&nbsp;'; return; }
+    if (x < 0 || y < 0 || x >= carta.cols || y >= carta.rows) { elCursore.textContent = gioco ? 'oltre il confine del mondo' : '\u00a0'; return; }
     const i = y * carta.cols + x;
+    if (gioco) {                                  // solo ciò che il cavaliere sa: niente numeri del generatore
+      if (!noto(xf, yf)) { elCursore.textContent = 'terre ignote'; return; }
+      const acqua = carta.acque?.[i] === ACQUA.LAGO || carta.acque?.[i] === ACQUA.LAGO_COSTIERO ? 'lago' : carta.mare[i] ? 'mare' : null;
+      elCursore.textContent = (acqua ?? `${carta.bioma ? NOMI_BIOMI[carta.bioma[i]] : 'terra'} · circa ${fmt(Math.round(quotaFinale(carta, xf * carta.cella, yf * carta.cella) / 10) * 10)} m`)
+        + luogoNoto(xf, yf);
+      return;
+    }
     const q = carta.quota[i];
     const X = xf * carta.cella, Z = yf * carta.cella;
     const esatta = carta.mare[i] ? '' : `quota nella Scena ${fmt(quotaFinale(carta, X, Z))} m · `;
@@ -1185,6 +1253,17 @@ export function createCartaVista(contenitore, opzioni = {}) {
               + ` · catena ${fmt(carta.catena[i], 2)}`
               + (carta.bacino?.[i] >= carta.sogliaFiume ? ` · fiume, bacino ${fmt(carta.bacino[i])} km²` : ''));
   });
+  /** Modalità di gioco: il luogo conosciuto sotto il puntatore, con il solo tipo. */
+  function luogoNoto(x, y) {
+    const r = Math.max(0.6, 8 * dpr / scala()), C = carta.cella;
+    for (const l of carta.luoghi ?? []) {
+      if (Math.hypot(l.x / C - x, l.z / C - y) <= r && noto(l.x / C, l.z / C)) return ` · ${l.partenza ? 'la tua rocca' : NOMI_SITI[l.tipo ?? 'rocca']}`;
+    }
+    for (const st of carta.siti ?? []) {
+      if (Math.hypot(st.x / C - x, st.z / C - y) <= r && noto(st.x / C, st.z / C)) return ` · ${NOMI_SITI[st.tipo]}`;
+    }
+    return '';
+  }
   /** Rocca entro ~1,5 km dal puntatore (o 8 pixel, se di più): classe, carattere e misure del sito. */
   function roccaSotto(x, y) {
     if (!carta.luoghi) return '';
@@ -1225,7 +1304,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
     const mosso = trascina.mosso;
     trascina = null;
     canvas.style.cursor = '';
-    if (mosso || e.type !== 'pointerup' || !opzioni.onScegli) return;
+    if (mosso || e.type !== 'pointerup' || !opzioni.onScegli || gioco) return;
     // Clic senza trascinamento: entra nella Scena centrata nel punto esatto (km, non il centro della cella).
     const [x, y] = inKm(e);
     if (x < 0 || y < 0 || x >= carta.cols || y >= carta.rows) return;

@@ -543,7 +543,8 @@ html, body {
 .carta-cronista .tabella .vuota { font-style: italic; color: var(--kd-sbiadito); padding: 6px 4px; }
 .carta-cronista.larga { width: min(760px, calc(100vw - 32px)); }
 
-/* Mappa intera (M in Storia): la minimappa a tutto schermo, al centro, sopra la scena ferma */
-#minimappa.intera { left: 50%; top: 50%; right: auto; bottom: auto; transform: translate(-50%, -50%); z-index: 55; }
-#minimappa.intera .grande { display: none; }
-#minimappa.intera canvas { cursor: default; }
+/* Carta in modalità di gioco (Storia): solo mappa e legenda, niente strumenti di sviluppo */
+#carta.gioco .barra > :not(.titolo):not(.intera):not(.centra):not(.info):not(.tasto) { display: none; }
+#carta.gioco .barra .titolo { font: 600 20px var(--kd-titolo); letter-spacing: .1em; color: var(--kd-oro-chiaro); }
+#carta.gioco .barra, #carta.gioco .piede { font-family: var(--kd-testo); font-size: 16px; }
+#carta.gioco .piede .dati { display: none; }
