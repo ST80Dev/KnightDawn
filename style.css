@@ -567,25 +567,25 @@ html, body {
 .carta-cronista .avanti { text-align: center; font: italic 13px var(--kd-testo); color: var(--kd-sbiadito); opacity: 0; transition: opacity .8s; }
 .carta-cronista .avanti.vista { opacity: 1; }
 
-/* Meridiana (interfaccia.js, creaMeridiana): in alto a sinistra */
-.meridiana { position: fixed; left: 12px; top: 12px; z-index: 5; width: 210px; padding: 8px 10px 6px; pointer-events: none;
-  background: var(--kd-legno); border: 1px solid var(--kd-oro-scuro);
-  box-shadow: inset 0 0 0 1px rgba(243, 217, 140, .18), 0 6px 18px rgba(0, 0, 0, .45); }
+/* Meridiana (interfaccia.js, creaMeridiana): tavoletta di legno incisa a mano, appesa un po' storta, in alto a sinistra */
+.meridiana { position: fixed; left: 14px; top: 10px; z-index: 5; width: 236px; pointer-events: none;
+  transform: rotate(-3.5deg); transform-origin: 50% 8%; filter: drop-shadow(0 6px 8px rgba(0, 0, 0, .55)); }
 .meridiana[hidden] { display: none; }
-.meridiana svg { display: block; width: 100%; height: auto; }
-.meridiana .faccia { fill: #e3cf9e; stroke: var(--kd-oro); stroke-width: 2; transition: fill 1s; }
-.meridiana .tacche line { stroke: #6e4c18; }
-.meridiana .etichette text { font: 600 9px var(--kd-titolo); fill: #4a2f14; text-anchor: middle; letter-spacing: .04em;
-  paint-order: stroke; stroke: #e3cf9e; stroke-width: 2.5px; }
-.meridiana.notte .etichette text { stroke: #3a3448; }
-.meridiana .ombra { stroke: #3a2412; stroke-width: 3; stroke-linecap: round; transition: all .9s ease-in-out; }
-.meridiana .sole { fill: #e8b030; stroke: #8a5a10; stroke-width: 1; transition: all .9s ease-in-out; }
-.meridiana .gnomone { fill: #6e4c18; }
-.meridiana .luna { fill: #e8e2c8; opacity: 0; transition: opacity 1s; }
-.meridiana.notte .faccia { fill: #3a3448; }
-.meridiana.notte .ombra, .meridiana.notte .sole { opacity: 0; }
-.meridiana.notte .luna { opacity: 1; }
-.meridiana.notte .etichette text { fill: #8a8298; }
-.meridiana .testo { text-align: center; font: 600 15px var(--kd-titolo); letter-spacing: .05em; color: var(--kd-oro-chiaro); margin-top: 2px; }
+.meridiana svg { display: block; width: 100%; height: auto; overflow: visible; }
+.meridiana .legno { fill: url(#mer-legno); transition: filter 1.2s; }
+.meridiana .orlo { fill: none; stroke: #3a2410; stroke-width: 2.2; }
+.meridiana .buco { fill: #1e1208; stroke: #5e4020; }
+.meridiana .incisioni path { stroke: #2e1a08; stroke-linecap: round; opacity: .85; }
+.meridiana .incisioni { filter: drop-shadow(0 .6px 0 rgba(255, 230, 180, .35)); }
+.meridiana .numeri text { font: 13px Fondamento, var(--kd-testo); fill: #2e1a08; text-anchor: middle; opacity: .9; }
+.meridiana .ombra { fill: rgba(30, 16, 4, .7); transition: d .9s ease-in-out; }
+.meridiana .piolo { fill: #4a2e12; stroke: #22140a; stroke-width: 1; }
+.meridiana .luna { fill: #e8e2c8; opacity: 0; transition: opacity 1.2s; }
+.meridiana .testo { font: 17px Fondamento, var(--kd-testo); fill: #f0dcae; text-anchor: middle; paint-order: stroke;
+  stroke: rgba(20, 10, 2, .85); stroke-width: 3px; }
+.meridiana.notte .legno { filter: brightness(.45) saturate(.6); }
+.meridiana.notte .ombra { opacity: 0; }
+.meridiana.notte .luna { opacity: .9; }
+.meridiana.notte .incisioni, .meridiana.notte .numeri { opacity: .55; }
 #menu-avvio .racconto-pref { margin-left: 8px; }
 #menu-avvio .impostazioni .riga { margin-bottom: 0; }
