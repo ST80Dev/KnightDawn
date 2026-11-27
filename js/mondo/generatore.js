@@ -3,7 +3,7 @@
 // Worker in moduli ES), genera qui, dopo aver lasciato disegnare la schermata di caricamento.
 
 import { generaCarta } from './carta.js';
-import { verificaFiumi, verificaPanorami, verificaVarieta, verificaLuoghi } from './verifica.js';
+import { verificaFiumi, verificaPanorami, verificaVarieta, verificaLuoghi, verificaAccessi } from './verifica.js';
 import { aggiungiLuoghi } from './luoghi.js';
 import { aggiungiStrade, precalcolaStrade, aggiungiTraghetti } from './strade.js';
 import { grigliaMondo, fiumiFini, terrenoBase } from './scena.js';
@@ -54,7 +54,7 @@ async function generaQui(seme, avanzamento) {
   carta.statistiche.msTerrenoBase = carta.terrenoBase.ms;   // prima di liberarlo: serve al conto delle fasi
   carta.terrenoBase = null;                         // servito a strade e griglia: 25 MB da liberare
   carta.verifiche = { fiumi: verificaFiumi(carta), panorami: verificaPanorami(carta), varieta: verificaVarieta(carta),
-    luoghi: verificaLuoghi(carta), siti: verificaSiti(carta) };
+    luoghi: verificaLuoghi(carta), siti: verificaSiti(carta), accessi: verificaAccessi(carta) };
   carta.daCache = false;
   return carta;
 }

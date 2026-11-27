@@ -418,7 +418,10 @@ export function creaCartaCronista(opzioni = {}) {
   }
   /**
    * @param {{ titolo: string, testo?: string, righe?: string[], nota?: string,
+   *   tabelle?: { titolo: string, vuota?: string, righe: { nome: string, info?: string, prezzo?: string,
+   *     azione?: string, disponibile?: boolean, etichetta?: string, scegli?: () => void }[] }[],
    *   opzioni: { testo: string, etichetta?: string, disponibile?: boolean, scegli: () => void }[] }} c
+   *   tabelle: elenchi con un pulsante per riga (mercato, zaino), dopo la nota e prima delle scelte.
    */
   function mostra(c) {
     const nuova = !el;
@@ -433,17 +436,29 @@ export function creaCartaCronista(opzioni = {}) {
       stacca = sfondoSvg(el, (w, h) => cornice(w, h, semeCornice).svg);
     }
     scelte = c.opzioni.filter((o) => o.disponibile !== false);
+    el.classList.toggle('larga', !!c.tabelle?.length);
     let n = 0;
     contenuto.innerHTML = `<div class="titolo">${_esc(c.titolo)}</div><div class="fregio"></div>`
       + (c.testo ? `<div class="testo${/^[A-Za-zÀ-ÿ]/.test(c.testo) ? ' miniata' : ''}">${_esc(c.testo)}</div>` : '')
       + (c.righe?.length ? `<div class="righe">${c.righe.map((r) => `<div>${_esc(r)}</div>`).join('')}</div>` : '')
       + (c.nota ? `<div class="nota">${_esc(c.nota)}</div>` : '')
+      + (c.tabelle ?? []).map((t, ti) => `<div class="tabella"><div class="tt">${_esc(t.titolo)}</div>`
+        + (t.righe.length ? t.righe.map((r, ri) => {
+          const ok = r.disponibile !== false;
+          return `<div class="voce${ok ? '' : ' spenta'}"><span class="nome">${_esc(r.nome)}`
+            + `${r.info ? `<i>${_esc(r.info)}</i>` : ''}</span><span class="prezzo">${_esc(r.prezzo ?? '')}</span>`
+            + (r.azione ? `<button type="button" data-t="${ti}" data-r="${ri}"${ok ? '' : ' disabled'}`
+              + `${!ok && r.etichetta ? ` title="${_esc(r.etichetta)}"` : ''}>${_esc(r.azione)}</button>` : '<span></span>')
+            + '</div>';
+        }).join('') : `<div class="vuota">${_esc(t.vuota ?? '—')}</div>`) + '</div>').join('')
       + `<div class="scelte">${c.opzioni.map((o, i) => {
         const ok = o.disponibile !== false;
         return `<button type="button" data-i="${i}"${ok ? '' : ' disabled'}><span class="n">${ok ? ++n : '·'}</span>`
           + `<span>${_esc(o.testo)}${o.etichetta && !ok ? ` <span class="req">${_esc(o.etichetta)}</span>` : ''}</span></button>`;
       }).join('')}</div>`;
     contenuto.querySelectorAll('.scelte button').forEach((b) => b.addEventListener('click', () => c.opzioni[+b.dataset.i].scegli()));
+    contenuto.querySelectorAll('.tabella button').forEach((b) => b.addEventListener('click',
+      () => c.tabelle[+b.dataset.t].righe[+b.dataset.r].scegli?.()));
     if (nuova) opzioni.onApri?.();
   }
   /** Tasti mentre la carta è aperta: true se il tasto è stato usato. */

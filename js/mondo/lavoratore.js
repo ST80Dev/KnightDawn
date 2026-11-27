@@ -12,7 +12,7 @@
 // CACHE_MASSIMO Carte usate (~8–10 MB l'una). Non è un salvataggio: la Carta si rigenera identica dal seme.
 
 import { generaCarta, VERSIONE_GENERATORE } from './carta.js';
-import { verificaFiumi, verificaPanorami, verificaVarieta, verificaLuoghi } from './verifica.js';
+import { verificaFiumi, verificaPanorami, verificaVarieta, verificaLuoghi, verificaAccessi } from './verifica.js';
 import { aggiungiLuoghi } from './luoghi.js';
 import { aggiungiStrade, precalcolaStrade, aggiungiTraghetti } from './strade.js';
 import { grigliaMondo, fiumiFini, terrenoBase } from './scena.js';
@@ -130,7 +130,7 @@ self.onmessage = async (e) => {
       carta.terrenoBase = null;         // servito a strade e griglia: 25 MB che non vanno né in cache né alla pagina
       const t0 = performance.now();
       carta.verifiche = { fiumi: verificaFiumi(carta), panorami: verificaPanorami(carta), varieta: verificaVarieta(carta),
-        luoghi: verificaLuoghi(carta), siti: verificaSiti(carta) };
+        luoghi: verificaLuoghi(carta), siti: verificaSiti(carta), accessi: verificaAccessi(carta) };
       carta.statistiche.msVerifiche = performance.now() - t0;
       carta.daCache = false;
       await scriviCache(chiave, carta);                // prima di trasferire i buffer (la put li copia)

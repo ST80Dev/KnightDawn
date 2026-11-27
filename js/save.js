@@ -72,6 +72,10 @@ const Save = {
       reputazione: Knight.reputazione.map(r => ({ ...r })),
       oro: Knight.oro,
       cavallo: Knight.cavallo ? { ...Knight.cavallo } : null,
+      inSella: Knight.inSella,
+      zaino: [...Knight.zaino],
+      ultimoPasto: Knight.ultimoPasto,
+      giornoControllato: Knight.giornoControllato,
       addestramento: Knight.addestramento,
       primaSangue: Knight.primaSangue,
       apprendista: Knight.apprendista,
@@ -96,6 +100,12 @@ const Save = {
     Knight.reputazione = k.reputazione;
     Knight.oro         = k.oro;
     Knight.cavallo     = k.cavallo || null;
+    Knight.inSella     = !!k.inSella;
+    Knight.zaino       = Array.isArray(k.zaino) ? k.zaino : [];
+    // Salvataggi di prima del passo 3: si considera mangiato fino a oggi (niente fame retroattiva).
+    const oggi = Math.floor(((blob.calendar && blob.calendar.passiTotali) || 0) / 8);
+    Knight.ultimoPasto = Number.isFinite(k.ultimoPasto) ? k.ultimoPasto : oggi;
+    Knight.giornoControllato = Number.isFinite(k.giornoControllato) ? k.giornoControllato : oggi;
     Knight.addestramento = k.addestramento || 0;
     Knight.primaSangue   = !!k.primaSangue;
     Knight.apprendista = k.apprendista;

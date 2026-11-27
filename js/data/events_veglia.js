@@ -9,7 +9,10 @@
 // animali fuori porta) → cappella per l'investitura, che chiude la Veglia e promuove a Cavaliere Errante.
 //
 // Il motore 3D passa nel contesto (Events.applyEffects(effetti, extra)): casata (nome della casata della rocca di
-// partenza) e dormi({ dove, forza, salute }) → testo. Senza (prove in Node) gli effetti che li usano non fanno nulla.
+// partenza), dormi({ dove, forza, salute }) → testo, mangia() (il pasto del giorno), notizia(foglio). Senza (prove in
+// Node) gli effetti che li usano non fanno nulla. Un'opzione con `apre: 'mercato'` apre la bottega dell'edificio
+// (js/data/items.js, NEGOZI) invece di applicare effetti. `prereqLabel` può essere una funzione(ctx): dice solo ciò
+// che manca (G1 passo 3: prima ripeteva il prezzo già scritto nel testo).
 
 // Soglie e prezzi [DA BILANCIARE] per una Veglia di ~60 minuti reali (docs/EARLY_GAME.md §7).
 const VEGLIA_SOGLIA_INVESTITURA = 10;   // oro per farsi armare
@@ -86,6 +89,11 @@ Events.register({
       reply: 'Passi ore tra criniere e zoccoli. Impari a leggere un cavallo con uno sguardo — ti servirà. Due monete nella scarsella.',
     },
     {
+      text: 'Comprare o vendere un cavallo',
+      prereq: () => _diGiorno(), prereqLabel: '(di giorno, fino a Nona)',
+      apre: 'mercato',
+    },
+    {
       text: 'Dormire nel fienile',
       prereq: () => _sera(), prereqLabel: '(da Vespri)',
       effects: [ ctx => { if (ctx.dormi) ctx.log(ctx.dormi({ dove: 'nel fienile', salute: 5 })); } ],
@@ -135,9 +143,16 @@ Events.register({
       reply: 'Tra un boccale e l\'altro raccogli mance e dicerie.',
     },
     {
+      text: 'Mangiare un pasto caldo (1 oro, mezz\'ora)',
+      prereq: ctx => ctx.knight.oro >= 1, prereqLabel: '(servono 1 oro)',
+      effects: [ { type: 'oro', delta: -1 }, { type: 'tempo', minuti: 30 }, ctx => { if (ctx.mangia) ctx.log(ctx.mangia(5)); } ],
+      reply: 'Zuppa di fave, pane nero e un boccale di sidro. Il pasto del giorno è fatto.',
+    },
+    { text: 'Comprare provviste per lo zaino', apre: 'mercato' },
+    {
       text: 'Prendere un pagliericcio per la notte (' + VEGLIA_PREZZO_STANZA + ' oro)',
       prereq: ctx => _sera() && ctx.knight.oro >= VEGLIA_PREZZO_STANZA,
-      prereqLabel: '(da Vespri · ' + VEGLIA_PREZZO_STANZA + ' oro)',
+      prereqLabel: ctx => (!_sera() ? '(da Vespri)' : '(servono ' + VEGLIA_PREZZO_STANZA + ' oro)'),
       effects: [
         { type: 'oro', delta: -VEGLIA_PREZZO_STANZA },
         ctx => { if (ctx.dormi) ctx.log(ctx.dormi({ dove: 'in taverna', forza: 15, salute: 10 })); },
@@ -159,7 +174,7 @@ Events.register({
     {
       text: 'Allenarti col maestro (3 ore, ' + VEGLIA_PREZZO_LEZIONE + ' oro)',
       prereq: ctx => ctx.knight.oro >= VEGLIA_PREZZO_LEZIONE && ctx.knight.forza.cur >= 15,
-      prereqLabel: '(' + VEGLIA_PREZZO_LEZIONE + ' oro · Forza 15)',
+      prereqLabel: ctx => (ctx.knight.oro < VEGLIA_PREZZO_LEZIONE ? '(servono ' + VEGLIA_PREZZO_LEZIONE + ' oro)' : '(troppo stanco: Forza 15)'),
       effects: [
         { type: 'oro', delta: -VEGLIA_PREZZO_LEZIONE },
         { type: 'volonta', delta: 4 }, { type: 'forza', delta: -15 }, { type: 'tempo', minuti: 180 },
@@ -187,11 +202,7 @@ Events.register({
   text: 'Ferro vecchio e nuovo, cuoio, qualche cavallo da vendere. Si compra e si vende — se hai di che pagare.',
   tone: 'neutro', portata: 'marginale',
   options: [
-    {
-      text: 'Sfogliare le mercanzie',
-      prereq: () => false, prereqLabel: '(arriva con il mercato, prossimo passo)',
-      effects: [],
-    },
+    { text: 'Sfogliare le mercanzie', apre: 'mercato' },
     { text: 'Solo dare un\'occhiata', effects: [] },
   ],
 });
@@ -207,7 +218,7 @@ Events.register({
     {
       text: 'Farti medicare (1 ora e mezza, ' + VEGLIA_PREZZO_CURA + ' oro)',
       prereq: ctx => ctx.knight.salute.cur < ctx.knight.salute.max && ctx.knight.oro >= VEGLIA_PREZZO_CURA,
-      prereqLabel: '(ferito · ' + VEGLIA_PREZZO_CURA + ' oro)',
+      prereqLabel: ctx => (ctx.knight.salute.cur >= ctx.knight.salute.max ? '(non sei ferito)' : '(servono ' + VEGLIA_PREZZO_CURA + ' oro)'),
       effects: [ { type: 'oro', delta: -VEGLIA_PREZZO_CURA }, { type: 'salute', delta: 30 }, { type: 'tempo', minuti: 90 } ],
       reply: 'Bende, un impiastro che brucia e un decotto amarissimo. Ti senti meglio.',
     },

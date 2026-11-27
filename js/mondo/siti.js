@@ -19,6 +19,7 @@ import { ACQUA, BIOMA } from './carta.js';
 import { quotaMondo, distanzaAcqua } from './scena.js';
 import { derivaSeme, hash2 } from './rumore.js';
 import { distanzaDa } from './verifica.js';
+import { ripianificaLuogo } from './luoghi.js';
 
 const B = BIOMA;
 const ABITABILI = [B.PIANURA, B.PIANURA_N, B.PIANURA_S, B.FORESTA, B.COLLINA];
@@ -351,13 +352,20 @@ function classiRocche(carta, F, seme) {
         + pesoClasse[l.classe] + 0.3 * hashU(l.id, 3, seme) };
   }).sort((a, b) => b.s - a.s || a.l.id - b.l.id);
   const nC = conta(C.numero, seme, 11), citta = [];
+  let cittaScartate = 0;                            // candidati saltati perché il terreno non regge il borgo grande
   // Due passate: prima i candidati sotto il tetto, poi — solo se non bastano — quelli sopra, nello stesso ordine di
   // punteggio. Così il tetto non costa città: le riduce soltanto quando c'è di meglio in basso.
   for (const alti of [false, true]) {
     for (const { l, q } of perCitta) {
       if (citta.length >= nC) break;
       if ((q > C.tetto) !== alti) continue;
-      if (citta.every((c) => km(c, l) >= C.distanza)) { l.tipo = 'citta'; citta.push(l); }
+      if (!citta.every((c) => km(c, l) >= C.distanza)) continue;
+      // Una città è più grande di qualunque rocca (richiesta dell'utente): si rifanno i piani con la classe `citta`
+      // (js/mondo/luoghi.js). Dove il terreno non regge il borgo più grande si salta il candidato e si prova il
+      // successivo, così non esistono città piccole.
+      if (!ripianificaLuogo(carta, l, 'citta')) { cittaScartate++; continue; }
+      l.tipo = 'citta';
+      citta.push(l);
     }
   }
   // Monasteri: isolati e in alto (dominanza, quota, lontano dalle altre rocche), le classi piccole prima.
@@ -371,7 +379,7 @@ function classiRocche(carta, F, seme) {
     if (monasteri.length >= nM) break;
     if (monasteri.every((m) => km(m, l) >= SITI.monasteri.distanza)) { l.tipo = 'monastero'; monasteri.push(l); }
   }
-  return { citta: citta.length, monasteri: monasteri.length };
+  return { citta: citta.length, cittaScartate, monasteri: monasteri.length };
 }
 
 /** Prima delle strade: classi delle rocche, villaggi e luoghi speciali. Scrive `carta.siti`. */
