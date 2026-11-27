@@ -525,6 +525,11 @@ html, body {
 #menu-avvio button, #menu-avvio input, #menu-avvio select { font-family: var(--kd-testo); font-size: 19px; border-radius: 0; }
 #menu-avvio .comincia { font: 600 24px var(--kd-titolo); letter-spacing: .12em; }
 #menu-avvio .nota { font: italic 17px/1.55 var(--kd-testo); color: #ab9970; }
+/* Due colonne sugli schermi larghi: partite salvate a sinistra, nuova partita a destra (niente scorrimento a 1920×1080) */
+@media (min-width: 900px) {
+  #menu-avvio .riquadro:has(.corpo.due) { width: min(1400px, 100%); }
+  #menu-avvio .corpo.due { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 0 20px; align-items: start; }
+}
 
 /* Tabelle della Carta del cronista: mercato e zaino (G1 passo 3) */
 .carta-cronista .tabella { clear: both; margin: 0 0 14px; }
