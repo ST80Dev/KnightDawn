@@ -532,8 +532,10 @@ ${ottaveGLSL(SUOLO.venature, 'venature')}
         float terra = smoothstep(0.62, 0.78, r1 * 0.6 + r2 * 0.4) * prato;
         cPrato = mix(cPrato, vec3(0.19, 0.125, 0.06) * (0.8 + 0.4 * r3), terra * 0.5);
         if (suoloV > 0.01) {
-          vec3 lett = mix(vec3(0.011, 0.0065, 0.003), vec3(0.06, 0.036, 0.016), smoothstep(0.3, 0.8, r2));
-          lett = mix(lett, vec3(0.003, 0.003, 0.002), smoothstep(0.55, 0.8, r3 * 0.5 + r2 * 0.5) * 0.85);
+          // Lettiera un po' meno cupa e con le chiazze chiare più marcate (richiesta dell'utente: nel bosco a Prima
+          // il suolo era una massa nera unica): chiaro da 0,06 a 0,085, chiazze scure da 0,003 a 0,006 e meno estese.
+          vec3 lett = mix(vec3(0.011, 0.0065, 0.003), vec3(0.085, 0.055, 0.026), smoothstep(0.3, 0.8, r2));
+          lett = mix(lett, vec3(0.006, 0.005, 0.003), smoothstep(0.55, 0.8, r3 * 0.5 + r2 * 0.5) * 0.7);
           lett = mix(lett, vec3(0.012, 0.03, 0.007), smoothstep(0.62, 0.8, r4) * 0.6);
           lett *= 0.6 + 0.8 * r3;
           cPrato = mix(cPrato, lett, vSuolo.x * 0.95 * prato * blocco);
