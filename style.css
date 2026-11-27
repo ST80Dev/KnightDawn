@@ -542,3 +542,9 @@ html, body {
 .carta-cronista .tabella button:disabled { background: #c9b48a; color: #efe2c2; border-color: #b09868; cursor: default; }
 .carta-cronista .tabella .vuota { font-style: italic; color: var(--kd-sbiadito); padding: 6px 4px; }
 .carta-cronista.larga { width: min(760px, calc(100vw - 32px)); }
+
+/* Carta in modalità di gioco (Storia): solo mappa e legenda, niente strumenti di sviluppo */
+#carta.gioco .barra > :not(.titolo):not(.intera):not(.centra):not(.info):not(.tasto) { display: none; }
+#carta.gioco .barra .titolo { font: 600 20px var(--kd-titolo); letter-spacing: .1em; color: var(--kd-oro-chiaro); }
+#carta.gioco .barra, #carta.gioco .piede { font-family: var(--kd-testo); font-size: 16px; }
+#carta.gioco .piede .dati { display: none; }

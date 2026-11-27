@@ -285,6 +285,13 @@ poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un
    in Libera si vede tutto. Provato in headless (seme 570549): 0,16 % del mondo noto all'inizio, cresce camminando,
    resta uguale dopo salvataggio e ripresa; Libera senza nebbia; nessun errore. Con G2: linea di vista dalle alture,
    notte e meteo, luoghi sentiti dire.
+   *Correzioni dopo la prova dell'utente:* oltre il confine del mondo minimappa e Carta non disegnano più il terreno
+   «a specchio» (in Storia una tinta più scura della nebbia, in Libera fondo scuro; una linea sul confine), così si
+   capisce la forma del mondo e dove si è. In Storia `M` apre la **Carta del mondo**: la stessa Carta della Libera in
+   modalità di gioco (`opzioni.conoscenza` di `cartaVista.js`): solo mappa, legenda, «Vista intera» e «Centra sul
+   cavaliere»; nebbia della conoscenza; luoghi, approdi, ponti, valichi e gruppi montuosi solo se conosciuti; sul
+   cursore solo bioma, quota arrotondata e luogo conosciuto («terre ignote» altrove); niente clic che sposta; il
+   gioco è fermo; `M` o `Esc` la chiudono. `N` resta la minimappa piccola/grande.
 2. **Carta del cronista vera.** Riquadro con titolo, testo, pulsanti tematici, prerequisiti visibili
    («Richiede…») ed esito; usa il motore di `js/events.js` così com'è. Effetto di tempo nuovo
    `{ type:'tempo', minuti:N }` accanto a `passi` (`Calendar.avanzaMinuti`); i costi della Veglia passano

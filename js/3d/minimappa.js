@@ -218,15 +218,15 @@ export function creaMinimappa(contenitore, opzioni) {
   function piede() {
     elPiede.textContent = !grande ? ''
       : (opzioni.prove?.() ?? true) ? 'clic: porta lì il cavaliere (prova) · rotella o +/−: zoom · N: riduci'
-        : 'rotella o +/−: zoom · N o M: riduci';
+        : 'rotella o +/−: zoom · N: riduci · M: Carta';
   }
   window.addEventListener('resize', () => { if (!el.hidden) adatta(); });
 
   // ─── Disegno ───
   function ridisegna() {
     const W = canvas.width, s = dpr / mpp();                 // pixel del dispositivo per metro
+    const c = cartaFatta, C = c.cella, Wm = c.cols * C, Hm = c.rows * C;
     const tx = W / 2 - pos.x * s, ty = W / 2 - pos.z * s;
-    const c = cartaFatta, C = c.cella;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#1a0e04';
     ctx.fillRect(0, 0, W, W);
@@ -267,6 +267,19 @@ export function creaMinimappa(contenitore, opzioni) {
       ctx.setTransform(s * k.CELLA, 0, 0, s * k.CELLA, tx, ty);
       ctx.drawImage(maschera, 0, 0);
       ctx.setTransform(s, 0, 0, s, tx, ty);
+    }
+    // Oltre il confine del mondo niente terreno «a specchio»: nebbia piena in Storia, fondo scuro in Libera,
+    // e una linea sul confine (richiesta dell'utente: capire la forma del mondo e dove si è).
+    {
+      const m = (lato * mpp()) * 1.5 + Math.max(Wm, Hm);
+      ctx.fillStyle = k ? 'rgb(122, 100, 66)' : '#1a0e04';   // più scuro della nebbia: si distingue dall'ignoto
+      ctx.beginPath();                                        // un solo tracciato pari-dispari: niente giunture
+      ctx.rect(-m, -m, Wm + 2 * m, Hm + 2 * m);
+      ctx.rect(0, 0, Wm, Hm);
+      ctx.fill('evenodd');
+      ctx.strokeStyle = k ? 'rgba(110, 76, 36, 0.8)' : 'rgba(216, 178, 90, 0.7)';
+      ctx.lineWidth = 1.5 * dpr / s;
+      ctx.strokeRect(0, 0, Wm, Hm);
     }
     const noto = (x, z) => !k || k.livello(x, z) >= 1;
     // Blocco disegnato in 3D (solo allargata: dentro, il clic sposta senza ricaricare).
@@ -374,6 +387,9 @@ export function creaMinimappa(contenitore, opzioni) {
   canvas.addEventListener('pointermove', (e) => {
     if (!grande || !pos || !cartaFatta) return;
     const p = nelMondo(e), dx = p.x - pos.x, dz = p.z - pos.z, d = Math.hypot(dx, dz);
+    if (p.x < 0 || p.z < 0 || p.x > cartaFatta.cols * cartaFatta.cella || p.z > cartaFatta.rows * cartaFatta.cella) {
+      elPiede.textContent = 'oltre il confine del mondo'; return;
+    }
     const k = opzioni.conoscenza?.();
     if (k && k.livello(p.x, p.z) < 1) { elPiede.textContent = 'terre ignote · rotella o +/−: zoom'; return; }
     const verso = PUNTI[Math.round(((Math.atan2(dx, -dz) * 180 / Math.PI + 360) % 360) / 45) % 8];

@@ -1305,7 +1305,7 @@ async function init() {
   };
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no · Spazio: scavalca'
-    + ` · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: Carta${inStoria() ? '' : ' (clic: vai lì) · T: avanza'}`
+    + ` · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: ${inStoria() ? 'Carta' : 'Carta (clic: vai lì) · T: avanza'}`
     + ' · N: minimappa grande · +/−: zoom minimappa · J: scrittoio · I: zaino'
     + ` · F2: qualità · F3: info · F8: menu · modalità ${inStoria() ? 'Storia' : 'Libera'}`,
   'aiuto');
@@ -1353,6 +1353,8 @@ const tasti = new Set();
 
 // Vista di sviluppo della Carta (M): mentre è aperta il gioco è fermo e la scena 3D non si disegna.
 const cartaVista = createCartaVista(document.body, {
+  // In Storia la Carta di gioco: nebbia della conoscenza, solo mappa e legenda (richiesta dell'utente).
+  conoscenza: () => (inStoria() && typeof Conoscenza !== 'undefined' && Conoscenza.attiva ? Conoscenza : null),
   onCambio: (aperta) => { tasti.clear(); minimappa?.nascondi(!!aperta); },
   cartaAttuale: () => carta,
   generaCarta: (seme, avanzamento) => generaCartaAsincrona(seme, { avanzamento, cache: !PARAMETRI.has('rigenera') }),
@@ -1517,8 +1519,10 @@ const premuto = (azione) => TASTI_MOVIMENTO[azione].some((k) => tasti.has(k));
 
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;      // si sta scrivendo (es. il seme della Carta)
-  // M: in Storia la minimappa grande (la Carta di gioco arriva con G2); in Libera la Carta di sviluppo.
-  if (e.code === 'KeyM' && !e.repeat) { if (inStoria() && !cartaVista.aperta) minimappa.alterna(); else cartaVista.alterna(); return; }
+  // M: la Carta. In Storia in modalità di gioco (nebbia della conoscenza, solo mappa e legenda, niente clic che
+  // sposta); in Libera la Carta di sviluppo. Mentre è aperta il gioco è fermo; M o Esc la chiudono.
+  if (e.code === 'KeyM' && !e.repeat) { if (!cronista) cartaVista.alterna(); return; }
+  if (cartaVista.aperta && e.code === 'Escape') { cartaVista.chiudi(); return; }
   if (cartaVista.aperta) return;
   if (cronista) {                                        // Carta del cronista aperta: scelte con 1–9, Esc o E per uscire
     if (e.repeat) return;
