@@ -525,3 +525,20 @@ html, body {
 #menu-avvio button, #menu-avvio input, #menu-avvio select { font-family: var(--kd-testo); font-size: 19px; border-radius: 0; }
 #menu-avvio .comincia { font: 600 24px var(--kd-titolo); letter-spacing: .12em; }
 #menu-avvio .nota { font: italic 17px/1.55 var(--kd-testo); color: #ab9970; }
+
+/* Tabelle della Carta del cronista: mercato e zaino (G1 passo 3) */
+.carta-cronista .tabella { clear: both; margin: 0 0 14px; }
+.carta-cronista .tabella .tt { font: 600 15px var(--kd-titolo); letter-spacing: .1em; color: var(--kd-rubrica);
+  border-bottom: 1px solid rgba(110, 70, 20, .55); padding-bottom: 3px; margin-bottom: 2px; }
+.carta-cronista .tabella .voce { display: grid; grid-template-columns: 1fr auto 110px; align-items: center; gap: 12px;
+  padding: 5px 4px; border-bottom: 1px dotted rgba(110, 70, 20, .45); }
+.carta-cronista .tabella .voce.spenta { color: var(--kd-sbiadito); }
+.carta-cronista .tabella .nome i { display: block; font-size: 14.5px; color: #5a3c1c; }
+.carta-cronista .tabella .voce.spenta .nome i { color: var(--kd-sbiadito); }
+.carta-cronista .tabella .prezzo { font: 600 14px var(--kd-titolo); letter-spacing: .04em; color: #4a2f14; white-space: nowrap; }
+.carta-cronista .tabella button { font: 600 14px var(--kd-titolo); letter-spacing: .06em; padding: 4px 8px; cursor: pointer;
+  color: #fff3cf; background: radial-gradient(circle at 35% 30%, #a3743a, #6e4a1c); border: 1px solid #4a2f10; }
+.carta-cronista .tabella button:hover { background: radial-gradient(circle at 35% 30%, #bb8a48, #7e5622); }
+.carta-cronista .tabella button:disabled { background: #c9b48a; color: #efe2c2; border-color: #b09868; cursor: default; }
+.carta-cronista .tabella .vuota { font-style: italic; color: var(--kd-sbiadito); padding: 6px 4px; }
+.carta-cronista.larga { width: min(760px, calc(100vw - 32px)); }

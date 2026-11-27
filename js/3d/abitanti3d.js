@@ -13,7 +13,7 @@ export const ABITANTI = {
   sosta: [2, 9],                           // s di sosta a fine tratto
   tratto: [6, 22],                         // punti della strada percorsi prima di fermarsi
   notte: 0.55,                             // buio oltre il quale restano fuori solo guardie e oste
-  popolani: { minore: 3, casata: 6, maggiore: 10 },
+  popolani: { minore: 3, casata: 6, maggiore: 10, citta: 14 },
   porta: { fuori: 1.2, lato: [1.8, 2.4] }, // m: chi lavora in un edificio sta accanto alla porta, non davanti
 };
 
@@ -68,6 +68,7 @@ export function creaPersonaSegnaposto({ ruolo, colori, seme = 1 }) {
     testa.translate(0, 1.5, 0);
     _geoSegnaposto = { corpo, testa };
     _matSegnaposto = new THREE.MeshLambertMaterial({ vertexColors: true });
+    _matSegnaposto.userData.condivisa = true;   // vive quanto la pagina: libera() in main.js non deve disporlo
   }
   const { corpo, testa } = _geoSegnaposto;
   const n0 = corpo.attributes.position.count, n1 = testa.attributes.position.count;

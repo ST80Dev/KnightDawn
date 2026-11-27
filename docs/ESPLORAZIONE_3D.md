@@ -1581,6 +1581,20 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
     fune e carrucola, abbeveratoio e pagliaio alla stalla; incudine su ceppo e mucchio di carbone dal fabbro; mazzi di
     erbe appesi dal guaritore; croce di ferro sul timpano di chiesa e cappella. Tutto con i materiali già in uso: i
     pezzi entrano negli stessi oggetti uniti, **nessuna chiamata di disegno in più**.
+13. **Città più grandi di ogni rocca** (richiesta dell'utente, nov. 2026: «ho visto città molto più piccole di rocche
+    con borghi grandi»). Fino a oggi «città» era solo `luogo.tipo`, messo da `siti.js` (M8) dopo che `luoghi.js` aveva
+    già fissato le misure: una città poteva essere una rocca minore. Ora in `luoghi.js` c'è la classe **`citta`** (rocca
+    96×86 m, raggio 32–45, borgo 180×270 contro 130×200 della sede maggiore) e `ripianificaLuogo(carta, luogo, classe)`,
+    che rifà i piani di un luogo con un'altra classe; `siti.js` la chiama su chi diventa città e, se il terreno non
+    regge il borgo più grande, **salta il candidato** e prova il successivo, così non escono città piccole
+    (`classiRocche` restituisce `cittaScartate`). La classe vecchia resta in `luogo.classeOrigine`, che servirà al
+    racconto delle casate. Nel 3D la classe `citta` ha mura più alte, 4 vicoli, fino a 110 case, piazza da 19 m con
+    loggia grande e chiesa, palazzo maggiore, giardino più grande, 14 popolani, 16 luci da lontano e il segno più
+    grande sulla Carta e sulla minimappa (senza queste voci la minimappa andava in errore a ogni fotogramma).
+    [Certo] Su 10 semi: città 2–4 per mondo, raggio dei piani 287–314 m contro 231–247 m di tutte le altre rocche,
+    `cittaScartate` 0, `verificaLuoghi` 10 su 10; il ricalcolo costa 35–54 ms l'uno, 0,36 s su tutta la generazione.
+    `VERSIONE_GENERATORE` `+citta-1+citta-2` (il primo è della PR di M8, il secondo questo): le Carte cambiano e i
+    mondi salvati si rigenerano. Restano a M8 il filtro di classe dei candidati e il tetto di quota a 1000 m.
 
 ### Accettazione
 
@@ -3289,6 +3303,54 @@ di saper sbarcare creerebbe il difetto che oggi non c'è.
 Vincoli: il traghetto non deve diventare la scorciatoia universale (una traversata è lenta e, in futuro, chiusa dal
 maltempo); la generazione resta dentro il budget di ~15 s, rimisurata sui semi 570549, 8899 e 42424.
 
+<<<<<<< HEAD
+## Rotte per mare e barcaiolo (novembre 2026) — deciso dall'utente, fatto, da provare
+
+> Dopo i traghetti di lago, una misura su **30 semi** ha mostrato che la premessa da cui eravamo partiti era
+> sbagliata: isole abitate senza alcun accesso **esistono**, in circa un seme su dieci. Erano tutte sul mare aperto,
+> mentre quelle su acqua chiusa i traghetti già le servivano. Decisioni dell'utente: «nessun luogo dove non si
+> sbarca», rotte per mare **subito**, e il **barcaiolo** per i posti che non meritano un porto.
+
+| seme | isola | sopra | acqua attorno | prima | ora |
+|---|---|---|---|---|---|
+| 6 | 181 km² | 1 rocca, 2 villaggi, 6 siti | mare aperto | nessun accesso | rotta ✓ |
+| 23 | 127 km² | 1 rocca, 2 siti | mare aperto | nessun accesso | rotta ✓ |
+| 999 | 3 km² | 1 rocca | mare aperto | nessun accesso | rotta ✓ |
+| 19 | 52 km² | 1 rocca, 3 siti | laguna | traghetto ✓ | traghetto ✓ |
+| 17 | 1 km² | 1 villaggio | laguna | traghetto ✓ | traghetto ✓ |
+
+**Le tre tratte stanno tutte in `carta.traghetti`**, distinte da `tipo`:
+- `'traghetto'` — specchi d'acqua chiusi (laghi e lagune), come prima;
+- `'mare'` — porti costieri. Il mare che tocca il bordo prosegue oltre la mappa (`docs/GDD.md` §3), quindi le celle
+  di bordo sono collegate fra loro lungo il perimetro esterno e due tratti di costa separati restano raggiungibili.
+  **Misurato: in tutti i semi provati ogni mare tocca il bordo, e di mari interni non ce n'è nessuno.**
+  Due obblighi e una comodità: ogni pezzo di terra con una rocca o un villaggio va collegato (a qualunque distanza);
+  le altre rotte nascono solo se fanno risparmiare strada, al più cinque per mondo;
+- `'barcaiolo'` — una barca a noleggio dal villaggio di riva più vicino verso un'isola di **soli siti speciali**
+  (rovine, grotte, accampamenti): nessun molo, nessun orario, al più 14 km.
+
+**Una trappola trovata provando**: un villaggio su un isolotto diventava il capolinea di **diciannove** traghetti,
+perché ogni coppia di approdi che lo tocca conta come «unico accesso». Ora fra due rive separate si tiene **una sola**
+tratta, la più corta: quel seme è passato da 31 tratte a 13.
+
+**La regola è sorvegliata, non concordata.** `verificaAccessi` (verifica.js) gira a ogni generazione, come le
+verifiche su fiumi e luoghi: controlla che ogni pezzo di terra separato con una rocca, un villaggio o anche solo una
+rovina sia toccato da una tratta. **Su 30 semi: zero luoghi irraggiungibili.** Così nessuno deve rimuovere luoghi a
+posteriori, e se un domani ne nascono in posti nuovi la verifica lo dice subito invece di lasciare un castello
+irraggiungibile in una partita.
+
+Il barcaiolo ha richiesto due correzioni, trovate misurando: conta la **traversata** da riva a riva (al più 14 km),
+non quanto dista il villaggio — nessuno rema 18 km, ma un pescatore attraversa un braccio di mare di tre; e la riva
+di partenza e il villaggio che noleggia si scelgono **insieme**, perché scegliendo prima la riva più vicina e poi chi
+noleggia, un'isola restava scoperta se quella riva non aveva villaggi.
+
+Misure su 10 semi: **83 tratte** (40 traghetti, 40 rotte di mare, 3 barcaioli), **14 ms** per mondo, nessuna rotta
+fuori dall'acqua giusta e nessun approdo che non sia su terra. `VERSIONE_GENERATORE` `+mare-rotte-1`.
+
+**Resta da fare, non mio**: il viaggio vero (costi in tempo e denaro, comando «imbarcati») è della sessione di gioco,
+in G2; la regola «niente luoghi dove nessuna rotta arriva» è di M8 in `siti.js`, e va scritta **dopo** queste rotte,
+non prima, o vieterebbe isole che ora sono raggiungibili.
+=======
 ## Città: quali rocche lo diventano (novembre 2026) — fatto, misurato, da provare
 
 > Richiesta dell'utente a M7: «le città siano più grandi delle rocche normali». La taglia è lavoro di M7 (classe
@@ -3335,6 +3397,53 @@ branch): se il terreno non regge il borgo più largo, il candidato viene saltato
 classe e il tetto stanno **sopra** quella riga. Da rimisurare quando le due parti si uniscono: i tre filtri si
 moltiplicano (classe × terreno che regge × distanza di 30 km) e il numero di città potrebbe calare — è il caso che il
 ripiego non copre, perché il salto di M7 non dipende dalla quota.
+>>>>>>> origin/main
+
+## Mulino ad acqua (novembre 2026) — fatto, misurato, da provare
+
+Il mulino aveva il simbolo sulla Carta e **niente a terra**: 33–50 luoghi per mondo invisibili nelle Scene. Due parti.
+
+### Dove sta il mulino (`js/mondo/siti.js`)
+
+Il vincolo era `distanzaAcqua(..., dolce)` ≤ 140 m, misurato su una mappa a 125 m che conta anche i laghi. Misurato
+su 178 mulini (4 semi): **4 stavano su un lago** senza nessun corso d'acqua entro 150 m, e il più lontano aveva la
+ruota a 145 m dall'acqua corrente. Ora c'è anche `SITI.mulinoCorso = 60` m, misurato sulle polilinee di `carta.fiumi`
+con una griglia a 200 m costruita una volta; `verificaSiti` misura sulla stessa cosa, non più sulla mappa grossolana.
+
+| | prima | dopo |
+|---|---|---|
+| mulini per mondo | 33–50 | 33–50 (invariati: il vincolo li sposta, non li toglie) |
+| distanza mediana dal corso d'acqua | 41 m | 35 m |
+| 90° percentile | 96 m | 52 m |
+| massima | 145 m | 60 m |
+| mulini di solo lago | 4 | 0 |
+
+### Com'è fatto (`js/3d/villaggio3d.js`, `createMulinoAPezzi`)
+
+- **Il corpo si accosta al corso d'acqua**, non sta sul punto del sito (che è a 35 m mediani): un mulino con la ruota
+  a trenta metri dall'acqua non è un mulino. La riva è la più alta delle due, perché l'altra è il greto; se il terreno
+  è sotto il pelo dell'acqua, il corpo arretra finché non sta all'asciutto.
+- **Ruota a spinta dal basso, dentro la corrente** (immersa 45 cm), retta da un castello di travi sul fondo, e
+  **sbarramento di pietre** di traverso al corso poco a valle, che alza l'acqua sulle pale. Scelta dell'utente, ed è il
+  mulino classico sul torrente. *Prima tentativo con ruota per di sopra e gora*: scartato dall'utente. Il motivo per cui
+  l'avevo provata resta vero e vale la pena saperlo: sui torrenti del mondo generato **l'alveo è inciso 0,6 m** e largo
+  6, quindi il pelo dell'acqua è quasi a filo di terra e **l'acqua quasi non si vede**. Non è un difetto del mulino: è
+  l'incisione dell'alveo, cioè terreno della sessione del generatore.
+- **L'asse della ruota è la normale alla riva**, così il piano della ruota contiene la corrente (la ruota sta per il
+  lungo nel corso d'acqua). Un `+90°` di troppo l'aveva messa di traverso: trovato dall'utente guardando l'immagine.
+- **La ruota gira dentro `aggiornaLuci`**, l'unico aggancio per fotogramma che i villaggi hanno. Nome improprio,
+  commentato come tale; concordato con M7 che quando servirà un `aggiorna(dt, t)` vero nel kit (insegne al vento, fumo)
+  la ruota ci si sposta.
+- `EDIFICI` non ha la voce `mulino` e `edifici3d.js` è di M7: le misure si passano per intero a `kit.edificio`. M7 ha
+  accettato di dichiarare legittimo nel kit un tipo fuori da `EDIFICI` quando arrivano `misure` complete.
+- I colori di legno e pietra sono copiati da `edifici3d.js` (`COL` non è esportato): la copia sparisce quando M7
+  esporterà `COL`, senza accoppiare le due PR.
+
+**Costo**: 12 chiamate e ~1.400 triangoli per mulino (un villaggio ne usa 14). Mai due mulini nello stesso blocco di
+2 km. Provato nel browser sul seme 570549 (mulino a 86.033, 4.967): nessun errore in console.
+
+**Resta da fare**: gente al mulino (il mugnaio), e i sacchi di farina. Il forno e gli orti dei villaggi restano fuori
+dal passo, come già scritto.
 
 ## Fuori dal prototipo (non farlo ora)
 

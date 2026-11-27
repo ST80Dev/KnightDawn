@@ -29,6 +29,10 @@ export const CLASSI_BORGO = {
     case: 30, edifici: ['stalla', 'taverna', 'fabbro', 'guaritore'], piazza: 11, loggia: 'loggia', banchi: 4, torriCasa: 0.15 },
   maggiore: { altezza: 8, spessore: 1.8, torre: 5.6, passoTorri: 38, vicoli: 3,
     case: 60, edifici: ['stalla', 'taverna', 'fabbro', 'guaritore'], piazza: 15, loggia: 'loggiaGrande', chiesa: true, banchi: 7, torriCasa: 0.25 },
+  // Città (richiesta dell'utente, nov. 2026): il borgo è una volta e mezzo quello della sede maggiore, quindi mura più
+  // alte, più vicoli, più case, piazza grande con la loggia e i banchi, chiesa, e più case-torre.
+  citta:    { altezza: 9, spessore: 2, torre: 6.2, passoTorri: 40, vicoli: 4,
+    case: 110, edifici: ['stalla', 'taverna', 'fabbro', 'guaritore'], piazza: 19, loggia: 'loggiaGrande', chiesa: true, banchi: 10, torriCasa: 0.32 },
 };
 // Case e edifici (passo 5, edifici3d.js): `case` al più per classe (8–14, 20–30, 40–60: dove c'è posto), edifici
 // nominati lungo la via principale dalla porta, piazza del mercato (raggio m) a metà della via con banchi e loggia,

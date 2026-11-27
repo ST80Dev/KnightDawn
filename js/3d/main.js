@@ -20,7 +20,7 @@ import { createCastle } from './castle3d.js';
 import { createRoccaAPezzi } from './rocca3d.js';
 import { creaCaseCampagna, quotaFinestre } from './edifici3d.js';
 import { createBorgoAPezzi } from './borgo3d.js';
-import { createVillaggioAPezzi, createMonasteroAPezzi, createEremoAPezzi, pianoDelSito } from './villaggio3d.js';
+import { createVillaggioAPezzi, createMonasteroAPezzi, createEremoAPezzi, createMulinoAPezzi, pianoDelSito } from './villaggio3d.js';
 import { createRovinaAPezzi, createMisteroAPezzi } from './rovine3d.js';
 import { raggioSito, climaDelLuogo } from '../mondo/siti.js';
 import { createCartaVista } from './cartaVista.js';
@@ -324,6 +324,7 @@ function nuovaPartitaDati(m, nome) {
     Knight.promuovi('errante');
     Object.assign(Knight.equip, { arma: 'Spada da arme', armatura: 'Cotta di maglia', scudo: 'Scudo di legno' });
     Knight.oro = 60;
+    Knight.zaino = ['Pane e formaggio', 'Pane e formaggio', 'Carne secca e mele', 'Bende di lino'];
     Knight.addestramento = 3;
     Calendar.fineVeglia();
     // Knight.cavallo resta null finché la milestone Cavallo non corregge isMounted (oggi conterebbe anche a piedi):
@@ -387,7 +388,9 @@ function riposa() {
   if (sera) {
     const passi = Calendar.avanzaFinoA(0);
     Knight.riposaPassi(passi);
-    messaggio(`Dormi all'addiaccio fino a Prima (${_ore(passi)})${_guadagno(prima)}`);
+    const p = controllaGiornata();
+    if (p.digiuno) Knight.forza.cur = prima;               // a stomaco vuoto il sonno non ristora
+    messaggio(`Dormi all'addiaccio fino a Prima (${_ore(passi)})${_guadagno(prima)}${p.testi.length ? ' ' + p.testi.join(' ') : ''}`);
   } else {
     if (Knight.forza.cur >= Knight.forza.max) {
       messaggio('Sei riposato: la Forza è piena.');
@@ -514,7 +517,119 @@ function dormiNelBorgo({ dove, forza = 0, salute = 0 }) {
   Knight.forza.cur = Math.min(Knight.forza.max, Knight.forza.cur + forza);
   Knight.salute.cur = Math.min(Knight.salute.max, Knight.salute.cur + salute);
   if (typeof Events !== 'undefined') Events.tickDeadlines();
-  return `Dormi ${dove} fino a Prima (${_ore(passi)})${_guadagno(prima)}`;
+  const p = controllaGiornata();
+  if (p.digiuno) Knight.forza.cur = prima;                 // a stomaco vuoto il sonno non ristora
+  return `Dormi ${dove} fino a Prima (${_ore(passi)})${_guadagno(prima)}${p.testi.length ? ' ' + p.testi.join(' ') : ''}`;
+}
+
+// ─── Pasti, mercato e zaino (G1 passo 3) ─────────────────────────────────
+// Un pasto al giorno (docs/GDD.md §2 «Pasti e zaino»): il giorno comincia a Prima. Per ogni giorno finito senza
+// pasto il cavaliere mangia da sé dallo zaino; se non ha nulla salta il pasto (−3 Salute) e il sonno non ristora.
+// Solo in Storia. Logica in Knight (js/knight.js), prezzi e botteghe in Items (js/data/items.js).
+const giornoDiGioco = () => Math.floor((Calendar.passiTotali + Calendar.frazione) / CALENDAR.PASSI_PER_GIORNO);
+function controllaGiornata() {
+  const oggi = giornoDiGioco();
+  if (!inStoria()) { Knight.giornoControllato = oggi; return { testi: [], digiuno: false }; }
+  return Knight.controllaPasti(oggi);
+}
+/** Il pasto del giorno mangiato sul posto (taverna): `forza` in più. */
+function mangiaSulPosto(forza = 0) {
+  Knight.ultimoPasto = Math.max(Knight.ultimoPasto, giornoDiGioco());
+  Knight.forza.cur = Math.min(Knight.forza.max, Knight.forza.cur + forza);
+  return forza ? `Il pasto del giorno è fatto (Forza +${forza}).` : 'Il pasto del giorno è fatto.';
+}
+const MINUTI_AFFARE = 15;                  // ogni acquisto o vendita: un po' di contrattazione (GDD §3)
+/** Il cavallo 3D segue Knight.cavallo in Storia (comprato: compare accanto; venduto: se ne va). */
+function aggiornaCavallo3D() {
+  if (!knight) return;
+  if (Knight.cavallo && !cavallo) {
+    cavallo = createCavallo(suolo, ostacoli);
+    scene.add(cavallo.object);
+    cavallo.posizionaAccanto(knight.stato);
+    if (!ostacoli.includes(cavallo)) ostacoli.push(cavallo);
+  } else if (!Knight.cavallo && cavallo && inStoria()) {
+    scene.remove(cavallo.object);
+    libera(cavallo.object);
+    const i = ostacoli.indexOf(cavallo);
+    if (i >= 0) ostacoli.splice(i, 1);
+    cavallo = null;
+  }
+}
+
+/** Bottega di un edificio (Items.NEGOZI[tipo]): compra e vendi in tabella. `indietro`: torna all'evento. */
+function mostraMercato(tipo, indietro, righe = []) {
+  const N = Items.NEGOZI[tipo] ?? Items.NEGOZI.loggia;
+  const affare = (r) => {
+    if (r.ok) { Calendar.avanzaMinuti(MINUTI_AFFARE); aggiornaCavallo3D(); salvaOra(); }
+    mostraMercato(tipo, indietro, [r.testo]);
+  };
+  const compra = [], vendi = [];
+  if (N.vende.includes('cavalli')) {
+    const permuta = Knight.cavallo ? Items.mountResale(Knight.cavallo.id) : 0;
+    for (const m of Items.mountList()) {
+      const tuo = Knight.cavallo?.id === m.id, ok = !tuo && Knight.oro + permuta >= m.prezzo;
+      compra.push({ nome: m.nome, info: `viaggio ${m.vigoreMax} · battaglia ${m.possa}${tuo ? ' · è il tuo' : ''}`, prezzo: `${m.prezzo} oro`,
+        azione: Knight.cavallo ? 'Permuta' : 'Compra', disponibile: ok, etichetta: tuo ? 'Lo hai già' : `Servono ${m.prezzo} oro`,
+        scegli: () => affare(Knight.compraCavallo(m.id)) });
+    }
+    if (Knight.cavallo) vendi.push({ nome: Knight.cavallo.nome, prezzo: `+${Items.mountResale(Knight.cavallo.id)} oro`, azione: 'Vendi',
+      scegli: () => affare(Knight.vendiCavallo()) });
+  }
+  for (const it of Items.inVendita(N.vende)) {
+    const zaino = it.slot === 'provviste', vecchio = zaino ? null : Knight.equip[it.slot];
+    const permuta = vecchio ? Items.rivendita(vecchio) : 0;
+    const pieno = zaino && Knight.zaino.length >= Items.ZAINO_POSTI, tuo = vecchio === it.nome;
+    const info = zaino ? (it.pasto ? `pasto${it.forza ? `, Forza +${it.forza}` : ''}` : it.salute ? `cura, Salute +${it.salute}` : 'provvista')
+      : `${it.slot}${vecchio && !tuo ? ` · al posto di ${vecchio}` : ''}${tuo ? ' · lo porti già' : ''}`;
+    compra.push({ nome: it.nome, info, prezzo: `${it.prezzo} oro`, azione: vecchio && !tuo ? 'Permuta' : 'Compra',
+      disponibile: !tuo && !pieno && Knight.oro + permuta >= it.prezzo,
+      etichetta: tuo ? 'Lo porti già' : pieno ? 'Zaino pieno' : `Servono ${it.prezzo} oro`,
+      scegli: () => affare(Knight.compra(it.nome)) });
+  }
+  for (const slot of Items.SLOT_ORDER) {
+    const nome = Knight.equip[slot];
+    if (nome && N.vende.includes(slot) && Items.catalog[nome]) {
+      vendi.push({ nome, info: slot, prezzo: `+${Items.rivendita(nome)} oro`, azione: 'Vendi', scegli: () => affare(Knight.vendi(slot)) });
+    }
+  }
+  if (N.vende.includes('provviste')) {
+    Knight.zaino.forEach((nome, i) => {
+      if (Items.catalog[nome]) vendi.push({ nome, info: 'nello zaino', prezzo: `+${Items.rivendita(nome)} oro`, azione: 'Vendi', scegli: () => affare(Knight.vendi('zaino', i)) });
+    });
+  }
+  cartaCronista.mostra({
+    titolo: N.nome,
+    nota: `${Calendar.oraCanonica()} · ${Knight.oro} oro · zaino ${Knight.zaino.length}/${Items.ZAINO_POSTI}`,
+    righe,
+    tabelle: [{ titolo: 'In vendita', righe: compra }, { titolo: 'Puoi vendere', vuota: 'Niente che qui si compri.', righe: vendi }],
+    opzioni: [{ testo: 'Indietro', scegli: indietro }, ESCI],
+  });
+}
+
+/** Zaino (I): ciò che indossi e ciò che porti; i pasti si mangiano, le bende si usano. */
+function mostraZaino(righe = []) {
+  const oggi = giornoDiGioco();
+  const indossi = Items.SLOT_ORDER.filter((s) => Knight.equip[s]).map((s) => ({ nome: Knight.equip[s], info: s }));
+  if (Knight.cavallo) indossi.push({ nome: Knight.cavallo.nome, info: `cavallo · viaggio ${Knight.cavallo.vigoreMax}` });
+  const porti = Knight.zaino.map((nome, i) => {
+    const it = Items.catalog[nome] ?? {};
+    const azione = it.pasto ? 'Mangia' : it.salute || it.forza ? 'Usa' : null;
+    return { nome, info: it.pasto ? `pasto${it.forza ? `, Forza +${it.forza}` : ''}` : it.salute ? `Salute +${it.salute}` : '',
+      azione, disponibile: !(it.salute && !it.pasto && Knight.salute.cur >= Knight.salute.max), etichetta: 'Non sei ferito',
+      scegli: () => {
+        const r = Knight.usa(i, giornoDiGioco());
+        if (r.ok) { Calendar.avanzaMinuti(it.pasto ? 20 : 10); salvaOra(); }
+        mostraZaino([r.testo]);
+      } };
+  });
+  cartaCronista.mostra({
+    titolo: 'Zaino',
+    nota: `${Knight.oro} oro · ${Knight.ultimoPasto >= oggi ? 'oggi hai mangiato' : 'oggi non hai ancora mangiato'}`,
+    righe,
+    tabelle: [{ titolo: 'Addosso', vuota: 'Niente: solo i panni del garzone.', righe: indossi },
+      { titolo: `Nello zaino · ${Knight.zaino.length}/${Items.ZAINO_POSTI}`, vuota: 'Vuoto.', righe: porti }],
+    opzioni: [{ testo: 'Chiudi', scegli: () => cartaCronista.chiudi() }],
+  });
 }
 /** Una notizia diventa un foglio nello scrittoio (J), con l'avviso d'arrivo. */
 function annotaNotizia(doc) {
@@ -523,7 +638,7 @@ function annotaNotizia(doc) {
   News.emit({ tipo: d.tipo === 'voce' ? 'rumor' : 'evento', tag: d.tag || d.tipo, testo: d.testo, doc: d }, true);
   avvisoFoglio(d, d.tipo === 'voce' ? 'Una voce annotata nello scrittoio' : d.tipo === 'bando' ? 'Un bando è stato affisso' : 'Una lettera giunge da lontano');
 }
-const contestoEventi = () => ({ casata: nomeCasata(), dormi: dormiNelBorgo, notizia: annotaNotizia });
+const contestoEventi = () => ({ casata: nomeCasata(), dormi: dormiNelBorgo, notizia: annotaNotizia, mangia: mangiaSulPosto });
 
 // Scrittoio (J): i fogli delle notizie che il cavaliere ha ricevuto, dal più recente. Mentre è aperto il gioco è fermo.
 const scrittoio = creaScrittoio({
@@ -553,7 +668,7 @@ function mostraEvento(ev, luogo) {
     testo: typeof ev.text === 'function' ? ev.text(ctx) : ev.text,
     nota: `${Calendar.oraCanonica()} · ${Knight.oro} oro · Forza ${Math.ceil(Knight.forza.cur)}`,
     opzioni: ev.options.map((o) => ({
-      testo: o.text, etichetta: o.prereqLabel,
+      testo: o.text, etichetta: typeof o.prereqLabel === 'function' ? o.prereqLabel(ctx) : o.prereqLabel,
       disponibile: !o.prereq || !!o.prereq(ctx),
       scegli: () => scegliOpzione(ev, o, luogo),
     })),
@@ -561,6 +676,11 @@ function mostraEvento(ev, luogo) {
 }
 
 function scegliOpzione(ev, o, luogo) {
+  if (o.apre === 'mercato') {
+    const tipo = ev.id === 'veglia.stalla' ? 'stalla' : ev.id === 'veglia.taverna' ? 'taverna' : edificioAperto;
+    mostraMercato(tipo, () => mostraEvento(ev, luogo));
+    return;
+  }
   if (!o.effects?.length && !o.reply) { cartaCronista.chiudi(); return; }
   const righe = Events.applyEffects(o.effects, contestoEventi());
   Events.markSeen(ev);
@@ -570,7 +690,9 @@ function scegliOpzione(ev, o, luogo) {
   cartaCronista.mostra({ titolo: ev.title, testo: o.reply ?? '', righe, opzioni: [...ancora, ESCI] });
 }
 
+let edificioAperto = null;                 // tipo dell'edificio della carta aperta (per la bottega)
 function apriCronista(e, luogo = null) {
+  edificioAperto = e.tipo ?? null;
   const ev = eventoDellaPorta(e, luogo);
   if (ev) { mostraEvento(ev, luogo); return; }
   const nota = Calendar.inVeglia && e.porta
@@ -637,9 +759,12 @@ function contaPercorso() {
 
 function libera(oggetto) {
   oggetto.traverse((o) => {
-    // Modelli della vegetazione condivisi tra i blocchi (userData.condivisa): li usa già il blocco nuovo.
+    // Geometrie e materiali condivisi tra i blocchi (userData.condivisa): li usa già il blocco nuovo. Disporli
+    // qui non libera niente (restano referenziati) e costringe a ricompilare lo shader al cambio di blocco.
     if (!o.geometry?.userData.condivisa) o.geometry?.dispose();
-    for (const m of Array.isArray(o.material) ? o.material : o.material ? [o.material] : []) m.dispose();
+    for (const m of Array.isArray(o.material) ? o.material : o.material ? [o.material] : []) {
+      if (!m.userData.condivisa) m.dispose();
+    }
   });
 }
 
@@ -692,12 +817,13 @@ function* costruisciVillaggi(cx, cz, ter) {
   };
   for (const s of carta?.siti ?? []) {
     const eremo = s.tipo === 'eremo', rovina = s.tipo === 'rovina' || s.tipo === 'abbandonato';
-    const mistero = s.tipo === 'grotta' || s.tipo === 'fantastico';
-    if (s.tipo !== 'villaggio' && s.tipo !== 'ovile' && !eremo && !rovina && !mistero) continue;
+    const mistero = s.tipo === 'grotta' || s.tipo === 'fantastico', mulino = s.tipo === 'mulino';
+    if (s.tipo !== 'villaggio' && s.tipo !== 'ovile' && !eremo && !rovina && !mistero && !mulino) continue;
     const x = s.x - cx, z = s.z - cz, m = raggioSito(s) + 50;
     if (Math.abs(x) > half + m || Math.abs(z) > half + m) continue;
     if (mistero) out.push(yield* createMisteroAPezzi(suoloMondo, s, x, z, carta));        // M8, passo 5
     else if (rovina) out.push(yield* createRovinaAPezzi(suoloMondo, s, x, z, carta));     // M8, passo 4
+    else if (mulino) out.push(yield* createMulinoAPezzi(suoloMondo, s, x, z, carta));     // M8: mulino ad acqua
     else out.push(eremo ? yield* createEremoAPezzi(suoloMondo, s, x, z, carta)
       : yield* createVillaggioAPezzi(suoloMondo, s, x, z, carta, cx, cz));
   }
@@ -761,6 +887,7 @@ function* preparaMondo(desc) {
     copertura: coperturaMondo(carta, Calendar.stagione), seme: carta.seme, carta,
     piani: [...(carta.luoghi || []).flatMap((l) => l.piani || []),
       ...(carta.siti || []).filter((s) => s.tipo === 'villaggio' || s.tipo === 'ovile' || s.tipo === 'eremo').map((s) => pianoDelSito(s)),
+      ...(carta.siti || []).filter((s) => s.tipo === 'mulino').map((s) => pianoDelSito(s, 0.5)),
       // Rovine e abbandonati: cerchio più stretto, gli alberi stanno fuori dai muri ma il bosco se li riprende.
       ...(carta.siti || []).filter((s) => s.tipo === 'rovina' || s.tipo === 'abbandonato').map((s) => pianoDelSito(s, 0.45)),
       // Grotte e luoghi del fantastico: cerchio ancora più stretto, stanno dentro il paesaggio che li circonda.
@@ -956,7 +1083,7 @@ function posizionaCavaliere(x, z, direzione) {
   _prec.x = knight.stato.x; _prec.y = knight.stato.y; _prec.z = knight.stato.z;   // niente fatica per il salto
   // Cavallo accanto al cavaliere; è anche un ostacolo per lui (la lista si rifà a ogni Scena). In Storia il garzone
   // parte a piedi: il cavallo arriva comprandolo (G1, passo 3).
-  if (!cavallo && (!inStoria() || Knight.cavallo)) {
+  if (!cavallo && (!inStoria() || Knight.cavallo)) {   // in Storia solo se comprato (aggiornaCavallo3D)
     cavallo = createCavallo(suolo, ostacoli);
     scene.add(cavallo.object);
   }
@@ -970,7 +1097,7 @@ function posizionaCavaliere(x, z, direzione) {
   }
 }
 
-const NOMI_CLASSI = { minore: 'rocca minore', casata: 'castello di casata', maggiore: 'sede maggiore' };
+const NOMI_CLASSI = { minore: 'rocca minore', casata: 'castello di casata', maggiore: 'sede maggiore', citta: 'città' };
 const PARTENZA_DAL_SITO = 170;   // m dalla rocca verso il borgo, se il sito non ha ancora la porta (Carte di prima)
 const FUORI_DALLA_PORTA = 35;    // m fuori dalla porta del borgo (M7, passo 2: fine del terrapieno del borgo)
 
@@ -1188,7 +1315,7 @@ async function init() {
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no · Spazio: scavalca'
     + ` · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: Carta${inStoria() ? '' : ' (clic: vai lì) · T: avanza'}`
-    + ' · N: minimappa grande · +/−: zoom minimappa · J: scrittoio'
+    + ' · N: minimappa grande · +/−: zoom minimappa · J: scrittoio · I: zaino'
     + ` · F2: qualità · F3: info · F8: menu · modalità ${inStoria() ? 'Storia' : 'Libera'}`,
   'aiuto');
 }
@@ -1311,6 +1438,15 @@ function rivelaInizio() {
   }
 }
 
+let _tPasti = 0;
+/** Ogni ~2 s: se è cominciato un giorno nuovo, il pasto di quello finito (vedi controllaGiornata). */
+function aggiornaPasti(dt) {
+  if (!knight || cronista || (_tPasti += dt) < 2) return;
+  _tPasti = 0;
+  const p = controllaGiornata();
+  if (p.testi.length) messaggio(p.testi.join(' '));
+}
+
 let _tConoscenza = 0;
 const _ultimaRivelazione = { x: NaN, z: NaN };
 /** Ogni ~0,5 s, se il cavaliere si è spostato: percorso attorno e intravisto più in là (di notte poco). */
@@ -1400,6 +1536,7 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (e.code === 'KeyJ' && !e.repeat && knight) { scrittoio.apri(); return; }
+  if (e.code === 'KeyI' && !e.repeat && knight) { mostraZaino(); return; }
   if (e.code === PORTA.tasto && !e.repeat) {
     const azione = AZIONI_TASTO.find((a) => a.pronta());
     if (azione) { azione.esegui(); return; }
@@ -1924,6 +2061,7 @@ function frame(now) {
     tt = segna('interfaccia', tt);
     minimappa.nascondi(!!percorso);        // percorso di prova: misure confrontabili con quelle di prima
     aggiornaConoscenza(dtReale);
+    aggiornaPasti(dtReale);
     minimappa.aggiorna(now);
     tt = segna('minimappa', tt);
     if (percorso) {
