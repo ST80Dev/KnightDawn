@@ -276,6 +276,18 @@ function innesta(shader) {
       transformed.y += abs(kdS) * 0.035 * iMoto.y;`);                           // il corpo sale e scende col passo
 }
 
+// Un solo materiale per tutta la partita: `userData.condivisa` dice a `libera()` di non cancellarlo al cambio di
+// blocco (senza, lo shader si ricompilerebbe proprio mentre si cambia blocco).
+let _materiale = null;
+function materialePersone() {
+  if (!_materiale) {
+    _materiale = new THREE.MeshLambertMaterial({ vertexColors: true });
+    _materiale.onBeforeCompile = innesta;
+    _materiale.userData.condivisa = true;
+  }
+  return _materiale;
+}
+
 // ─── Fabbrica ──────────────────────────────────────────────────────────────────────────────────────────────
 
 function generatore(seme) {
@@ -284,8 +296,9 @@ function generatore(seme) {
 }
 
 /**
- * Fabbrica delle persone di una Scena. Geometria e materiale si creano una volta per Scena (li libera
- * `libera()` di main.js insieme a `abitanti.object`).
+ * Fabbrica delle persone di una Scena. La geometria si rifà per Scena, perché porta gli attributi di istanza
+ * (tante quante le persone del blocco), e `libera()` di main.js la pulisce insieme a `abitanti.object`; il
+ * materiale è uno solo per tutta la partita (`userData.condivisa`).
  * @returns {{ creaPersona:Function, finisci:() => THREE.Object3D|null }}
  */
 export function creaPersone() {
@@ -360,10 +373,7 @@ export function creaPersone() {
     geo.setAttribute('iCapelli', cap);
     geo.setAttribute('iMoto', moto);
 
-    const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
-    mat.onBeforeCompile = innesta;
-
-    const mesh = new THREE.InstancedMesh(geo, mat, n);
+    const mesh = new THREE.InstancedMesh(geo, materialePersone(), n);
     mesh.name = 'persone';
     mesh.frustumCulled = false;     // le istanze stanno sparse per il blocco: la selezione la fa `visible`
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);

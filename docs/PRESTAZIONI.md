@@ -134,8 +134,11 @@ Nel codice di oggi [Probabile, da confermare con le misure del passo 1]:
      (`onBeforeCompile`: per vertice il verso dell'oscillazione e la quota dello snodo, per istanza fase e
      ampiezza del passo), i colori di veste, pelle e capelli e la capigliatura sono attributi di istanza, la
      corporatura sta nella matrice di istanza. 892 triangoli a persona (14.272 per 16, **+1,9 %** dei triangoli
-     di scena nel borgo), 1 geometria e 1 materiale, rifatti una volta per Scena (`libera()` li pulisce col
-     resto di `abitanti.object`). Ripiego per il confronto: `?persone=capsule` (il segnaposto di `abitanti3d.js`,
+     di scena nel borgo). La geometria si rifà per Scena, perché porta gli attributi di istanza, e `libera()` la
+     pulisce col resto di `abitanti.object`; il **materiale è uno solo per tutta la partita**
+     (`userData.condivisa`, PR #231), così il cambio di blocco non ricompila lo shader. Verificato in headless:
+     dopo un cambio di blocco geometria nuova, stesso materiale, zero `dispose`, 16 persone prima e dopo.
+     Ripiego per il confronto: `?persone=capsule` (il segnaposto di `abitanti3d.js`,
      una chiamata a persona). Il tetto di 8 oggetti a persona resta la regola per chi non può usare le istanze.
      Misura headless (borgo del seme 570549, `&centro=97042,80681`, 16 persone in campo): chiamate del
      fotogramma 170 senza persone → **171 con**, triangoli 565.661 → 579.933. I millisecondi in headless non
