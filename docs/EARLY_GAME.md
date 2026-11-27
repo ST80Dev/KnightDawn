@@ -321,6 +321,23 @@ poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un
    50 %), equipaggiamento indossato; **zaino** con pochi posti e **pasti** (uno al giorno, `docs/GDD.md` §2
    «Pasti e zaino»); il ronzino comprato compare accanto al cavaliere (milestone Cavallo,
    `docs/ESPLORAZIONE_3D.md`). In Storia si parte a piedi, in Libera con il cavallo.
+   **Stato: fatto, da provare dall'utente.** Botteghe nelle porte del borgo di partenza (`Items.NEGOZI`): fabbro
+   (armi, scudi), armeria (armi, armature, scudi), loggia del mercato (provviste, cose da viaggio), oste (provviste),
+   stalliere (cavalli, «Comprare o vendere un cavallo» nella stalla). Riquadro a tabella nella Carta del cronista:
+   «In vendita» e «Puoi vendere», con prezzo e pulsante; comprare ciò che va indossato **permuta** quello che c'era
+   (rivendita al 50 %), le provviste vanno nello zaino; ogni affare costa 15 minuti. **Zaino** (`I`): ciò che si porta
+   addosso e fino a 8 provviste (pane e formaggio 1 oro, carne secca e mele 2 oro e Forza +8, bende di lino 2 oro e
+   Salute +15); «Mangia» e «Usa». **Pasti**: il giorno comincia a Prima; per ogni giorno finito senza pasto il cavaliere
+   mangia da sé dallo zaino, altrimenti Salute −3 e il sonno di quella notte non ridà Forza (solo in Storia). In
+   taverna «Mangiare un pasto caldo» (1 oro, mezz'ora, Forza +5). Il garzone parte con un pane; in Libera con 4
+   provviste. **Cavallo**: il ronzino comprato compare accanto (venduto, se ne va); `Knight.inSella` (falso finché la
+   milestone Cavallo non fa montare) corregge `isMounted`, che dava lo sconto di Forza anche a piedi. Requisiti
+   mancanti scritti senza ripetere il prezzo (`prereqLabel` funzione). Logica in `js/knight.js` (`compra`, `vendi`,
+   `compraCavallo`, `usa`, `controllaPasti`), dati in `js/data/items.js`, salvataggio in `js/save.js`.
+   Limite: le botteghe esistono solo nella Veglia, nel borgo di partenza; dopo l'investitura e negli altri borghi
+   arriveranno con le missioni (G4). Provato in headless a 1920×1080 (seme 570549): coltello dal fabbro, ronzino dallo
+   stalliere (compare in 3D, non dà lo sconto a piedi), pasto in taverna, zaino, tre giorni con un solo pane (mangiato
+   da solo il secondo giorno, il terzo Salute −3); `?prova` e Libera senza errori.
 4. **Combattimento nel riquadro.** Tre colonne (cavaliere, scelte e Slancio, nemico) e cronaca dei Round;
    la scena dietro è ferma. Ogni Round confermato avanza il calendario dei suoi minuti; i rami di esito
    tornano all'evento. In Veglia a Salute 0 si sviene; dopo l'investitura **schermata di morte** con

@@ -68,6 +68,10 @@ const Knight = {
   reputazione: [],
   oro: 0,
   cavallo: null,   // null = a piedi; altrimenti { id, nome, vigore, vigoreMax }
+  inSella: false,  // in sella (milestone Cavallo, passo 3): finché non si monta, avere un cavallo non dà lo sconto
+  zaino: [],       // nomi degli oggetti nello zaino (Items, slot 'provviste'), al più Items.ZAINO_POSTI
+  ultimoPasto: -1, // giorno di gioco (Calendar) dell'ultimo pasto
+  giornoControllato: 0, // ultimo giorno di cui si è controllato il pasto (G1 passo 3)
   addestramento: 0, // sessioni col maestro d'armi (Veglia → promozione a scudiero)
   primaSangue: false, // true dopo la prima vera battaglia (gate investitura)
   apprendista: null,
@@ -104,6 +108,10 @@ const Knight = {
 
     this.oro          = 3;
     this.cavallo      = null;   // il garzone parte a piedi: compra un ronzino al mercato
+    this.inSella      = false;
+    this.zaino        = ['Pane e formaggio'];   // un pasto per il primo giorno
+    this.ultimoPasto  = -1;
+    this.giornoControllato = 0;
     this.addestramento = 0;
     this.primaSangue   = false;
     this.apprendista  = null;
@@ -127,8 +135,100 @@ const Knight = {
   // però consuma Vigore tile per tile e, a Vigore 0, è stremato: bisogna
   // abbeverarlo a un fiume o riposare (accampa). Il sistema riguarda SOLO il
   // cavaliere: la compagnia viaggia con lui in astratto (GDD §2 Seguito).
-  isMounted()    { return !!(this.cavallo && this.cavallo.vigore > 0); },
+  isMounted()    { return !!(this.cavallo && this.inSella && this.cavallo.vigore > 0); },
   isHorseTired() { return !!(this.cavallo && this.cavallo.vigore <= 0); },
+
+  // ─── Mercato e zaino (G1 passo 3) — prezzi e regole in js/data/items.js ─────
+  // Ritornano { ok, testo } con una riga per la cronaca. Niente DOM.
+
+  /** Compra un oggetto: si indossa (permutando quello che c'era, al prezzo di rivendita) o va nello zaino. */
+  compra(nome) {
+    const it = Items.catalog[nome];
+    if (!it) return { ok: false, testo: 'Questo non è in vendita.' };
+    if (it.slot === 'provviste') {
+      if (this.zaino.length >= Items.ZAINO_POSTI) return { ok: false, testo: 'Lo zaino è pieno.' };
+      if (this.oro < it.prezzo) return { ok: false, testo: `Servono ${it.prezzo} oro.` };
+      this.oro -= it.prezzo;
+      this.zaino.push(nome);
+      return { ok: true, testo: `Metti nello zaino: ${nome} (−${it.prezzo} oro).` };
+    }
+    const vecchio = this.equip[it.slot];
+    const permuta = vecchio ? Items.rivendita(vecchio) : 0;
+    if (this.oro + permuta < it.prezzo) return { ok: false, testo: `Servono ${it.prezzo} oro.` };
+    this.oro += permuta - it.prezzo;
+    this.equip[it.slot] = nome;
+    return { ok: true, testo: vecchio
+      ? `Prendi ${nome} e lasci ${vecchio} in permuta (−${it.prezzo - permuta} oro).`
+      : `Prendi ${nome} (−${it.prezzo} oro).` };
+  },
+
+  /** Vende ciò che si indossa in uno slot, o l'oggetto `i` dello zaino (slot = 'zaino'). */
+  vendi(slot, i) {
+    const nome = slot === 'zaino' ? this.zaino[i] : this.equip[slot];
+    if (!nome || !Items.catalog[nome]) return { ok: false, testo: 'Nessuno lo compra.' };
+    const v = Items.rivendita(nome);
+    if (slot === 'zaino') this.zaino.splice(i, 1); else this.equip[slot] = null;
+    this.oro += v;
+    return { ok: true, testo: `Vendi ${nome} (+${v} oro).` };
+  },
+
+  /** Compra un cavallo (permuta del precedente). */
+  compraCavallo(id) {
+    const m = Items.MOUNTS[id];
+    if (!m) return { ok: false, testo: 'Non c\'è un cavallo così.' };
+    const permuta = this.cavallo ? Items.mountResale(this.cavallo.id) : 0;
+    if (this.oro + permuta < m.prezzo) return { ok: false, testo: `Servono ${m.prezzo} oro.` };
+    const vecchio = this.cavallo;
+    this.oro += permuta - m.prezzo;
+    this.cavallo = Items.makeMount(id);
+    return { ok: true, testo: vecchio ? `Prendi un ${m.nome} e lasci il ${vecchio.nome} in permuta.` : `Prendi un ${m.nome} (−${m.prezzo} oro).` };
+  },
+
+  /** Vende il cavallo. */
+  vendiCavallo() {
+    if (!this.cavallo) return { ok: false, testo: 'Non hai un cavallo.' };
+    const v = Items.mountResale(this.cavallo.id), nome = this.cavallo.nome;
+    this.cavallo = null; this.inSella = false;
+    this.oro += v;
+    return { ok: true, testo: `Vendi il ${nome} (+${v} oro).` };
+  },
+
+  /** Usa l'oggetto `i` dello zaino (mangiare un pasto, bendarsi). `giorno`: giorno di gioco di oggi. */
+  usa(i, giorno) {
+    const nome = this.zaino[i], it = nome && Items.catalog[nome];
+    if (!it) return { ok: false, testo: 'Non c\'è niente lì.' };
+    if (!it.pasto && !it.salute && !it.forza) return { ok: false, testo: `${nome} non si usa così.` };
+    if (it.salute && !it.pasto && this.salute.cur >= this.salute.max) return { ok: false, testo: 'Non sei ferito.' };
+    this.zaino.splice(i, 1);
+    if (it.pasto) this.ultimoPasto = Math.max(this.ultimoPasto, giorno);
+    if (it.forza) this.forza.cur = Math.min(this.forza.max, this.forza.cur + it.forza);
+    if (it.salute) this.salute.cur = Math.min(this.salute.max, this.salute.cur + it.salute);
+    return { ok: true, testo: it.pasto ? `Mangi: ${nome}.` : `Usi: ${nome}.` };
+  },
+
+  /**
+   * Pasti (docs/GDD.md §2 «Pasti e zaino»): per ogni giorno finito prima di `giorno` senza pasto, il cavaliere mangia
+   * da sé un pasto dello zaino; se non ne ha, salta il pasto (−3 Salute). Ritorna { testi, digiuno } (digiuno: almeno
+   * un pasto saltato: chi dorme non recupera Forza).
+   */
+  controllaPasti(giorno) {
+    const testi = [];
+    let digiuno = false;
+    while (this.giornoControllato < giorno) {
+      const d = this.giornoControllato;
+      if (this.ultimoPasto < d) {
+        const i = this.zaino.findIndex((n) => Items.catalog[n] && Items.catalog[n].pasto);
+        if (i >= 0) testi.push(this.usa(i, d).testo.replace('Mangi', 'Mangi dallo zaino'));
+        else {
+          this.salute.cur = Math.max(0, this.salute.cur - 3);
+          digiuno = true;
+          testi.push('Hai saltato il pasto: la fame si fa sentire (Salute −3).');
+        }
+      }
+      this.giornoControllato++;
+    }
+    return { testi, digiuno };
+  },
 
   // Nome leggibile del rango corrente (per UI/log).
   rangoNome() {
