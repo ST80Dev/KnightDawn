@@ -557,74 +557,73 @@ export function creaCartaCronista(opzioni = {}) {
 }
 
 // ─── Meridiana (richiesta dell'utente, novembre 2026): in alto a sinistra, il momento del giorno ──────────────────
-// Non un quadrante preciso da cruscotto ma uno strumento del cavaliere fatto a mano, sul modello delle meridiane
-// canoniche medievali graffiate sulle pietre delle chiese: una tavoletta di legno dal contorno irregolare, appesa un
-// po' storta, con un semicerchio inciso a mano, raggi di lunghezza diversa, numeri romani graffiati sulle ore canoniche
-// (I Prima, III Terza, VI Sesta, IX Nona, XII Vespri) e un piolo al posto dello gnomone, la cui ombra morbida indica
-// l'ora. Sotto, l'ora scritta a mano. Scatta a passi fissi (mezz'ora di gioco), non scorre di continuo. Di notte la
-// tavoletta è al buio e mostra una luna incisa. Irregolarità fisse (seme costante): è sempre la stessa tavoletta.
-const ORE_MERIDIANA = [[6, 'I'], [9, 'III'], [12, 'VI'], [15, 'IX'], [18, 'XII']];
+// Una tavoletta di pietra, sul modello delle meridiane canoniche medievali incise sulle chiese: il bordo è scheggiato e
+// la superficie granulosa (l'irregolarità sta nella pietra), ma il disegno è dritto e leggibile [rivisto con l'utente:
+// la versione sbilenca sembrava un graffito rupestre]: base orizzontale, semicerchio regolare, raggi incisi, numeri
+// romani sulle ore canoniche (I Prima, III Terza, VI Sesta, IX Nona, XII Vespri), un piolo la cui ombra indica l'ora.
+// Sotto, in orizzontale, l'ora canonica e l'orario «circa». Scatta a passi fissi (mezz'ora di gioco), non scorre di
+// continuo. Di notte la pietra è al buio e mostra una luna. Scheggiature fisse (seme costante).
+// [ora, raggio del sole, colore]: dall'alba pallida al mezzogiorno pieno, al tramonto rossiccio.
+const SOLI_MERIDIANA = [[6, 3.2, '#d9a066'], [9, 4.6, '#e8b440'], [12, 6.2, '#f6cf3a'], [15, 4.6, '#e8b440'], [18, 3.2, '#d98a4a']];
 export function creaMeridiana(contenitore) {
   const el = document.createElement('div');
   el.className = 'meridiana';
   el.hidden = true;
   const r = rng(77017);
-  const j = (a) => (r() - 0.5) * 2 * a;                     // scarto casuale ±a
-  const cx = 104, cy = 92, R = 66;
-  const ang = (h) => Math.PI * (1 - (h - 6) / 15) + 0.05;   // 6 → sinistra, 21 → destra (inciso un poco storto)
+  const j = (a) => (r() - 0.5) * 2 * a;
+  const W = 220, H = 128, cx = W / 2, cy = 104, R = 62;
+  const ang = (h) => Math.PI * (1 - (h - 6) / 15);           // 6 → sinistra, 21 → destra
   const pt = (h, rr) => [cx + Math.cos(ang(h)) * rr, cy - Math.sin(ang(h)) * rr];
   const f = (v) => v.toFixed(1);
-  // Tavoletta: un ovale schiacciato e storto, il bordo spezzato da piccole irregolarità e un angolo smussato.
-  let bordo = '';
-  for (let k = 0; k <= 26; k++) {
-    const a = (k / 26) * Math.PI * 2, rx = 98 + j(4) + (k === 4 ? -7 : 0), ry = 66 + j(4);
-    bordo += `${k ? 'L' : 'M'}${f(104 + Math.cos(a) * rx)} ${f(72 + Math.sin(a) * ry * (Math.sin(a) > 0 ? 0.92 : 1))} `;
-  }
-  // Semicerchio inciso a mano: tratti corti che non tornano mai perfetti, linea di base un poco obliqua.
-  let arco = '';
-  for (let k = 0; k <= 20; k++) {
-    const h = 6 + (15 * k) / 20, [x, y] = pt(h, R + j(2.2));
-    arco += `${k ? 'L' : 'M'}${f(x)} ${f(y)} `;
-  }
-  const [bx0, by0] = pt(5.6, R + 4), [bx1, by1] = pt(21.4, R + 3);
-  const base = `M${f(bx0)} ${f(by0 + 3)} Q ${f(cx)} ${f(cy + 4)} ${f(bx1)} ${f(by1 + 1)}`;
-  // Raggi delle ore: di lunghezza diversa, quelli canonici più lunghi e con una crocetta in cima.
-  let raggi = '', croci = '';
-  for (let h = 6; h <= 21; h += 1.5) {
-    const canonica = (h - 6) % 3 === 0, d0 = 10 + j(3), d1 = (canonica ? R - 2 : R - 18) + j(4);
-    const [x0, y0] = pt(h + j(0.12), d0), [x1, y1] = pt(h + j(0.12), d1);
-    raggi += `<path d="M${f(x0)} ${f(y0)} L${f(x1)} ${f(y1)}" stroke-width="${canonica ? 1.6 : 0.9}"/>`;
-    if (canonica && h < 21) {
-      const [x, y] = pt(h, d1 + 4);
-      croci += `<path d="M${f(x - 2.5)} ${f(y)} h5 M${f(x)} ${f(y - 2.5)} v5" stroke-width="1"/>`;
+  // Lastra: rettangolo con il bordo scheggiato (punti ogni ~12 px con piccoli scarti, qualche scheggia più profonda).
+  const m = 4, pts = [];
+  const lato = (x0, y0, x1, y1, nx, ny) => {
+    const n = Math.round(Math.hypot(x1 - x0, y1 - y0) / 12);
+    for (let k = 0; k < n; k++) {
+      const t = k / n, d = r() * 2.2 + (r() < 0.12 ? 3 + r() * 3 : 0);
+      pts.push([x0 + (x1 - x0) * t + nx * d, y0 + (y1 - y0) * t + ny * d]);
     }
+  };
+  lato(m, m, W - m, m, 0, 1); lato(W - m, m, W - m, H - m, -1, 0); lato(W - m, H - m, m, H - m, 0, -1); lato(m, H - m, m, m, 1, 0);
+  const bordo = 'M' + pts.map((p) => `${f(p[0])} ${f(p[1])}`).join(' L') + ' Z';
+  // Quadrante: semicerchio e base dritti; raggi a ogni ora e mezza, i canonici più lunghi e più marcati.
+  const [ax0, ay0] = pt(6, R), [ax1, ay1] = pt(21, R);
+  const arco = `M${f(ax0)} ${f(ay0)} A${R} ${R} 0 0 1 ${f(ax1)} ${f(ay1)}`;
+  const base = `M${f(cx - R - 6)} ${cy} H${f(cx + R + 6)}`;
+  let raggi = '';
+  for (let h = 6; h <= 21; h += 1.5) {
+    const canonica = (h - 6) % 3 === 0, [x0, y0] = pt(h, 12), [x1, y1] = pt(h, canonica ? R : R - 14);
+    raggi += `<path d="M${f(x0)} ${f(y0)} L${f(x1)} ${f(y1)}" class="${canonica ? 'forte' : ''}"/>`;
   }
-  const numeri = ORE_MERIDIANA.map(([h, n]) => {
-    const [x, y] = pt(h, R + 12 + j(2));
-    return `<text x="${f(x)}" y="${f(y + 3)}" transform="rotate(${f(j(9))} ${f(x)} ${f(y)})">${n}</text>`;
+  // Al posto dei numeri, soli stilizzati (richiesta dell'utente): piccoli e pallidi all'alba e al tramonto, grandi e
+  // luminosi a mezzogiorno. Un disco con otto raggi, come intarsiato nella pietra.
+  const soli = SOLI_MERIDIANA.map(([h, rs, col]) => {
+    const [x, y] = pt(h, R + 16);                           // fuori dal semicerchio, come attorno a un quadrante
+    let raggiSole = '';
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2, c = Math.cos(a), s2 = Math.sin(a);
+      raggiSole += `M${f(x + c * rs * 1.35)} ${f(y + s2 * rs * 1.35)} L${f(x + c * rs * 1.95)} ${f(y + s2 * rs * 1.95)} `;
+    }
+    return `<g class="sole"><path d="${raggiSole}" stroke="${col}" stroke-width="${f(Math.max(1.2, rs * 0.32))}"/>`
+      + `<circle cx="${f(x)}" cy="${f(y)}" r="${rs}" fill="${col}"/></g>`;
   }).join('');
-  el.innerHTML = `<svg viewBox="0 0 208 150" aria-hidden="true">
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H + 26}" aria-hidden="true">
       <defs>
-        <radialGradient id="mer-legno" cx=".45" cy=".4" r=".75"><stop offset="0" stop-color="#b48a52"/><stop offset=".7" stop-color="#8d6534"/><stop offset="1" stop-color="#5e4020"/></radialGradient>
-        <filter id="mer-vena" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.012 0.18" numOctaves="3" seed="5"/><feColorMatrix values="0 0 0 0 .2  0 0 0 0 .12  0 0 0 0 .05  0 0 0 1.6 -.6"/></filter>
-        <filter id="mer-sfuma" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6"/></filter>
-        <clipPath id="mer-taglio"><path d="${bordo}Z"/></clipPath>
+        <linearGradient id="mer-pietra" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b8b0a0"/><stop offset="1" stop-color="#8e8676"/></linearGradient>
+        <filter id="mer-grana" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".09" numOctaves="3" seed="9"/><feColorMatrix values="0 0 0 0 .25  0 0 0 0 .23  0 0 0 0 .2  0 0 0 .9 -.25"/></filter>
+        <filter id="mer-macchie" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".018" numOctaves="2" seed="3"/><feColorMatrix values="0 0 0 0 .3  0 0 0 0 .32  0 0 0 0 .22  0 0 0 1.4 -.6"/></filter>
+        <filter id="mer-sfuma" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.2"/></filter>
+        <clipPath id="mer-taglio"><path d="${bordo}"/></clipPath>
       </defs>
-      <g class="tavoletta">
-        <path class="legno" d="${bordo}Z"/>
-        <g clip-path="url(#mer-taglio)"><rect width="208" height="150" filter="url(#mer-vena)"/></g>
-        <path class="orlo" d="${bordo}Z"/>
-        <circle class="buco" cx="104" cy="12" r="3"/>
-        <g class="incisioni">
-          <path d="${arco}" fill="none" stroke-width="1.4"/><path d="${base}" fill="none" stroke-width="1.2"/>
-          ${raggi}${croci}
-        </g>
-        <g class="numeri">${numeri}</g>
-        <path class="ombra" d="M${cx} ${cy}" filter="url(#mer-sfuma)"/>
-        <circle class="piolo" cx="${cx}" cy="${cy}" r="3.4"/>
-        <path class="luna" d="M${cx + 2} ${cy - 52} a15 15 0 1 0 12 22 a12 12 0 1 1 -12 -22z"/>
-      </g>
-      <text class="testo" x="104" y="143"></text>
+      <path class="pietra" d="${bordo}"/>
+      <g clip-path="url(#mer-taglio)"><rect width="${W}" height="${H}" filter="url(#mer-macchie)"/><rect width="${W}" height="${H}" filter="url(#mer-grana)"/></g>
+      <path class="orlo" d="${bordo}"/>
+      <g class="incisioni"><path d="${arco}"/><path d="${base}"/>${raggi}</g>
+      <g class="soli">${soli}</g>
+      <path class="ombra" d="M${cx} ${cy}" filter="url(#mer-sfuma)"/>
+      <circle class="piolo" cx="${cx}" cy="${cy}" r="4"/>
+      <path class="luna" d="M${cx + 2} ${cy - 52} a15 15 0 1 0 12 22 a12 12 0 1 1 -12 -22z"/>
+      <text class="testo" x="${cx}" y="${H + 19}"></text>
     </svg>`;
   contenitore.appendChild(el);
   const ombra = el.querySelector('.ombra'), testo = el.querySelector('.testo');
@@ -637,13 +636,13 @@ export function creaMeridiana(contenitore) {
     const notte = o < 6 || o >= 21;
     el.classList.toggle('notte', notte);
     if (!notte) {
-      // L'ombra del piolo indica l'ora: un cuneo morbido che si allarga verso la punta.
-      const [x, y] = pt(o, R - 6), a = ang(o), w = 4.5, nx = -Math.sin(a) * w, ny = -Math.cos(a) * w;
+      // L'ombra del piolo indica l'ora: un cuneo sottile che si allarga un poco verso la punta.
+      const [x, y] = pt(o, R - 4), a = ang(o), w = 3.5, nx = -Math.sin(a) * w, ny = -Math.cos(a) * w;
       ombra.setAttribute('d', `M${cx} ${cy} L${f(x + nx)} ${f(y + ny)} L${f(x - nx)} ${f(y - ny)} Z`);
     }
     const h = Math.floor(o), mezza = o - h >= 0.5;
     const quando = h === 0 ? 'mezzanotte' : h === 12 ? 'mezzogiorno' : h === 1 || h === 13 ? "l'una" : `le ${h}`;
-    testo.textContent = `${ORE_CANONICHE_DI(o)}, circa ${quando}${mezza ? ' e mezza' : ''}`;
+    testo.textContent = `${ORE_CANONICHE_DI(o)} · ${h === 0 || h === 12 ? '' : 'circa '}${quando}${mezza ? ' e mezza' : ''}`;
   }
   return { aggiorna, nascondi(si) { el.hidden = si; } };
 }

@@ -567,25 +567,27 @@ html, body {
 .carta-cronista .avanti { text-align: center; font: italic 13px var(--kd-testo); color: var(--kd-sbiadito); opacity: 0; transition: opacity .8s; }
 .carta-cronista .avanti.vista { opacity: 1; }
 
-/* Meridiana (interfaccia.js, creaMeridiana): tavoletta di legno incisa a mano, appesa un po' storta, in alto a sinistra */
-.meridiana { position: fixed; left: 14px; top: 10px; z-index: 5; width: 236px; pointer-events: none;
-  transform: rotate(-3.5deg); transform-origin: 50% 8%; filter: drop-shadow(0 6px 8px rgba(0, 0, 0, .55)); }
+/* Meridiana (interfaccia.js, creaMeridiana): tavoletta di pietra dal bordo scheggiato, disegno dritto e leggibile */
+.meridiana { position: fixed; left: 14px; top: 12px; z-index: 5; width: 236px; pointer-events: none;
+  filter: drop-shadow(0 5px 7px rgba(0, 0, 0, .55)); }
 .meridiana[hidden] { display: none; }
 .meridiana svg { display: block; width: 100%; height: auto; overflow: visible; }
-.meridiana .legno { fill: url(#mer-legno); transition: filter 1.2s; }
-.meridiana .orlo { fill: none; stroke: #3a2410; stroke-width: 2.2; }
-.meridiana .buco { fill: #1e1208; stroke: #5e4020; }
-.meridiana .incisioni path { stroke: #2e1a08; stroke-linecap: round; opacity: .85; }
-.meridiana .incisioni { filter: drop-shadow(0 .6px 0 rgba(255, 230, 180, .35)); }
-.meridiana .numeri text { font: 13px Fondamento, var(--kd-testo); fill: #2e1a08; text-anchor: middle; opacity: .9; }
-.meridiana .ombra { fill: rgba(30, 16, 4, .7); transition: d .9s ease-in-out; }
-.meridiana .piolo { fill: #4a2e12; stroke: #22140a; stroke-width: 1; }
-.meridiana .luna { fill: #e8e2c8; opacity: 0; transition: opacity 1.2s; }
-.meridiana .testo { font: 17px Fondamento, var(--kd-testo); fill: #f0dcae; text-anchor: middle; paint-order: stroke;
-  stroke: rgba(20, 10, 2, .85); stroke-width: 3px; }
-.meridiana.notte .legno { filter: brightness(.45) saturate(.6); }
+.meridiana .pietra { fill: url(#mer-pietra); transition: filter 1.2s; }
+.meridiana .orlo { fill: none; stroke: #4e4a40; stroke-width: 1.6; }
+.meridiana .incisioni path { fill: none; stroke: #2e2a24; stroke-width: 1.3; stroke-linecap: round; }
+.meridiana .incisioni path.forte { stroke-width: 2.2; }
+.meridiana .incisioni { filter: drop-shadow(.8px .8px 0 rgba(240, 232, 214, .7)); }
+.meridiana .soli { filter: drop-shadow(.6px .8px 0 rgba(40, 30, 20, .55)); }
+.meridiana .soli path { stroke-linecap: round; }
+.meridiana .ombra { fill: rgba(20, 16, 10, .78); }
+.meridiana .piolo { fill: #3a2e22; stroke: #1a140e; stroke-width: 1; }
+.meridiana .luna { fill: #ece6cc; opacity: 0; transition: opacity 1.2s; }
+.meridiana .testo { font: 600 15px var(--kd-titolo); letter-spacing: .04em; fill: #f0dcae; text-anchor: middle; paint-order: stroke;
+  stroke: rgba(20, 10, 2, .85); stroke-width: 3.5px; }
+.meridiana.notte .pietra { filter: brightness(.42) saturate(.5) hue-rotate(200deg); }
 .meridiana.notte .ombra { opacity: 0; }
-.meridiana.notte .luna { opacity: .9; }
-.meridiana.notte .incisioni, .meridiana.notte .numeri { opacity: .55; }
+.meridiana.notte .luna { opacity: .95; }
+.meridiana.notte .incisioni { opacity: .5; }
+.meridiana.notte .soli { opacity: .25; }
 #menu-avvio .racconto-pref { margin-left: 8px; }
 #menu-avvio .impostazioni .riga { margin-bottom: 0; }

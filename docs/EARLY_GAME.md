@@ -354,12 +354,13 @@ poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un
    animazione e una sosta per leggere), poi passa da solo all'esito; un clic, Spazio o Invio completa, il secondo va
    avanti. Anche il riposo con `R` (sosta o notte all'addiaccio) ha il suo racconto. Nel menu d'avvio «Racconto delle
    azioni»: completo, breve (~4 s) o spento (preferenza del browser `kd.racconto`). Gli acquisti al mercato no: lì
-   la riga d'esito nella tabella basta. **Meridiana** in alto a sinistra (`creaMeridiana`) [rivista con l'utente: non un
-   quadrante preciso «da tachimetro» ma uno strumento fatto a mano]: tavoletta di legno dal contorno irregolare, appesa
-   un po' storta, con un semicerchio inciso a mano sul modello delle meridiane canoniche medievali (raggi diseguali,
-   crocette, numeri romani graffiati I Prima, III Terza, VI Sesta, IX Nona, XII Vespri) e un piolo la cui ombra morbida
-   indica l'ora; sotto, scritto a mano, «Terza, circa le 10 e mezza»; avanza a scatti di mezz'ora di gioco (3 minuti
-   reali), non di continuo; di notte il legno si scurisce e compare una luna.
+   la riga d'esito nella tabella basta. **Meridiana** in alto a sinistra (`creaMeridiana`) [rivista due volte con l'utente: non un
+   quadrante preciso «da tachimetro», ma nemmeno sbilenca come un graffito]: tavoletta di pietra dal bordo scheggiato e
+   dalla superficie granulosa, con il disegno dritto e leggibile delle meridiane canoniche medievali: base orizzontale,
+   semicerchio regolare, raggi incisi (più marcati sulle ore canoniche), un piolo la cui ombra indica l'ora. Al posto dei
+   numeri, **soli stilizzati** fuori dal semicerchio: piccoli e rossicci all'alba e al tramonto, grandi e dorati a
+   mezzogiorno. Sotto, in orizzontale, «Terza · circa le 10 e mezza». Avanza a scatti di mezz'ora di gioco (3 minuti
+   reali), non di continuo; di notte la pietra si scurisce, i soli si spengono e compare una luna.
    Corretto anche `Calendar.fineVeglia`: all'investitura l'ora del giorno ripartiva da Prima.
 4. **Combattimento nel riquadro.** Tre colonne (cavaliere, scelte e Slancio, nemico) e cronaca dei Round;
    la scena dietro è ferma. Ogni Round confermato avanza il calendario dei suoi minuti; i rami di esito
