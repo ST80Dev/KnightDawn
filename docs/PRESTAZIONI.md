@@ -214,8 +214,8 @@ sforamento, peggiorando la resa degli alberi a 30 m.
 
 **Quando si riapre, il primo passo non è una decisione ma una misura**: i due valori `F3`/`F9` di «veg. sagome» e
 «veg. resto» nel bosco fitto.
-- se pesa «resto», il confine del livello ricco da 50 a 35 m porta la vegetazione a 513 302 triangoli (−18 %) senza
-  chiamate in più; un livello intermedio da ~500 triangoli costerebbe +3 chiamate, cioè 35 su 35, al tetto;
+- se pesa «resto», il confine del livello ricco da 50 a 35 m porta la vegetazione a 513 302 triangoli (−18 %, scena
+  −11 %) senza chiamate in più: provato dalla sessione vegetazione su `main` 611868f, non stimato; un livello intermedio da ~500 triangoli costerebbe +3 chiamate, cioè 35 su 35, al tetto;
 - se pesano le sagome, i livelli degli alberi non c'entrano: si lavora su diradamento e misura delle sagome.
 
 ## Risultati del percorso di prova
