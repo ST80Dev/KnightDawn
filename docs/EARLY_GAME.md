@@ -345,6 +345,19 @@ poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un
    arriveranno con le missioni (G4). Provato in headless a 1920×1080 (seme 570549): coltello dal fabbro, ronzino dallo
    stalliere (compare in 3D, non dà lo sconto a piedi), pasto in taverna, zaino, tre giorni con un solo pane (mangiato
    da solo il secondo giorno, il terzo Salute −3); `?prova` e Libera senza errori.
+3b. **Racconto delle azioni e meridiana** [richiesta dell'utente, novembre 2026]. **Stato: fatto, da provare
+   dall'utente.** Quando una scelta fa passare almeno mezz'ora o cambia qualcosa, la pergamena racconta prima
+   dell'esito (`racconta` in `js/3d/interfaccia.js`, `raccontaAzione` in `main.js`): frasi scritte parola per parola in
+   scrittura a mano (campo `racconto` dell'opzione, altrimenti il testo d'esito spezzato), le ore che avanzano («Prima ·
+   6:00 → Terza · 9:00», con la meridiana che segue), il **registro** dei cambiamenti calcolato confrontando lo stato
+   prima e dopo (oro, Forza, Salute, Volontà, rango, equipaggiamento, zaino, cavallo). Dura circa 11 secondi (8 di
+   animazione e una sosta per leggere), poi passa da solo all'esito; un clic, Spazio o Invio completa, il secondo va
+   avanti. Anche il riposo con `R` (sosta o notte all'addiaccio) ha il suo racconto. Nel menu d'avvio «Racconto delle
+   azioni»: completo, breve (~4 s) o spento (preferenza del browser `kd.racconto`). Gli acquisti al mercato no: lì
+   la riga d'esito nella tabella basta. **Meridiana** in alto a sinistra (`creaMeridiana`): quadrante a mezzaluna con
+   le ore canoniche da Prima a Compieta, l'ombra dello gnomone che indica l'ora, sotto l'ora canonica e «circa le 10 e
+   mezza»; avanza a scatti di mezz'ora di gioco (3 minuti reali), non di continuo; di notte si spegne e mostra la luna.
+   Corretto anche `Calendar.fineVeglia`: all'investitura l'ora del giorno ripartiva da Prima.
 4. **Combattimento nel riquadro.** Tre colonne (cavaliere, scelte e Slancio, nemico) e cronaca dei Round;
    la scena dietro è ferma. Ogni Round confermato avanza il calendario dei suoi minuti; i rami di esito
    tornano all'evento. In Veglia a Salute 0 si sviene; dopo l'investitura **schermata di morte** con
