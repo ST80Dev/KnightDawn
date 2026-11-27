@@ -515,6 +515,17 @@ Durante la Veglia:
 **Sulla Carta.**
 - Si sceglie la destinazione (o una strada o direzione, se il luogo è noto solo per sentito dire) →
   percorso sulle celle (A*), che preferisce strade, ponti, guadi e valichi → viaggio automatico.
+- **Scelta della meta** [deciso con l'utente, novembre 2026; si fa in G2, sulla Carta di gioco e sulla minimappa
+  grande]. Passando col mouse, un luogo si «aggancia» entro una ventina di pixel (vince il più vicino al puntatore):
+  il nome si ingrandisce, il segno si illumina, cambia il cursore. Al clic un riquadro nello stile della Carta del
+  cronista chiede conferma e dice il costo: «Viaggiare fino a Villaggio di Hornwold? 6 km per strada, ~4 ore a piedi,
+  arrivo a Vespri, Forza −20» (con l'eventuale traghetto o barcaiolo e il suo prezzo), «Parti» o «Annulla». In Storia è
+  un viaggio vero (tempo, Forza, eventi lungo la strada); in Libera sposta subito e gratis, per le prove. Si scelgono
+  solo luoghi conosciuti o intravisti (nebbia della conoscenza); sull'ignoto al più «cammina in quella direzione».
+  **Punto d'arrivo**: fuori dal luogo, a poche decine di metri, con il luogo in vista e il cavaliere rivolto verso di
+  esso, dal lato da cui si arriva (sulla strada percorsa): borgo e rocca ~35–40 m fuori dalla porta, sulla strada
+  d'accesso; villaggio, rovina, grotta, monastero 30–60 m fuori dall'ingombro, su terreno percorribile (mai in acqua o
+  contro un muro).
 - Celle di ~1 km. Il costo di ogni cella in tempo, Forza e
   vigore del cavallo dipende da bioma, pendenza e presenza di strade. La tabella per bioma del
   2D (`TRAVEL_COST`) resta come base.
@@ -529,6 +540,22 @@ Durante la Veglia:
   - un **porto** nasce solo dove serve: almeno un altro porto raggiungibile per mare e una rotta che fa risparmiare
     tempo rispetto al viaggio a piedi. Uno specchio d'acqua piccolo e isolato non ha porti (al più un villaggio di
     pescatori).
+- **Isole e traghetti** [segnalato dall'utente, novembre 2026; misurato su 28 semi]. Le isole abitate stanno nel mare
+  (seme 6: 181 km² con un monastero e due villaggi) e nelle lagune costiere (seme 19: 52 km² con una città); nei
+  laghi interni solo isolette (seme 17: un villaggio su 1 km²). Decisioni dell'utente: **nessun luogo dove non si
+  sbarca** (sorvegliato da `verificaAccessi` nel generatore: zero luoghi irraggiungibili su 30 semi), **rotte per mare
+  subito**, **barcaiolo** approvato. Il generatore (M6, `carta.traghetti`) dà un solo elenco di tratte con
+  `tipo: 'traghetto' | 'mare' | 'barcaiolo'`, `km` navigati, `giro` (km a piedi per lo stesso tragitto, `Infinity`
+  se non c'è), `isolata` (unica via d'accesso), `rotta`, e due capi `a`/`b` con `sorta` `'villaggio' | 'rocca' |
+  'approdo'` (`'approdo'` = riva senza insediamento, capolinea del barcaiolo, `sito: -1`; gli id non sono unici fra
+  `carta.siti` e `carta.luoghi`: guardare `sorta`) e la cella di riva `rx, ry` dove sta il molo. Numeri su 10 semi:
+  ~8 tratte per mondo (metà traghetti, metà mare, pochi barcaioli); traghetti 2–21 km, mare fino a ~70 km, barcaioli
+  ≤ 14 km. Il viaggio (G2) le tratta tutte con il **passaggio sulla Carta** (al molo della Scena «imbarcati» riporta
+  alla Carta e sbarca all'altro capo; nessuna barca da guidare). **Regole per i costi** (da fissare in G2): tempo
+  alla velocità della barca (2–2,5× a piedi), un'attesa d'imbarco, qualche moneta (di più per mare e per il
+  barcaiolo, che va solo di giorno); una tratta `isolata` non deve mai diventare impossibile (troppo cara o chiusa
+  dal maltempo renderebbe irraggiungibile un luogo); le altre sono scorciatoie e devono costare meno del `giro`,
+  altrimenti non servono.
 - Durante il viaggio possono scattare eventi (incontri, meteo, scoperte). Il giocatore può fermarsi
   quando vuole: fermarsi vuol dire entrare nella scena 3D di quel punto. Un evento (imboscata,
   incontro) può fermare il viaggio e portare in 3D lì.
@@ -787,6 +814,7 @@ Dettagli in `docs/UI_GUIDE.md`.
 >    eventi di viaggio, «fermati qui» che porta nella Scena) e **nebbia della conoscenza** rivelata da
 >    ciò che il cavaliere vede dalle alture. (La versione base della nebbia, per vicinanza, è già in G1:
 >    `docs/EARLY_GAME.md` §7, passo 1b.)
+>    Comprende traghetti, rotte per mare e isole (§3 *Viaggio*, «Isole e traghetti»).
 > 3. **G3 — Fazioni e nomi generati** (S5, prima parte).
 > 4. **G4 — Incarichi per tipo di luogo, reputazione, notizie che si propagano** (S3, S5, S6).
 > 5. **G5 — Seguito e covi** (S7). 6. **G6 — Archi narrativi e titoli** (S8).
