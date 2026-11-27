@@ -17,6 +17,20 @@ const Items = {
   // Ordine canonico degli slot (per liste ordinate e vendita).
   SLOT_ORDER: ['arma', 'armatura', 'scudo', 'speciale', 'viaggio'],
 
+  // Zaino (G1 passo 3, docs/GDD.md §2 «Pasti e zaino»): pochi posti per le cose che si consumano. Gli oggetti con
+  // slot 'provviste' vanno nello zaino, non si indossano.
+  ZAINO_POSTI: 8,
+
+  // Cosa vende ogni bottega del borgo (tipo di edificio, js/3d/edifici3d.js → categorie). Prezzi uguali ovunque.
+  NEGOZI: {
+    fabbro:       { nome: 'Il fabbro',          vende: ['arma', 'scudo'] },
+    armeria:      { nome: "L'armeria",          vende: ['arma', 'armatura', 'scudo'] },
+    loggia:       { nome: 'Il mercato',         vende: ['provviste', 'viaggio'] },
+    loggiaGrande: { nome: 'Il mercato',         vende: ['provviste', 'viaggio', 'armatura'] },
+    taverna:      { nome: "L'oste",             vende: ['provviste'] },
+    stalla:       { nome: 'Lo stalliere',       vende: ['cavalli'] },
+  },
+
   catalog: {
     // ── Armi ──
     'Coltello da contadino': { slot: 'arma', prezzo: 4,  glyph: '⚔' },
@@ -32,6 +46,15 @@ const Items = {
     // ── Da viaggio ──
     'Mantello da viandante': { slot: 'viaggio', prezzo: 5,  glyph: '◊' },
     'Mantello scuro':        { slot: 'viaggio', prezzo: 9,  glyph: '◊' },
+    // ── Provviste (nello zaino) ── pasto: vale il pasto del giorno; forza/salute: quanto rende usarlo.
+    'Pane e formaggio':      { slot: 'provviste', prezzo: 1, glyph: '❦', pasto: true },
+    'Carne secca e mele':    { slot: 'provviste', prezzo: 2, glyph: '❦', pasto: true, forza: 8 },
+    'Bende di lino':         { slot: 'provviste', prezzo: 2, glyph: '✚', salute: 15 },
+  },
+
+  /** Oggetti in vendita in una bottega (lista come buyList), cavalli esclusi. */
+  inVendita(categorie) {
+    return this.buyList().filter((it) => categorie.includes(it.slot));
   },
 
   prezzo(nome)  { const it = this.catalog[nome]; return it ? it.prezzo : 0; },
