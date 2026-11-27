@@ -230,8 +230,30 @@ coprono gli stessi pixel di prima: se «resto» è limitato dai pixel il guadagn
 dall'utente** con lo stesso indirizzo e `&qualita=medio`; se non basta, il passo seguente non è tagliare altri
 triangoli ma lavorare su diradamento e misura delle sagome.
 
-Fuori da quella PR, da cercare a parte: il **terreno** peggiorato di +0,9 ms dal 21/11, e il **fotogramma peggiore a
-30 ms** (picchi di «resto» e aggiornamento CPU al cambio di livello).
+**Esito, misura dell'utente del 27/11 alle 23:41, dopo la #239** (stesso indirizzo e `&qualita=medio`):
+
+| | prima (22:31) | dopo (23:41) |
+|---|---|---|
+| veg. resto | 4,6 ms (picco 7,8) | **3,8** (picco 8,3) |
+| vegetazione in tutto | 7,7 ⚠ | **6,9** ⚠ (budget 6,5) |
+| GPU totale | 13,5 (picco 17,1) | **12,7** (picco 17,0), budget 15,5 |
+| FPS medio | 65,4 | **69,8** |
+| triangoli | 996 mila | **885 mila** |
+
+**Il taglio dei triangoli ha reso più del previsto: −0,8 ms, non ~0,2.** La cautela scritta sopra (il costo segue i
+pixel coperti) vale per le sagome, non per questi alberi: fra 18 e 50 m ogni latifoglia costava ~1 800 triangoli ed
+erano abbastanza vicine da pesare anche come geometria, non solo come pixel. Da tenere presente la prossima volta:
+il limite «i triangoli non contano» non è generale, dipende da quanto l'oggetto è grande sullo schermo.
+
+Cosa resta, in ordine di importanza:
+- la vegetazione sfora ancora di **0,4 ms** (6,9 su 6,5), ma il **totale è 12,7 su 15,5**: c'è margine. Il prossimo
+  guadagno non sta più nella geometria degli alberi ma nelle **sagome** (2,3 + 0,7 = 3,0 ms per 71 mila istanze
+  sovrapposte): diradarle prima o rimpicciolirle;
+- il **picco** di «veg. resto» è peggiorato (7,8 → 8,3) e il **fotogramma peggiore resta 30,1 ms**: non l'ha toccato
+  questa PR, è lo scatto al cambio di livello o di blocco. L'1 % peggiore fermo a 49,8 FPS è l'artefatto del vsync
+  spiegato più sotto (un fotogramma oltre 10 ms aspetta il giro dopo a ~100 Hz), non un peggioramento;
+- il **terreno** resta a 4,9 su 4,5, +0,9 dal 21/11: non è della vegetazione, va cercato a parte;
+- il **preset qualità non cambia niente** (alta e media danno numeri identici): difetto a parte.
 
 ## Risultati del percorso di prova
 
@@ -254,6 +276,8 @@ Scheda Intel UHD 730 (il browser Brave nasconde il nome), 1920×935, seme 570549
 | 21/11/2026 | bosco fitto, main dopo #144 (sagome diradate da 300 m) | **84,1** | 49,8 ² | 10,7 | 4,0 | 6,5 | 0,0 | 0,1 | 0,2 | 127 | 882 mila |
 | 21/11/2026 | **base attuale** partenza **nuova** (#147: rocca in pendio a 97,0 / 80,6 km, quota ~1200 m), main dopo #153 (cavallo, fiumi, mura in pietra, ponti) | 97,9 ¹ | 50,0 ² | 8,4 | **5,7** ⚠ | 1,7 | 0,2 | 0,1 | 0,6 | 153 | 694 mila |
 | 21/11/2026 | **base attuale** bosco fitto, stessa versione | 83,7 | 49,8 ² | 10,7 | 4,0 | 6,3 | 0,0 | 0,1 | 0,2 | 143 | 870 mila |
+| 27/11/2026 | bosco fitto, main aae06e4 (prima della PR #239) ⚠ | 65,4 | 49,8 ² | 13,5 | **4,9** ⚠ | **7,7** ⚠ | 0,0 | 0,1 | 0,4 | 149 | 996 mila |
+| 27/11/2026 | bosco fitto, main dopo #239 (livello ricco a 35 m, tronchi sottili e vari, piede del tronco) | **69,8** | 49,8 ² | **12,7** | **4,9** ⚠ | **6,9** ⚠ | 0,0 | 0,1 | 0,5 | 149 | 885 mila |
 
 Dopo #147 la partenza del seme 570549 è un'altra (castello di casata in pendio, montagna attorno): non confrontabile con
 le righe precedenti. Lì il terreno sfora (5,7 ms su 4,5); per sapere se pesa il blocco o l'orizzonte il percorso ora
