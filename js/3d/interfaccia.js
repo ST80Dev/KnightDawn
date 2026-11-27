@@ -55,12 +55,15 @@ export function mostraMenuAvvio(opzioni) {
     }).join('');
     el.innerHTML = `<div class="riquadro">
       <div class="titolo">Knight Dawn</div>
+      <div class="corpo${continua || leggiFile ? ' due' : ''}">
+      <div class="colonna salvate">
       ${continua ? `<div class="sezione">${continua}</div>` : ''}
       ${leggiFile ? `<div class="sezione file">
         <button type="button" class="carica">Carica una partita da file…</button>
         <input type="file" class="file-partita" accept=".json,application/json" hidden>
         <div class="errore" hidden></div>
       </div>` : ''}
+      </div>
       <div class="sezione nuova">
         <div class="etichetta">Nuova partita</div>
         <div class="modi">
@@ -83,6 +86,7 @@ export function mostraMenuAvvio(opzioni) {
         </div>
         <div class="avviso" hidden></div>
         <button type="button" class="comincia">Comincia</button>
+      </div>
       </div>
       <div class="nota">Le due modalità hanno salvataggi separati: provare in Libera non tocca la Storia. F8 in gioco salva e
         riporta qui, dove la partita si può scaricare in un file.</div>
