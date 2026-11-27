@@ -24,7 +24,7 @@ import * as THREE from 'three';
 import { creaKit, completaPezzi, siToccano, PEZZO_MS } from './edifici3d.js';
 // Geometrie e utilità comuni di M7 (sola lettura: rocca3d.js non si tocca).
 import { localeDelLuogo, dentroPoligono, distanzaContorno, prisma, unisci, materialeMuro, tonoDelLuogo } from './rocca3d.js';
-import { quotaFinale, livelloLago } from '../mondo/scena.js';
+import { quotaFinale, livelloLago, tracciatiFiumi } from '../mondo/scena.js';
 import { distanzaStrada } from '../mondo/strade.js';
 import { hash2 } from '../mondo/rumore.js';
 import { raggioSito, climaDelLuogo } from '../mondo/siti.js';
@@ -978,4 +978,239 @@ export function* createEremoAPezzi(suolo, sito, ox, oz, carta) {
     spingiFuori: spintaDaScatole(r.scatole, ox, oz, E.raggio + 20), quotaSuolo: () => null,
     dentro: () => false, aggiornaLuci: r.aggiornaLuci, sorgenti: r.sorgenti, misure: r.misure, edifici: r.edifici,
     raggio: E.raggio };
+}
+
+/**
+ * MULINO AD ACQUA (M8). Un corpo di pietra sulla riva, la ruota a pale sulla corrente, la gora di legno che porta
+ * l'acqua alla ruota e uno sbarramento di sassi che la alza. Il sito sta entro 60 m da un corso d'acqua
+ * (`SITI.mulinoCorso`), ma non esattamente sulla riva: qui il mulino si **accosta** al corso più vicino, perché un
+ * mulino con la ruota a trenta metri dall'acqua non è un mulino.
+ *
+ * La ruota è un oggetto a sé (una chiamata in più) perché gira: `aggiornaLuci` riceve già il tempo in secondi a ogni
+ * fotogramma per le finestre accese, e la ruota si gira lì — senza aggiungere un aggancio nuovo in main.js.
+ */
+const MULINI = {
+  // `nome` serve a `kit.edificio`: EDIFICI non ha la voce `mulino` (edifici3d.js è di un'altra sessione), quindi le
+  // misure arrivano tutte da qui. Se un giorno quella voce verrà aggiunta, queste continuano a prevalere.
+  casa: { nome: 'Mulino', largo: 7, fondo: 8.5, piani: 2, intonaco: false, copertura: 'coppi' },
+  riva: 3.4,                 // m fra il bordo dell'acqua e il muro verso il corso (la ruota sta nel mezzo)
+  // Ruota **per di sopra**: l'acqua le cade in testa dalla gora. Misurato sui torrenti del mondo generato: l'alveo è
+  // inciso di appena 0,6 m e largo 6, quindi il pelo dell'acqua è quasi a filo di terra. Una ruota a spinta dal basso
+  // lì sembra piantata nel fango; una ruota per di sopra con la gora si capisce anche se l'acqua non si vede.
+  ruota: { raggio: 2.1, largo: 1.15, pale: 12, cerchio: 0.16, mozzo: 0.3, sopra: 0.15 },
+  gora: { largo: 1.45, sponda: 0.4, lungo: 6.5, pali: 2, pendenza: 0.12 },
+  giri: 0.07,                // giri al secondo della ruota (una pala ogni ~1,2 s)
+  sbarramento: { sassi: 9, raggio: [0.35, 0.8] },
+  raggio: 15,                // m di terra battuta attorno
+  margine: [1.3, 3.2],
+  cerca: 90,                 // m: entro quanto si cerca il corso d'acqua (il sito ne garantisce 60)
+};
+// Lo stesso legno delle case (edifici3d.js, COL.legno, che non è esportato).
+const LEGNO_MULINO = '#4a3220';
+
+/** Punto del corso d'acqua più vicino al sito, in coordinate locali del sito: pelo, semilarghezza e direzione. */
+function corsoVicino(carta, sito, raggio) {
+  const pezzi = tracciatiFiumi(carta, sito.x, sito.z, raggio, true, raggio);
+  let b = null;
+  for (const p of pezzi) {
+    const n = p.length / 4;
+    for (let i = 0; i < n; i++) {
+      const u = p[i * 4], v = p[i * 4 + 1], d = Math.hypot(u, v);
+      if (b && d >= b.d) continue;
+      const j = i + 1 < n ? i + 1 : i - 1;                  // tangente: il punto dopo, o quello prima se è l'ultimo
+      const tu = j >= 0 ? (j > i ? p[j * 4] - u : u - p[j * 4]) : 1;
+      const tv = j >= 0 ? (j > i ? p[j * 4 + 1] - v : v - p[j * 4 + 1]) : 0;
+      b = { d, u, v, pelo: p[i * 4 + 2], w: Math.max(0.9, p[i * 4 + 3]), tu, tv };
+    }
+  }
+  if (!b) return null;
+  const L = Math.hypot(b.tu, b.tv) || 1;
+  b.tu /= L; b.tv /= L;
+  return b;
+}
+
+/** Scatola orientata come geometria, in coordinate locali della ruota (piano XY, asse Z). */
+function scatolaLocale(cx, cy, cz, sx, sy, sz, rot = 0) {
+  const g = new THREE.BoxGeometry(sx, sy, sz);
+  if (rot) g.rotateZ(rot);
+  g.translate(cx, cy, cz);
+  return g;
+}
+
+/** Unisce geometrie non indicizzate in una sola (posizioni e normali): niente BufferGeometryUtils vendorizzato. */
+function unisciSemplice(parti) {
+  const pezzi = parti.filter(Boolean).map((g) => (g.index ? g.toNonIndexed() : g));
+  for (const g of pezzi) if (!g.attributes.normal) g.computeVertexNormals();
+  const n = pezzi.reduce((s, g) => s + g.attributes.position.count, 0);
+  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3);
+  let o = 0;
+  for (const g of pezzi) {
+    pos.set(g.attributes.position.array, o * 3);
+    nor.set(g.attributes.normal.array, o * 3);
+    o += g.attributes.position.count;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  return geo;
+}
+
+/** Ruota a pale: due cerchi di legno a segmenti, le pale fra loro, il mozzo. Nel suo piano locale XY, asse Z. */
+function geoRuota(R) {
+  const parti = [], n = R.pale, r = R.raggio, sp = R.cerchio, mezzo = R.largo / 2;
+  const lato = 2 * r * Math.sin(Math.PI / n) * 1.04;        // corda di un segmento, un filo più lunga per non aprirsi
+  for (const z of [-mezzo + sp / 2, mezzo - sp / 2]) {
+    for (let k = 0; k < n; k++) {
+      const a = (k + 0.5) * 2 * Math.PI / n, rm = r - sp / 2;
+      parti.push(scatolaLocale(Math.cos(a) * rm, Math.sin(a) * rm, z, lato, sp, sp * 1.4, a + Math.PI / 2));
+    }
+  }
+  for (let k = 0; k < n; k++) {                              // pale: inclinate come quelle di una ruota a spinta
+    const a = k * 2 * Math.PI / n, rm = r - 0.42;
+    parti.push(scatolaLocale(Math.cos(a) * rm, Math.sin(a) * rm, 0, 0.1, 0.84, R.largo - sp * 2, a + Math.PI / 2));
+  }
+  for (let k = 0; k < 6; k++) {                              // raggi
+    const a = k * Math.PI / 3;
+    parti.push(scatolaLocale(Math.cos(a) * r / 2, Math.sin(a) * r / 2, 0, r, 0.1, 0.12, a));
+  }
+  parti.push(scatolaLocale(0, 0, 0, R.mozzo, R.mozzo, R.largo + 0.5, Math.PI / 4));
+  return unisciSemplice(parti);
+}
+
+export function createMulino(suolo, sito, ox, oz, carta) {
+  return completaPezzi(createMulinoAPezzi(suolo, sito, ox, oz, carta));
+}
+
+export function* createMulinoAPezzi(suolo, sito, ox, oz, carta) {
+  const M = MULINI, C = M.casa;
+  const seme = hash2(Math.floor(sito.x), Math.floor(sito.z), (carta.seme ?? 1) ^ 0x3b17a9) || 1;
+  const kit = creaKit({ X: (u) => ox + u, Z: (u, v) => oz + v, terreno: (u, v) => suolo.getHeight(ox + u, oz + v),
+    seme, nome: `mulino-${sito.id}`, contesto: 'campagna', zone: 1, clima: climaDelLuogo(carta, sito.x, sito.z) });
+  const rnd = kit.rnd;
+  const quota = (u, v) => suolo.getHeight(ox + u, oz + v);
+  const corso = corsoVicino(carta, sito, M.cerca);
+  const forme = [], travi = [];
+  let ruota = null;
+
+  // Dove va il corpo: accostato alla riva più asciutta del corso, con la facciata (e la porta) verso terra e il muro
+  // di dietro verso l'acqua, dove sta la ruota. Senza corso d'acqua — non deve capitare, perché il sito ne garantisce
+  // uno entro 60 m, ma la Scena non può rompersi — il mulino resta sul punto del sito, girato a caso e senza ruota.
+  let c, f, pelo = NaN;
+  if (corso) {
+    const nu = -corso.tv, nv = corso.tu;                     // normale al corso
+    const altezza = (sg) => quota(corso.u + nu * sg * (corso.w + 6), corso.v + nv * sg * (corso.w + 6));
+    const sg = altezza(1) >= altezza(-1) ? 1 : -1;           // la riva più alta: l'altra è il greto
+    f = [nu * sg, nv * sg];
+    pelo = corso.pelo;
+    let d = corso.w + M.riva + C.fondo / 2;
+    for (let k = 0; k < 10; k++) {                           // si allontana finché il corpo non sta sull'asciutto
+      c = [corso.u + f[0] * d, corso.v + f[1] * d];
+      if (quota(c[0], c[1]) >= pelo + 0.25) break;
+      d += 1.2;
+    }
+  } else {
+    const a = rnd() * Math.PI * 2;
+    f = [Math.cos(a), Math.sin(a)];
+    c = [0, 0];
+  }
+  kit.edificio('mulino', { u: c[0], v: c[1], fu: f[0], fv: f[1], misure: C });
+  const lat = [-f[1], f[0]];
+  forme.push({ c, s: lat, f, a: C.largo / 2 + 1.2, b: C.fondo / 2 + 1.2 });
+  kit.catasta(c[0] + lat[0] * (C.largo / 2 + 1.2), c[1] + lat[1] * (C.largo / 2 + 1.2), f[0], f[1], 0.85);
+  kit.botte(c[0] + lat[0] * (C.largo / 2 - 1) + f[0] * (C.fondo / 2 + 1.1),
+    c[1] + lat[1] * (C.largo / 2 - 1) + f[1] * (C.fondo / 2 + 1.1));
+  yield;
+
+  if (corso) {
+    const R = M.ruota, G = M.gora;
+    // Ruota fra il bordo dell'acqua e il muro, appena sopra il pelo: l'acqua le arriva dall'alto, dalla gora.
+    const dr = corso.w + 1.15;
+    const ru = corso.u + f[0] * dr, rv = corso.v + f[1] * dr;
+    // Il piede della ruota non deve restare per aria: sta al più basso fra il pelo dell'acqua e il terreno sotto di
+    // lei (dove il terreno è più alto del pelo, la ruota gira nella sua fossa, come nei mulini veri).
+    const yr = Math.min(pelo + R.sopra, quota(ru, rv) - 0.15) + R.raggio;
+    ruota = new THREE.Mesh(geoRuota(R), new THREE.MeshLambertMaterial({ color: LEGNO_MULINO, flatShading: true }));
+    ruota.name = `mulino-${sito.id}-ruota`;
+    ruota.position.set(ox + ru, yr, oz + rv);
+    // L'asse della ruota è la normale alla riva (`f`), così il **piano** della ruota contiene la corrente: la ruota
+    // sta per il lungo nel corso d'acqua, non di traverso. (Segnalato dall'utente: con +90° era trasversale.)
+    // `geoRuota` costruisce la ruota nel piano XY locale con l'asse su Z: ruotando di θ attorno a Y, Z va in
+    // (sin θ, 0, cos θ), quindi θ = atan2(f[0], f[1]).
+    ruota.rotation.y = Math.atan2(f[0], f[1]);
+    // Albero dal mozzo al muro di dietro, e il cavalletto che regge la ruota dall'altra parte.
+    const muro = [c[0] - f[0] * (C.fondo / 2), c[1] - f[1] * (C.fondo / 2)];
+    travi.push(trave([ox + ru, yr, oz + rv], [ox + muro[0], yr, oz + muro[1]], 0.24, 0.24));
+    for (const k of [-1, 1]) {
+      const pu = ru - f[0] * 0.9 + lat[0] * k * (R.largo / 2 + 0.3);
+      const pv = rv - f[1] * 0.9 + lat[1] * k * (R.largo / 2 + 0.3);
+      travi.push(trave([ox + pu, quota(pu, pv) - 0.4, oz + pv], [ox + ru - f[0] * 0.25, yr, oz + rv - f[1] * 0.25], 0.22, 0.22));
+    }
+    // Gora: canale di legno che scende da monte fino sopra la ruota, su pali. Il verso del corso non si conosce qui:
+    // si prende il lato dove il terreno è più alto, che è quello da cui l'acqua arriva.
+    const avanti = quota(corso.u + corso.tu * G.lungo, corso.v + corso.tv * G.lungo)
+      >= quota(corso.u - corso.tu * G.lungo, corso.v - corso.tv * G.lungo) ? 1 : -1;
+    const tu = corso.tu * avanti, tv = corso.tv * avanti;
+    const gu = ru - f[0] * 0.15, gv = rv - f[1] * 0.15;      // sbocco: sopra il colmo della ruota
+    const yB = yr + R.raggio + 0.2, yA = yB + G.lungo * G.pendenza;
+    const A = [ox + gu + tu * G.lungo, yA, oz + gv + tv * G.lungo], B = [ox + gu, yB, oz + gv];
+    travi.push(trave(A, B, G.largo, 0.16));                  // fondo del canale
+    for (const k of [-1, 1]) {                               // sponde (in piedi sui bordi del fondo)
+      const o = [k * -tv * (G.largo / 2 + 0.06), 0, k * tu * (G.largo / 2 + 0.06)];
+      travi.push(trave([A[0] + o[0], A[1] + G.sponda / 2, A[2] + o[2]],
+        [B[0] + o[0], B[1] + G.sponda / 2, B[2] + o[2]], 0.12, G.sponda));
+    }
+    for (let k = 0; k < G.pali; k++) {                       // pali sotto il canale
+      const t = (k + 0.5) / G.pali;
+      const pu = gu + tu * G.lungo * t, pv = gv + tv * G.lungo * t;
+      const cima = yB + (yA - yB) * t - 0.12;
+      travi.push(trave([ox + pu, quota(pu, pv) - 0.3, oz + pv], [ox + pu, cima, oz + pv], 0.2, 0.2));
+    }
+    forme.push({ c: [gu + tu * G.lungo / 2, gv + tv * G.lungo / 2], s: [-tv, tu], f: [tu, tv],
+      a: G.largo / 2 + 0.5, b: G.lungo / 2 + 0.5 });
+  }
+  yield;
+  const r = yield* kit.chiudiAPezzi();
+  if (ruota) { r.object.add(ruota); r.misure.chiamate++; r.misure.triangoli += triangoli(ruota.geometry); }
+  if (travi.length) {
+    const g = unisciSemplice(travi);
+    const mesh = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ color: LEGNO_MULINO, flatShading: true }));
+    mesh.name = `mulino-${sito.id}-gora`;
+    r.object.add(mesh);
+    r.misure.chiamate++; r.misure.triangoli += triangoli(g);
+  }
+  const distForme = (u, v) => {
+    let m = Infinity;
+    for (const L of forme) m = Math.min(m, distRett(L, u, v));
+    if (corso) {                                             // niente terra battuta dentro l'alveo
+      const du = (u - corso.u) * -corso.tv + (v - corso.v) * corso.tu;
+      if (Math.abs(du) < corso.w + 0.4) return 99;
+    }
+    return m;
+  };
+  attaccaSuolo(r, [['terra', geoTerra(M.raggio, distForme, ox, oz, quota, seme, M.margine), 0]]);
+  yield;
+  const girata = M.giri * Math.PI * 2;
+  return { tipo: 'mulino', sito, object: r.object, solidi: r.solidi,
+    spingiFuori: spintaDaScatole(r.scatole, ox, oz, M.raggio + 20), quotaSuolo: () => null,
+    dentro: () => false, sorgenti: r.sorgenti, misure: r.misure, edifici: r.edifici, raggio: M.raggio,
+    // La ruota gira qui: `aggiornaLuci` è l'unico aggancio per fotogramma che i villaggi hanno già.
+    aggiornaLuci: (t, buio, q) => { r.aggiornaLuci(t, buio, q); if (ruota) ruota.rotation.z = -t * girata; },
+  };
+}
+
+/** Trave fra due punti del mondo (una scatola orientata): asse maggiore da `a` a `b`, sezione `largo` × `alto`. */
+function trave(a, b, largo, alto) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2];
+  const L = Math.hypot(dx, dy, dz) || 0.01;
+  const g = new THREE.BoxGeometry(L, alto, largo);
+  const m = new THREE.Matrix4().makeRotationY(Math.atan2(dx, dz) - Math.PI / 2);
+  m.multiply(new THREE.Matrix4().makeRotationZ(Math.asin(Math.max(-1, Math.min(1, dy / L)))));
+  g.applyMatrix4(m);
+  g.translate((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
+  return g;
+}
+
+/** Triangoli di una geometria, per il conto delle misure. */
+function triangoli(g) {
+  return (g.index ? g.index.count : g.attributes.position.count) / 3;
 }
