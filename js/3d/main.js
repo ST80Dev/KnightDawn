@@ -24,7 +24,7 @@ import { createVillaggioAPezzi, createMonasteroAPezzi, createEremoAPezzi, create
 import { createRovinaAPezzi, createMisteroAPezzi } from './rovine3d.js';
 import { raggioSito, climaDelLuogo } from '../mondo/siti.js';
 import { createCartaVista } from './cartaVista.js';
-import { mostraMenuAvvio, creaCartaCronista, creaScrittoio, avvisoFoglio, nomeCasuale } from './interfaccia.js';
+import { mostraMenuAvvio, creaCartaCronista, creaScrittoio, avvisoFoglio, nomeCasuale, creaMeridiana } from './interfaccia.js';
 import { creaMinimappa } from './minimappa.js';
 import { creaOrizzonteAPezzi } from './orizzonte.js';
 import { creaAcqueScena, creaPonti, suoloStrade } from './acqua.js';
@@ -378,16 +378,20 @@ function avanza() {
 // Riposo (R): scorciatoia per il riposo pieno (docs/GDD.md §3). Da Vespri in poi si dorme all'aperto
 // fino a Prima (la notte passa d'un colpo); di giorno una sosta di un Passo (~3 ore).
 function riposa() {
-  if (!knight || inPausa) return;
+  if (!knight || inPausa || cronista) return;
   if (knight.stato.velEffettiva > 0.1) { messaggio('Fermati prima di riposare.'); return; }
-  const prima = Knight.forza.cur;
+  const prima = Knight.forza.cur, stato = istantanea();
   const sera = Calendar.eNotte() || Calendar.indiceNelGiorno() === CALENDAR.INDICE_NOTTE - 1;
+  let titolo, frasi;
   if (sera) {
     const passi = Calendar.avanzaFinoA(0);
     Knight.riposaPassi(passi);
     const p = controllaGiornata();
     if (p.digiuno) Knight.forza.cur = prima;               // a stomaco vuoto il sonno non ristora
     messaggio(`Dormi all'addiaccio fino a Prima (${_ore(passi)})${_guadagno(prima)}${p.testi.length ? ' ' + p.testi.join(' ') : ''}`);
+    titolo = 'La notte all\'addiaccio';
+    frasi = ['Ti avvolgi nel mantello e cerchi un riparo dal vento.', 'La notte passa lenta, fra versi lontani e il freddo che sale dalla terra.',
+      ...(p.testi.length ? p.testi : []), 'All\'alba ti rialzi, intirizzito.'];
   } else {
     if (Knight.forza.cur >= Knight.forza.max) {
       messaggio('Sei riposato: la Forza è piena.');
@@ -396,8 +400,12 @@ function riposa() {
     Calendar.avanza(VIAGGIO.PASSI_SOSTA);
     Knight.riposaPassi(VIAGGIO.PASSI_SOSTA);
     messaggio(`Ti fermi a riposare (${_ore(VIAGGIO.PASSI_SOSTA)})${_guadagno(prima)}`);
+    titolo = 'Una sosta';
+    frasi = ['Ti siedi all\'ombra e lasci riposare le gambe.', 'Il tempo scorre lento; il fiato torna.'];
   }
   salvaOra();
+  // Racconto della sosta (la meridiana segue le ore); poi la pergamena si chiude.
+  raccontaAzione({ titolo, frasi, prima: stato, dopo: istantanea() }).then((fatto) => { if (fatto) cartaCronista.chiudi(); });
 }
 
 // Pausa (P): nulla scorre, né il tempo di gioco né il cavaliere. La scheda nascosta ferma comunque
@@ -517,6 +525,53 @@ function dormiNelBorgo({ dove, forza = 0, salute = 0 }) {
   const p = controllaGiornata();
   if (p.digiuno) Knight.forza.cur = prima;                 // a stomaco vuoto il sonno non ristora
   return `Dormi ${dove} fino a Prima (${_ore(passi)})${_guadagno(prima)}${p.testi.length ? ' ' + p.testi.join(' ') : ''}`;
+}
+
+// ─── Racconto delle azioni e meridiana (richiesta dell'utente, novembre 2026) ─────
+// Quando una scelta fa passare almeno mezz'ora o cambia qualcosa (oro, Forza, Salute, Volontà, rango, zaino,
+// equipaggiamento, cavallo), la pergamena racconta prima dell'esito: frasi, ore che avanzano (la meridiana segue),
+// registro dei cambiamenti calcolato confrontando lo stato prima e dopo. Durata scelta nel menu d'avvio (preferenza
+// del browser `kd.racconto`: completo ~11 s, breve ~4 s, spento). Gli effetti sono già applicati alla conferma.
+const RACCONTO = { completo: 8000, breve: 2800, spento: 0 };
+const preferenzaRacconto = () => { try { return localStorage.getItem('kd.racconto') || 'completo'; } catch { return 'completo'; } };
+const meridiana = creaMeridiana(document.body);
+let oraForzata = null;                     // ora mostrata dalla meridiana durante il racconto (null: quella vera)
+function istantanea() {
+  return { oro: Knight.oro, forza: Knight.forza.cur, salute: Knight.salute.cur, volonta: Knight.volonta.cur, titolo: Knight.titolo,
+    zaino: [...Knight.zaino], equip: { ...Knight.equip }, cavallo: Knight.cavallo?.nome ?? null,
+    t: Calendar.passiTotali + Calendar.frazione, ora: Calendar.oraDelGiorno(), canonica: Calendar.oraCanonica() };
+}
+/** Righe del registro: ciò che è cambiato fra due istantanee. */
+function registroDi(a, b) {
+  const out = [];
+  const num = (nome, d) => { if (Math.abs(d) >= 0.5) out.push({ testo: `${nome} ${d > 0 ? '+' : '−'}${Math.round(Math.abs(d))}`, segno: d > 0 ? 'piu' : 'meno' }); };
+  num('Oro', b.oro - a.oro); num('Forza', b.forza - a.forza); num('Salute', b.salute - a.salute); num('Volontà', b.volonta - a.volonta);
+  if (b.titolo !== a.titolo) out.push({ testo: `Ora sei ${b.titolo}`, segno: 'piu' });
+  for (const slot of Object.keys(b.equip)) {
+    if (b.equip[slot] === a.equip[slot]) continue;
+    if (a.equip[slot]) out.push({ testo: `Lasci: ${a.equip[slot]}`, segno: 'meno' });
+    if (b.equip[slot]) out.push({ testo: `Porti: ${b.equip[slot]}`, segno: 'piu' });
+  }
+  const conta = (l) => l.reduce((m, n) => m.set(n, (m.get(n) ?? 0) + 1), new Map());
+  const za = conta(a.zaino), zb = conta(b.zaino);
+  for (const n of new Set([...za.keys(), ...zb.keys()])) {
+    const d = (zb.get(n) ?? 0) - (za.get(n) ?? 0);
+    if (d) out.push({ testo: `Zaino: ${d > 0 ? '+' : '−'} ${n}${Math.abs(d) > 1 ? ` ×${Math.abs(d)}` : ''}`, segno: d > 0 ? 'piu' : 'meno' });
+  }
+  if (b.cavallo !== a.cavallo) out.push(b.cavallo ? { testo: `Cavallo: ${b.cavallo}`, segno: 'piu' } : { testo: `Lasci il ${a.cavallo}`, segno: 'meno' });
+  return out;
+}
+const _hh = (o) => `${Math.floor(o)}:${o % 1 >= 0.5 ? '30' : '00'}`;
+/** Racconta un'azione già avvenuta (ritorna false se non c'è nulla da raccontare o il racconto è spento). */
+async function raccontaAzione({ titolo, frasi, prima, dopo }) {
+  const durata = RACCONTO[preferenzaRacconto()] ?? RACCONTO.completo;
+  const registro = registroDi(prima, dopo), passi = dopo.t - prima.t;
+  if (!durata || (passi < 1 / 6 - 1e-6 && !registro.length)) return false;
+  const ore = passi >= 1 / 6 - 1e-6 ? { da: `${prima.canonica} · ${_hh(prima.ora)}`, a: `${dopo.canonica} · ${_hh(dopo.ora)}` } : null;
+  await cartaCronista.racconta({ titolo, frasi, ore, registro, durata,
+    alTempo: (f) => { oraForzata = (prima.ora + f * passi * 24 / CALENDAR.PASSI_PER_GIORNO) % 24; } });
+  oraForzata = null;
+  return true;
 }
 
 // ─── Pasti, mercato e zaino (G1 passo 3) ─────────────────────────────────
@@ -672,16 +727,21 @@ function mostraEvento(ev, luogo) {
   });
 }
 
-function scegliOpzione(ev, o, luogo) {
+async function scegliOpzione(ev, o, luogo) {
   if (o.apre === 'mercato') {
     const tipo = ev.id === 'veglia.stalla' ? 'stalla' : ev.id === 'veglia.taverna' ? 'taverna' : edificioAperto;
     mostraMercato(tipo, () => mostraEvento(ev, luogo));
     return;
   }
   if (!o.effects?.length && !o.reply) { cartaCronista.chiudi(); return; }
+  const prima = istantanea();
   const righe = Events.applyEffects(o.effects, contestoEventi());
   Events.markSeen(ev);
   salvaOra();
+  // Racconto tra la scelta e l'esito: le frasi dell'opzione (o il suo esito spezzato in frasi), le ore, il registro.
+  const frasi = o.racconto ?? (o.reply ? o.reply.split(/(?<=[.!?…»])\s+/) : [o.text]);
+  await raccontaAzione({ titolo: ev.title, frasi, prima, dopo: istantanea() });
+  if (!cartaCronista.aperta) return;
   // Dopo l'investitura la Veglia è finita: la carta non torna agli eventi della Veglia.
   const ancora = Calendar.inVeglia ? [{ testo: 'Indietro', scegli: () => mostraEvento(ev, luogo) }] : [];
   cartaCronista.mostra({ titolo: ev.title, testo: o.reply ?? '', righe, opzioni: [...ancora, ESCI] });
@@ -2056,6 +2116,8 @@ function frame(now) {
     tt = segna('interfaccia', tt);
     minimappa.nascondi(!!percorso);        // percorso di prova: misure confrontabili con quelle di prima
     aggiornaConoscenza(dtReale);
+    meridiana.nascondi(!!percorso);
+    meridiana.aggiorna(oraForzata ?? Calendar.oraDelGiorno(), oraForzata != null ? 0.25 : 0.5);
     aggiornaPasti(dtReale);
     minimappa.aggiorna(now);
     tt = segna('minimappa', tt);

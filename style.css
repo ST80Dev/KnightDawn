@@ -553,3 +553,50 @@ html, body {
 #carta.gioco .barra .titolo { font: 600 20px var(--kd-titolo); letter-spacing: .1em; color: var(--kd-oro-chiaro); }
 #carta.gioco .barra, #carta.gioco .piede { font-family: var(--kd-testo); font-size: 16px; }
 #carta.gioco .piede .dati { display: none; }
+
+/* Racconto tra la scelta e l'esito (interfaccia.js, racconta) */
+.carta-cronista .racconto { font: 21px/1.5 Fondamento, var(--kd-testo); color: #2b190a; text-align: center; margin: 4px 0 16px; min-height: 3em; }
+.carta-cronista .racconto span { opacity: 0; transition: opacity .5s; }
+.carta-cronista .racconto span.scritta { opacity: 1; }
+.carta-cronista .ore-racconto { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; margin: 0 20px 16px;
+  font: 600 15px var(--kd-titolo); letter-spacing: .08em; color: #4a2f14; }
+.carta-cronista .ore-racconto i { display: block; height: 4px; background: rgba(110, 70, 20, .25); border-radius: 2px; }
+.carta-cronista .ore-racconto b { display: block; height: 100%; width: 0; background: var(--kd-rubrica); border-radius: 2px; }
+.carta-cronista .registro { margin: 0 30px 10px; padding: 6px 0; border-top: 1px solid rgba(110, 70, 20, .5); }
+.carta-cronista .registro div { font: italic 18px/1.6 var(--kd-testo); color: #3e2810; opacity: 0; transform: translateX(-6px);
+  transition: opacity .6s, transform .6s; }
+.carta-cronista .registro div.vista { opacity: 1; transform: none; }
+.carta-cronista .registro div::before { content: '❧ '; color: var(--kd-rubrica); font-style: normal; }
+.carta-cronista .registro div.piu { color: #2f5a1e; }
+.carta-cronista .registro div.meno { color: #7a1f12; }
+.carta-cronista .avanti { text-align: center; font: italic 13px var(--kd-testo); color: var(--kd-sbiadito); opacity: 0; transition: opacity .8s; }
+.carta-cronista .avanti.vista { opacity: 1; }
+
+/* Meridiana (interfaccia.js, creaMeridiana): tavoletta di pietra dal bordo scheggiato, disegno dritto e leggibile */
+.meridiana { position: fixed; left: 14px; top: 12px; z-index: 5; width: 236px; pointer-events: none;
+  filter: drop-shadow(0 5px 7px rgba(0, 0, 0, .55)); }
+.meridiana[hidden] { display: none; }
+.meridiana svg { display: block; width: 100%; height: auto; overflow: visible; }
+.meridiana .pietra { fill: url(#mer-pietra); transition: filter 1.2s; }
+.meridiana .orlo { fill: none; stroke: #4e4a40; stroke-width: 1.6; }
+.meridiana .incisioni path { fill: none; stroke: #2e2a24; stroke-width: 1.3; stroke-linecap: round; }
+.meridiana .incisioni path.forte { stroke-width: 2.2; }
+.meridiana .incisioni { filter: drop-shadow(.8px .8px 0 rgba(240, 232, 214, .7)); }
+.meridiana .soli { filter: drop-shadow(.6px .8px 0 rgba(40, 30, 20, .55)); }
+.meridiana .soli path { stroke-linecap: round; }
+.meridiana .ombra { fill: none; stroke: #f0a020; stroke-width: 5; stroke-linecap: round;
+  filter: drop-shadow(0 0 1px #6a3a08) drop-shadow(0 0 3px rgba(255, 190, 60, .55)); }
+.meridiana .piolo { fill: #3a2e22; stroke: #1a140e; stroke-width: 1; }
+.meridiana .notturno { display: none; }
+.meridiana.notte .giorno { display: none; }
+.meridiana.notte .notturno { display: inline; }
+.meridiana .lune .disco { fill: #ece6cc; stroke: #3a3e52; stroke-width: .8; filter: drop-shadow(0 0 3px rgba(236, 230, 204, .7)); }
+.meridiana .indice { fill: none; stroke: #e4e0cc; stroke-width: 5; stroke-linecap: round;
+  filter: drop-shadow(0 0 1px #2a2c3a) drop-shadow(0 0 3px rgba(236, 230, 204, .5)); }
+.meridiana .testo { font: 600 15px var(--kd-titolo); letter-spacing: .04em; fill: #f0dcae; text-anchor: middle; paint-order: stroke;
+  stroke: rgba(20, 10, 2, .85); stroke-width: 3.5px; }
+.meridiana.notte .pietra { filter: brightness(.55) saturate(.4); }
+.meridiana.notte .incisioni path { stroke: #1a1c26; }
+.meridiana.notte .incisioni { filter: drop-shadow(.8px .8px 0 rgba(200, 205, 225, .45)); }
+#menu-avvio .racconto-pref { margin-left: 8px; }
+#menu-avvio .impostazioni .riga { margin-bottom: 0; }

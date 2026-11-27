@@ -345,6 +345,26 @@ poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un
    arriveranno con le missioni (G4). Provato in headless a 1920×1080 (seme 570549): coltello dal fabbro, ronzino dallo
    stalliere (compare in 3D, non dà lo sconto a piedi), pasto in taverna, zaino, tre giorni con un solo pane (mangiato
    da solo il secondo giorno, il terzo Salute −3); `?prova` e Libera senza errori.
+3b. **Racconto delle azioni e meridiana** [richiesta dell'utente, novembre 2026]. **Stato: fatto, da provare
+   dall'utente.** Quando una scelta fa passare almeno mezz'ora o cambia qualcosa, la pergamena racconta prima
+   dell'esito (`racconta` in `js/3d/interfaccia.js`, `raccontaAzione` in `main.js`): frasi scritte parola per parola in
+   scrittura a mano (campo `racconto` dell'opzione, altrimenti il testo d'esito spezzato), le ore che avanzano («Prima ·
+   6:00 → Terza · 9:00», con la meridiana che segue), il **registro** dei cambiamenti calcolato confrontando lo stato
+   prima e dopo (oro, Forza, Salute, Volontà, rango, equipaggiamento, zaino, cavallo). Dura circa 11 secondi (8 di
+   animazione e una sosta per leggere), poi passa da solo all'esito; un clic, Spazio o Invio completa, il secondo va
+   avanti. Anche il riposo con `R` (sosta o notte all'addiaccio) ha il suo racconto. Nel menu d'avvio «Racconto delle
+   azioni»: completo, breve (~4 s) o spento (preferenza del browser `kd.racconto`). Gli acquisti al mercato no: lì
+   la riga d'esito nella tabella basta. **Meridiana** in alto a sinistra (`creaMeridiana`) [rivista due volte con l'utente: non un
+   quadrante preciso «da tachimetro», ma nemmeno sbilenca come un graffito]: tavoletta di pietra dal bordo scheggiato e
+   dalla superficie granulosa, con il disegno dritto e leggibile delle meridiane canoniche medievali: base orizzontale,
+   semicerchio regolare, raggi incisi (più marcati sulle ore canoniche), un piolo la cui ombra indica l'ora. Al posto dei
+   numeri, **soli stilizzati** fuori dal semicerchio: piccoli e rossicci all'alba e al tramonto, grandi e dorati a
+   mezzogiorno. Sotto, in orizzontale, «Terza · circa le 10 e mezza». Avanza a scatti di mezz'ora di gioco (3 minuti
+   reali), non di continuo. Al posto dell'ombra realistica una **lancetta giallo-arancio** che indica l'ora
+   (richiesta dell'utente). **Di notte il notturnale**: il semicerchio si ribalta verso il basso, da Compieta (21, a
+   sinistra) a Prima (6, a destra) passando per Mattutino; tacche ogni ora e mezza; **lune** al posto dei soli (falce
+   crescente a Compieta, piena a mezzanotte, calante a Lodi) e una lancetta argento.
+   Corretto anche `Calendar.fineVeglia`: all'investitura l'ora del giorno ripartiva da Prima.
 4. **Combattimento nel riquadro.** Tre colonne (cavaliere, scelte e Slancio, nemico) e cronaca dei Round;
    la scena dietro è ferma. Ogni Round confermato avanza il calendario dei suoi minuti; i rami di esito
    tornano all'evento. In Veglia a Salute 0 si sviene; dopo l'investitura **schermata di morte** con

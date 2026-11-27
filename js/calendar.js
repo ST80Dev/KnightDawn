@@ -180,7 +180,9 @@ const Calendar = {
     this.luce     = 1;
     this.stagione = 0;
     this.diario   = 1;
-    this.passo    = 1;
+    // L'ora del giorno resta quella di prima (prima ripartiva da Prima, qualunque ora fosse): il Passo nel Diario
+    // comincia dall'ora canonica corrente.
+    this.passo    = 1 + (this.passiTotali % CALENDAR.PASSI_PER_GIORNO);
   },
 
   nomeStagione() {

@@ -63,6 +63,13 @@ export function mostraMenuAvvio(opzioni) {
         <input type="file" class="file-partita" accept=".json,application/json" hidden>
         <div class="errore" hidden></div>
       </div>` : ''}
+      <div class="sezione impostazioni">
+        <div class="riga"><label>Racconto delle azioni <select class="racconto-pref">
+          <option value="completo">completo (circa 11 secondi)</option>
+          <option value="breve">breve (circa 4 secondi)</option>
+          <option value="spento">spento</option>
+        </select></label></div>
+      </div>
       </div>
       <div class="sezione nuova">
         <div class="etichetta">Nuova partita</div>
@@ -94,6 +101,10 @@ export function mostraMenuAvvio(opzioni) {
     document.body.appendChild(el);
 
     const inSeme = el.querySelector('.seme');
+    // Preferenza del racconto (comodità del browser: si può perdere senza danno).
+    const selRacconto = el.querySelector('.racconto-pref');
+    try { selRacconto.value = localStorage.getItem('kd.racconto') || 'completo'; } catch { /* niente preferenze */ }
+    selRacconto.addEventListener('change', () => { try { localStorage.setItem('kd.racconto', selRacconto.value); } catch { /* pazienza */ } });
     const rigaLuogo = el.querySelector('.luogo');
     const rigaNome = el.querySelector('.riga.nome'), inNome = el.querySelector('.nome-garzone');
     inNome.value = nomeCasuale();
@@ -468,13 +479,210 @@ export function creaCartaCronista(opzioni = {}) {
   /** Tasti mentre la carta è aperta: true se il tasto è stato usato. */
   function tasto(e) {
     if (!el) return false;
+    if (avanzaRacconto) {                          // racconto in corso: Spazio, Invio o Esc lo completano / lo chiudono
+      if (['Space', 'Enter', 'NumpadEnter', 'Escape'].includes(e.code)) { e.preventDefault?.(); avanzaRacconto(); }
+      return true;
+    }
     if (e.code === 'Escape') { chiudi(); return true; }
     const m = /^(Digit|Numpad)([1-9])$/.exec(e.code);
     if (m) { scelte[+m[2] - 1]?.scegli(); return true; }
     return false;
   }
-  return { mostra, chiudi, tasto, get aperta() { return !!el; } };
+
+  // ─── Racconto (richiesta dell'utente, novembre 2026): tra una scelta che fa passare ore o cambia qualcosa e il suo
+  // esito, la pergamena racconta. Le frasi si scrivono parola per parola (scrittura a mano), poi le ore avanzano
+  // («Prima → Terza», con `alTempo(f)` che muove la meridiana), poi il registro dei cambiamenti riga per riga; resta
+  // fermo per leggere e si risolve da solo. Un clic (o Spazio, Invio) completa l'animazione; il secondo va avanti.
+  // Gli effetti sono già applicati: è solo il modo di mostrarli.
+  let avanzaRacconto = null;
+  /**
+   * @param {{ titolo: string, frasi: string[], ore?: { da: string, a: string }, registro: { testo: string, segno?: 'piu'|'meno' }[],
+   *   durata?: number, alTempo?: (f: number) => void }} r   durata: ms dell'animazione (poi ~40 % in più di sosta)
+   * @returns {Promise<void>}
+   */
+  function racconta(r) {
+    return new Promise((risolvi) => {
+      const nuova = !el;
+      if (!el) {
+        el = document.createElement('div');
+        el.className = 'carta-cronista';
+        contenuto = document.createElement('div');
+        contenuto.className = 'contenuto';
+        el.appendChild(contenuto);
+        document.body.appendChild(el);
+        semeCornice = semeDaTesto(r.titolo);
+        stacca = sfondoSvg(el, (w, h) => cornice(w, h, semeCornice).svg);
+      }
+      el.classList.remove('larga');
+      scelte = [];
+      const parole = r.frasi.join(' ').split(/\s+/).filter(Boolean);
+      contenuto.innerHTML = `<div class="titolo">${_esc(r.titolo)}</div><div class="fregio"></div>`
+        + `<div class="racconto">${parole.map((p) => `<span>${_esc(p)}</span>`).join(' ')}</div>`
+        + (r.ore ? `<div class="ore-racconto"><span>${_esc(r.ore.da)}</span><i><b></b></i><span>${_esc(r.ore.a)}</span></div>` : '')
+        + `<div class="registro">${r.registro.map((v) => `<div class="${v.segno ?? ''}">${_esc(v.testo)}</div>`).join('')}</div>`
+        + '<div class="avanti">clic, Spazio o Invio per continuare</div>';
+      if (nuova) opzioni.onApri?.();
+      const durata = Math.max(600, r.durata ?? 8000);
+      // Tempi: parole nel primo 45 %, ore dal 35 al 70 %, registro dal 60 al 100 %; poi sosta.
+      const sp = [...contenuto.querySelectorAll('.racconto span')], righe = [...contenuto.querySelectorAll('.registro div')];
+      const barra = contenuto.querySelector('.ore-racconto b');
+      const t0 = performance.now(), sosta = durata * 0.4;
+      let finito = false, raf = 0, timer = 0;
+      const passo = (f) => {
+        sp.forEach((s, i) => s.classList.toggle('scritta', f >= (i / Math.max(1, sp.length)) * 0.45));
+        const ft = Math.min(1, Math.max(0, (f - 0.35) / 0.35));
+        if (barra) barra.style.width = `${ft * 100}%`;
+        r.alTempo?.(ft);
+        righe.forEach((d, i) => d.classList.toggle('vista', f >= 0.6 + (i / Math.max(1, righe.length)) * 0.4));
+      };
+      const chiudiRacconto = () => {
+        cancelAnimationFrame(raf); clearTimeout(timer);
+        avanzaRacconto = null;
+        el?.removeEventListener('click', clic);
+        risolvi();
+      };
+      const completa = () => {
+        finito = true; cancelAnimationFrame(raf); passo(1);
+        contenuto.querySelector('.avanti')?.classList.add('vista');
+        clearTimeout(timer); timer = setTimeout(chiudiRacconto, sosta);
+      };
+      const ciclo = () => {
+        const f = Math.min(1, (performance.now() - t0) / durata);
+        passo(f);
+        if (f >= 1) completa(); else raf = requestAnimationFrame(ciclo);
+      };
+      avanzaRacconto = () => (finito ? chiudiRacconto() : completa());
+      const clic = () => avanzaRacconto?.();
+      el.addEventListener('click', clic);
+      raf = requestAnimationFrame(ciclo);
+    });
+  }
+  return { mostra, chiudi, tasto, racconta, get aperta() { return !!el; }, get inRacconto() { return !!avanzaRacconto; } };
 }
+
+// ─── Meridiana (richiesta dell'utente, novembre 2026): in alto a sinistra, il momento del giorno ──────────────────
+// Una tavoletta di pietra, sul modello delle meridiane canoniche medievali incise sulle chiese: il bordo è scheggiato e
+// la superficie granulosa (l'irregolarità sta nella pietra), ma il disegno è dritto e leggibile [rivisto con l'utente:
+// la versione sbilenca sembrava un graffito rupestre]: base orizzontale, semicerchio regolare, raggi incisi, soli stilizzati
+// sulle ore canoniche (I Prima, III Terza, VI Sesta, IX Nona, XII Vespri), un piolo la cui ombra indica l'ora.
+// Sotto, in orizzontale, l'ora canonica e l'orario «circa». Scatta a passi fissi (mezz'ora di gioco), non scorre di
+// continuo. Di notte la pietra è al buio e mostra una luna. Scheggiature fisse (seme costante).
+// [ora, raggio del sole, colore]: dall'alba pallida al mezzogiorno pieno, al tramonto rossiccio.
+// [ora (dopo mezzanotte + 24), raggio, fase]: le lune del notturnale.
+const LUNE_NOTTURNALE = [[21, 6, 'crescente'], [24, 7, 'piena'], [27, 6, 'calante']];
+const SOLI_MERIDIANA = [[6, 3.2, '#d9a066'], [9, 4.6, '#e8b440'], [12, 6.2, '#f6cf3a'], [15, 4.6, '#e8b440'], [18, 3.2, '#d98a4a']];
+export function creaMeridiana(contenitore) {
+  const el = document.createElement('div');
+  el.className = 'meridiana';
+  el.hidden = true;
+  const r = rng(77017);
+  const j = (a) => (r() - 0.5) * 2 * a;
+  const W = 220, H = 128, cx = W / 2, cy = 104, R = 62;
+  const ang = (h) => Math.PI * (1 - (h - 6) / 15);           // 6 → sinistra, 21 → destra
+  const pt = (h, rr) => [cx + Math.cos(ang(h)) * rr, cy - Math.sin(ang(h)) * rr];
+  const f = (v) => v.toFixed(1);
+  // Lastra: rettangolo con il bordo scheggiato (punti ogni ~12 px con piccoli scarti, qualche scheggia più profonda).
+  const m = 4, pts = [];
+  const lato = (x0, y0, x1, y1, nx, ny) => {
+    const n = Math.round(Math.hypot(x1 - x0, y1 - y0) / 12);
+    for (let k = 0; k < n; k++) {
+      const t = k / n, d = r() * 2.2 + (r() < 0.12 ? 3 + r() * 3 : 0);
+      pts.push([x0 + (x1 - x0) * t + nx * d, y0 + (y1 - y0) * t + ny * d]);
+    }
+  };
+  lato(m, m, W - m, m, 0, 1); lato(W - m, m, W - m, H - m, -1, 0); lato(W - m, H - m, m, H - m, 0, -1); lato(m, H - m, m, m, 1, 0);
+  const bordo = 'M' + pts.map((p) => `${f(p[0])} ${f(p[1])}`).join(' L') + ' Z';
+  // Quadrante: semicerchio e base dritti; raggi a ogni ora e mezza, i canonici più lunghi e più marcati.
+  const [ax0, ay0] = pt(6, R), [ax1, ay1] = pt(21, R);
+  const arco = `M${f(ax0)} ${f(ay0)} A${R} ${R} 0 0 1 ${f(ax1)} ${f(ay1)}`;
+  const base = `M${f(cx - R - 6)} ${cy} H${f(cx + R + 6)}`;
+  let raggi = '';
+  for (let h = 6; h <= 21; h += 1.5) {
+    const canonica = (h - 6) % 3 === 0, [x0, y0] = pt(h, 12), [x1, y1] = pt(h, canonica ? R : R - 14);
+    raggi += `<path d="M${f(x0)} ${f(y0)} L${f(x1)} ${f(y1)}" class="${canonica ? 'forte' : ''}"/>`;
+  }
+  // Al posto dei numeri, soli stilizzati (richiesta dell'utente): piccoli e pallidi all'alba e al tramonto, grandi e
+  // luminosi a mezzogiorno. Un disco con otto raggi, come intarsiato nella pietra.
+  const soli = SOLI_MERIDIANA.map(([h, rs, col]) => {
+    const [x, y] = pt(h, R + 16);                           // fuori dal semicerchio, come attorno a un quadrante
+    let raggiSole = '';
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2, c = Math.cos(a), s2 = Math.sin(a);
+      raggiSole += `M${f(x + c * rs * 1.35)} ${f(y + s2 * rs * 1.35)} L${f(x + c * rs * 1.95)} ${f(y + s2 * rs * 1.95)} `;
+    }
+    return `<g class="sole"><path d="${raggiSole}" stroke="${col}" stroke-width="${f(Math.max(1.2, rs * 0.32))}"/>`
+      + `<circle cx="${f(x)}" cy="${f(y)}" r="${rs}" fill="${col}"/></g>`;
+  }).join('');
+  // Notturnale (richiesta dell'utente): di notte il semicerchio si ribalta verso il basso, da Compieta (21, a sinistra)
+  // a Prima (6, a destra) passando per Mattutino (mezzanotte) in fondo; tacche ogni ora e mezza, lune al posto dei soli
+  // (falce a Compieta e a Lodi, piena a mezzanotte); l'indice indica l'ora.
+  const ncy = 26, angN = (h) => Math.PI * (1 + (h - 21) / 9);   // 21 → sinistra, 30 (= 6) → destra, passando in basso
+  const ptN = (h, rr) => [cx + Math.cos(angN(h)) * rr, ncy - Math.sin(angN(h)) * rr];
+  let raggiN = '';
+  for (let h = 21; h <= 30; h += 1.5) {
+    const canonica = (h - 21) % 3 === 0, [x0, y0] = ptN(h, 12), [x1, y1] = ptN(h, canonica ? R : R - 14);
+    raggiN += `<path d="M${f(x0)} ${f(y0)} L${f(x1)} ${f(y1)}" class="${canonica ? 'forte' : ''}"/>`;
+  }
+  const lune = LUNE_NOTTURNALE.map(([h, rl, fase]) => {
+    const [x, y] = ptN(h, R + 15);
+    if (fase === 'piena') return `<circle cx="${f(x)}" cy="${f(y)}" r="${rl}" class="disco"/>`;
+    // Falce: mezzo cerchio esterno e, a ritroso, mezza ellisse più stretta dalla stessa parte (crescente a destra).
+    const est = fase === 'crescente' ? 1 : 0;
+    return `<path class="disco" d="M${f(x)} ${f(y - rl)} A${rl} ${rl} 0 0 ${est} ${f(x)} ${f(y + rl)} A${f(rl * 0.45)} ${rl} 0 0 ${1 - est} ${f(x)} ${f(y - rl)} Z"/>`;
+  }).join('');
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H + 26}" aria-hidden="true">
+      <defs>
+        <linearGradient id="mer-pietra" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b8b0a0"/><stop offset="1" stop-color="#8e8676"/></linearGradient>
+        <filter id="mer-grana" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".09" numOctaves="3" seed="9"/><feColorMatrix values="0 0 0 0 .25  0 0 0 0 .23  0 0 0 0 .2  0 0 0 .9 -.25"/></filter>
+        <filter id="mer-macchie" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".018" numOctaves="2" seed="3"/><feColorMatrix values="0 0 0 0 .3  0 0 0 0 .32  0 0 0 0 .22  0 0 0 1.4 -.6"/></filter>
+        <filter id="mer-sfuma" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.2"/></filter>
+        <clipPath id="mer-taglio"><path d="${bordo}"/></clipPath>
+      </defs>
+      <path class="pietra" d="${bordo}"/>
+      <g clip-path="url(#mer-taglio)"><rect width="${W}" height="${H}" filter="url(#mer-macchie)"/><rect width="${W}" height="${H}" filter="url(#mer-grana)"/></g>
+      <path class="orlo" d="${bordo}"/>
+      <g class="giorno">
+        <g class="incisioni"><path d="${arco}"/><path d="${base}"/>${raggi}</g>
+        <g class="soli">${soli}</g>
+        <path class="ombra" d="M${cx} ${cy}"/>
+        <circle class="piolo" cx="${cx}" cy="${cy}" r="4"/>
+      </g>
+      <g class="notturno">
+        <g class="incisioni"><path d="M${f(cx - R)} ${ncy} A${R} ${R} 0 0 0 ${f(cx + R)} ${ncy}"/><path d="M${f(cx - R - 6)} ${ncy} H${f(cx + R + 6)}"/>${raggiN}</g>
+        <g class="lune">${lune}</g>
+        <path class="indice" d="M${cx} ${ncy}"/>
+        <circle class="piolo" cx="${cx}" cy="${ncy}" r="4"/>
+      </g>
+      <text class="testo" x="${cx}" y="${H + 19}"></text>
+    </svg>`;
+  contenitore.appendChild(el);
+  const ombra = el.querySelector('.ombra'), indice = el.querySelector('.indice'), testo = el.querySelector('.testo');
+  let ultima = null;
+  /** ora: 0–24 (con i decimali); passo: ore di gioco per scatto (0,5 = mezz'ora). */
+  function aggiorna(ora, passo = 0.5) {
+    const o = Math.floor(ora / passo) * passo;
+    if (o === ultima) return;
+    ultima = o;
+    const notte = o < 6 || o >= 21;
+    el.classList.toggle('notte', notte);
+    if (!notte) {
+      // Lancetta giallo-arancio che indica l'ora (richiesta dell'utente: un indicatore chiaro, non un'ombra realistica).
+      const [x, y] = pt(o, R - 2);
+      ombra.setAttribute('d', `M${cx} ${cy} L${f(x)} ${f(y)}`);
+    } else {
+      // Notturnale: una lancetta argento, come quella arancio del giorno, indica l'ora della notte.
+      const on = o < 6 ? o + 24 : o, [x, y] = ptN(on, R - 2);
+      indice.setAttribute('d', `M${cx} ${ncy} L${f(x)} ${f(y)}`);
+    }
+    const h = Math.floor(o), mezza = o - h >= 0.5;
+    const quando = h === 0 ? 'mezzanotte' : h === 12 ? 'mezzogiorno' : h === 1 || h === 13 ? "l'una" : `le ${h}`;
+    testo.textContent = `${ORE_CANONICHE_DI(o)} · ${h === 0 || h === 12 ? '' : 'circa '}${quando}${mezza ? ' e mezza' : ''}`;
+  }
+  return { aggiorna, nascondi(si) { el.hidden = si; } };
+}
+// Ora canonica di un'ora del giorno: ogni canonica dura 3 ore da Prima (6:00).
+const NOMI_CANONICHE = ['Prima', 'Terza', 'Sesta', 'Nona', 'Vespri', 'Compieta', 'Mattutino', 'Lodi'];
+function ORE_CANONICHE_DI(o) { return NOMI_CANONICHE[Math.floor((((o - 6) % 24) + 24) % 24 / 3)]; }
 
 // ─── Fogli delle notizie e scrittoio (J) ─────────────────────────────────────────────────────────────────────────
 // Documento: { tipo:'voce'|'lettera'|'bando', testo, fonte?, quando?, a?, firma?, titolo?, sottotitolo?, usura? (0–1),
