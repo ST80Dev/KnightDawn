@@ -216,12 +216,12 @@ triangoli** (~1 800 l'una), più di tutte le 71 253 sagome messe insieme (142 50
 
 | | prima | dopo |
 |---|---|---|
-| triangoli della vegetazione | 626 934 | **535 308** (−14,6 %) |
-| triangoli della scena | 1 015 516 | **923 890** (−9 %) |
+| triangoli della vegetazione | 626 934 | **529 260** (−15,6 %) |
+| triangoli della scena | 1 015 516 | **917 842** (−9,6 %) |
 | chiamate della vegetazione | 32 | **32** (nessuna in più) |
 
 Il taglio viene dal livello ricco delle latifoglie portato da 50 a 35 m (−113 632 triangoli); i tronchi più sottili non
-cambiano il conto, i piedi dei tronchi lo rialzano di ~20 mila.
+cambiano il conto, i piedi dei tronchi lo rialzano di ~16 mila.
 
 **Attenzione: il guadagno in millisecondi non è dato per scontato.** La misura del 21/11 qui sotto dice che il costo
 segue i pixel coperti, non i triangoli: togliendo 187 mila triangoli la vegetazione scese solo da 7,2 a 7,0 ms, perché

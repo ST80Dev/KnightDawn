@@ -2367,7 +2367,7 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      budget, e il peso sta in «veg. resto», cioè la geometria). Quattro cose insieme.
      **Livello ricco delle latifoglie da 50 a 35 m**: fra 18 e 50 m c'erano 119 piante per 215 512 triangoli, un terzo
      di tutta la vegetazione; a 35 m l'albero sullo schermo è un terzo di quello vicino e il livello medio regge.
-     Vegetazione da 626 934 a 535 308 triangoli (−14,6 %), scena −9 %, nessuna chiamata di disegno in più.
+     Vegetazione da 626 934 a 529 260 triangoli (−15,6 %), scena −9,6 %, nessuna chiamata di disegno in più.
      **Tronchi più sottili** (richiesta dell'utente, ribadita: «troppo grossi alla base, sproporzionati rispetto
      all'altezza»): la quercia aveva raggio di base 0,46 m, cioè 92 cm di diametro per 10–11 m d'altezza, rapporto
      1 : 12, e i rami principali erano più grossi del tronco (r0 0,5 contro 0,46); ora base 0,19–0,24 m e rami ~0,6
@@ -2381,11 +2381,12 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      **Piede del tronco** (richieste dell'utente, con foto: «la base finisce lineare come uno stuzzicadenti»; poi
      «troppo poco, sembrano rinforzi meccanici»; poi «sembrano pezzi grafici aggiunti, non si può fare direttamente il
      tronco che si modifica?»). Non è un pezzo a parte ma una **deformazione del tronco già costruito**, `piedeTronco`:
-     stessa maglia, nessuna giunzione. Un rigonfiamento dolce negli ultimi 1,3–2,2 m (`gonfia`, esponente `curva`) e
-     4–6 *costole* strette che escono solo nell'ultima frazione (`piede`), si allungano fino a 2–3,4 volte e nascono
-     interrate (il tronco comincia a −0,5 m), con valli profonde in mezzo: sono loro a fare la ceppaia, il
-     rigonfiamento da solo dava un imbuto. Specie diverse, piede diverso: quercia e castagno larghi, faggio e pioppo
-     sobri. Perché il profilo non esca come un cono dritto servono anelli fitti alla base: `ramoCurvo` ha un parametro
+     stessa maglia, nessuna giunzione. Un rigonfiamento dolce negli ultimi 1,1–1,9 m (`gonfia`, esponente `curva`) e
+     4–6 *costole* che escono nell'ultima frazione (`piede`), si allungano fino a 1,5–2,3 volte e nascono interrate
+     (il tronco comincia a −0,5 m). Specie diverse, piede diverso: quercia e castagno larghi, faggio e pioppo sobri.
+     Una versione con creste molto più marcate (sporgenza 3,4, 16 lati) è stata provata e scartata dall'utente, «le
+     basi degli alberi troppo segmentate»: il rigonfiamento porta il grosso della forma, le costole la sporcano
+     quanto basta. Perché il profilo non esca come un cono dritto servono anelli fitti alla base: `ramoCurvo` ha un parametro
      `verso` che li ridistribuisce (prima un fusto di 4,7 m aveva un anello ogni 1,6 m) e `fusto` un `segmentiY` con la
      stessa curva. ~+20 mila triangoli nel bosco fitto, solo nei livelli vicini.
      *La variante è la specie* (richiesta dell'utente: «da una certa distanza vedo una forma di albero, arbusto e altro,

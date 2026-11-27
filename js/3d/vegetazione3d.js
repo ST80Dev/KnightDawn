@@ -297,8 +297,10 @@ function ramoCurvo(punti, r0, r1, colore, lati = 5, seg = 3, verso = null) {
  * Per questo non è un pezzo a parte ma una **deformazione del tronco già costruito**: si spostano i suoi vertici in
  * orizzontale secondo la quota e l'angolo attorno all'asse, quindi è la stessa maglia, senza giunzioni né bordi.
  * Due cose sovrapposte: un *rigonfiamento* dolce negli ultimi `alta` m (fattore `gonfia` a terra, esponente `curva`:
- * quasi niente in alto, tutto nell'ultimo pezzo) e `radici` *costole* strette (esponente `strette`) che escono solo
- * nell'ultima frazione `piede` dell'altezza, allungandosi fino a `sporgenza` volte, con valli profonde in mezzo.
+ * quasi niente in alto, tutto nell'ultimo pezzo), che porta il grosso della forma, e `radici` *costole* strette
+ * (esponente `strette`) che escono nell'ultima frazione `piede` dell'altezza allungandosi fino a `sporgenza` volte.
+ * Le costole restano misurate: una versione con creste molto più marcate (sporgenza 3,4, 16 lati) è stata provata e
+ * scartata dall'utente, «le basi degli alberi troppo segmentate».
  * Il tronco comincia sotto il terreno (`sotto` di `fusto`, P0 a −0,5 m in `ramificato`), così le costole nascono
  * interrate e affiorano salendo. Chi lo usa deve costruire il tronco con abbastanza segmenti in altezza e lati,
  * altrimenti il profilo diventa un cono e le creste si perdono fra un vertice e l'altro.
@@ -311,7 +313,7 @@ function piedeTronco(geo, { alta = 1.1, gonfia = 1.7, curva = 2.8, radici = 5, s
     const t = Math.max(0, Math.min(1, 1 - Math.max(0, y) / alta));       // 1 a terra, 0 dove il piede finisce
     if (t <= 0) continue;
     const a = Math.atan2(z, x);
-    const basso = Math.max(0, (t - (1 - piede)) / piede) ** 2.2;
+    const basso = Math.max(0, (t - (1 - piede)) / piede) ** 1.4;
     const cresta = Math.max(0, Math.cos(radici * a + fase)) ** strette;
     const minore = 0.5 + 0.5 * Math.sin(3 * a + fase * 1.7);
     const k = 1 + (gonfia - 1) * t ** curva + basso * ((sporgenza - 1) * cresta + 0.22 * minore);
@@ -355,7 +357,7 @@ function ramificato({ fusto: hF, cima, rami: nR, parte, inc, lungo, r0, colRamo,
     return [A[0] + (B[0] - A[0]) * u, A[2] + (B[2] - A[2]) * u]; };
   if (tronco) {
     // Con il piede il tronco ha più anelli e più lati, se no il rigonfiamento diventa un cono e le costole spariscono.
-    const g = ramoCurvo([P0, P1, P2], tronco[0], tronco[1], colRamo, base ? 16 : 8, base ? 10 + 2 * sv : 3 + sv,
+    const g = ramoCurvo([P0, P1, P2], tronco[0], tronco[1], colRamo, base ? 12 : 8, base ? 10 + 2 * sv : 3 + sv,
       base ? (u) => u ** 2.2 : null);
     parti.push(base ? piedeTronco(g, { ...base, fase: rnd() * 6.283, radici: (base.radici ?? 5) + (rnd() < 0.5 ? 0 : 1) }) : g);
   }
@@ -589,15 +591,15 @@ function creaModelli() {
   // hanno la stessa forma (stessi ciuffi negli stessi punti), cambia solo quanto sono sfaccettati.
   // Alberi ramificati: foglie lungo i rami a tutte le altezze, vuoti e rami visibili (≈ 30–34 ciuffi come prima).
   const quercia = (det) => { const r = casuale(311); return unisci([
-    ...ramificato({ fusto: 4.2, cima: 4.6, rami: 4, cime: 3, parte: [0.55, 1.0], inc: [32, 62], lungo: 3.2, r0: 0.15, rCima: 0.13, tronco: [0.24, 0.15], base: { alta: 2.2, gonfia: 1.4, curva: 2.6, radici: 5, sporgenza: 3.4, strette: 3, piede: 0.6 },
+    ...ramificato({ fusto: 4.2, cima: 4.6, rami: 4, cime: 3, parte: [0.55, 1.0], inc: [32, 62], lungo: 3.2, r0: 0.15, rCima: 0.13, tronco: [0.24, 0.15], base: { alta: 1.9, gonfia: 2.0, curva: 3.2, radici: 5, sporgenza: 2.3 },
       colRamo: COL.corteccia, ciuffi: 2, rCiuffo: 1.4, raggio: [0.52, 0.85], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r, piatto: 0.85 }),
   ]); };
   const faggio = (det) => { const r = casuale(312); return unisci([
-    ...ramificato({ fusto: 4.6, cima: 5.2, rami: 4, cime: 3, parte: [0.5, 1.0], inc: [40, 68], lungo: 2.7, r0: 0.13, rCima: 0.11, tronco: [0.20, 0.13], base: { alta: 1.7, gonfia: 1.3, curva: 2.8, radici: 4, sporgenza: 2.3, strette: 3.5, piede: 0.55 },
+    ...ramificato({ fusto: 4.6, cima: 5.2, rami: 4, cime: 3, parte: [0.5, 1.0], inc: [40, 68], lungo: 2.7, r0: 0.13, rCima: 0.11, tronco: [0.20, 0.13], base: { alta: 1.5, gonfia: 1.6, curva: 3.4, radici: 4, sporgenza: 1.6 },
       colRamo: COL.cortecciaChiara, ciuffi: 2, rCiuffo: 1.3, raggio: [0.5, 0.8], dettaglio: det, scuro: FF[0], chiaro: FF[1], rnd: r }),
   ]); };
   const castagno = (det) => { const r = casuale(313); return unisci([
-    ...ramificato({ fusto: 3.8, cima: 4.8, rami: 4, cime: 3, parte: [0.45, 1.0], inc: [35, 68], lungo: 3.0, r0: 0.14, rCima: 0.12, tronco: [0.22, 0.14], base: { alta: 2.0, gonfia: 1.35, curva: 2.6, radici: 6, sporgenza: 3.1, strette: 3, piede: 0.6 },
+    ...ramificato({ fusto: 3.8, cima: 4.8, rami: 4, cime: 3, parte: [0.45, 1.0], inc: [35, 68], lungo: 3.0, r0: 0.14, rCima: 0.12, tronco: [0.22, 0.14], base: { alta: 1.8, gonfia: 1.95, curva: 3.2, radici: 6, sporgenza: 2.2 },
       colRamo: COL.corteccia, ciuffi: 2, rCiuffo: 1.35, raggio: [0.52, 0.82], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r }),
   ]); };
   // Livelli (prestazioni, dopo la misura dell'utente: 28–30 FPS nel bosco; «meno definizione a centinaia di metri a
@@ -635,7 +637,7 @@ function creaModelli() {
   // Conifere: abete (largo, a palchi) e abete slanciato.
   const abete = (palchi, largo, alto) => unisci([
     fusto(0.18, 0.06, alto, 12, COL.corteccia, { segmentiY: 7,
-      piede: { alta: 1.6, gonfia: 1.3, curva: 2.8, radici: 4, sporgenza: 2.2, strette: 3.5, piede: 0.55, fase: rnd() * 6.283 } }),
+      piede: { alta: 1.4, gonfia: 1.5, curva: 3.2, radici: 4, sporgenza: 1.6, fase: rnd() * 6.283 } }),
     ...Array.from({ length: palchi }, (_, k) => {
       const t = k / palchi, r = largo * (1 - t * 0.85), h = (alto / palchi) * 1.9;
       return palco(r, h, 1.6 + t * (alto - 2.2), COL.ago[0], COL.ago[1], rnd);
@@ -662,7 +664,7 @@ function creaModelli() {
     const P0 = [0, -0.5, 0], P2 = [(r() - 0.5) * 1.4, hF, (r() - 0.5) * 1.4], P1 = piega(P0, P2, 0.5, 0.08, r);
     parti.push(det
       ? piedeTronco(ramoCurvo([P0, P1, P2], 0.22, 0.14, COL.cortecciaPino, 12, 11, (u) => u ** 2.2),
-        { alta: 1.7, gonfia: 1.3, curva: 2.8, radici: 5, sporgenza: 2.4, strette: 3.5, piede: 0.55, fase: r() * 6.283 })
+        { alta: 1.5, gonfia: 1.65, curva: 3.2, radici: 5, sporgenza: 1.8, fase: r() * 6.283 })
       : ramoCurvo([P0, P1, P2], 0.22, 0.13, COL.cortecciaPino, 4, 2));
     const nB = 2 + (r() < 0.6 ? 1 : 0), cime = [], a0 = r() * 6.283;
     for (let k = 0; k < nB; k++) {
@@ -695,7 +697,7 @@ function creaModelli() {
     { fino: 60, varianti: [unisci([
       // (richiesta dell'utente: «pali con ciuffi in cima»: prima una cima nuda di ~9 m con tre ciuffi; ora cima corta e
       // più rami ripidi lungo il fusto, colonna di foglie da ~3 m in su)
-      ...ramificato({ fusto: 4.6, cima: 3.0, rami: 8, parte: [0.3, 1.0], inc: [58, 78], lungo: 2.0, r0: 0.12, rCima: 0.09, tronco: [0.19, 0.11], base: { alta: 1.3, gonfia: 1.25, curva: 3.0, radici: 4, sporgenza: 2.0, strette: 4, piede: 0.5 },
+      ...ramificato({ fusto: 4.6, cima: 3.0, rami: 8, parte: [0.3, 1.0], inc: [58, 78], lungo: 2.0, r0: 0.12, rCima: 0.09, tronco: [0.19, 0.11], base: { alta: 1.1, gonfia: 1.45, curva: 3.4, radici: 4, sporgenza: 1.5 },
         colRamo: COL.cortecciaBetulla, ciuffi: 2, rCiuffo: 1.05, raggio: [0.45, 0.7], dettaglio: 1, scuro: R[0], chiaro: R[1], rnd })])] },
     { fino: 300, varianti: [unisci([fusto(0.19, 0.03, 8, 4, COL.cortecciaBetulla),
       ...chioma({ y: 5.8, a: 1.8, b: 3.4, ciuffi: 10, raggio: [1.05, 1.35], dettaglio: 0, scuro: R[0], chiaro: R[1], rnd, pieno: 0.2,
@@ -706,7 +708,7 @@ function creaModelli() {
   // Albero secco: fusto e rami spogli.
   M.secco = [
     { fino: 60, varianti: [unisci([fusto(0.18, 0.06, 7.5, 12, COL.cortecciaChiara, { segmentiY: 6,
-      piede: { alta: 1.4, gonfia: 1.25, curva: 3.0, radici: 4, sporgenza: 2.0, strette: 4, piede: 0.5, fase: rnd() * 6.283 } }),
+      piede: { alta: 1.2, gonfia: 1.45, curva: 3.3, radici: 4, sporgenza: 1.5, fase: rnd() * 6.283 } }),
       ...rami(6, 2.8, 3.0, COL.cortecciaChiara, rnd)])] },
     { fino: 300, varianti: [unisci([fusto(0.18, 0.07, 7, 4, COL.cortecciaChiara), ...rami(2, 3.5, 2.8, COL.cortecciaChiara, rnd)])] },
     { fino: Infinity, sagoma: [SAGOME.secco] },
