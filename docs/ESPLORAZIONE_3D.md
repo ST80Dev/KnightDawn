@@ -2363,6 +2363,31 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
      secondo solo entro 18 m, punta) con l'ultimo ciuffo centrato un po' sotto la punta; cime più corte (faggio 5,2 m,
      pioppo 3 m). Bosco fitto: 568 000 triangoli contro 553 000.
      Bosco fitto in headless: ~550 000 triangoli (prima delle chiome nuove 458 000): da misurare sulla scheda.
+     *Bosco fitto: meno triangoli, tronchi veri* (misura dell'utente nel bosco fitto: vegetazione 7,7 ms su 6,5 di
+     budget, e il peso sta in «veg. resto», cioè la geometria). Quattro cose insieme.
+     **Livello ricco delle latifoglie da 50 a 35 m**: fra 18 e 50 m c'erano 119 piante per 215 512 triangoli, un terzo
+     di tutta la vegetazione; a 35 m l'albero sullo schermo è un terzo di quello vicino e il livello medio regge.
+     Vegetazione da 626 934 a 535 308 triangoli (−14,6 %), scena −9 %, nessuna chiamata di disegno in più.
+     **Tronchi più sottili** (richiesta dell'utente, ribadita: «troppo grossi alla base, sproporzionati rispetto
+     all'altezza»): la quercia aveva raggio di base 0,46 m, cioè 92 cm di diametro per 10–11 m d'altezza, rapporto
+     1 : 12, e i rami principali erano più grossi del tronco (r0 0,5 contro 0,46); ora base 0,19–0,24 m e rami ~0,6
+     della base, su tutte le specie, sui livelli medi e sui raggi di collisione (latifoglia 0,42 → 0,27: prima si
+     entrava nella corteccia).
+     **Taglie molto più varie** (richiesta dell'utente: «sembrano ancora quasi tutti uguali»): `TAGLIE` e
+     `misureAlbero(v)`, una sola definizione per le matrici delle istanze e per le collisioni. L'altezza va da 0,52 a
+     1,54 del modello (prima 0,72–1,28) con una curva che lascia molti alberi giovani e pochi grandi, e la larghezza
+     cresce **più in fretta** dell'altezza (`allometria` 1,3): come in natura un albero vecchio è sproporzionatamente
+     più grosso, non solo più alto. Con la scala dell'istanza un bosco va da arbusti di 3 m a querce di oltre 20.
+     **Piede del tronco** (richieste dell'utente, con foto: «la base finisce lineare come uno stuzzicadenti»; poi
+     «troppo poco, sembrano rinforzi meccanici»; poi «sembrano pezzi grafici aggiunti, non si può fare direttamente il
+     tronco che si modifica?»). Non è un pezzo a parte ma una **deformazione del tronco già costruito**, `piedeTronco`:
+     stessa maglia, nessuna giunzione. Un rigonfiamento dolce negli ultimi 1,3–2,2 m (`gonfia`, esponente `curva`) e
+     4–6 *costole* strette che escono solo nell'ultima frazione (`piede`), si allungano fino a 2–3,4 volte e nascono
+     interrate (il tronco comincia a −0,5 m), con valli profonde in mezzo: sono loro a fare la ceppaia, il
+     rigonfiamento da solo dava un imbuto. Specie diverse, piede diverso: quercia e castagno larghi, faggio e pioppo
+     sobri. Perché il profilo non esca come un cono dritto servono anelli fitti alla base: `ramoCurvo` ha un parametro
+     `verso` che li ridistribuisce (prima un fusto di 4,7 m aveva un anello ogni 1,6 m) e `fusto` un `segmentiY` con la
+     stessa curva. ~+20 mila triangoli nel bosco fitto, solo nei livelli vicini.
      *La variante è la specie* (richiesta dell'utente: «da una certa distanza vedo una forma di albero, arbusto e altro,
      poi avvicinandomi la forma si stravolge del tutto e rende incoerente quello che vedo attorno»; proposta sua di una
      figura standard per tipo a ogni distanza). Ogni istanza sceglie la variante una volta sola (`varia`) e la ritrova

@@ -93,9 +93,18 @@ function lobo(r, dettaglio, { x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1, forza
 }
 
 /** Tronco o ramo: cilindro da (0,0,0) verso l'alto lungo h, inclinato e spostato; base sotto terra di `sotto`. */
-function fusto(r0, r1, h, lati, colore, { x = 0, y = 0, z = 0, inclinaX = 0, inclinaZ = 0, sotto = 0.5, chiuso = false } = {}) {
-  const geo = new THREE.CylinderGeometry(r1, r0, h + sotto, lati, 1, !chiuso);
+function fusto(r0, r1, h, lati, colore, { x = 0, y = 0, z = 0, inclinaX = 0, inclinaZ = 0, sotto = 0.5, chiuso = false,
+  segmentiY = 1, piede = null } = {}) {
+  const geo = new THREE.CylinderGeometry(r1, r0, h + sotto, lati, segmentiY, !chiuso);
+  if (piede && segmentiY > 1) {        // anelli addensati in basso, come `verso` in ramoCurvo
+    const P = geo.attributes.position, H = h + sotto;
+    for (let i = 0; i < P.count; i++) {
+      const u = 0.5 - P.getY(i) / H;   // 0 in cima, 1 in fondo
+      P.setY(i, (0.5 - (1 - (1 - u) ** 2.2)) * H);
+    }
+  }
   geo.translate(0, (h + sotto) / 2 - sotto, 0);
+  if (piede) piedeTronco(geo, piede);
   geo.rotateX(inclinaX); geo.rotateZ(inclinaZ);
   geo.translate(x, y, z);
   const cs = new THREE.Color(colore), cc = cs.clone().multiplyScalar(0.7);
@@ -259,21 +268,58 @@ function ramoVerso(x0, y0, z0, x1, y1, z1, r0, r1, colore, lati = 5) {
  * Ramo curvo (richiesta dell'utente: «rendi curvi tronco alto e rami, sennò resta l'effetto stuzzicadenti incastrati»):
  * tubo lungo una curva liscia (Catmull-Rom) per `punti`, raggio da r0 a r1, `seg` tratti; colore più scuro all'attacco.
  */
-function ramoCurvo(punti, r0, r1, colore, lati = 5, seg = 3) {
+function ramoCurvo(punti, r0, r1, colore, lati = 5, seg = 3, verso = null) {
   const curva = new THREE.CatmullRomCurve3(punti.map(([x, y, z]) => new THREE.Vector3(x, y, z)), false, 'centripetal');
   const geo = new THREE.TubeGeometry(curva, seg, 1, lati, false);
-  const p = geo.attributes.position, c = new THREE.Vector3();
+  const p = geo.attributes.position, c = new THREE.Vector3(), c0 = new THREE.Vector3();
+  // `verso`: ridistribuisce gli anelli lungo la curva (gli stessi vertici, spostati su un altro punto). Serve al piede
+  // del tronco, che ha bisogno di anelli fitti nel primo mezzo metro: con la distribuzione uniforme un fusto di 11 m
+  // aveva un anello ogni 1,6 m e il rigonfiamento usciva per forza come un cono dritto.
   for (let i = 0; i <= seg; i++) {
-    const t = i / seg, r = r0 + (r1 - r0) * t;
+    const u = i / seg, t = verso ? verso(u) : u, r = r0 + (r1 - r0) * t;
+    curva.getPointAt(u, c0);
     curva.getPointAt(t, c);
     for (let j = 0; j <= lati; j++) {
       const k = i * (lati + 1) + j;
-      p.setXYZ(k, c.x + (p.getX(k) - c.x) * r, c.y + (p.getY(k) - c.y) * r, c.z + (p.getZ(k) - c.z) * r);
+      p.setXYZ(k, c.x + (p.getX(k) - c0.x) * r, c.y + (p.getY(k) - c0.y) * r, c.z + (p.getZ(k) - c0.z) * r);
     }
   }
   const y0 = punti[0][1], y1 = punti[punti.length - 1][1];
   const cs = new THREE.Color(colore), cc = cs.clone().multiplyScalar(0.75);
   return colora(geo, (col, px, py) => col.copy(cc).lerp(cs, Math.min(1, Math.max(0, (py - y0) / Math.max(0.5, y1 - y0)))));
+}
+
+/**
+ * Piede del tronco (richieste dell'utente, con foto di querce e faggi: «la base finisce lineare come uno
+ * stuzzicadenti»; «il tronco si deve allargare con molta più rapidità negli ultimi metri, almeno nelle specie che lo
+ * prevedono, e allargarsi nel terreno iniziando le radici»; e infine «sembrano pezzi grafici aggiunti al tronco, non
+ * si può fare direttamente il tronco che si modifica?»).
+ * Per questo non è un pezzo a parte ma una **deformazione del tronco già costruito**: si spostano i suoi vertici in
+ * orizzontale secondo la quota e l'angolo attorno all'asse, quindi è la stessa maglia, senza giunzioni né bordi.
+ * Due cose sovrapposte: un *rigonfiamento* dolce negli ultimi `alta` m (fattore `gonfia` a terra, esponente `curva`:
+ * quasi niente in alto, tutto nell'ultimo pezzo) e `radici` *costole* strette (esponente `strette`) che escono solo
+ * nell'ultima frazione `piede` dell'altezza, allungandosi fino a `sporgenza` volte, con valli profonde in mezzo.
+ * Il tronco comincia sotto il terreno (`sotto` di `fusto`, P0 a −0,5 m in `ramificato`), così le costole nascono
+ * interrate e affiorano salendo. Chi lo usa deve costruire il tronco con abbastanza segmenti in altezza e lati,
+ * altrimenti il profilo diventa un cono e le creste si perdono fra un vertice e l'altro.
+ */
+function piedeTronco(geo, { alta = 1.1, gonfia = 1.7, curva = 2.8, radici = 5, sporgenza = 2.0, strette = 6,
+  piede = 0.34, fase = 0 } = {}) {
+  const P = geo.attributes.position;
+  for (let i = 0; i < P.count; i++) {
+    const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
+    const t = Math.max(0, Math.min(1, 1 - Math.max(0, y) / alta));       // 1 a terra, 0 dove il piede finisce
+    if (t <= 0) continue;
+    const a = Math.atan2(z, x);
+    const basso = Math.max(0, (t - (1 - piede)) / piede) ** 2.2;
+    const cresta = Math.max(0, Math.cos(radici * a + fase)) ** strette;
+    const minore = 0.5 + 0.5 * Math.sin(3 * a + fase * 1.7);
+    const k = 1 + (gonfia - 1) * t ** curva + basso * ((sporgenza - 1) * cresta + 0.22 * minore);
+    P.setX(i, x * k); P.setZ(i, z * k);
+  }
+  P.needsUpdate = true;
+  geo.computeVertexNormals();
+  return geo;
 }
 
 /** Punto intermedio tra a e b spostato a caso di `k` volte la distanza (piega del ramo). */
@@ -292,7 +338,7 @@ function piega(a, b, f, k, rnd) {
  * Restituisce le parti da unire (il fusto a parte).
  */
 function ramificato({ fusto: hF, cima, rami: nR, parte, inc, lungo, r0, colRamo, ciuffi, rCiuffo, raggio, dettaglio,
-  scuro, chiaro, rnd, piatto = 1, rCima = r0 * 0.6, cime = 1, tronco = null }) {
+  scuro, chiaro, rnd, piatto = 1, rCima = r0 * 0.6, cime = 1, tronco = null, base = null }) {
   const parti = [];
   const inviluppo = { x: 0, y: hF + cima * 0.45, z: 0, a: lungo * 0.95, b: cima * 0.75 + 1, c: lungo * 0.95 };
   const foglie = (x, y, z, k = 1) => parti.push(...chioma({ x, y, z, a: rCiuffo * k * (0.8 + 0.4 * rnd()),
@@ -307,7 +353,12 @@ function ramificato({ fusto: hF, cima, rami: nR, parte, inc, lungo, r0, colRamo,
   if (!tronco) { P1[0] = P1[2] = P2[0] = P2[2] = 0; }
   const asse = (y) => { const t = Math.min(1, Math.max(0, y / hF)), [A, B, u] = t < 0.45 ? [P0, P1, t / 0.45] : [P1, P2, (t - 0.45) / 0.55];
     return [A[0] + (B[0] - A[0]) * u, A[2] + (B[2] - A[2]) * u]; };
-  if (tronco) parti.push(ramoCurvo([P0, P1, P2], tronco[0], tronco[1], colRamo, 8, 3 + sv));
+  if (tronco) {
+    // Con il piede il tronco ha più anelli e più lati, se no il rigonfiamento diventa un cono e le costole spariscono.
+    const g = ramoCurvo([P0, P1, P2], tronco[0], tronco[1], colRamo, base ? 16 : 8, base ? 10 + 2 * sv : 3 + sv,
+      base ? (u) => u ** 2.2 : null);
+    parti.push(base ? piedeTronco(g, { ...base, fase: rnd() * 6.283, radici: (base.radici ?? 5) + (rnd() < 0.5 ? 0 : 1) }) : g);
+  }
   const an0 = rnd() * Math.PI * 2;
   for (let c = 0; c < cime; c++) {
     const a = an0 + c * (Math.PI * 2 / cime) + (rnd() - 0.5) * 0.9;
@@ -367,7 +418,7 @@ function ramificato({ fusto: hF, cima, rami: nR, parte, inc, lungo, r0, colRamo,
 function rami(n, y0, lunghezza, colore, rnd) {
   return Array.from({ length: n }, (_, k) => {
     const a = (k / n) * Math.PI * 2 + rnd() * 0.8, inc = 0.55 + rnd() * 0.35;
-    return fusto(0.13, 0.05, lunghezza * (0.8 + 0.4 * rnd()), 5, colore,
+    return fusto(0.08, 0.03, lunghezza * (0.8 + 0.4 * rnd()), 5, colore,
       { y: y0 + rnd() * 1.2, inclinaZ: Math.cos(a) * inc, inclinaX: Math.sin(a) * inc, sotto: 0 });
   });
 }
@@ -410,8 +461,11 @@ function rocciaSpigolosa(r, rnd, { dettaglio = 1, tagli = 8, sx = 1, sy = 0.7, s
 }
 
 // Colori (tarati sulla luce 3D, in tono con il terreno di terrain.js).
+// Corteccia (richiesta dell'utente: nel bosco a Prima «non distinguo i tronchi dal terreno»): era #4f3d2c, lo stesso
+// bruno della lettiera, e con poca luce i due valori coincidevano. Ora più chiara e più grigia, così il tronco stacca
+// per valore e non solo per tinta; le cortecce già chiare (faggio, albero secco, betulla) restano come erano.
 const COL = {
-  corteccia: '#4f3d2c', cortecciaChiara: '#7d7468', cortecciaPino: '#6b4a34', cortecciaBetulla: '#8f8a80',
+  corteccia: '#6e5c47', cortecciaChiara: '#7d7468', cortecciaPino: '#7d5a42', cortecciaBetulla: '#8f8a80',
   foglia: ['#24431a', '#6a9440'], fogliaFaggio: ['#2c4d1c', '#7da24a'], fogliaRiva: ['#38592a', '#93ad62'],
   fogliaPino: ['#2e4a26', '#76904a'], ago: ['#15301f', '#3f6e45'], cespuglio: ['#2a4a1e', '#6a9040'],
   mugo: ['#1c3222', '#4a6a4a'], sterpo: '#8a7448', canna: ['#5f7a34', '#c4b46a'], roccia: ['#56565a', '#b2b0aa'],
@@ -525,20 +579,25 @@ function creaModelli() {
   const M = {};
   const F = COL.foglia, FF = COL.fogliaFaggio;
 
+  // Tronchi (richiesta dell'utente, ribadita: «troppo grossi almeno alla base, sproporzionati rispetto all'altezza»):
+  // prima la quercia aveva raggio di base 0,46 m, cioè 92 cm di diametro per 10–11 m d'altezza, rapporto ~1:12; un
+  // albero di quell'altezza in un bosco fitto sta sui 25–45 cm di diametro. Ora base 0,19–0,24 m di raggio, rami
+  // principali ~0,6 della base (prima erano più grossi del tronco: quercia r0 0,5 contro tronco 0,46). Scalato tutto:
+  // specie vicine, livelli medi (`latMedio`, `abeteMedio`, pino, pioppo, albero secco) e raggi di collisione.
   // Latifoglie: quercia (larga e bassa), faggio (ovale e alto), castagno (irregolare, a due masse).
   // `det`: dettaglio dei ciuffi (1 = 80 triangoli, 0 = 20). Ogni specie ha il suo generatore: i due livelli vicini
   // hanno la stessa forma (stessi ciuffi negli stessi punti), cambia solo quanto sono sfaccettati.
   // Alberi ramificati: foglie lungo i rami a tutte le altezze, vuoti e rami visibili (≈ 30–34 ciuffi come prima).
   const quercia = (det) => { const r = casuale(311); return unisci([
-    ...ramificato({ fusto: 4.2, cima: 4.6, rami: 4, cime: 3, parte: [0.55, 1.0], inc: [32, 62], lungo: 3.2, r0: 0.5, rCima: 0.3, tronco: [0.46, 0.3],
+    ...ramificato({ fusto: 4.2, cima: 4.6, rami: 4, cime: 3, parte: [0.55, 1.0], inc: [32, 62], lungo: 3.2, r0: 0.15, rCima: 0.13, tronco: [0.24, 0.15], base: { alta: 2.2, gonfia: 1.4, curva: 2.6, radici: 5, sporgenza: 3.4, strette: 3, piede: 0.6 },
       colRamo: COL.corteccia, ciuffi: 2, rCiuffo: 1.4, raggio: [0.52, 0.85], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r, piatto: 0.85 }),
   ]); };
   const faggio = (det) => { const r = casuale(312); return unisci([
-    ...ramificato({ fusto: 4.6, cima: 5.2, rami: 4, cime: 3, parte: [0.5, 1.0], inc: [40, 68], lungo: 2.7, r0: 0.4, rCima: 0.22, tronco: [0.36, 0.22],
+    ...ramificato({ fusto: 4.6, cima: 5.2, rami: 4, cime: 3, parte: [0.5, 1.0], inc: [40, 68], lungo: 2.7, r0: 0.13, rCima: 0.11, tronco: [0.20, 0.13], base: { alta: 1.7, gonfia: 1.3, curva: 2.8, radici: 4, sporgenza: 2.3, strette: 3.5, piede: 0.55 },
       colRamo: COL.cortecciaChiara, ciuffi: 2, rCiuffo: 1.3, raggio: [0.5, 0.8], dettaglio: det, scuro: FF[0], chiaro: FF[1], rnd: r }),
   ]); };
   const castagno = (det) => { const r = casuale(313); return unisci([
-    ...ramificato({ fusto: 3.8, cima: 4.8, rami: 4, cime: 3, parte: [0.45, 1.0], inc: [35, 68], lungo: 3.0, r0: 0.46, rCima: 0.26, tronco: [0.42, 0.26],
+    ...ramificato({ fusto: 3.8, cima: 4.8, rami: 4, cime: 3, parte: [0.45, 1.0], inc: [35, 68], lungo: 3.0, r0: 0.14, rCima: 0.12, tronco: [0.22, 0.14], base: { alta: 2.0, gonfia: 1.35, curva: 2.6, radici: 6, sporgenza: 3.1, strette: 3, piede: 0.6 },
       colRamo: COL.corteccia, ciuffi: 2, rCiuffo: 1.35, raggio: [0.52, 0.82], dettaglio: det, scuro: F[0], chiaro: F[1], rnd: r }),
   ]); };
   // Livelli (prestazioni, dopo la misura dell'utente: 28–30 FPS nel bosco; «meno definizione a centinaia di metri a
@@ -551,7 +610,7 @@ function creaModelli() {
   // stravolge del tutto e rende incoerente quello che vedo»): misure e colori presi da quella vicina, così un castagno
   // resta un castagno e perde solo definizione.
   const latMedio = (a, b, y, cor, fog) => unisci([
-    fusto(0.4, 0.05, y + b * 0.3, 4, cor),               // si assottiglia dentro la chioma, niente moncone in vista
+    fusto(0.22, 0.04, y + b * 0.3, 4, cor),              // si assottiglia dentro la chioma, niente moncone in vista
     ...chioma({ y, a, b, ciuffi: 7, raggio: [1.55, 1.95], dettaglio: 0, scuro: fog[0], chiaro: fog[1], rnd, pieno: 0.2, sotto: 0.6,
       morbido: 0.7, leggero: true }),
   ]);
@@ -560,7 +619,10 @@ function creaModelli() {
     // della vegetazione. Ciuffi pieni entro 25 m; da 25 a 60 m stessa chioma a ciuffi semplici (~650 triangoli).
     // Alberi ramificati (~46 ciuffi in gruppi da 2): pieni entro 18 m, ciuffi semplici fino a 50 m (stessa forma).
     { fino: 18, varianti: [quercia(1), faggio(1), castagno(1)] },
-    { fino: 50, varianti: [quercia(0), faggio(0), castagno(0)] },
+    // Prima fino a 50 m: 119 piante nel bosco fitto valevano 215 mila triangoli, un terzo di tutta la vegetazione.
+    // A 35 m l'albero sullo schermo è già un terzo di quello vicino e il livello medio regge (misura dell'utente:
+    // «veg. resto» 4,6 ms su un budget di 6,5 per tutta la vegetazione).
+    { fino: 35, varianti: [quercia(0), faggio(0), castagno(0)] },
     // Medio fino a 200 m (prima 300; misura nel bosco fitto dopo la Carta rigenerata: vegetazione 7,2 ms contro 6,5 di
     // budget, ~4400 latifoglie medie per ~300 000 triangoli); oltre, sagome.
     // Una forma media e una sagoma per specie, nello stesso ordine delle varianti vicine (quercia, faggio, castagno):
@@ -572,7 +634,8 @@ function creaModelli() {
 
   // Conifere: abete (largo, a palchi) e abete slanciato.
   const abete = (palchi, largo, alto) => unisci([
-    fusto(0.32, 0.1, alto, 7, COL.corteccia),
+    fusto(0.18, 0.06, alto, 12, COL.corteccia, { segmentiY: 7,
+      piede: { alta: 1.6, gonfia: 1.3, curva: 2.8, radici: 4, sporgenza: 2.2, strette: 3.5, piede: 0.55, fase: rnd() * 6.283 } }),
     ...Array.from({ length: palchi }, (_, k) => {
       const t = k / palchi, r = largo * (1 - t * 0.85), h = (alto / palchi) * 1.9;
       return palco(r, h, 1.6 + t * (alto - 2.2), COL.ago[0], COL.ago[1], rnd);
@@ -580,7 +643,7 @@ function creaModelli() {
   ]);
   // Media: due palchi con le misure del vicino (stessa larghezza e stessa cima), una forma per variante.
   const abeteMedio = (largo, alto) => unisci([
-    fusto(0.3, 0.15, alto * 0.22, 3, COL.corteccia),
+    fusto(0.17, 0.08, alto * 0.22, 3, COL.corteccia),
     palco(largo, alto * 0.55, 1.4, COL.ago[0], COL.ago[1], rnd, { lati: 6, segmenti: 1, punte: 0.15 }),
     palco(largo * 0.56, alto * 0.6, alto * 0.47, COL.ago[0], COL.ago[1], rnd, { lati: 6, segmenti: 1, punte: 0.15 }),
   ]);
@@ -597,14 +660,17 @@ function creaModelli() {
   const pinoDomestico = (seme, det) => {
     const r = casuale(seme), parti = [], hF = 4.6 + 1.2 * r();
     const P0 = [0, -0.5, 0], P2 = [(r() - 0.5) * 1.4, hF, (r() - 0.5) * 1.4], P1 = piega(P0, P2, 0.5, 0.08, r);
-    parti.push(det ? ramoCurvo([P0, P1, P2], 0.38, 0.24, COL.cortecciaPino, 7, 4) : ramoCurvo([P0, P1, P2], 0.38, 0.22, COL.cortecciaPino, 4, 2));
+    parti.push(det
+      ? piedeTronco(ramoCurvo([P0, P1, P2], 0.22, 0.14, COL.cortecciaPino, 12, 11, (u) => u ** 2.2),
+        { alta: 1.7, gonfia: 1.3, curva: 2.8, radici: 5, sporgenza: 2.4, strette: 3.5, piede: 0.55, fase: r() * 6.283 })
+      : ramoCurvo([P0, P1, P2], 0.22, 0.13, COL.cortecciaPino, 4, 2));
     const nB = 2 + (r() < 0.6 ? 1 : 0), cime = [], a0 = r() * 6.283;
     for (let k = 0; k < nB; k++) {
       const a = a0 + k * 6.283 / nB + (r() - 0.5) * 0.8, d = 1.7 + 1.1 * r();
       const e = [P2[0] + Math.cos(a) * d, hF + 2.4 + 0.9 * r(), P2[2] + Math.sin(a) * d];
       const b0 = [P2[0], hF - 0.4, P2[2]];
-      parti.push(det ? ramoCurvo([b0, piega(b0, e, 0.5, 0.12, r), e], 0.2, 0.05, COL.cortecciaPino, 5, 4)
-        : ramoCurvo([b0, e], 0.2, 0.06, COL.cortecciaPino, 4, 1));
+      parti.push(det ? ramoCurvo([b0, piega(b0, e, 0.5, 0.12, r), e], 0.13, 0.04, COL.cortecciaPino, 5, 4)
+        : ramoCurvo([b0, e], 0.13, 0.04, COL.cortecciaPino, 4, 1));
       cime.push(e);
     }
     const cx = cime.reduce((t, e) => t + e[0], 0) / nB, cz = cime.reduce((t, e) => t + e[2], 0) / nB;
@@ -629,9 +695,9 @@ function creaModelli() {
     { fino: 60, varianti: [unisci([
       // (richiesta dell'utente: «pali con ciuffi in cima»: prima una cima nuda di ~9 m con tre ciuffi; ora cima corta e
       // più rami ripidi lungo il fusto, colonna di foglie da ~3 m in su)
-      ...ramificato({ fusto: 4.6, cima: 3.0, rami: 8, parte: [0.3, 1.0], inc: [58, 78], lungo: 2.0, r0: 0.3, rCima: 0.2, tronco: [0.36, 0.2],
+      ...ramificato({ fusto: 4.6, cima: 3.0, rami: 8, parte: [0.3, 1.0], inc: [58, 78], lungo: 2.0, r0: 0.12, rCima: 0.09, tronco: [0.19, 0.11], base: { alta: 1.3, gonfia: 1.25, curva: 3.0, radici: 4, sporgenza: 2.0, strette: 4, piede: 0.5 },
         colRamo: COL.cortecciaBetulla, ciuffi: 2, rCiuffo: 1.05, raggio: [0.45, 0.7], dettaglio: 1, scuro: R[0], chiaro: R[1], rnd })])] },
-    { fino: 300, varianti: [unisci([fusto(0.34, 0.04, 8, 4, COL.cortecciaBetulla),
+    { fino: 300, varianti: [unisci([fusto(0.19, 0.03, 8, 4, COL.cortecciaBetulla),
       ...chioma({ y: 5.8, a: 1.8, b: 3.4, ciuffi: 10, raggio: [1.05, 1.35], dettaglio: 0, scuro: R[0], chiaro: R[1], rnd, pieno: 0.2,
         sotto: 0.6, morbido: 0.7, leggero: true })])] },
     { fino: Infinity, sagoma: [SAGOME.riva] },
@@ -639,8 +705,10 @@ function creaModelli() {
 
   // Albero secco: fusto e rami spogli.
   M.secco = [
-    { fino: 60, varianti: [unisci([fusto(0.3, 0.1, 7.5, 7, COL.cortecciaChiara), ...rami(6, 2.8, 3.0, COL.cortecciaChiara, rnd)])] },
-    { fino: 300, varianti: [unisci([fusto(0.3, 0.12, 7, 4, COL.cortecciaChiara), ...rami(2, 3.5, 2.8, COL.cortecciaChiara, rnd)])] },
+    { fino: 60, varianti: [unisci([fusto(0.18, 0.06, 7.5, 12, COL.cortecciaChiara, { segmentiY: 6,
+      piede: { alta: 1.4, gonfia: 1.25, curva: 3.0, radici: 4, sporgenza: 2.0, strette: 4, piede: 0.5, fase: rnd() * 6.283 } }),
+      ...rami(6, 2.8, 3.0, COL.cortecciaChiara, rnd)])] },
+    { fino: 300, varianti: [unisci([fusto(0.18, 0.07, 7, 4, COL.cortecciaChiara), ...rami(2, 3.5, 2.8, COL.cortecciaChiara, rnd)])] },
     { fino: Infinity, sagoma: [SAGOME.secco] },
   ];
 
@@ -896,8 +964,27 @@ const SAGOME_DIRADA = { da: 300, bordo: 0.36 };
 // sassi piccoli si attraversano) ───
 // Cerchi sul piano in una griglia di 16 m: si controllano solo le celle attorno al cavaliere. Raggio per tipo al
 // modello di scala 1 (m), moltiplicato per la scala dell'istanza; il tronco caduto è una fila di tre cerchi.
+/**
+ * Taglie degli alberi (richiesta dell'utente: «variare in modo maggiore la grandezza dei tronchi e degli alberi di
+ * conseguenza, sembrano ancora quasi tutti uguali»). Prima l'altezza stava fra 0,72 e 1,28 del modello (1,8 : 1) e la
+ * larghezza le era proporzionale: tronchi quasi identici. Ora l'altezza va da 0,52 a 1,54 con una curva che lascia
+ * molti alberi giovani e pochi grandi, e la larghezza cresce più in fretta dell'altezza (`allometria`): come in natura
+ * un albero vecchio è sproporzionatamente più grosso di uno giovane, non solo più alto. Si moltiplicano con la scala
+ * dell'istanza (TIPI.scala, 0,45–1,45 con curva): un bosco va da arbusti di 3 m a querce di oltre 20.
+ */
+const TAGLIE = { alto: [0.52, 1.02], curva: 1.25, largo: [0.8, 0.4], allometria: 1.3 };
+/** Altezza, larghezza e spessore di un albero dal numero casuale `v` dell'istanza (0–1). */
+function misureAlbero(v) {
+  const v2 = (v * 7.13) % 1, v3 = (v * 3.71) % 1, v4 = (v * 17.31) % 1;
+  const alto = TAGLIE.alto[0] + TAGLIE.alto[1] * v4 ** TAGLIE.curva;
+  const largo = alto ** TAGLIE.allometria * (TAGLIE.largo[0] + TAGLIE.largo[1] * v3);
+  return { alto, largo, spessore: largo * (0.9 + 0.2 * v2) };
+}
+
 const COLLISIONI = { cella: 16, sassoMinimo: 1.1,
-  raggio: { latifoglia: 0.42, conifera: 0.34, pino: 0.38, riva: 0.4, secco: 0.32, masso: 1.05, affioramento: 2.3,
+  // Alberi: poco più del raggio del tronco disegnato (tronchi assottigliati, vedi creaModelli), così ci si ferma
+  // appena prima della corteccia invece di entrarci dentro come prima (collisione 0,42 contro un tronco di 0,46).
+  raggio: { latifoglia: 0.27, conifera: 0.21, pino: 0.25, riva: 0.22, secco: 0.21, masso: 1.05, affioramento: 2.3,
     sasso: 0.3, tronco: 0.32, muretto: 0.4, siepe: 0.75 } };
 
 // Altezza della sommità sopra la base, al modello di scala 1 (m): rocce (moltiplicata per la scala verticale
@@ -943,7 +1030,8 @@ function* creaCollisioni(pos, stanco = () => false, pausa = null) {
         for (const d of [-0.75, 0, 0.75]) aggiungi(x + Math.cos(rot) * d * s, z - Math.sin(rot) * d * s, r0 * s);
       } else if (nome === 'tronco') {
         for (const d of [0.6, 2.5, 4.4]) aggiungi(x + Math.cos(rot) * d * s, z - Math.sin(rot) * d * s, r0 * s);
-      } else aggiungi(x, z, r0 * Math.max(0.6, s));
+      } else if (t.gruppo === 'alberi') aggiungi(x, z, r0 * Math.max(0.6, s) * misureAlbero(v).largo);
+      else aggiungi(x, z, r0 * Math.max(0.6, s));
       n++;
       if (pausa && (k & 1023) === 1023 && stanco()) yield* pausa();
     }
@@ -1428,11 +1516,12 @@ export function* creaVegetazioneAPezzi(pos, terrain = null, renderer = null, bud
       e.set(roccia ? (v - 0.5) * 0.5 : (v2 - 0.5) * 0.06, rot, roccia ? (v3 - 0.5) * 0.4 : (v3 - 0.5) * 0.06);
       q.setFromEuler(e);
       const v4 = (v * 17.31) % 1;              // altezza indipendente dalla larghezza (richiesta dell'utente)
-      const alto = roccia ? 0.55 + 0.7 * v : (albero ? 0.72 + 0.56 * v4 : 0.85 + 0.3 * v4);
-      // Alberi: larghezza (e quindi spessore del tronco) proporzionata all'altezza, ±15 % (richiesta dell'utente:
-      // «tronchi tutti uguali alla base»); arbusti e rocce come prima.
-      const largo = roccia ? 0.7 + 0.8 * v3 : albero ? alto * (0.85 + 0.3 * v3) : 0.8 + 0.45 * v3;
-      sc.set(s * largo, s * alto, s * (roccia ? 0.7 + 0.7 * v2 : largo * (0.9 + 0.2 * v2)));
+      // Alberi: taglie da `misureAlbero` (altezza molto varia, larghezza che cresce più in fretta: vedi TAGLIE);
+      // arbusti e rocce come prima.
+      const mA = albero ? misureAlbero(v) : null;
+      const alto = roccia ? 0.55 + 0.7 * v : (albero ? mA.alto : 0.85 + 0.3 * v4);
+      const largo = roccia ? 0.7 + 0.8 * v3 : albero ? mA.largo : 0.8 + 0.45 * v3;
+      sc.set(s * largo, s * alto, s * (roccia ? 0.7 + 0.7 * v2 : albero ? mA.spessore : largo * (0.9 + 0.2 * v2)));
       if (muro) {                              // muretti: diritti, lungo il confine, solo un po' più alti o bassi
         e.set(0, rot, 0); q.setFromEuler(e);
         p.y = d[o + 1] - 0.08;

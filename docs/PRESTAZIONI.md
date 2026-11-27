@@ -192,31 +192,46 @@ effetti 2,1 su 1,5 (cielo 1,2). Rimedi:
   ogni 8192 m;
 - **cupola del cielo** disegnata per ultima con il test di profondità (sessione Cielo e meteo).
 
-### In sospeso per decisione dell'utente: lo sforamento della vegetazione nel bosco fitto
+### Riaperto e lavorato: lo sforamento della vegetazione nel bosco fitto
 
-**Stato: sospeso a tempo indeterminato, 27 novembre 2026. Si riapre solo se lo chiede l'utente**, dopo aver provato
-di persona il bosco fitto e averci trovato rallentamenti. Nessuna sessione resta in attesa.
+**Stato: riaperto dall'utente il 27 novembre 2026 dopo la sua misura, lavorato nella PR «Bosco fitto».**
+Era stato sospeso il 27/11 («solo se la ritiro fuori dopo prove di lentezza»).
 
-Il piano «+7 forme» **non è in sospeso: è già unito** (PR #218, 24/11, «Livelli di dettaglio: la variante è la
+Il piano «+7 forme» **non era in sospeso: era già unito** (PR #218, 24/11, «Livelli di dettaglio: la variante è la
 specie»). Risolveva la *coerenza*, non il costo: un castagno a 200 m diventava un'altra pianta avvicinandosi, perché i
 livelli avevano numeri di varianti diversi. Le chiamate della vegetazione misurate dopo sono **32 su 35**, non le
 34-35 stimate.
 
-Resta aperto lo **sforamento**: nel bosco fitto la vegetazione sta a **8,1 ms su 6,5** (misura dell'utente). Misura su
-`main` 611868f, `?seme=570549&prova&centro=99937,43289`: vegetazione 626 934 triangoli in 32 chiamate, scena
-1 015 516 in 149. Dentro, le **latifoglie fra 18 e 50 m sono 119 piante per 215 512 triangoli** (~1 800 l'una): più
-di tutte le 71 253 sagome messe insieme (142 506).
+**Misura «prima» dell'utente** (27/11, Brave, UHD 730, 1884×917, qualità media, MSAA 4×, profondità invertita,
+`?seme=570549&prova&centro=99937,43289`): FPS medio 65,4 · 1 % peggiori 49,8 · fotogramma peggiore 30,0 ms · GPU
+13,5 ms (picco 17,1) · 149 chiamate · 996 mila triangoli. Per gruppi: terreno blocco 3,7 · terreno orizzonte 1,3 ·
+veg. sagome lontane 0,7 · veg. sagome 2,4 · veg. erba 0,1 · **veg. resto 4,6 (picco 7,8)** · cielo 0,4. Vegetazione in
+tutto **7,7 su 6,5** ⚠, terreno **4,9 su 4,5** ⚠. CPU «vegetazione aggiorna» 0,42 (1 % 1,8, max 2,4).
+A qualità alta i numeri sono identici: **il preset non cambia niente**, difetto da guardare a parte.
 
-**Attenzione prima di tagliare triangoli.** La misura del 21/11 qui sotto dice che il costo segue i pixel coperti, non
-i triangoli: togliendo 187 mila triangoli la vegetazione scese solo da 7,2 a 7,0 ms, perché «veg. resto» calò da 4,9 a
-3,8 ma «veg. sagome» salì da 1,6 a 2,5. Se vale ancora, tagliare quei 215 mila triangoli vale ~0,2 ms su 1,6 di
-sforamento, peggiorando la resa degli alberi a 30 m.
+Pesa «veg. resto», cioè la geometria: nel bosco fitto le **latifoglie fra 18 e 50 m erano 119 piante per 215 512
+triangoli** (~1 800 l'una), più di tutte le 71 253 sagome messe insieme (142 506).
 
-**Quando si riapre, il primo passo non è una decisione ma una misura**: i due valori `F3`/`F9` di «veg. sagome» e
-«veg. resto» nel bosco fitto.
-- se pesa «resto», il confine del livello ricco da 50 a 35 m porta la vegetazione a 513 302 triangoli (−18 %, scena
-  −11 %) senza chiamate in più: provato dalla sessione vegetazione su `main` 611868f, non stimato; un livello intermedio da ~500 triangoli costerebbe +3 chiamate, cioè 35 su 35, al tetto;
-- se pesano le sagome, i livelli degli alberi non c'entrano: si lavora su diradamento e misura delle sagome.
+**Fatto nella PR «Bosco fitto»** (misure headless su `main` aae06e4, stesso indirizzo):
+
+| | prima | dopo |
+|---|---|---|
+| triangoli della vegetazione | 626 934 | **535 308** (−14,6 %) |
+| triangoli della scena | 1 015 516 | **923 890** (−9 %) |
+| chiamate della vegetazione | 32 | **32** (nessuna in più) |
+
+Il taglio viene dal livello ricco delle latifoglie portato da 50 a 35 m (−113 632 triangoli); i tronchi più sottili non
+cambiano il conto, i piedi dei tronchi lo rialzano di ~20 mila.
+
+**Attenzione: il guadagno in millisecondi non è dato per scontato.** La misura del 21/11 qui sotto dice che il costo
+segue i pixel coperti, non i triangoli: togliendo 187 mila triangoli la vegetazione scese solo da 7,2 a 7,0 ms, perché
+«veg. resto» calò da 4,9 a 3,8 ma «veg. sagome» salì da 1,6 a 2,5. Questa volta si tolgono vertici a alberi che
+coprono gli stessi pixel di prima: se «resto» è limitato dai pixel il guadagno resta piccolo. **Da rimisurare
+dall'utente** con lo stesso indirizzo e `&qualita=medio`; se non basta, il passo seguente non è tagliare altri
+triangoli ma lavorare su diradamento e misura delle sagome.
+
+Fuori da quella PR, da cercare a parte: il **terreno** peggiorato di +0,9 ms dal 21/11, e il **fotogramma peggiore a
+30 ms** (picchi di «resto» e aggiornamento CPU al cambio di livello).
 
 ## Risultati del percorso di prova
 
