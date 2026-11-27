@@ -573,7 +573,8 @@ html, body {
 .carta-cronista .avanti.vista { opacity: 1; }
 
 /* Meridiana (interfaccia.js, creaMeridiana): tavoletta di pietra dal bordo scheggiato, disegno dritto e leggibile */
-.meridiana { position: fixed; left: 14px; top: 12px; z-index: 5; width: 236px; pointer-events: none;
+.meridiana { position: fixed; left: 14px; bottom: 40px;   /* in basso a sinistra, sopra la riga d'aiuto: in alto c'è il pannello F3 */
+  z-index: 5; width: 236px; pointer-events: none;
   filter: drop-shadow(0 5px 7px rgba(0, 0, 0, .55)); }
 .meridiana[hidden] { display: none; }
 .meridiana svg { display: block; width: 100%; height: auto; overflow: visible; }
