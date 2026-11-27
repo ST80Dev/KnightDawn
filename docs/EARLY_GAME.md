@@ -360,7 +360,10 @@ poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un
    semicerchio regolare, raggi incisi (più marcati sulle ore canoniche), un piolo la cui ombra indica l'ora. Al posto dei
    numeri, **soli stilizzati** fuori dal semicerchio: piccoli e rossicci all'alba e al tramonto, grandi e dorati a
    mezzogiorno. Sotto, in orizzontale, «Terza · circa le 10 e mezza». Avanza a scatti di mezz'ora di gioco (3 minuti
-   reali), non di continuo; di notte la pietra si scurisce, i soli si spengono e compare una luna.
+   reali), non di continuo. Al posto dell'ombra realistica una **lancetta giallo-arancio** che indica l'ora
+   (richiesta dell'utente). **Di notte il notturnale**: il semicerchio si ribalta verso il basso, da Compieta (21, a
+   sinistra) a Prima (6, a destra) passando per Mattutino; tacche ogni ora e mezza; **lune** al posto dei soli (falce
+   crescente a Compieta, piena a mezzanotte, calante a Lodi) e una lancetta argento.
    Corretto anche `Calendar.fineVeglia`: all'investitura l'ora del giorno ripartiva da Prima.
 4. **Combattimento nel riquadro.** Tre colonne (cavaliere, scelte e Slancio, nemico) e cronaca dei Round;
    la scena dietro è ferma. Ogni Round confermato avanza il calendario dei suoi minuti; i rami di esito

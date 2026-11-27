@@ -559,11 +559,13 @@ export function creaCartaCronista(opzioni = {}) {
 // ─── Meridiana (richiesta dell'utente, novembre 2026): in alto a sinistra, il momento del giorno ──────────────────
 // Una tavoletta di pietra, sul modello delle meridiane canoniche medievali incise sulle chiese: il bordo è scheggiato e
 // la superficie granulosa (l'irregolarità sta nella pietra), ma il disegno è dritto e leggibile [rivisto con l'utente:
-// la versione sbilenca sembrava un graffito rupestre]: base orizzontale, semicerchio regolare, raggi incisi, numeri
-// romani sulle ore canoniche (I Prima, III Terza, VI Sesta, IX Nona, XII Vespri), un piolo la cui ombra indica l'ora.
+// la versione sbilenca sembrava un graffito rupestre]: base orizzontale, semicerchio regolare, raggi incisi, soli stilizzati
+// sulle ore canoniche (I Prima, III Terza, VI Sesta, IX Nona, XII Vespri), un piolo la cui ombra indica l'ora.
 // Sotto, in orizzontale, l'ora canonica e l'orario «circa». Scatta a passi fissi (mezz'ora di gioco), non scorre di
 // continuo. Di notte la pietra è al buio e mostra una luna. Scheggiature fisse (seme costante).
 // [ora, raggio del sole, colore]: dall'alba pallida al mezzogiorno pieno, al tramonto rossiccio.
+// [ora (dopo mezzanotte + 24), raggio, fase]: le lune del notturnale.
+const LUNE_NOTTURNALE = [[21, 6, 'crescente'], [24, 7, 'piena'], [27, 6, 'calante']];
 const SOLI_MERIDIANA = [[6, 3.2, '#d9a066'], [9, 4.6, '#e8b440'], [12, 6.2, '#f6cf3a'], [15, 4.6, '#e8b440'], [18, 3.2, '#d98a4a']];
 export function creaMeridiana(contenitore) {
   const el = document.createElement('div');
@@ -607,6 +609,23 @@ export function creaMeridiana(contenitore) {
     return `<g class="sole"><path d="${raggiSole}" stroke="${col}" stroke-width="${f(Math.max(1.2, rs * 0.32))}"/>`
       + `<circle cx="${f(x)}" cy="${f(y)}" r="${rs}" fill="${col}"/></g>`;
   }).join('');
+  // Notturnale (richiesta dell'utente): di notte il semicerchio si ribalta verso il basso, da Compieta (21, a sinistra)
+  // a Prima (6, a destra) passando per Mattutino (mezzanotte) in fondo; tacche ogni ora e mezza, lune al posto dei soli
+  // (falce a Compieta e a Lodi, piena a mezzanotte); l'indice indica l'ora.
+  const ncy = 26, angN = (h) => Math.PI * (1 + (h - 21) / 9);   // 21 → sinistra, 30 (= 6) → destra, passando in basso
+  const ptN = (h, rr) => [cx + Math.cos(angN(h)) * rr, ncy - Math.sin(angN(h)) * rr];
+  let raggiN = '';
+  for (let h = 21; h <= 30; h += 1.5) {
+    const canonica = (h - 21) % 3 === 0, [x0, y0] = ptN(h, 12), [x1, y1] = ptN(h, canonica ? R : R - 14);
+    raggiN += `<path d="M${f(x0)} ${f(y0)} L${f(x1)} ${f(y1)}" class="${canonica ? 'forte' : ''}"/>`;
+  }
+  const lune = LUNE_NOTTURNALE.map(([h, rl, fase]) => {
+    const [x, y] = ptN(h, R + 15);
+    if (fase === 'piena') return `<circle cx="${f(x)}" cy="${f(y)}" r="${rl}" class="disco"/>`;
+    // Falce: mezzo cerchio esterno e, a ritroso, mezza ellisse più stretta dalla stessa parte (crescente a destra).
+    const est = fase === 'crescente' ? 1 : 0;
+    return `<path class="disco" d="M${f(x)} ${f(y - rl)} A${rl} ${rl} 0 0 ${est} ${f(x)} ${f(y + rl)} A${f(rl * 0.45)} ${rl} 0 0 ${1 - est} ${f(x)} ${f(y - rl)} Z"/>`;
+  }).join('');
   el.innerHTML = `<svg viewBox="0 0 ${W} ${H + 26}" aria-hidden="true">
       <defs>
         <linearGradient id="mer-pietra" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b8b0a0"/><stop offset="1" stop-color="#8e8676"/></linearGradient>
@@ -618,15 +637,22 @@ export function creaMeridiana(contenitore) {
       <path class="pietra" d="${bordo}"/>
       <g clip-path="url(#mer-taglio)"><rect width="${W}" height="${H}" filter="url(#mer-macchie)"/><rect width="${W}" height="${H}" filter="url(#mer-grana)"/></g>
       <path class="orlo" d="${bordo}"/>
-      <g class="incisioni"><path d="${arco}"/><path d="${base}"/>${raggi}</g>
-      <g class="soli">${soli}</g>
-      <path class="ombra" d="M${cx} ${cy}" filter="url(#mer-sfuma)"/>
-      <circle class="piolo" cx="${cx}" cy="${cy}" r="4"/>
-      <path class="luna" d="M${cx + 2} ${cy - 52} a15 15 0 1 0 12 22 a12 12 0 1 1 -12 -22z"/>
+      <g class="giorno">
+        <g class="incisioni"><path d="${arco}"/><path d="${base}"/>${raggi}</g>
+        <g class="soli">${soli}</g>
+        <path class="ombra" d="M${cx} ${cy}"/>
+        <circle class="piolo" cx="${cx}" cy="${cy}" r="4"/>
+      </g>
+      <g class="notturno">
+        <g class="incisioni"><path d="M${f(cx - R)} ${ncy} A${R} ${R} 0 0 0 ${f(cx + R)} ${ncy}"/><path d="M${f(cx - R - 6)} ${ncy} H${f(cx + R + 6)}"/>${raggiN}</g>
+        <g class="lune">${lune}</g>
+        <path class="indice" d="M${cx} ${ncy}"/>
+        <circle class="piolo" cx="${cx}" cy="${ncy}" r="4"/>
+      </g>
       <text class="testo" x="${cx}" y="${H + 19}"></text>
     </svg>`;
   contenitore.appendChild(el);
-  const ombra = el.querySelector('.ombra'), testo = el.querySelector('.testo');
+  const ombra = el.querySelector('.ombra'), indice = el.querySelector('.indice'), testo = el.querySelector('.testo');
   let ultima = null;
   /** ora: 0–24 (con i decimali); passo: ore di gioco per scatto (0,5 = mezz'ora). */
   function aggiorna(ora, passo = 0.5) {
@@ -636,9 +662,13 @@ export function creaMeridiana(contenitore) {
     const notte = o < 6 || o >= 21;
     el.classList.toggle('notte', notte);
     if (!notte) {
-      // L'ombra del piolo indica l'ora: un cuneo sottile che si allarga un poco verso la punta.
-      const [x, y] = pt(o, R - 4), a = ang(o), w = 3.5, nx = -Math.sin(a) * w, ny = -Math.cos(a) * w;
-      ombra.setAttribute('d', `M${cx} ${cy} L${f(x + nx)} ${f(y + ny)} L${f(x - nx)} ${f(y - ny)} Z`);
+      // Lancetta giallo-arancio che indica l'ora (richiesta dell'utente: un indicatore chiaro, non un'ombra realistica).
+      const [x, y] = pt(o, R - 2);
+      ombra.setAttribute('d', `M${cx} ${cy} L${f(x)} ${f(y)}`);
+    } else {
+      // Notturnale: una lancetta argento, come quella arancio del giorno, indica l'ora della notte.
+      const on = o < 6 ? o + 24 : o, [x, y] = ptN(on, R - 2);
+      indice.setAttribute('d', `M${cx} ${ncy} L${f(x)} ${f(y)}`);
     }
     const h = Math.floor(o), mezza = o - h >= 0.5;
     const quando = h === 0 ? 'mezzanotte' : h === 12 ? 'mezzogiorno' : h === 1 || h === 13 ? "l'una" : `le ${h}`;
