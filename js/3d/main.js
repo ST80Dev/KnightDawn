@@ -20,7 +20,7 @@ import { createCastle } from './castle3d.js';
 import { createRoccaAPezzi } from './rocca3d.js';
 import { creaCaseCampagna, quotaFinestre } from './edifici3d.js';
 import { createBorgoAPezzi } from './borgo3d.js';
-import { createVillaggioAPezzi, createMonasteroAPezzi, createEremoAPezzi, pianoDelSito } from './villaggio3d.js';
+import { createVillaggioAPezzi, createMonasteroAPezzi, createEremoAPezzi, createMulinoAPezzi, pianoDelSito } from './villaggio3d.js';
 import { createRovinaAPezzi, createMisteroAPezzi } from './rovine3d.js';
 import { raggioSito, climaDelLuogo } from '../mondo/siti.js';
 import { createCartaVista } from './cartaVista.js';
@@ -814,12 +814,13 @@ function* costruisciVillaggi(cx, cz, ter) {
   };
   for (const s of carta?.siti ?? []) {
     const eremo = s.tipo === 'eremo', rovina = s.tipo === 'rovina' || s.tipo === 'abbandonato';
-    const mistero = s.tipo === 'grotta' || s.tipo === 'fantastico';
-    if (s.tipo !== 'villaggio' && s.tipo !== 'ovile' && !eremo && !rovina && !mistero) continue;
+    const mistero = s.tipo === 'grotta' || s.tipo === 'fantastico', mulino = s.tipo === 'mulino';
+    if (s.tipo !== 'villaggio' && s.tipo !== 'ovile' && !eremo && !rovina && !mistero && !mulino) continue;
     const x = s.x - cx, z = s.z - cz, m = raggioSito(s) + 50;
     if (Math.abs(x) > half + m || Math.abs(z) > half + m) continue;
     if (mistero) out.push(yield* createMisteroAPezzi(suoloMondo, s, x, z, carta));        // M8, passo 5
     else if (rovina) out.push(yield* createRovinaAPezzi(suoloMondo, s, x, z, carta));     // M8, passo 4
+    else if (mulino) out.push(yield* createMulinoAPezzi(suoloMondo, s, x, z, carta));     // M8: mulino ad acqua
     else out.push(eremo ? yield* createEremoAPezzi(suoloMondo, s, x, z, carta)
       : yield* createVillaggioAPezzi(suoloMondo, s, x, z, carta, cx, cz));
   }
@@ -883,6 +884,7 @@ function* preparaMondo(desc) {
     copertura: coperturaMondo(carta, Calendar.stagione), seme: carta.seme, carta,
     piani: [...(carta.luoghi || []).flatMap((l) => l.piani || []),
       ...(carta.siti || []).filter((s) => s.tipo === 'villaggio' || s.tipo === 'ovile' || s.tipo === 'eremo').map((s) => pianoDelSito(s)),
+      ...(carta.siti || []).filter((s) => s.tipo === 'mulino').map((s) => pianoDelSito(s, 0.5)),
       // Rovine e abbandonati: cerchio più stretto, gli alberi stanno fuori dai muri ma il bosco se li riprende.
       ...(carta.siti || []).filter((s) => s.tipo === 'rovina' || s.tipo === 'abbandonato').map((s) => pianoDelSito(s, 0.45)),
       // Grotte e luoghi del fantastico: cerchio ancora più stretto, stanno dentro il paesaggio che li circonda.

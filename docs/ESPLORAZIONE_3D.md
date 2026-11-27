@@ -3391,6 +3391,52 @@ moltiplicano (classe × terreno che regge × distanza di 30 km) e il numero di c
 ripiego non copre, perché il salto di M7 non dipende dalla quota.
 >>>>>>> origin/main
 
+## Mulino ad acqua (novembre 2026) — fatto, misurato, da provare
+
+Il mulino aveva il simbolo sulla Carta e **niente a terra**: 33–50 luoghi per mondo invisibili nelle Scene. Due parti.
+
+### Dove sta il mulino (`js/mondo/siti.js`)
+
+Il vincolo era `distanzaAcqua(..., dolce)` ≤ 140 m, misurato su una mappa a 125 m che conta anche i laghi. Misurato
+su 178 mulini (4 semi): **4 stavano su un lago** senza nessun corso d'acqua entro 150 m, e il più lontano aveva la
+ruota a 145 m dall'acqua corrente. Ora c'è anche `SITI.mulinoCorso = 60` m, misurato sulle polilinee di `carta.fiumi`
+con una griglia a 200 m costruita una volta; `verificaSiti` misura sulla stessa cosa, non più sulla mappa grossolana.
+
+| | prima | dopo |
+|---|---|---|
+| mulini per mondo | 33–50 | 33–50 (invariati: il vincolo li sposta, non li toglie) |
+| distanza mediana dal corso d'acqua | 41 m | 35 m |
+| 90° percentile | 96 m | 52 m |
+| massima | 145 m | 60 m |
+| mulini di solo lago | 4 | 0 |
+
+### Com'è fatto (`js/3d/villaggio3d.js`, `createMulinoAPezzi`)
+
+- **Il corpo si accosta al corso d'acqua**, non sta sul punto del sito (che è a 35 m mediani): un mulino con la ruota
+  a trenta metri dall'acqua non è un mulino. La riva è la più alta delle due, perché l'altra è il greto; se il terreno
+  è sotto il pelo dell'acqua, il corpo arretra finché non sta all'asciutto.
+- **Ruota a spinta dal basso, dentro la corrente** (immersa 45 cm), retta da un castello di travi sul fondo, e
+  **sbarramento di pietre** di traverso al corso poco a valle, che alza l'acqua sulle pale. Scelta dell'utente, ed è il
+  mulino classico sul torrente. *Prima tentativo con ruota per di sopra e gora*: scartato dall'utente. Il motivo per cui
+  l'avevo provata resta vero e vale la pena saperlo: sui torrenti del mondo generato **l'alveo è inciso 0,6 m** e largo
+  6, quindi il pelo dell'acqua è quasi a filo di terra e **l'acqua quasi non si vede**. Non è un difetto del mulino: è
+  l'incisione dell'alveo, cioè terreno della sessione del generatore.
+- **L'asse della ruota è la normale alla riva**, così il piano della ruota contiene la corrente (la ruota sta per il
+  lungo nel corso d'acqua). Un `+90°` di troppo l'aveva messa di traverso: trovato dall'utente guardando l'immagine.
+- **La ruota gira dentro `aggiornaLuci`**, l'unico aggancio per fotogramma che i villaggi hanno. Nome improprio,
+  commentato come tale; concordato con M7 che quando servirà un `aggiorna(dt, t)` vero nel kit (insegne al vento, fumo)
+  la ruota ci si sposta.
+- `EDIFICI` non ha la voce `mulino` e `edifici3d.js` è di M7: le misure si passano per intero a `kit.edificio`. M7 ha
+  accettato di dichiarare legittimo nel kit un tipo fuori da `EDIFICI` quando arrivano `misure` complete.
+- I colori di legno e pietra sono copiati da `edifici3d.js` (`COL` non è esportato): la copia sparisce quando M7
+  esporterà `COL`, senza accoppiare le due PR.
+
+**Costo**: 12 chiamate e ~1.400 triangoli per mulino (un villaggio ne usa 14). Mai due mulini nello stesso blocco di
+2 km. Provato nel browser sul seme 570549 (mulino a 86.033, 4.967): nessun errore in console.
+
+**Resta da fare**: gente al mulino (il mugnaio), e i sacchi di farina. Il forno e gli orti dei villaggi restano fuori
+dal passo, come già scritto.
+
 ## Fuori dal prototipo (non farlo ora)
 
 Multiplayer, server/VPS, NPC con IA, mobile/touch, modelli esterni, combattimento in 3D, ombre di
