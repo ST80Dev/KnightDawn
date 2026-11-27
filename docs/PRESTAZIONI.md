@@ -192,6 +192,22 @@ effetti 2,1 su 1,5 (cielo 1,2). Rimedi:
   ogni 8192 m;
 - **cupola del cielo** disegnata per ultima con il test di profondità (sessione Cielo e meteo).
 
+### In sospeso per decisione dell'utente: livelli di dettaglio delle latifoglie
+
+**Stato: sospeso a tempo indeterminato, 27 novembre 2026. Si riapre solo se lo chiede l'utente**, dopo aver provato
+di persona il bosco fitto e averci trovato rallentamenti. Nessuna sessione lo sta aspettando.
+
+Il problema misurato resta vero: nel bosco fitto la vegetazione sta a **8,1 ms su un budget di 6,5**, e tre gruppi di
+latifoglie a media distanza, con sole **120 piante**, fanno **219 mila triangoli**. Il fotogramma peggiore nel bosco
+arriva a 33,5 ms, cioè ogni tanto se ne perde uno.
+
+Il rimedio proposto dalla sessione «M7 - vegetazione» era **7 forme in più**, con le chiamate di disegno da 28 a
+**34-35 su un tetto di 35**. Il piano per esteso non è mai arrivato in questo documento e la sessione che lo aveva
+scritto non lo ha più in memoria: se si riapre, va rifatto e rimisurato su `main` di allora, non ripescato.
+
+Motivo della sospensione: il difetto non è stato giudicato fastidioso in gioco, e il margine sulle chiamate di
+disegno (34-35 su 35) è troppo sottile per spenderlo senza una ragione sentita.
+
 ## Risultati del percorso di prova
 
 Scheda Intel UHD 730 (il browser Brave nasconde il nome), 1920×935, seme 570549 (`?seme=570549&prova`).
