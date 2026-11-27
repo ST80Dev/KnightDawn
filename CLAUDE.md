@@ -15,9 +15,13 @@ instabile durante lo sviluppo. In alternativa in locale con `python -m http.serv
 
 ## Struttura
 - `index.html` + `style.css` — canvas WebGL + overlay HUD in HTML/CSS + importmap
-- `js/3d/` — moduli ES del motore 3D: `main.js` (renderer, luci, loop, input, F3), `terrain.js`, `orizzonte.js`, `acqua.js`, `knight3d.js`, `camera.js`, `cielo.js` (giorno/notte, nebbia, meteo), `castle3d.js` (Tavullia), `rocca3d.js` e `borgo3d.js` (mondo generato), `minimappa.js`, `interfaccia.js` (menu d'avvio, Carta del cronista, combattimento)
+- `js/3d/` — moduli ES del motore 3D: `main.js` (renderer, luci, loop, input, F3), `prestazioni.js` (profilatore F3/F4/F9,
+  qualità), `terrain.js`, `orizzonte.js`, `acqua.js`, `blocchi.js` (blocco che segue il cavaliere), `cielo.js` (giorno/notte,
+  nebbia, meteo), `camera.js`, `knight3d.js`, `cavallo3d.js`, `abitanti3d.js` (persone di rocche e borghi), `castle3d.js`
+  (Tavullia), `rocca3d.js`, `borgo3d.js`, `edifici3d.js` (kit unico degli edifici), `villaggio3d.js` (villaggi, ovili, mulini),
+  `rovine3d.js`, `vegetazione3d.js`, `minimappa.js`, `cartaVista.js`, `interfaccia.js` (menu d'avvio, Carta del cronista, combattimento)
 - `js/mondo/` — generatore del mondo, moduli ES senza grafica né DOM (`rumore.js`, `carta.js`, `verifica.js`,
-  `scena.js`, `fiumi.js`, `luoghi.js`, `strade.js`, `siti.js`; `lavoratore.js` = Web Worker con cache IndexedDB, `generatore.js` = lato pagina); la vista di
+  `scena.js`, `fiumi.js`, `luoghi.js`, `strade.js`, `siti.js`, `vegetazione.js`; `lavoratore.js` = Web Worker con cache IndexedDB, `generatore.js` = lato pagina); la vista di
   sviluppo della Carta è `js/3d/cartaVista.js`. Cambiando le Carte generate: aggiornare `VERSIONE_GENERATORE`
 - `js/` — logica di gioco ereditata, script classici senza grafica (`config` `calendar` `knight`
   `combat` `events` `news` `save` + `data/`). I moduli 3D li leggono come globali.
