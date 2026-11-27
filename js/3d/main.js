@@ -35,6 +35,7 @@ import { distanzaStrada, percorsiStrade } from '../mondo/strade.js';
 import { posizionaVegetazione, posizionaVegetazioneAPezzi, coperturaMondo, coperturaTavullia } from '../mondo/vegetazione.js';
 import { creaVegetazione, creaVegetazioneAPezzi } from './vegetazione3d.js';
 import { creaAbitanti } from './abitanti3d.js';
+import { creaPersone } from './persone3d.js';
 import { semeDaTesto, completa } from '../mondo/rumore.js';
 import { creaCielo, posizioneSole, visibilitaDelGiorno } from './cielo.js';
 import { creaProfilatore, creaPercorso, GRUPPI, FAMIGLIE, BUDGET_GPU, budgetDi, creaQualita } from './prestazioni.js';
@@ -50,6 +51,8 @@ let TAVULLIA = PARAMETRI.get('terreno') === 'tavullia';
 const CLIMA_FORZATO = ['freddo', 'temperato', 'caldo'].includes(PARAMETRI.get('clima')) ? PARAMETRI.get('clima') : null;
 const climaDi = (x, z) => CLIMA_FORZATO ?? (carta ? climaDelLuogo(carta, x, z) : 'temperato');
 const PROVA_PRESTAZIONI = PARAMETRI.has('prova');             // percorso di prova: niente salvataggi (vedi init)
+// ?persone=capsule: torna al segnaposto a capsula di abitanti3d.js, per confrontarlo coi modelli (persone3d.js).
+const PERSONE_CAPSULE = PARAMETRI.get('persone') === 'capsule';
 const CENTRO_PROVA = (() => {                                   // ?centro=x,z (m del mondo) per il percorso di prova
   const v = (PARAMETRI.get('centro') || '').split(',').map(Number);
   return v.length === 2 && v.every(Number.isFinite) ? v : null;
@@ -875,7 +878,13 @@ function applicaMondo(p) {
   // Persone ai loro posti e per le strade (passo 7), sul suolo composto. Al cambio di blocco (scambiaBlocco) si rifanno
   // con rocche e borghi, già nelle coordinate del blocco nuovo: non serve spostarle (abitanti.sposta resta per altri usi).
   if (rocche.length) {
-    abitanti = creaAbitanti({ rocche, quota: (x, z) => suolo.getHeight(x, z), seme: carta.seme });
+    // I modelli stanno in persone3d.js: tutte le persone del blocco in una sola InstancedMesh, agganciata dentro
+    // `abitanti.object` così il profilatore la conta tra i «personaggi» e `libera()` la pulisce col resto.
+    const persone = PERSONE_CAPSULE ? null : creaPersone();
+    abitanti = creaAbitanti({ rocche, quota: (x, z) => suolo.getHeight(x, z), seme: carta.seme,
+      creaPersona: persone?.creaPersona });
+    const comune = persone?.finisci();
+    if (comune) abitanti.object.add(comune);
     scene.add(abitanti.object);
     ostacoli.push(abitanti);
   }
