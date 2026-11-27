@@ -128,6 +128,21 @@ Nel codice di oggi [Probabile, da confermare con le misure del passo 1]:
    - *Persone*: ≤ 2.000 triangoli e ≤ 8 oggetti a persona (pezzi uniti per snodo); geometrie condivise tra persone
      (colori diversi per istanza dove si può); animate a piena frequenza entro ~40 m, a metà frequenza fino a ~120 m,
      ferme oltre, non disegnate (o sagome) oltre ~200 m; al più ~12 animate insieme e ~40 visibili.
+     **Fatto meglio del vincolo** (`js/3d/persone3d.js`, novembre 2026): tutte le persone del blocco stanno in
+     **una sola `InstancedMesh`**, quindi **1 chiamata di disegno** invece di una a persona, e 0 per chi non è
+     visibile (`count` conta solo le persone visibili). L'articolazione degli arti è nel vertex shader
+     (`onBeforeCompile`: per vertice il verso dell'oscillazione e la quota dello snodo, per istanza fase e
+     ampiezza del passo), i colori di veste, pelle e capelli e la capigliatura sono attributi di istanza, la
+     corporatura sta nella matrice di istanza. 892 triangoli a persona (14.272 per 16, **+1,9 %** dei triangoli
+     di scena nel borgo). La geometria si rifà per Scena, perché porta gli attributi di istanza, e `libera()` la
+     pulisce col resto di `abitanti.object`; il **materiale è uno solo per tutta la partita**
+     (`userData.condivisa`, PR #231), così il cambio di blocco non ricompila lo shader. Verificato in headless:
+     dopo un cambio di blocco geometria nuova, stesso materiale, zero `dispose`, 16 persone prima e dopo.
+     Ripiego per il confronto: `?persone=capsule` (il segnaposto di `abitanti3d.js`,
+     una chiamata a persona). Il tetto di 8 oggetti a persona resta la regola per chi non può usare le istanze.
+     Misura headless (borgo del seme 570549, `&centro=97042,80681`, 16 persone in campo): chiamate del
+     fotogramma 170 senza persone → **171 con**, triangoli 565.661 → 579.933. I millisecondi in headless non
+     valgono (rendering software): il gruppo «personaggi» va letto con `F3`/`F4` sulla scheda vera.
    - *Sempre*: nessun lavoro oltre ~1,5 ms in un solo fotogramma (a pezzi o nel Worker); niente materiali o texture
      creati durante il gioco, solo al caricamento; alpha test solo dove serve; il cavaliere oggi è 86 oggetti
      (0,1 ms GPU, ma pesa sulle chiamate): unirlo per snodo prima di moltiplicare personaggi simili.

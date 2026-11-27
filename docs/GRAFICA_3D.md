@@ -54,6 +54,27 @@ armatura completa con elmo chiuso è il caso più favorevole: niente volto, mani
 4. **Ombra vera del cavaliere** (facoltativa): ombra proiettata limitata alla zona attorno a lui al posto del
    disco finto. Si decide guardando gli FPS.
 
+## Persone dei borghi (`js/3d/persone3d.js`) — fatto, da provare dall'utente
+
+Il contrasto col cavaliere è voluto: lui è il personaggio del giocatore ed è rifinito, la gente intorno no.
+Livello di dettaglio deciso dall'utente (novembre 2026): «arti visibili, testa e capigliatura diverse, niente
+riflessi, vestiti definiti e altri particolari che hai fatto sul cavaliere».
+- **Forma**: tronco tornito (`LatheGeometry`) schiacciato in profondità, gambe con ginocchio e scarpa, braccia
+  con spalla tonda, gomito piegato a riposo e mano, collo e **testa staccata**. Le braccia si staccano dal corpo
+  di ~12°: a piombo sui fianchi sembravano appese. Proporzioni dal cavaliere (anca 0,90 m, spalla 1,40 m,
+  testa 1,60 m), adulto di ~1,72 m, bambino a ~0,65.
+- **Capigliatura**: guscio sul cranio il cui bordo inferiore cambia quota secondo la direzione — attaccatura sulla
+  fronte davanti, sopra l'orecchio ai lati (guancia e tempia scoperte), giù sulla nuca dietro — e **non è
+  simmetrico**: da un lato il ciuffo scende di più (scriminatura). Dal seme: colore (tavola pesata di 9 toni, dal
+  corvino al bianco), lunghezza sulla nuca, volume, lato della scriminatura, e qualche adulto calvo (il guscio si chiude a
+  volume zero: costa vertici, zero pixel).
+- **Materiale**: `MeshLambertMaterial` opaco, un solo materiale. Niente mappe d'ambiente, niente satinature.
+  I colori stanno nei pesi per vertice (veste, pelle, capelli): un peso sotto 1 sulla veste scurisce senza
+  aggiungere un vestito a parte, così calzoni e scarpe sono la stessa stoffa più scura.
+- **Varietà**: statura e corporatura dal seme nella matrice di istanza; la tavola delle vesti è in
+  `abitanti3d.js` ed è stretta (bruni e verdi), quindi ogni persona schiarisce o scurisce la sua di ±15 %.
+- **Costo**: vedi `docs/PRESTAZIONI.md`. Una sola chiamata di disegno per tutte le persone del blocco.
+
 ## Terreno
 
 Piano generale (superficie sfumata + dettaglio nello shader, poi oggetti sparsi): `docs/ESPLORAZIONE_3D.md`,
