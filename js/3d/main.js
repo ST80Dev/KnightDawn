@@ -1303,7 +1303,7 @@ async function init() {
   };
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no · Spazio: scavalca'
-    + ` · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: Carta${inStoria() ? '' : ' (clic: vai lì) · T: avanza'}`
+    + ` · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: ${inStoria() ? 'mappa' : 'Carta (clic: vai lì) · T: avanza'}`
     + ' · N: minimappa grande · +/−: zoom minimappa · J: scrittoio · I: zaino'
     + ` · F2: qualità · F3: info · F8: menu · modalità ${inStoria() ? 'Storia' : 'Libera'}`,
   'aiuto');
@@ -1515,8 +1515,19 @@ const premuto = (azione) => TASTI_MOVIMENTO[azione].some((k) => tasti.has(k));
 
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;      // si sta scrivendo (es. il seme della Carta)
-  // M: in Storia la minimappa grande (la Carta di gioco arriva con G2); in Libera la Carta di sviluppo.
-  if (e.code === 'KeyM' && !e.repeat) { if (inStoria() && !cartaVista.aperta) minimappa.alterna(); else cartaVista.alterna(); return; }
+  // M: in Storia la mappa intera con la nebbia (minimappa a tutto schermo; la Carta di gioco arriva con G2); in Libera
+  // la Carta di sviluppo. Mentre la mappa intera è aperta il gioco è fermo: solo M o Esc per chiudere, +/− per lo zoom.
+  if (minimappa.intera) {
+    if ((e.code === 'KeyM' || e.code === 'Escape') && !e.repeat) { minimappa.alternaIntera(); tasti.clear(); }
+    if ((e.key === '+' || e.code === 'NumpadAdd') && !e.repeat) minimappa.zoom(-1);
+    if ((e.key === '-' || e.code === 'NumpadSubtract') && !e.repeat) minimappa.zoom(1);
+    return;
+  }
+  if (e.code === 'KeyM' && !e.repeat) {
+    if (inStoria() && !cartaVista.aperta) { if (!cronista && knight) { tasti.clear(); minimappa.alternaIntera(); } }
+    else cartaVista.alterna();
+    return;
+  }
   if (cartaVista.aperta) return;
   if (cronista) {                                        // Carta del cronista aperta: scelte con 1–9, Esc o E per uscire
     if (e.repeat) return;
@@ -2019,7 +2030,7 @@ function frame(now) {
   if (knight) {
     if (percorso) {
       // Percorso di prova: tempo di gioco fermo, la camera segue il giro fisso.
-    } else if (!inPausa && !cronista) {
+    } else if (!inPausa && !cronista && !minimappa.intera) {
       knight.update(dt, leggiInput());
       if (SEGUI_BLOCCO && scenaAttuale?.tipo === 'mondo' && vicinoAlBordo(knight.stato.x, knight.stato.z, terrain.size / 2)) cambiaBlocco();
       avanzaBlocco();
@@ -2029,8 +2040,8 @@ function frame(now) {
     } else {
       cam.prendiGiroMouse();               // in pausa il mouse non gira il cavaliere
     }
-    if (cavallo && !inPausa && !cronista) cavallo.update(dt);
-    if (abitanti && !inPausa && !cronista && !percorso) abitanti.update(dt, knight.stato, 1 - _luceGiorno);
+    if (cavallo && !inPausa && !cronista && !minimappa.intera) cavallo.update(dt);
+    if (abitanti && !inPausa && !cronista && !minimappa.intera && !percorso) abitanti.update(dt, knight.stato, 1 - _luceGiorno);
     cercaPortaVicina();
     cercaScavalcoVicino(dt);
     tt = segna('cavaliere e tempo', tt);

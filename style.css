@@ -542,3 +542,8 @@ html, body {
 .carta-cronista .tabella button:disabled { background: #c9b48a; color: #efe2c2; border-color: #b09868; cursor: default; }
 .carta-cronista .tabella .vuota { font-style: italic; color: var(--kd-sbiadito); padding: 6px 4px; }
 .carta-cronista.larga { width: min(760px, calc(100vw - 32px)); }
+
+/* Mappa intera (M in Storia): la minimappa a tutto schermo, al centro, sopra la scena ferma */
+#minimappa.intera { left: 50%; top: 50%; right: auto; bottom: auto; transform: translate(-50%, -50%); z-index: 55; }
+#minimappa.intera .grande { display: none; }
+#minimappa.intera canvas { cursor: default; }

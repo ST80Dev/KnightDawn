@@ -64,6 +64,8 @@ export function creaMinimappa(contenitore, opzioni) {
 
   // Preferenze di chi gioca (zoom, allargata): comodità del browser, si può perdere senza danno.
   let livello = MINIMAPPA.zoomIniziale, grande = false;
+  // Mappa intera (M in Storia): a tutto schermo, centrata sul mondo, zoom che lo mostra tutto; il gioco è fermo.
+  let intera = false, livelloPrima = 0;
   try {
     const p = JSON.parse(localStorage.getItem('kd.minimappa') || 'null');
     if (p && Number.isInteger(p.livello) && p.livello >= 0 && p.livello < MINIMAPPA.zoom.length) livello = p.livello;
@@ -130,6 +132,7 @@ export function creaMinimappa(contenitore, opzioni) {
   }
   /** Serve un nuovo rilievo fine? (nessuno, zoom cambiato, o il cavaliere si avvicina al bordo di quello che c'è). */
   function daRifare(r) {
+    if (intera) return false;                    // a tutto schermo basta la Carta (1 px per km): niente rilievo fine
     if (!r || r.carta !== cartaFatta || r.stagione !== stagioneFatta || r.passo !== passoVoluto()) return true;
     const vista = lato * mpp() / 2, cx = r.x0 + r.w / 2, cz = r.z0 + r.w / 2;
     return Math.max(Math.abs(pos.x - cx), Math.abs(pos.z - cz)) + vista > r.w / 2;
@@ -205,9 +208,11 @@ export function creaMinimappa(contenitore, opzioni) {
   // ─── Dimensioni ───
   function adatta() {
     dpr = window.devicePixelRatio || 1;
-    lato = grande
-      ? Math.round(Math.min(window.innerHeight * MINIMAPPA.grande.altezza, window.innerWidth * MINIMAPPA.grande.larghezza))
-      : MINIMAPPA.lato;
+    lato = intera ? Math.round(Math.min(window.innerHeight * 0.9, window.innerWidth * 0.9))
+      : grande
+        ? Math.round(Math.min(window.innerHeight * MINIMAPPA.grande.altezza, window.innerWidth * MINIMAPPA.grande.larghezza))
+        : MINIMAPPA.lato;
+    el.classList.toggle('intera', intera);
     canvas.style.width = canvas.style.height = lato + 'px';
     canvas.width = canvas.height = Math.round(lato * dpr);
     el.classList.toggle('allargata', grande);
@@ -216,17 +221,18 @@ export function creaMinimappa(contenitore, opzioni) {
     sporca = true;
   }
   function piede() {
-    elPiede.textContent = !grande ? ''
+    elPiede.textContent = intera ? 'rotella o +/−: zoom · M o Esc: chiudi la mappa' : !grande ? ''
       : (opzioni.prove?.() ?? true) ? 'clic: porta lì il cavaliere (prova) · rotella o +/−: zoom · N: riduci'
-        : 'rotella o +/−: zoom · N o M: riduci';
+        : 'rotella o +/−: zoom · N: riduci · M: mappa intera';
   }
   window.addEventListener('resize', () => { if (!el.hidden) adatta(); });
 
   // ─── Disegno ───
   function ridisegna() {
     const W = canvas.width, s = dpr / mpp();                 // pixel del dispositivo per metro
-    const tx = W / 2 - pos.x * s, ty = W / 2 - pos.z * s;
-    const c = cartaFatta, C = c.cella;
+    const c = cartaFatta, C = c.cella, Wm = c.cols * C, Hm = c.rows * C;
+    const centro = intera ? { x: Wm / 2, z: Hm / 2 } : pos;  // a tutto schermo: il mondo al centro
+    const tx = W / 2 - centro.x * s, ty = W / 2 - centro.z * s;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = '#1a0e04';
     ctx.fillRect(0, 0, W, W);
@@ -267,6 +273,19 @@ export function creaMinimappa(contenitore, opzioni) {
       ctx.setTransform(s * k.CELLA, 0, 0, s * k.CELLA, tx, ty);
       ctx.drawImage(maschera, 0, 0);
       ctx.setTransform(s, 0, 0, s, tx, ty);
+    }
+    // Oltre il confine del mondo niente terreno «a specchio»: nebbia piena in Storia, fondo scuro in Libera,
+    // e una linea sul confine (richiesta dell'utente: capire la forma del mondo e dove si è).
+    {
+      const m = (lato * mpp()) * 1.5 + Math.max(Wm, Hm);
+      ctx.fillStyle = k ? 'rgb(122, 100, 66)' : '#1a0e04';   // più scuro della nebbia: si distingue dall'ignoto
+      ctx.beginPath();                                        // un solo tracciato pari-dispari: niente giunture
+      ctx.rect(-m, -m, Wm + 2 * m, Hm + 2 * m);
+      ctx.rect(0, 0, Wm, Hm);
+      ctx.fill('evenodd');
+      ctx.strokeStyle = k ? 'rgba(110, 76, 36, 0.8)' : 'rgba(216, 178, 90, 0.7)';
+      ctx.lineWidth = 1.5 * dpr / s;
+      ctx.strokeRect(0, 0, Wm, Hm);
     }
     const noto = (x, z) => !k || k.livello(x, z) >= 1;
     // Blocco disegnato in 3D (solo allargata: dentro, il clic sposta senza ricaricare).
@@ -317,10 +336,10 @@ export function creaMinimappa(contenitore, opzioni) {
       ctx.fillStyle = COLORE_CAVALLO; ctx.strokeStyle = '#f4ead0'; ctx.lineWidth = 1.2 * dpr;
       ctx.beginPath(); ctx.arc(x, y, (fuoriVista ? 3.5 : 4.5) * dpr, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     }
-    // Il cavaliere al centro, con la direzione in cui guarda (x verso est, z verso sud: in avanti è (sin, cos)).
+    // Il cavaliere (al centro, salvo a tutto schermo), con la direzione in cui guarda (x verso est, z verso sud).
     {
-      const x = W / 2, y = W / 2, dx = Math.sin(pos.direzione), dy = Math.cos(pos.direzione);
-      const L = 9 * dpr, w = 5.5 * dpr;
+      const [x, y] = P(pos.x, pos.z), dx = Math.sin(pos.direzione), dy = Math.cos(pos.direzione);
+      const L = (intera ? 12 : 9) * dpr, w = (intera ? 7 : 5.5) * dpr;
       ctx.fillStyle = COLORE_CAVALIERE; ctx.strokeStyle = '#fff6e0'; ctx.lineWidth = 1.4 * dpr;
       ctx.beginPath();
       ctx.moveTo(x + dx * L, y + dy * L);
@@ -362,18 +381,22 @@ export function creaMinimappa(contenitore, opzioni) {
   /** Punto del mondo (m) sotto il puntatore. */
   function nelMondo(e) {
     const r = canvas.getBoundingClientRect();
-    return { x: pos.x + (e.clientX - r.left - lato / 2) * mpp(), z: pos.z + (e.clientY - r.top - lato / 2) * mpp() };
+    const c = cartaFatta, centro = intera && c ? { x: c.cols * c.cella / 2, z: c.rows * c.cella / 2 } : pos;
+    return { x: centro.x + (e.clientX - r.left - lato / 2) * mpp(), z: centro.z + (e.clientY - r.top - lato / 2) * mpp() };
   }
   canvas.addEventListener('click', (e) => {
-    if (!pos) return;
+    if (!pos || intera) return;
     if (!grande) { alterna(); return; }
     const p = nelMondo(e);
     opzioni.onVai?.(p.x, p.z);
   });
   const PUNTI = ['N', 'NE', 'E', 'SE', 'S', 'SO', 'O', 'NO'];
   canvas.addEventListener('pointermove', (e) => {
-    if (!grande || !pos || !cartaFatta) return;
+    if (!(grande || intera) || !pos || !cartaFatta) return;
     const p = nelMondo(e), dx = p.x - pos.x, dz = p.z - pos.z, d = Math.hypot(dx, dz);
+    if (p.x < 0 || p.z < 0 || p.x > cartaFatta.cols * cartaFatta.cella || p.z > cartaFatta.rows * cartaFatta.cella) {
+      elPiede.textContent = 'oltre il confine del mondo'; return;
+    }
     const k = opzioni.conoscenza?.();
     if (k && k.livello(p.x, p.z) < 1) { elPiede.textContent = 'terre ignote · rotella o +/−: zoom'; return; }
     const verso = PUNTI[Math.round(((Math.atan2(dx, -dz) * 180 / Math.PI + 360) % 360) / 45) % 8];
@@ -383,8 +406,28 @@ export function creaMinimappa(contenitore, opzioni) {
   });
   canvas.addEventListener('pointerleave', piede);
 
+  /** Mappa a tutto schermo (M in Storia): apre con lo zoom che mostra tutto il mondo, chiude tornando a com'era. */
+  function alternaIntera() {
+    const c = opzioni.carta();
+    if (!c) return;
+    intera = !intera;
+    if (intera) {
+      livelloPrima = livello;
+      adatta();
+      const serve = Math.max(c.cols, c.rows) * c.cella / lato * 0.98;
+      livello = MINIMAPPA.zoom.findIndex((z) => z >= serve);
+      if (livello < 0) livello = MINIMAPPA.zoom.length - 1;
+    } else {
+      livello = livelloPrima;
+    }
+    lavoro = null; sporca = true;
+    if (!el.hidden) adatta();
+  }
+
   return {
     get grande() { return grande; },
+    get intera() { return intera; },
+    alternaIntera,
     /** Per la console (kd.minimappa.info). */
     get info() {
       const d = (r) => r && { passo: r.passo, n: r.n, righe: r.righe, ms: Math.round(r.ms), x0: r.x0, z0: r.z0, w: r.w, fiumi: r.fiumi.length, strade: r.strade.length };
