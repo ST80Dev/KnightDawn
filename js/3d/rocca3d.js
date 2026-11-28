@@ -257,6 +257,33 @@ export function materialeMuro(colore, riflessa, mappa = texturaMuro()) {
   return m;
 }
 
+/**
+ * Superfici sottili posate sul terreno (ciottolato del borgo, terra battuta e vie dei villaggi): stanno solo 1–2 cm
+ * sopra il terreno, perché il cavaliere cammina sul terreno (getHeight) e a 12–14 cm i piedi affondavano nel selciato
+ * (segnalazione dell'utente). Il terreno disegnato è a triangoli di 7,8 m e la superficie ha i vertici più fitti: dove il
+ * pendio piega fra due vertici il terreno spunterebbe sopra di lei. Per ogni triangolo si campiona il terreno (griglia
+ * baricentrica di 5 punti per lato) e, dove lo supera, si alzano i tre vertici quanto basta (+ `margine`): così si alza
+ * solo lungo le pieghe, di pochi cm. Solo alla costruzione; lo sfarfallio lo toglie il polygonOffset dei materiali.
+ * `pos` (array piatto x, y, z) e `altezza(x, z)` nelle stesse coordinate; `idx` gli indici dei triangoli.
+ */
+export function appoggiaSulTerreno(pos, idx, altezza, margine = 0.005) {
+  const alza = new Float32Array(pos.length / 3), N = 4;
+  for (let n = 0; n < idx.length; n += 3) {
+    const a = idx[n] * 3, b = idx[n + 1] * 3, c = idx[n + 2] * 3;
+    let serve = 0;
+    for (let i = 0; i <= N; i++) {
+      for (let j = 0; i + j <= N; j++) {
+        const la = i / N, lb = j / N, lc = 1 - la - lb;
+        const x = la * pos[a] + lb * pos[b] + lc * pos[c], z = la * pos[a + 2] + lb * pos[b + 2] + lc * pos[c + 2];
+        const d = altezza(x, z) + margine - (la * pos[a + 1] + lb * pos[b + 1] + lc * pos[c + 1]);
+        if (d > serve) serve = d;
+      }
+    }
+    if (serve > 0) for (const v of [a, b, c]) if (serve > alza[v / 3]) alza[v / 3] = serve;
+  }
+  for (let v = 0; v < alza.length; v++) pos[v * 3 + 1] += alza[v];
+}
+
 /** Unisce geometrie (posizione e normale) in una sola, non indicizzata, con uv e colori di rifinisci(). */
 export function unisci(parti) {
   if (!parti.length) return null;

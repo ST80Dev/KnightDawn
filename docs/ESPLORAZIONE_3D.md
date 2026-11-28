@@ -1215,6 +1215,13 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
      mura), lati diritti e angoli smussati; **vicoli** lungo le curve di livello (1/2/3 secondo la classe) da un lato
      all'altro. Curve morbide e un leggero serpeggiare, bordi irregolari; **ciottolato** in una texture generata una
      volta al caricamento. Le polilinee restano nel borgo (`strade`) per il passo 5: gli isolati tra le strade.
+     *Piedi sul selciato* (segnalazione dell'utente, 28/11: il cavaliere affondava nelle strade del borgo): il nastro
+     stava 12–14 cm sopra il terreno, il cavaliere cammina sul terreno (`getHeight`). Ora 1–2 cm sopra il suolo su cui
+     si cammina (terreno, o pavimento della porta e rampe di `quotaSuolo`), alzato solo dove il terreno spunterebbe fra
+     due vertici (`appoggiaSulTerreno`, rocca3d.js, solo alla costruzione); lo sfarfallio lo toglie il polygonOffset.
+     Misura (raycast verticale, seme 570549): strade del borgo da +12,6 a **+1,6 cm** di media (p90 2,4, p99 4,9),
+     rampa e porta +2,6. Villaggi: terra battuta su una sotto-griglia del terreno (un terzo di cella, stessa
+     diagonale) a **+1,0 cm esatti**; vie +1,6 cm di media, con picchi fino a ~12 cm lungo le pieghe del terreno.
    - *Rocca:* la rampa della sua porta scende sul pendio del borgo (fino a 40 m, 25 %); lì finisce la via principale.
    - *Prestazioni* (`docs/PRESTAZIONI.md`, passo 6): un borgo = **6 oggetti disegnati** (mura e torri, scarpe, pietra,
      legno, strade, merli in istanza), 5 materiali più quello del ciottolato, ~8.200 triangoli (casata).
