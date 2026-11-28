@@ -133,7 +133,8 @@ Nel codice di oggi [Probabile, da confermare con le misure del passo 1]:
      visibile (`count` conta solo le persone visibili). L'articolazione degli arti è nel vertex shader
      (`onBeforeCompile`: per vertice il verso dell'oscillazione e la quota dello snodo, per istanza fase e
      ampiezza del passo), i colori di veste, pelle e capelli e la capigliatura sono attributi di istanza, la
-     corporatura sta nella matrice di istanza. 892 triangoli a persona (14.272 per 16, **+1,9 %** dei triangoli
+     corporatura sta nella matrice di istanza; elmo e lancia delle guardie stanno nella stessa geometria e si
+     chiudono in un punto per chi non li porta. 1.070 triangoli a persona (17.120 per 16, **+2,3 %** dei triangoli
      di scena nel borgo). La geometria si rifà per Scena, perché porta gli attributi di istanza, e `libera()` la
      pulisce col resto di `abitanti.object`; il **materiale è uno solo per tutta la partita**
      (`userData.condivisa`, PR #231), così il cambio di blocco non ricompila lo shader. Verificato in headless:
@@ -141,7 +142,7 @@ Nel codice di oggi [Probabile, da confermare con le misure del passo 1]:
      Ripiego per il confronto: `?persone=capsule` (il segnaposto di `abitanti3d.js`,
      una chiamata a persona). Il tetto di 8 oggetti a persona resta la regola per chi non può usare le istanze.
      Misura headless (borgo del seme 570549, `&centro=97042,80681`, 16 persone in campo): chiamate del
-     fotogramma 170 senza persone → **171 con**, triangoli 565.661 → 579.933. I millisecondi in headless non
+     fotogramma 170 senza persone → **171 con**, triangoli 565.661 → 582.781. I millisecondi in headless non
      valgono (rendering software): il gruppo «personaggi» va letto con `F3`/`F4` sulla scheda vera.
    - *Sempre*: nessun lavoro oltre ~1,5 ms in un solo fotogramma (a pezzi o nel Worker); niente materiali o texture
      creati durante il gioco, solo al caricamento; alpha test solo dove serve; il cavaliere oggi è 86 oggetti
