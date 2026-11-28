@@ -40,6 +40,10 @@ export const CAVALLO_CFG = {
   attesa: 2.5,        // s bloccato prima di smettere di seguire
   indietro: 60,       // m: oltre smette di seguire e aspetta
   fischio: 250,       // m: entro questa distanza, con la strada libera, al fischio arriva
+  // Fermo finché il cavaliere non si allontana (richiesta dell'utente, 28/11: avvicinarlo per montare). Zona morta tra
+  // il posto in cui si ferma (~4,5 m) e riparte: dentro, non si gira né si sposta; si avvicina il cavaliere, non lui.
+  riparte: 10,        // m: oltre questa distanza dal cavaliere riparte a seguirlo
+  incontro: 8,        // m: se il cavaliere gli viene incontro entro questa distanza, si ferma e lo aspetta
   // Passo 3: in sella (andature riviste con l'utente il 28/11/2026: a cavallo le distanze devono sembrare più corte)
   sella: {
     vel: { passo: 1.8, trotto: 8, galoppo: 18 },   // m/s: Ctrl, normale, Shift
@@ -572,6 +576,7 @@ export function createCavallo(terrain, ostacoli = []) {
     fase: 0,                // ciclo delle gambe, in [0, 1)
     modo: 'segue',          // 'segue' | 'aspetta' (rimasto indietro: bloccato o troppo lontano)
     richiamato: false,      // fischiato: va dritto al cavaliere, anche da lontano
+    fermo: true,            // arrivato: resta dov'è finché il cavaliere non è oltre cfg.riparte
     distanza: 0,            // m dal cavaliere
     bloccatoDa: 0,          // s di fila senza riuscire ad avanzare
     fermoDa: 0,             // s da fermo
@@ -635,7 +640,7 @@ export function createCavallo(terrain, ostacoli = []) {
   /** Fermo, al passo, a seguire da capo (nuova Scena, ricomparsa). */
   function azzera() {
     Object.assign(stato, { velocita: 0, velEffettiva: 0, andatura: 'passo', modo: 'segue', richiamato: false,
-      bloccatoDa: 0, sobbalzo: 0, dondolo: 0 });
+      fermo: true, bloccatoDa: 0, sobbalzo: 0, dondolo: 0 });
     for (const g of mod.gambe) { g.f = 0; g.volo = 0; }
     tracce.length = 0;
     tLinea = 0;
@@ -751,18 +756,14 @@ export function createCavallo(terrain, ostacoli = []) {
 
   /**
    * Posto da tenere quando la linea è libera: a ~4,5 m dal cavaliere, dalla parte in cui si trova il cavallo, ma
-   * fuori dal cono alle sue spalle (dove sta la camera) e, se lui cammina, non davanti a lui (si scansa e lo lascia
-   * passare). Il lato preferito è il sinistro: la camera guarda sopra la spalla destra.
+   * fuori dal cono alle sue spalle (dove sta la camera). Il lato preferito è il sinistro: la camera guarda sopra la
+   * spalla destra. (Non si scansa più davanti a lui: chi gli viene incontro lo trova fermo, vedi segui.)
    */
   function postoVicino(k) {
     let a = Math.atan2(stato.x - k.x, stato.z - k.z);           // direzione cavaliere → cavallo
     const dietro = angolo(k.direzione + Math.PI);
     const s = angolo(a - dietro);
     if (Math.abs(s) < cfg.cono) a = dietro + (s > 0.05 ? cfg.cono : -cfg.cono);
-    if ((k.velEffettiva || 0) > 0.4) {
-      const avanti = angolo(a - k.direzione);
-      if (Math.abs(avanti) < 1.2) a = k.direzione + (avanti >= 0 ? 1.2 : -1.2);
-    }
     const r = cfg.distanza * 0.9;
     return [k.x + Math.sin(a) * r, k.z + Math.cos(a) * r];
   }
@@ -787,6 +788,16 @@ export function createCavallo(terrain, ostacoli = []) {
     }
     if (stato.richiamato && d < 12) stato.richiamato = false;
     if (d > cfg.indietro && !stato.richiamato) { stato.modo = 'aspetta'; return frena(dt); }
+    // Zona morta: arrivato, resta fermo (bruca, si guarda attorno) finché il cavaliere non va oltre cfg.riparte.
+    if (stato.fermo && !stato.richiamato) {
+      if (d <= cfg.riparte) return frena(dt);
+      stato.fermo = false;
+    }
+    // Il cavaliere gli viene incontro: si ferma e lo aspetta, senza scansarsi né girargli intorno
+    const vk = k.velEffettiva || 0;
+    const incontro = d < cfg.incontro && d > 1e-3 && vk > 0.3 && !stato.richiamato
+      && (Math.sin(k.direzione) * (stato.x - k.x) + Math.cos(k.direzione) * (stato.z - k.z)) / d > 0.5;
+    if (incontro) { if (stato.velocita < 0.05) stato.fermo = true; return frena(dt); }
 
     // Meta: il posto vicino se la linea è libera, altrimenti le tracce (o dritto, se fischiato)
     let mx = k.x, mz = k.z, gap;
@@ -798,7 +809,7 @@ export function createCavallo(terrain, ostacoli = []) {
       if (p) { mx = p.x; mz = p.z; }
       gap = Math.max(0, d - cfg.distanza);
     }
-    let v = velocitaSegue(gap, k.velEffettiva || 0, stato.velEffettiva < 0.05, cfg);
+    let v = velocitaSegue(gap, vk, stato.velEffettiva < 0.05, cfg);
 
     // Rotazione verso la meta: al galoppo le curve sono larghe; per girarsi molto rallenta al passo
     const manca = angolo(Math.atan2(mx - stato.x, mz - stato.z) - stato.direzione);
@@ -815,6 +826,7 @@ export function createCavallo(terrain, ostacoli = []) {
 
     stato.velocita += clamp(v - stato.velocita, -cfg.frenata * dt, cfg.accelerazione * dt);
     if (stato.velocita < 0.02 && v === 0) stato.velocita = 0;
+    if (v === 0 && stato.velocita === 0 && r && d <= cfg.riparte) stato.fermo = true;   // arrivato
     const voluto = stato.velocita * dt;
     const fatto = avanza(voluto, k);
     // Bloccato (bosco fitto, acqua, pendio, muro): dopo un poco smette di seguire e aspetta
