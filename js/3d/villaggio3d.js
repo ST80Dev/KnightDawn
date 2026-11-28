@@ -23,8 +23,8 @@
 import * as THREE from 'three';
 import { creaKit, completaPezzi, siToccano, PEZZO_MS } from './edifici3d.js';
 // Geometrie e utilità comuni di M7 (sola lettura: rocca3d.js non si tocca).
-import { localeDelLuogo, dentroPoligono, distanzaContorno, prisma, unisci, materialeMuro, tonoDelLuogo } from './rocca3d.js';
-import { quotaFinale, livelloLago, tracciatiFiumi } from '../mondo/scena.js';
+import { localeDelLuogo, appoggiaSulTerreno, dentroPoligono, distanzaContorno, prisma, unisci, materialeMuro, tonoDelLuogo } from './rocca3d.js';
+import { quotaFinale, livelloLago, tracciatiFiumi, SCENA } from '../mondo/scena.js';
 import { distanzaStrada } from '../mondo/strade.js';
 import { hash2 } from '../mondo/rumore.js';
 import { raggioSito, climaDelLuogo } from '../mondo/siti.js';
@@ -59,8 +59,11 @@ export function pianoDelSito(s, frazione = 0.7) {
 // ─── Suolo del villaggio ───────────────────────────────────────────────────
 // Terra battuta: una griglia che copre solo dove serve (entro `margine` m da case, aie e strade, con il bordo che
 // ondeggia), alpha per vertice e alphaTest: bordo frastagliato, nessuna trasparenza da ordinare. Strade: nastri di
-// terra più scura. Piazzetta selciata (villaggi grandi). Al più 3 chiamate, qualche cm sopra il terreno.
-export const SUOLO = { sopra: 0.06, passo: 2.5, tessera: 4, margine: [3, 7], aia: 6 };
+// terra più scura. Piazzetta selciata (villaggi grandi). Al più 3 chiamate, 1–2 cm sopra il terreno (il cavaliere vi
+// cammina sul terreno: a 6–8 cm i piedi affondavano); l'ordine fra i pezzi lo dà il polygonOffset (attaccaSuolo).
+// La griglia della terra battuta è un terzo della cella del terreno (2,60 m), allineata ai suoi vertici e con la stessa
+// diagonale: ogni triangolo sta dentro un triangolo del terreno e lo segue esattamente (geoTerra).
+export const SUOLO = { sopra: 0.01, passo: SCENA.lato / SCENA.celle / 3, tessera: 4, margine: [3, 7], aia: 6 };
 const _tex = {};
 /** 0 terra battuta, 1 selciato rustico, 2 carreggiata (solchi delle ruote), 3 orto arato: 512 px = SUOLO.tessera m. */
 function texturaSuolo(tipo) {
@@ -125,8 +128,10 @@ function texturaSuolo(tipo) {
 }
 
 /** Finisce una geometria del suolo: triangoli verso l'alto, normali, sfera. */
-function chiudiGeo(pos, uv, idx, col = null) {
+function chiudiGeo(pos, uv, idx, col = null, ox = 0, oz = 0, quota = null) {
   if (!idx.length) return null;
+  // Appena sopra il terreno, alzato solo dove il terreno spunterebbe (rocca3d.js, appoggiaSulTerreno).
+  if (quota) appoggiaSulTerreno(pos, idx, (x, z) => quota(x - ox, z - oz));
   for (let i = 0; i < idx.length; i += 3) {
     const a = idx[i] * 3, b = idx[i + 1] * 3, c = idx[i + 2] * 3;
     const ux = pos[b] - pos[a], uz = pos[b + 2] - pos[a + 2], vx = pos[c] - pos[a], vz = pos[c + 2] - pos[a + 2];
@@ -163,7 +168,7 @@ function geoNastri(nastri, ox, oz, quota, sopra) {
       idx.push(a, c, b, b, c, d);
     }
   }
-  return chiudiGeo(pos, uv, idx);
+  return chiudiGeo(pos, uv, idx, null, ox, oz, quota);
 }
 
 /** Chiazza tonda (centro, raggio) col bordo che ondeggia. */
@@ -182,7 +187,7 @@ function geoChiazza(c, r, ox, oz, quota, sopra, rnd) {
     const a = 1 + (k - 1) * nA + j, b = 1 + (k - 1) * nA + (j + 1) % nA, cc = a + nA, d = b + nA;
     idx.push(a, b, cc, b, d, cc);
   }
-  return chiudiGeo(pos, uv, idx);
+  return chiudiGeo(pos, uv, idx, null, ox, oz, quota);
 }
 
 /**
@@ -191,31 +196,35 @@ function geoChiazza(c, r, ox, oz, quota, sopra, rnd) {
  * dalla forma più vicina (case con aia, strade, piazzetta).
  */
 export function geoTerra(L, dist, ox, oz, quota, seme, M = SUOLO.margine) {
-  const P = SUOLO.passo, n = Math.ceil(2 * L / P) + 1, T = SUOLO.tessera;
-  const alfa = new Float32Array(n * n), id = new Int32Array(n * n).fill(-1);
-  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-    const u = -L + i * P, v = -L + j * P;
+  // Vertici sulla sotto-griglia del terreno del blocco (x = −lato/2 + i·passo, coordinate del blocco).
+  const P = SUOLO.passo, T = SUOLO.tessera, h = SCENA.lato / 2;
+  const u0 = -h + P * Math.floor((ox - L + h) / P) - ox, v0 = -h + P * Math.floor((oz - L + h) / P) - oz;
+  const nu = Math.ceil((L - u0) / P) + 1, nv = Math.ceil((L - v0) / P) + 1;
+  const alfa = new Float32Array(nu * nv), id = new Int32Array(nu * nv).fill(-1);
+  for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
+    const u = u0 + i * P, v = v0 + j * P;
     const onda = 0.5 + 0.3 * Math.sin(u * 0.21 + v * 0.13 + seme % 7) + 0.2 * Math.sin(u * 0.07 - v * 0.17 + seme % 5);
     const lim = M[0] + (M[1] - M[0]) * clamp(onda, 0, 1);
-    alfa[j * n + i] = clamp(0.5 + (lim - dist(u, v)) / 2.5, 0, 1);
+    alfa[j * nu + i] = clamp(0.5 + (lim - dist(u, v)) / 2.5, 0, 1);
   }
   const pos = [], uv = [], col = [], idx = [];
   const vert = (i, j) => {
-    const k = j * n + i;
+    const k = j * nu + i;
     if (id[k] < 0) {
-      const u = -L + i * P, v = -L + j * P;
+      const u = u0 + i * P, v = v0 + j * P;
       id[k] = pos.length / 3;
       pos.push(ox + u, quota(u, v) + SUOLO.sopra, oz + v); uv.push(u / T, v / T); col.push(1, 1, 1, alfa[k]);
     }
     return id[k];
   };
-  for (let j = 0; j + 1 < n; j++) for (let i = 0; i + 1 < n; i++) {
-    const k = j * n + i;
-    if (alfa[k] <= 0 && alfa[k + 1] <= 0 && alfa[k + n] <= 0 && alfa[k + n + 1] <= 0) continue;
+  // Diagonale da (i+1, j) a (i, j+1), come i triangoli del terreno (terrain.js, NE–SO).
+  for (let j = 0; j + 1 < nv; j++) for (let i = 0; i + 1 < nu; i++) {
+    const k = j * nu + i;
+    if (alfa[k] <= 0 && alfa[k + 1] <= 0 && alfa[k + nu] <= 0 && alfa[k + nu + 1] <= 0) continue;
     const a = vert(i, j), b = vert(i + 1, j), c = vert(i, j + 1), d = vert(i + 1, j + 1);
     idx.push(a, c, b, b, c, d);
   }
-  return chiudiGeo(pos, uv, idx, col);
+  return chiudiGeo(pos, uv, idx, col, ox, oz, quota);
 }
 
 /**
@@ -501,8 +510,8 @@ export function* createVillaggioAPezzi(suolo, sito, ox, oz, carta, cx, cz) {
   const distNucleo = (u, v) => (Math.hypot(u, v) > R + 4 ? Infinity : distForme(u, v));
   const pezzi = [
     ['terra', geoTerra(R + 8, distNucleo, ox, oz, quota, seme), 0],
-    ['strade', geoNastri(vie, ox, oz, quota, SUOLO.sopra + 0.02), 2],
-    ['piazza', sito.dimensione === 'villaggio' && piazze[0] ? geoChiazza(piazze[0].c, piazze[0].r, ox, oz, quota, SUOLO.sopra + 0.04, rnd) : null, 1],
+    ['strade', geoNastri(vie, ox, oz, quota, SUOLO.sopra + 0.005), 2],
+    ['piazza', sito.dimensione === 'villaggio' && piazze[0] ? geoChiazza(piazze[0].c, piazze[0].r, ox, oz, quota, SUOLO.sopra + 0.01, rnd) : null, 1],
   ];
   attaccaSuolo(r, pezzi);
   yield;
@@ -585,7 +594,7 @@ function geoPoligono(P, ox, oz, quota, sopra, anelli = 6) {
     const a = 1 + (k - 1) * nA + j, b = 1 + (k - 1) * nA + (j + 1) % nA, c = a + nA, d = b + nA;
     idx.push(a, b, c, b, d, c);
   }
-  return chiudiGeo(pos, uv, idx);
+  return chiudiGeo(pos, uv, idx, null, ox, oz, quota);
 }
 
 /** Rettangoli di suolo (orti, spiazzi) appoggiati sul terreno: griglia di ~2 m per lotto. */
@@ -604,7 +613,7 @@ function geoRettangoli(lotti, ox, oz, quota, sopra) {
       idx.push(p, p + na + 1, p + 1, p + 1, p + na + 1, p + na + 2);
     }
   }
-  return chiudiGeo(pos, uv, idx);
+  return chiudiGeo(pos, uv, idx, null, ox, oz, quota);
 }
 
 /**
@@ -892,8 +901,8 @@ export function* createMonasteroAPezzi(suolo, luogo, ox, oz, carta) {
     // Cortile: terra battuta piena fino al muro (richiesta dell'utente: non a macchie). Fuori, una fascia stretta.
     ['terra', geoPoligono(P, ox, oz, quotaS, SUOLO.sopra), 0],
     ['fuori', geoTerra(Lm, fuoriCinta, ox, oz, quotaS, seme, [1.5, 4]), 0],
-    ['sentiero', geoNastri([sentiero], ox, oz, quotaS, SUOLO.sopra + 0.02), 1],
-    ['orti', geoRettangoli(orti, ox, oz, quotaS, SUOLO.sopra + 0.03), 3],
+    ['sentiero', geoNastri([sentiero], ox, oz, quotaS, SUOLO.sopra + 0.005), 1],
+    ['orti', geoRettangoli(orti, ox, oz, quotaS, SUOLO.sopra + 0.0075), 3],
   ]);
   yield;
   const raggio = Lm;
@@ -971,7 +980,7 @@ export function* createEremoAPezzi(suolo, sito, ox, oz, carta) {
   };
   attaccaSuolo(r, [
     ['terra', geoTerra(E.raggio + 6, distForme, ox, oz, quota, seme, EREMI.margine), 0],
-    ['orti', geoRettangoli(orti, ox, oz, quota, SUOLO.sopra + 0.03), 3],
+    ['orti', geoRettangoli(orti, ox, oz, quota, SUOLO.sopra + 0.0075), 3],
   ]);
   yield;
   return { tipo: 'eremo', sito, object: r.object, solidi: r.solidi,
