@@ -85,7 +85,12 @@ const VIAGGIO = {
   METRI_PER_PASSO_CAVALLO: 9700,  // a cavallo ~2× a piedi (~20 km al giorno; il galoppo consuma il vigore)
   METRI_PER_METRO_SALITA: 6.7,    // regola tipo Naismith: 600 m di salita ≈ 1 ora ≈ 4 km in piano
   METRI_PER_FORZA_PIENA:  30000,  // 100 di Forza ≈ 30 km in piano camminando
-  FORZA_ANDATURA: { camminata: 1, corsetta: 1.5, scatto: 3 },  // moltiplicatori di Forza al metro
+  // Moltiplicatori di Forza al metro in piano (deciso con l'utente, 28/11/2026: un cavaliere allenato non si stanca
+  // camminando; la corsetta è l'andatura di viaggio: ~9 ore di gioco di corsa continua, 14 km, costano ~47; lo scatto è la scelta cara).
+  // Prima 1 / 1,5 / 3.
+  // La salita pesa almeno ×1 a qualunque andatura (camminata compresa): le montagne restano faticose.
+  FORZA_ANDATURA: { camminata: 0, corsetta: 1, scatto: 3 },
+  RECUPERO_CAMMINATA: 1 / 3,      // camminando si recupera un terzo del riposo da fermi (~+3 Forza ogni 18 min reali)
   PASSI_SOSTA:            1,      // riposo di giorno con R: ~3 ore
   FORZA_RIPOSO_PER_PASSO: 10,     // Forza recuperata da fermi ogni Passo (3 ore) di gioco: ~3,3 l'ora
 };

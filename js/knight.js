@@ -266,10 +266,11 @@ const Knight = {
   // VIAGGIO.FORZA_ANDATURA ('camminata' | 'corsetta' | 'scatto'). Niente arrotondamenti: arriva
   // un pezzetto per fotogramma.
   consumaForzaMetri(metri, salita, andatura) {
-    const molt = VIAGGIO.FORZA_ANDATURA[andatura] || 1;
-    const equivalenti = metri + Math.max(0, salita || 0) * VIAGGIO.METRI_PER_METRO_SALITA;
+    const molt = VIAGGIO.FORZA_ANDATURA[andatura] ?? 1;
+    // La salita pesa almeno ×1 anche al passo (camminata ×0 in piano): le montagne restano faticose.
+    const equivalenti = metri * molt + Math.max(0, salita || 0) * VIAGGIO.METRI_PER_METRO_SALITA * Math.max(1, molt);
     const cavallo = this.isMounted() ? 0.7 : 1;
-    const costo = equivalenti * molt * cavallo * this.forza.max / VIAGGIO.METRI_PER_FORZA_PIENA;
+    const costo = equivalenti * cavallo * this.forza.max / VIAGGIO.METRI_PER_FORZA_PIENA;
     this.forza.cur = Math.max(0, this.forza.cur - costo);
   },
 
