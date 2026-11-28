@@ -49,7 +49,7 @@ Cambiare non è mai gratis, ma non è mai vietato [proposta]:
   promozioni) arrivano dopo un periodo di servizio (~un Diario) o subito con un'impresa per la casata.
 - **Fama di incostante**: ogni giuramento sciolto conta. Con 2–3 cambi in poco tempo (una Luce) le casate
   d'onore alzano la soglia per accettarti e la prova si allunga; la fama cala col tempo passato fedeli.
-- Il **rango della via del vessillo** si conserva cambiando casata (sei Bannerale, ma non della nuova casata
+- Il **rango della via del vessillo** si conserva cambiando casata (sei Capitano, ma non della nuova casata
   finché non te lo riconosce); la reputazione resta per casata.
 - **Una sola casata alla volta**. Le fazioni senza territorio (ordini, città libere, briganti) hanno
   reputazione propria; se ci si possa anche affiliare, e con quali incompatibilità, è da decidere.
@@ -62,7 +62,7 @@ Cambiare non è mai gratis, ma non è mai vietato [proposta]:
 | Strade | niente pedaggi nel territorio, protezione | pedaggi ovunque |
 | Obblighi | **chiamata alle armi** quando la casata è in guerra; non si serve un nemico | nessuno oltre il contratto in corso |
 | Nemici | i nemici della casata sono i tuoi | il nemico del committente, finché dura il contratto |
-| Rango | via del vessillo: … → **Bannerale** della casata | via della ventura: … → **Capitano di ventura** |
+| Ruolo | al servizio → della casata → **Capitano della casata** → Campione della casata | di ventura → **Capitano di ventura** → Condottiero → Campione |
 | Onore | si guadagna rispettando gli obblighi | il contratto è affare: rispettarlo non dà Onore, romperlo lo toglie |
 
 **Onore** (−5…+5, `Knight.onore`) [numeri DA BILANCIARE]:
