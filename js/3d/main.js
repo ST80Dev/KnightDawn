@@ -1375,7 +1375,7 @@ async function init() {
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no · Spazio: scavalca'
     + ` · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: ${inStoria() ? 'Carta' : 'Carta (clic: vai lì) · T: avanza'}`
-    + ' · N: minimappa grande · +/−: zoom minimappa · J: scrittoio · I: zaino'
+    + ' · N: minimappa (icona, piccola, grande) · +/−: zoom minimappa · J: scrittoio · I: zaino'
     + ` · F2: qualità · F3: info · F8: menu · modalità ${inStoria() ? 'Storia' : 'Libera'}`,
   'aiuto');
 }

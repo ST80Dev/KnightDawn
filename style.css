@@ -285,7 +285,7 @@ html, body {
 #caricamento .barra i { display: block; height: 100%; width: 0; background: #b08a3a; transition: width 0.2s; }
 #carta button:disabled { opacity: 0.5; cursor: wait; }
 
-/* Minimappa (js/3d/minimappa.js): in basso a destra; allargata con N */
+/* Minimappa (js/3d/minimappa.js): in basso a destra; N: icona → piccola → allargata */
 #minimappa {
   position: fixed;
   right: 8px;
@@ -340,6 +340,11 @@ html, body {
 #minimappa button:hover { background: #3a2410; }
 #minimappa .piede:empty { display: none; }
 #minimappa .piede { padding: 4px 2px 0; color: #b8a880; }
+#minimappa .apri { display: none; width: auto; padding: 0 8px; font-size: 13px; }
+#minimappa.icona { padding: 3px; }
+#minimappa.icona .apri { display: block; }
+#minimappa.icona canvas, #minimappa.icona .nord, #minimappa.icona .scala, #minimappa.icona .comandi,
+#minimappa.icona .piede { display: none; }
 
 /* Menu d'avvio (js/3d/interfaccia.js, G1 passo 1): prima della generazione del mondo */
 #menu-avvio {
