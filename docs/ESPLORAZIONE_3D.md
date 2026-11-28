@@ -3017,6 +3017,17 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
 4. **Partita e viaggio.** Ronzino alla partita nuova, salvataggio (posizione, in sella), cambio di Scena con il cavallo
    accanto, Carta con `METRI_PER_PASSO_CAVALLO` se si parte in sella; note in `EARLY_GAME.md` e `GDD.md`. *Prova:*
    ricaricare la pagina in sella e a piedi; viaggio sulla Carta e ritorno in Scena.
+   **Stato: fatto, da provare dall'utente** (via dell'utente il 28/11). Ronzino: in Libera è in `Knight.cavallo` dalla
+   partita nuova (anche nei salvataggi di prima, passo 3); in Storia si compra dallo stalliere (G1 passo 3, al posto del
+   «ronzino alla partita nuova» di questo piano) e da lì funziona allo stesso modo. Nel salvataggio (e quindi nei file
+   JSON del menu): `Knight.cavallo` con il vigore, `Knight.inSella`, e nella Scena `cavallo: { dx, dz, direzione }`, la
+   posizione del cavallo a piedi rispetto al cavaliere. Alla ripresa: in sella si riprende in sella (cavallo sotto,
+   camera in sella); a piedi il cavallo torna dov'era (accanto, o rimasto indietro fino a 400 m) se il punto è libero,
+   altrimenti accanto. Cambio di Scena (Carta, risveglio): accanto, o sotto se in sella; cambio di blocco: stato e
+   tracce spostati con il cavaliere (passo 2). Bisacce (#272): seguono `Knight.cavallo`. Carta: i cerchi dei 10 e 20 km
+   dicono anche le ore a cavallo (`METRI_PER_PASSO_CAVALLO`, ~metà); il viaggio sulla Carta con il tempo che passa non
+   c'è ancora (in Libera il clic sposta e basta), quindi `METRI_PER_PASSO_CAVALLO` si userà lì. Provato in Node
+   (salvataggio e ripresa: in sella, vigore, posizione del cavallo) e in headless (ricarica a piedi e in sella).
 
 ### Accordi con le altre sessioni (novembre 2026)
 
