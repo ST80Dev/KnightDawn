@@ -95,14 +95,17 @@ niente albero abilità. Dettaglio completo (apertura, azioni, mercato) in
   cavallo quando il cavallo è con te (con le bisacce piene il cavallo non si vende); zaino pieno: non si compra né si
   raccoglie. Il diario mostra i posti occupati;
 - **torcia** [deciso con l'utente, 28/11]: si compra alla loggia del mercato e dall'oste (1 oro) e sta nello zaino. Con
-  `L` si accende (da Vespri a Lodi; di giorno non serve) e si spegne. Una volta accesa illumina **fino a Prima**, poi è
-  consumata: spegnerla prima non la salva (si riaccende la stessa fino a Prima). Accesa la tiene il cavaliere nella
+  `L` si accende (da Vespri a Lodi; di giorno non serve) e si spegne [precisato dall'utente, 28/11]:
+  la prima accensione di una notte «apre» la torcia per quella notte; dopo la si spegne e la si **riaccende con `L`
+  tutte le volte che si vuole**, sempre la stessa, senza consumarne un'altra; **a Prima** quella torcia è consumata,
+  accesa o spenta che sia; una torcia mai accesa resta intera nello zaino per le notti successive. Il **tizzone** preso
+  dal fuoco del campo segue la stessa regola per il resto di quella notte. Accesa la tiene il cavaliere nella
   mano destra, anche in sella: luce calda tremolante (~18 m), di notte più strada scoperta nella nebbia della
   conoscenza (percorso 180 m e intravisto 320 m invece di 120 e 200), e gli animali **timidi** non si fanno
   incontrare (vipera, aquila, cani randagi, cervo); i lupi, soli o in branco, sì;
 - **acciarino e pietra focaia** [deciso, 28/11]: si compra una volta alla loggia (3 oro), sta alla cintura, serve ad
   accendere il **fuoco del campo** (`R` di notte all'aperto, se c'è legna vicina: seconda PR del viaggio di notte, con
-  il **tizzone** che vale una torcia per il resto della notte; piano in `docs/ESPLORAZIONE_3D.md`, «Viaggio di notte»);
+  il **tizzone**; piano in `docs/ESPLORAZIONE_3D.md`, «Viaggio di notte»);
 - **un pasto al giorno**: si compra in taverna e al mercato, si trova negli eventi; mangiare in taverna non
   consuma lo zaino. Se il giorno passa senza mangiare: niente recupero di Forza nel sonno e un poco di Salute
   persa (proposta: −3), come la Resistenza persa nel librogame. Il pasto si consuma da sé al risveglio, se
