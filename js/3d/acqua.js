@@ -167,17 +167,21 @@ function materialeStrada(centro = { x: 0, z: 0 }) {
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
 attribute float aTrasversale;
+attribute float aPaese;
 uniform vec2 uOrigineStrada;
 varying float vTrasversale;
+varying float vPaese;
 varying vec2 vPosStrada;`)
       .replace('#include <project_vertex>', `#include <project_vertex>
   vTrasversale = aTrasversale;
+  vPaese = aPaese;
   vPosStrada = (modelMatrix * vec4(transformed, 1.0)).xz + uOrigineStrada;`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform vec3 uErbaPestata;
 uniform float uMangiaBordo;
 varying float vTrasversale;
+varying float vPaese;
 varying vec2 vPosStrada;
 float hashStrada(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -198,6 +202,8 @@ float rumoreStrada(vec2 p) {
     float r = rumoreStrada(p / 0.6) * 0.55 + rumoreStrada(p / 2.1) * 0.45;
     float bordo = 1.0 - uMangiaBordo * r;
     if (t > bordo) discard;
+    // Entrando in un paese la strada si sfrangia e lascia il posto al suo suolo (ritagliaStradeNeiPaesi).
+    if (vPaese > 0.0 && vPaese * 1.2 > rumoreStrada(p / 0.7) * 0.6 + rumoreStrada(p / 1.9) * 0.4 + 0.1) discard;
     // Verso il bordo la terra battuta lascia il posto all'erba calpestata.
     diffuseColor.rgb = mix(diffuseColor.rgb, uErbaPestata * (0.8 + 0.4 * r), smoothstep(bordo - 0.3, bordo, t) * 0.75);
     // Chiazze di tono e ghiaia scura (solo vicino: lontano sfarfallerebbe).
@@ -210,7 +216,7 @@ float rumoreStrada(vec2 p) {
     diffuseColor.rgb *= 1.0 - 0.28 * sasso * (1.0 - smoothstep(20.0, 30.0, dist));
   }`);
   };
-  mat.customProgramCacheKey = () => 'strada-1';
+  mat.customProgramCacheKey = () => 'strada-2';
   return mat;
 }
 
@@ -290,6 +296,44 @@ export function suoloStrade(gruppo, terreno = null) {
 }
 
 /**
+ * La strada della rete FINISCE al limite del paese e RIPRENDE all'uscita (regola decisa con l'utente, 28/11: strada,
+ * vie, piazza e terra battuta sovrapposte erano texture sconnesse). `coperto(x, z)` dà la copertura 0–1 del suolo dei
+ * paesi (villaggi, ovili, mulini, eremi: js/3d/villaggio3d.js), letta al centro di ogni sezione del nastro. Dove vale 1
+ * i triangoli si tolgono (né vista né piedi: suoloStrade si costruisce dopo); nel raccordo la sezione scende sul
+ * terreno + 1 cm, come il suolo del paese, e lo shader la sfrangia (aPaese). Solo alla costruzione del blocco.
+ * I borghi non servono: la strada si ferma alla rampa fuori dalla porta (misurato: nessun vertice dentro le mura).
+ */
+export function ritagliaStradeNeiPaesi(gruppo, coperto, altezza) {
+  const k = STRADA.sezione.length;
+  gruppo?.traverse((o) => {
+    if (o.name !== 'strada' || !o.geometry?.index) return;
+    const g = o.geometry, p = g.attributes.position.array, w = g.attributes.aPaese.array, m = p.length / 3 / k;
+    let tocca = false;
+    for (let i = 0; i < m; i++) {
+      const c = (i * k + (k >> 1)) * 3, q = coperto(p[c], p[c + 2]);
+      if (q <= 0) continue;
+      tocca = true;
+      for (let j = 0; j < k; j++) {
+        const v = i * k + j;
+        w[v] = q;
+        p[v * 3 + 1] += (altezza(p[v * 3], p[v * 3 + 2]) + 0.01 - p[v * 3 + 1]) * q;
+      }
+    }
+    if (!tocca) return;
+    const idx = g.index.array, resta = [];
+    for (let n = 0; n < idx.length; n += 3) {
+      if (w[idx[n]] >= 1 && w[idx[n + 1]] >= 1 && w[idx[n + 2]] >= 1) continue;
+      resta.push(idx[n], idx[n + 1], idx[n + 2]);
+    }
+    g.setIndex(resta);
+    g.attributes.position.needsUpdate = true;
+    g.attributes.aPaese.needsUpdate = true;
+    g.computeBoundingSphere();
+    if (!resta.length) o.visible = false;
+  });
+}
+
+/**
  * Nastro di una strada lungo [x, z, semilarghezza, …] (coordinate locali): 5 vertici per sezione (bordi, solchi delle
  * ruote, centro), ciascuno alla quota del terreno disegnato `altezza(x, z)` (o della strada, `quote[i]`, se data) più
  * STRADA.sopra.
@@ -344,6 +388,7 @@ export function creaNastroStrada(t, mat, altezza, quote = null, coloreClima = nu
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
   geo.setAttribute('aTrasversale', new THREE.BufferAttribute(trasv, 1));
+  geo.setAttribute('aPaese', new THREE.BufferAttribute(new Float32Array(m * k), 1));   // ritagliaStradeNeiPaesi
   // Metri dal bordo della carreggiata per vertice (solo per suoloStrade, non va sulla scheda).
   geo.userData.bordo = Float32Array.from(trasv, (s, n) => (1 - Math.abs(s)) * t[Math.floor(n / k) * 3 + 2]);
   geo.setIndex(indici);

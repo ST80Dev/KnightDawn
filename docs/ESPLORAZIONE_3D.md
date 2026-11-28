@@ -1786,8 +1786,14 @@ frazione 55 m, villaggio 85 m, ovile 22 m; nessun cambio alle Carte, `VERSIONE_G
     case (rurali e basse), villaggio 12–20 con pieve sulla piazzetta (la chiesa del kit, 9 × 16 m), locanda sulla via e
     fabbro verso l'ingresso. Mai sulle strade, nell'acqua o dove il terreno sotto la casa sale più di 2,6 m.
 - **Suolo:** terra battuta continua tra le case, attorno a ognuna (aia dietro le rurali) e per 3–7 m oltre il nucleo,
-  con il bordo frastagliato (griglia di 2,5 m, alpha per vertice e alphaTest); via e vicoli di terra più scura con i
-  solchi delle ruote; piazzetta selciata nei villaggi grandi. Al più 3 chiamate.
+  con il bordo frastagliato (griglia di 2,60 m allineata al terreno, alpha per vertice e alphaTest); via e vicoli di
+  terra più scura con i solchi delle ruote; piazzetta selciata nei villaggi grandi. Al più 3 chiamate.
+- **La strada della rete finisce al limite del paese** (regola decisa con l'utente, 28/11: strada, piazza e terra
+  battuta sovrapposte erano texture sconnesse): dentro c'è solo il suolo del paese, la strada riprende all'uscita.
+  Villaggi, ovili, mulini ed eremi danno `coperto(x, z)` (copertura 0–1 di terra, vie e piazza); `ritagliaStradeNeiPaesi`
+  (acqua.js) toglie i triangoli del nastro dove vale 1 e nel raccordo scende sul terreno e si sfrangia nello shader
+  (`aPaese`), prima di `suoloStrade`: i piedi seguono ciò che si vede. Solo alla costruzione del blocco. I borghi non
+  servono: la strada si ferma alla rampa fuori dalla porta (nessun vertice del nastro dentro le mura).
 - **Ovile:** stalla con recinto e pagliaio, terra calpestata attorno.
 - **Niente terrapieno** (deviazione dal piano): case sul terreno com'è con lo zoccolo del kit; i siti sono già i punti
   più piani della cella. Un piano rotondo di 0,7 × raggio tiene fuori la vegetazione.
