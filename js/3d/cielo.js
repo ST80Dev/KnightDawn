@@ -24,10 +24,12 @@ const VISIBILITA = [                       // [probabilità, far minimo, far mas
   [0.25, 110000, 150000],                  // limpida
 ];
 
-// Ciclo del giorno (valori provvisori, senza stagioni): alba alle 5, tramonto alle 20, sole al
-// massimo a 55° verso le 12:30. Di notte la "quota" del sole scende sotto l'orizzonte fino a −35°.
+// Ciclo del giorno (stagioni ferme in Primavera): alba alle 5:45, tramonto alle 18:45, sole al massimo a 55° verso le
+// 12:15 (deciso con l'utente, 28/11/2026: Prima, ~6, è l'alba vera e Vespri, ~18, cade al tramonto; prima erano le 5 e
+// le 20, e a Prima il sole era già a 11° con le luci piene).
+// Di notte la "quota" del sole scende sotto l'orizzonte fino a −35°.
 export const CICLO = {
-  alba: 5, tramonto: 20, altezzaMax: 55, profonditaNotte: 35,
+  alba: 5.75, tramonto: 18.75, altezzaMax: 55, profonditaNotte: 35,
   soleMax: 3.4, lunaMax: 0.45,
   emisferaGiorno: 0.45, emisferaNotte: 0.16,
   // Di notte si vede bene solo vicino: la nebbia (color notte) si stringe attorno a ciò che si guarda.
@@ -313,15 +315,17 @@ export function creaCielo(scene, renderer = null) {
     _oraCielo = ora;
     const { altezza, azimut } = posizioneSole(ora);
     const C = CICLO.colori;
-    const giorno = smoothstep(-5, 8, altezza);             // 0 notte → 1 pieno giorno
+    // 0 notte → 1 pieno giorno. La luce sale piano (pieno giorno a 14°, il sole pieno a 20°): la prima ora dopo
+    // l'alba ha luce bassa e calda e ombre lunghe (deciso con l'utente, 28/11/2026; prima 8° e 10°).
+    const giorno = smoothstep(-5, 14, altezza);
     _luceGiorno = giorno;
     const crepuscolo = Math.max(0, 1 - Math.abs(altezza - 1) / 9) * smoothstep(-8, -2, altezza);
 
     const a = altezza * _gradi, z = azimut * _gradi;
     sole.position.set(Math.sin(z) * Math.cos(a), Math.max(Math.sin(a), 0.02), -Math.cos(z) * Math.cos(a))
       .multiplyScalar(1000);
-    sole.intensity = CICLO.soleMax * smoothstep(-2, 10, altezza);
-    sole.color.copy(C.soleGiorno).lerp(C.soleBasso, 1 - smoothstep(4, 20, altezza));
+    sole.intensity = CICLO.soleMax * smoothstep(-2, 20, altezza);
+    sole.color.copy(C.soleGiorno).lerp(C.soleBasso, 1 - smoothstep(4, 26, altezza));
     luna.intensity = CICLO.lunaMax * (1 - giorno);
 
     emisfera.intensity = THREE.MathUtils.lerp(CICLO.emisferaNotte, CICLO.emisferaGiorno, giorno);

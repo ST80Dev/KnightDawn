@@ -337,3 +337,21 @@ tempi del processore (media, 1% peggiori, massimo).
 Lettura: la GPU è il collo di bottiglia (24,7 ms su 26,3 ms di fotogramma); il **terreno** vale due terzi. Edifici e
 personaggi costano ~0,1 ms: unire le geometrie (passo 5) non è urgente. Ordine dei passi rivisto: prima terreno
 (passo 3) e profondità (passo 2), poi vegetazione.
+
+### Minimappa (28/11/2026)
+
+Misura dell'utente (seme 825636, Libera, allargata, zoom tutto indietro, mondo svelato): 20 FPS girando lo sguardo, con
+GPU a 10,4 ms. Causa: ogni cambio di direzione ridisegnava tutto il mondo (tutte le strade in tre passate, i fiumi, i
+siti), senza scartare nulla, e calcolava il rilievo fine a passi di 768 m. Rimedio: fondo in cache, dettaglio per zoom,
+stato a icona (regola in `docs/ESPLORAZIONE_3D.md`, «Minimappa»). Ms di CPU per ridisegno, in headless (rendering
+software; tra parentesi il lavoro della tela compreso):
+
+| Caso | Prima, girandosi | Dopo, girandosi | Dopo, fondo rifatto (raro) |
+|---|---|---|---|
+| allargata, 256 m/px (caso dell'utente) | 16,4 (161) | 0,06 (0,3) | 8,9 (9,5) |
+| allargata, 32 m/px | 1,4 (14) | 0,06 (0,4) | 4,3 (4,6) |
+| allargata, 4 m/px | 0,5 (6,1) | 0,03 (0,3) | 7,4 (7,7) |
+| piccola, 4 m/px | 0,2 (0,7) | 0,01 (0,04) | 1,8 (1,8) |
+
+Il fondo si rifà solo spostandosi di un quarto della vista, cambiando zoom, a nebbia cambiata (al più una volta al
+secondo) o mentre il rilievo fine si calcola (al più ogni 250 ms). Ridotta a icona: nessun lavoro.

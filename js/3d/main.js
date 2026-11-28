@@ -534,7 +534,7 @@ function dormiNelBorgo({ dove, forza = 0, salute = 0 }) {
 // Quando una scelta fa passare almeno mezz'ora o cambia qualcosa (oro, Forza, Salute, Volontà, rango, zaino,
 // equipaggiamento, cavallo), la pergamena racconta prima dell'esito: frasi, ore che avanzano (la meridiana segue),
 // registro dei cambiamenti calcolato confrontando lo stato prima e dopo. Durata scelta nel menu d'avvio (preferenza
-// del browser `kd.racconto`: completo ~11 s, breve ~4 s, spento). Gli effetti sono già applicati alla conferma.
+// del browser `kd.racconto`: completo, che resta aperto fino a «Continua»; breve ~4 s, che si chiude da solo; spento). Gli effetti sono già applicati alla conferma.
 const RACCONTO = { completo: 8000, breve: 2800, spento: 0 };
 const preferenzaRacconto = () => { try { return localStorage.getItem('kd.racconto') || 'completo'; } catch { return 'completo'; } };
 const meridiana = creaMeridiana(document.body);
@@ -571,7 +571,7 @@ async function raccontaAzione({ titolo, frasi, prima, dopo }) {
   const registro = registroDi(prima, dopo), passi = dopo.t - prima.t;
   if (!durata || (passi < 1 / 6 - 1e-6 && !registro.length)) return false;
   const ore = passi >= 1 / 6 - 1e-6 ? { da: `${prima.canonica} · ${_hh(prima.ora)}`, a: `${dopo.canonica} · ${_hh(dopo.ora)}` } : null;
-  await cartaCronista.racconta({ titolo, frasi, ore, registro, durata,
+  await cartaCronista.racconta({ titolo, frasi, ore, registro, durata, chiudeDaSolo: durata < RACCONTO.completo,
     alTempo: (f) => { oraForzata = (prima.ora + f * passi * 24 / CALENDAR.PASSI_PER_GIORNO) % 24; } });
   oraForzata = null;
   return true;
@@ -1375,7 +1375,7 @@ async function init() {
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no · Spazio: scavalca'
     + ` · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: ${inStoria() ? 'Carta' : 'Carta (clic: vai lì) · T: avanza'}`
-    + ' · N: minimappa grande · +/−: zoom minimappa · J: scrittoio · I: zaino'
+    + ' · N: minimappa (icona, piccola, grande) · +/−: zoom minimappa · J: scrittoio · I: zaino'
     + ` · F2: qualità · F3: info · F8: menu · modalità ${inStoria() ? 'Storia' : 'Libera'}`,
   'aiuto');
 }

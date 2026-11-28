@@ -301,7 +301,7 @@ Nel 2D 1 Passo era 1 tile; ora il **Passo è solo un'unità di tempo** (~3 ore, 
   all'addiaccio fino a Prima (da Compieta: 9 ore, +30 Forza); di giorno una sosta di un Passo
   (~3 ore, +10 Forza). Con la Forza piena di giorno rimanda a `T`.
 - **Pausa** con `P`: nulla scorre. La scheda nascosta ferma il ciclo di disegno: pausa automatica.
-- **Ciclo giorno/notte:** sole che segue l'ora (alba alle 5, tramonto alle 20, massimo 55°), colore
+- **Ciclo giorno/notte:** sole che segue l'ora (alba alle 5:45, tramonto alle 18:45, massimo 55°; dal 28/11/2026, prima alle 5 e alle 20), colore
   di luce, cielo e nebbia; crepuscolo caldo; la luce propria delle mura e l'ombra del cavaliere si
   abbassano. Niente stagioni per ora. **Notte (ritoccata dopo la prova dell'utente):** buia, luna
   debole; la nebbia, del colore del cielo notturno, si stringe attorno al punto osservato (nitido
@@ -3140,14 +3140,34 @@ dello schermo per capire cosa ho nei dintorni o (solo per il test) spostarmi sen
   ridisegno 0,3 ms (piccola, al massimo 25 volte al secondo) e ~3 ms in rendering software (allargata, 12 volte al
   secondo; sulla scheda vera la tela 2D è accelerata). In F3 la voce «minimappa» dei tempi CPU.
 - Zoom: rotella sopra la minimappa, `+` / `−` (tastiera o pulsanti), da 0,5 a 256 m per pixel (piccola: ~100 m – 54 km
-  di lato). `N` o ⤢ la allarga a min(70 % dell'altezza, 45 % della larghezza), stessa scala: si vede più terreno.
-  Zoom e dimensione ricordati nel browser.
+  di lato). Tre stati: **ridotta a icona** (un pulsantino «Mappa»), **piccola**, **allargata** (min(70 % dell'altezza,
+  45 % della larghezza), stessa scala: si vede più terreno). `N` fa il giro icona → piccola → allargata → icona; il clic
+  sull'icona la apre piccola, ⤢ alterna piccola e allargata, ▾ la riduce a icona. Zoom e stato ricordati nel browser
+  (`kd.minimappa`).
 - **Solo per le prove:** allargata, un clic porta lì il cavaliere (con il cavallo accanto). Dentro il blocco disegnato
   (riquadro tratteggiato) lo sposta e basta; fuori carica la Scena centrata lì come un clic sulla Carta (pausa di
   caricamento). Rifiuta mare e acqua profonda. Il puntatore mostra distanza, direzione e quota. Da togliere o
   sostituire quando ci sarà il viaggio vero.
 - Limiti noti: niente edifici disegnati (solo i segni di luoghi e siti), niente case di campagna; la minimappa non ruota
   con la camera.
+
+**Regola delle prestazioni** [decisa con l'utente, novembre 2026, dopo la misura: allargata, zoom tutto indietro, mondo
+svelato, 20 FPS girando lo sguardo]: la minimappa, piccola o allargata, **rappresenta** il mondo ma non lo riproduce
+alla definizione della Carta a tutto schermo (`M`), che resta il riferimento completo a gioco fermo. Il dettaglio
+dipende dallo zoom (`MINIMAPPA.dettaglio`, lato della vista):
+- **vicino** (fino a 3 km di lato): rilievo fine ombreggiato, tutte le strade (sentieri e carrarecce compresi), siti e
+  luoghi;
+- **medio** (fino a 15 km): rilievo fine ombreggiato, strade senza sentieri, siti e luoghi;
+- **lontano** (oltre): solo il colore dei biomi della Carta a 1 km, senza ombreggiatura, acque, strade maestre
+  semplificate e luoghi principali (rocche, città, monasteri). Nessun calcolo del rilievo fine.
+
+La minimappa non deve mai costare più di qualche decimo di ms per fotogramma, a qualunque zoom e con qualunque parte del
+mondo svelata. Come: tutto ciò che non si muove col cavaliere (terreno, acque, strade, segni, nebbia della conoscenza,
+riquadro del blocco) sta in un **fondo in cache** largo una volta e mezza la vista, rifatto solo quando lo spostamento
+esce dal suo margine, cambia lo zoom o cambia ciò che contiene (mentre il rilievo fine si calcola, al più ogni 250 ms);
+a ogni ridisegno si copia il fondo spostato e si disegnano cavallo e freccia. Le linee fuori dal fondo si scartano dal
+loro riquadro (calcolato una volta per finestra) e i punti più vicini di 1,5 pixel si saltano. Ridotta a icona non fa
+nessun lavoro. Misure in `docs/PRESTAZIONI.md` (tabella della minimappa).
 
 ## Mondo generato in anticipo su una griglia fine (novembre 2026) — approvato dall'utente, in corso
 
