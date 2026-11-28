@@ -307,6 +307,13 @@ Nel 2D 1 Passo era 1 tile; ora il **Passo è solo un'unità di tempo** (~3 ore, 
   debole; la nebbia, del colore del cielo notturno, si stringe attorno al punto osservato (nitido
   fino a ~15 m, buio pieno a ~110 m oltre la camera): si vede bene solo vicino, il castello a 225 m
   sparisce. Parametri in `CICLO` (`cielo.js`, prima in `main.js`).
+- **Luna perenne più forte** (28/11/2026, idea dell'utente). `lunaMax` da 0,45 a **1,0** (prima del 18/11
+  era 1,1); emisfera notturna e nebbia non si toccano. Misurato sui pixel di una schermata notturna nel
+  bosco fitto: sulle facce rivolte in su la luna dava già l'**83 %** della luce (irradianza 0,120 contro
+  0,025 dell'emisfera), quindi è lì la leva — ed essendo direzionale dà rilievo dove l'emisfera appiattisce.
+  Non ci sono shadow map in tutto il motore, così la luna illumina il suolo anche sotto la chioma. Suolo del
+  bosco da 6 a 12 su 255, tronchi da 14 a 23, cespugli da 19 a 30, mediana del fotogramma da 4,9 a 9,9 (lo
+  schermo sotto 16 su 255 dal 93 % al 76 %). «Di notte si vede bene solo vicino» resta: lo fa la nebbia.
 - **Luce ambiente scollegata dal sole** (28/11/2026, richiesta dell'utente: bosco meno buio nelle ore
   scure). Il sole conserva la sua curva lunga (pieno a 20°: luce bassa, calda, ombre lunghe nella prima
   ora), l'emisfera torna a salire su `smoothstep(−5°, 8°)`. Sotto la chioma l'emisfera è l'unica luce che
