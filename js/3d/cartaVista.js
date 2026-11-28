@@ -1106,7 +1106,10 @@ export function createCartaVista(contenitore, opzioni = {}) {
         ctx.setLineDash([]);
         const ore = km * MINUTI_PER_KM / 60, giorni = ore / ORE_MARCIA_GIORNO;
         ctx.fillStyle = 'rgba(120, 30, 20, 0.85)';
-        ctx.fillText(`${km} km · ~${fmt(ore, 0)} h di marcia (~${fmt(giorni, giorni < 2 ? 1 : 0)} ${giorni < 1.5 ? 'giorno' : 'giorni'})`,
+        // Col cavallo (milestone Cavallo, passo 4): circa il doppio della strada (VIAGGIO.METRI_PER_PASSO_CAVALLO)
+        const aCavallo = typeof Knight !== 'undefined' && Knight.cavallo && typeof VIAGGIO !== 'undefined'
+          ? ` · a cavallo ~${fmt(ore * VIAGGIO.METRI_PER_PASSO / VIAGGIO.METRI_PER_PASSO_CAVALLO, 0)} h` : '';
+        ctx.fillText(`${km} km · ~${fmt(ore, 0)} h di marcia (~${fmt(giorni, giorni < 2 ? 1 : 0)} ${giorni < 1.5 ? 'giorno' : 'giorni'})${aCavallo}`,
           px, py - r - 2 * dpr);
       }
       // Direzione in cui guarda il cavaliere (x verso est, z verso sud: in avanti è (sin, cos)).

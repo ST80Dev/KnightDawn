@@ -1787,6 +1787,17 @@ async function caricaScena(desc) {
   cieloScena.invalida();                   // ricalcola le luci (anche quelle proprie del castello)
 }
 
+/**
+ * Ripresa (milestone Cavallo, passo 4): il cavallo a piedi torna dove era rispetto al cavaliere (accanto, o rimasto
+ * indietro), se il punto è nel blocco e libero; altrimenti resta accanto (posizionaCavaliere). In sella non serve.
+ */
+function ripristinaCavallo(sc) {
+  const c = sc?.cavallo;
+  if (!cavallo || Knight.inSella || !c || !Number.isFinite(c.dx) || !Number.isFinite(c.dz)) return;
+  if (Math.hypot(c.dx, c.dz) > 400) return;
+  cavallo.posizionaSeLibero(knight.stato.x + c.dx, knight.stato.z + c.dz, c.direzione);
+}
+
 /** Mette il cavaliere in (x, z) locali della Scena attuale; lo crea la prima volta. */
 function posizionaCavaliere(x, z, direzione) {
   x += scostamento.x; z += scostamento.z;
@@ -1998,12 +2009,17 @@ async function init() {
   if (repCasata) repCasata.nome = nomeCasata();
   preparaConoscenza();
 
+  // Cavallo a piedi: dove sta rispetto al cavaliere (in sella sta sotto di lui, lo dice Knight.inSella).
+  const statoCavallo = () => (cavallo && !Knight.inSella && !sella.passaggio
+    ? { dx: cavallo.stato.x - knight.stato.x, dz: cavallo.stato.z - knight.stato.z, direzione: cavallo.stato.direzione } : null);
   Save.statoScena = () => {
     const k = knight.stato;
     return scenaAttuale.tipo === 'tavullia'
-      ? { terreno: 'tavullia', seme: carta?.seme, x: k.x, z: k.z, direzione: k.direzione }
-      : { terreno: 'mondo', seme: carta.seme, cx: scenaAttuale.cx, cz: scenaAttuale.cz, x: k.x, z: k.z, direzione: k.direzione };
+      ? { terreno: 'tavullia', seme: carta?.seme, x: k.x, z: k.z, direzione: k.direzione, cavallo: statoCavallo() }
+      : { terreno: 'mondo', seme: carta.seme, cx: scenaAttuale.cx, cz: scenaAttuale.cz, x: k.x, z: k.z, direzione: k.direzione,
+        cavallo: statoCavallo() };
   };
+  if (ripresa) ripristinaCavallo(sc);
   if (!PROVA_PRESTAZIONI) Save.startAutosave();
   window.addEventListener('pagehide', salvaOra);
   document.addEventListener('visibilitychange', () => {

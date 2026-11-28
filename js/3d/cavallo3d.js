@@ -1142,6 +1142,12 @@ export function createCavallo(terrain, ostacoli = []) {
 
   const api = {
     object, cfg, stato, update, posizionaAccanto, spingiFuori, fischia, sella,
+    /** Il cavallo in (x, z) con la direzione data, se lì c'è posto (ripresa dal salvataggio); false altrimenti. */
+    posizionaSeLibero(x, z, direzione) {
+      if (![x, z, direzione].every(Number.isFinite) || !postoLibero(x, z, direzione)) return false;
+      stato.x = x; stato.z = z; stato.direzione = direzione; azzera(); posa(0, true);
+      return true;
+    },
     /** Il cavallo esattamente in (x, z), con la direzione data (in sella al cambio di Scena). */
     posiziona(x, z, direzione) { stato.x = x; stato.z = z; stato.direzione = direzione; azzera(); posa(0, true); },
     /** Rimasto indietro: bloccato o troppo lontano, aspetta il fischio. */
