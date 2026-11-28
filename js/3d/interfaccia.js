@@ -865,14 +865,15 @@ function figura(f, forma) {
 }
 
 // ─── Persone ───
-// Pose: articolazioni [x, y] per il personaggio rivolto a destra. «attacco»: affondo con la gamba davanti piegata, la
-// gamba dietro tesa sul tallone sollevato, il braccio dell'arma alzato dietro la testa per il colpo, l'altro avanti.
+// Pose: articolazioni [x, y] per il personaggio rivolto a destra. «attacco»: la guardia delle miniature di battaglia,
+// gamba davanti piegata e gamba dietro tesa sul tallone sollevato, l'arma impugnata davanti e puntata verso
+// l'avversario (richiesta dell'utente: non alzata dietro la testa), lo scudo davanti al busto.
 // «pugni»: stesse gambe, i pugni alzati in guardia (chi non ha un'arma).
 const POSE = {
   attacco: { testa: [119, 38], collo: [116, 54], spalle: [[108, 60], [121, 60]], anche: [[103, 100], [113, 100]],
     gambaDietro: [[103, 100], [90, 128], [78, 156]], piedeDietro: [[76, 158], [91, 165]],
     gambaAvanti: [[113, 100], [133, 122], [131, 158]], piedeAvanti: [[128, 163], [146, 164]],
-    braccioDietro: [[108, 60], [95, 46], [99, 28]], braccioAvanti: [[121, 60], [134, 74], [147, 77]] },
+    braccioDietro: [[108, 60], [128, 72], [150, 68]], braccioAvanti: [[121, 60], [129, 78], [137, 84]] },
   pugni: { testa: [119, 38], collo: [116, 54], spalle: [[108, 60], [121, 60]], anche: [[103, 100], [113, 100]],
     gambaDietro: [[103, 100], [92, 128], [82, 157]], piedeDietro: [[80, 160], [94, 165]],
     gambaAvanti: [[113, 100], [130, 124], [128, 158]], piedeAvanti: [[125, 163], [143, 164]],
@@ -889,21 +890,27 @@ function arto(punti, colore, largo) {
 const arto2 = ([a, b, c], colore, l1, l2, colore2 = colore) => arto([a, b], colore, l1) + arto([b, c], colore2, l2);
 const scuro = (hex, f = 0.72) => '#' + [1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * f).toString(16).padStart(2, '0')).join('');
 
+/** L'arma impugnata in `mano`, puntata verso l'avversario (davanti, un po' in alto). */
 function arma(tipo, mano) {
+  if (!tipo) return '';
   const [x, y] = mano;
-  if (tipo === 'spada') return `<g stroke-linecap="round"><path d="M${x} ${y}L${x - 36} ${y - 22}" stroke="${INK}" stroke-width="6.5"/>`
-    + `<path d="M${x - 3} ${y - 2}L${x - 36} ${y - 22}" stroke="#cfd3d8" stroke-width="3.6"/>`
-    + `<path d="M${x - 7} ${y + 6}L${x + 2} ${y - 9}" stroke="${INK}" stroke-width="5"/><path d="M${x - 7} ${y + 6}L${x + 2} ${y - 9}" stroke="#b8892e" stroke-width="2.6"/>`
-    + `<path d="M${x + 3} ${y + 2}L${x + 7} ${y + 4}" stroke="#5a3a1a" stroke-width="4"/></g>`;
-  if (tipo === 'ascia') {   // manico all'indietro sopra la spalla, lama in cima
-    const ex = x - 26, ey = y - 16;
-    return `<g stroke-linecap="round"><path d="M${x + 4} ${y + 6}L${ex} ${ey}" stroke="${INK}" stroke-width="6"/>`
-      + `<path d="M${x + 4} ${y + 6}L${ex} ${ey}" stroke="#7a5228" stroke-width="3.4"/></g>`
-      + `<path d="M${ex + 1} ${ey - 9}C${ex - 10} ${ey - 6} ${ex - 14} ${ey + 6} ${ex - 9} ${ey + 15}L${ex + 3} ${ey + 4}Z" fill="#8e9196" stroke="${INK}" stroke-width="1.6"/>`;
+  const dir = { spada: [40, -18], coltello: [40, -12], ascia: [18, -36] }[tipo];
+  const l = Math.hypot(dir[0], dir[1]), u = [dir[0] / l, dir[1] / l], n = [-u[1], u[0]];   // n: perpendicolare
+  const P = (a, b = 0) => `${(x + u[0] * a + n[0] * b).toFixed(1)} ${(y + u[1] * a + n[1] * b).toFixed(1)}`;
+  const linea = (a, b, colore, largo) => `<path d="M${P(a)}L${P(b)}" stroke="${INK}" stroke-width="${largo + 2.6}" stroke-linecap="round"/>`
+    + `<path d="M${P(a)}L${P(b)}" stroke="${colore}" stroke-width="${largo}" stroke-linecap="round"/>`;
+  if (tipo === 'spada' || tipo === 'coltello') {
+    const L = tipo === 'spada' ? 46 : 18;
+    return linea(-8, 0, '#5a3a1a', 3.6)                                         // impugnatura
+      + `<circle cx="${P(-9).split(' ')[0]}" cy="${P(-9).split(' ')[1]}" r="2.8" fill="#b8892e" stroke="${INK}" stroke-width="1.2"/>`
+      + `<path d="M${P(4, 0)}L${P(L - 5, 1.6)}L${P(L, 0)}L${P(L - 5, -1.6)}Z" fill="#d4d8dd" stroke="${INK}" stroke-width="1.4" stroke-linejoin="round"/>`
+      + (tipo === 'spada' ? `<path d="M${P(3, -8)}L${P(3, 8)}" stroke="${INK}" stroke-width="5" stroke-linecap="round"/>`
+        + `<path d="M${P(3, -8)}L${P(3, 8)}" stroke="#b8892e" stroke-width="2.6" stroke-linecap="round"/>` : '');
   }
-  if (tipo === 'coltello') return `<g stroke-linecap="round"><path d="M${x} ${y}L${x - 14} ${y - 12}" stroke="${INK}" stroke-width="5"/>`
-    + `<path d="M${x - 2} ${y - 2}L${x - 14} ${y - 12}" stroke="#cfd3d8" stroke-width="2.6"/></g>`;
-  return '';
+  // ascia: manico che sale davanti, lama in cima rivolta verso l'avversario
+  const s = n[0] > 0 ? 1 : -1;
+  return linea(-10, 30, '#7a5228', 3.4)
+    + `<path d="M${P(24, 0)}L${P(34, 0)}L${P(38, 14 * s)}Q${P(29, 18 * s)} ${P(20, 14 * s)}Z" fill="#8e9196" stroke="${INK}" stroke-width="1.6" stroke-linejoin="round"/>`;
 }
 
 /**
@@ -975,7 +982,7 @@ const CORREDI = {
 };
 
 /** Sagoma del cavaliere, rivolto a destra: elmo, cotta e sopravveste se ha l'armatura; scudo e spada se li porta. */
-function sagomaCavaliere(eq = {}) {
+export function sagomaCavaliere(eq = {}) {
   const armato = !!eq.armatura;
   const o = armato
     ? { pelle: PELLE, capo: 'elmo', elmo: '#a3a7ad', veste: '#2f4a7a', vesteLunga: true, maglia: '#8a8e95', calze: '#6a6e75',
@@ -987,7 +994,7 @@ function sagomaCavaliere(eq = {}) {
 }
 
 /** Sagoma del nemico, rivolto a sinistra; un gruppo o un'orda sono più figure, le lontane più piccole e più chiare. */
-function sagomaNemico(n = {}) {
+export function sagomaNemico(n = {}) {
   const umano = n.tipo === 'umano';
   const forma = n.tipo === 'mitico' ? 'mitico' : umano ? null : FIGURE[n.categoria] ? n.categoria : 'lupo';
   const disegna = () => (umano
