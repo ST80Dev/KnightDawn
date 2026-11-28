@@ -571,6 +571,10 @@ html, body {
 .carta-cronista .registro div.meno { color: #7a1f12; }
 .carta-cronista .avanti { text-align: center; font: italic 13px var(--kd-testo); color: var(--kd-sbiadito); opacity: 0; transition: opacity .8s; }
 .carta-cronista .avanti.vista { opacity: 1; }
+.carta-cronista .avanti .continua { font: 600 17px var(--kd-titolo); letter-spacing: .08em; padding: 6px 22px; margin-right: 10px;
+  cursor: pointer; color: var(--kd-inchiostro); background: rgba(243, 217, 140, .35); border: 1px solid rgba(110, 70, 20, .7); }
+.carta-cronista .avanti .continua:hover, .carta-cronista .avanti .continua:focus-visible { background: rgba(243, 217, 140, .6); outline: none; }
+.carta-cronista .avanti:not(.vista) .continua { pointer-events: none; }
 
 /* Meridiana (interfaccia.js, creaMeridiana): tavoletta di pietra dal bordo scheggiato, disegno dritto e leggibile */
 .meridiana { position: fixed; left: 14px; bottom: 40px;   /* in basso a sinistra, sopra la riga d'aiuto: in alto c'è il pannello F3 */

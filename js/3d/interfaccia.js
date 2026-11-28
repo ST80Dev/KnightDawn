@@ -492,12 +492,15 @@ export function creaCartaCronista(opzioni = {}) {
   // ─── Racconto (richiesta dell'utente, novembre 2026): tra una scelta che fa passare ore o cambia qualcosa e il suo
   // esito, la pergamena racconta. Le frasi si scrivono parola per parola (scrittura a mano), poi le ore avanzano
   // («Prima → Terza», con `alTempo(f)` che muove la meridiana), poi il registro dei cambiamenti riga per riga; resta
-  // fermo per leggere e si risolve da solo. Un clic (o Spazio, Invio) completa l'animazione; il secondo va avanti.
+  // fermo per leggere finché non si preme «Continua» (richiesta dell'utente, 28/11/2026: chiudersi da solo dopo ~11 s non
+  // lasciava il tempo di leggere; solo con `chiudeDaSolo` sparisce dopo la sosta). Un clic (o Spazio, Invio) completa
+  // l'animazione; il secondo va avanti.
   // Gli effetti sono già applicati: è solo il modo di mostrarli.
   let avanzaRacconto = null;
   /**
    * @param {{ titolo: string, frasi: string[], ore?: { da: string, a: string }, registro: { testo: string, segno?: 'piu'|'meno' }[],
-   *   durata?: number, alTempo?: (f: number) => void }} r   durata: ms dell'animazione (poi ~40 % in più di sosta)
+   *   durata?: number, chiudeDaSolo?: boolean, alTempo?: (f: number) => void }} r
+   *   durata: ms dell'animazione; chiudeDaSolo: dopo una sosta del 40 % si chiude senza «Continua»
    * @returns {Promise<void>}
    */
   function racconta(r) {
@@ -520,7 +523,8 @@ export function creaCartaCronista(opzioni = {}) {
         + `<div class="racconto">${parole.map((p) => `<span>${_esc(p)}</span>`).join(' ')}</div>`
         + (r.ore ? `<div class="ore-racconto"><span>${_esc(r.ore.da)}</span><i><b></b></i><span>${_esc(r.ore.a)}</span></div>` : '')
         + `<div class="registro">${r.registro.map((v) => `<div class="${v.segno ?? ''}">${_esc(v.testo)}</div>`).join('')}</div>`
-        + '<div class="avanti">clic, Spazio o Invio per continuare</div>';
+        + (r.chiudeDaSolo ? '<div class="avanti">clic, Spazio o Invio per continuare</div>'
+          : '<div class="avanti"><button type="button" class="continua">Continua</button><span>o Spazio, Invio</span></div>');
       if (nuova) opzioni.onApri?.();
       const durata = Math.max(600, r.durata ?? 8000);
       // Tempi: parole nel primo 45 %, ore dal 35 al 70 %, registro dal 60 al 100 %; poi sosta.
@@ -544,7 +548,8 @@ export function creaCartaCronista(opzioni = {}) {
       const completa = () => {
         finito = true; cancelAnimationFrame(raf); passo(1);
         contenuto.querySelector('.avanti')?.classList.add('vista');
-        clearTimeout(timer); timer = setTimeout(chiudiRacconto, sosta);
+        clearTimeout(timer);
+        if (r.chiudeDaSolo) timer = setTimeout(chiudiRacconto, sosta);
       };
       const ciclo = () => {
         const f = Math.min(1, (performance.now() - t0) / durata);
