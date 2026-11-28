@@ -441,6 +441,31 @@ poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un
    ora. Serve ampliare il catalogo `js/data/enemies.js` (oggi 4 bestie). Il primo scontro sopravvissuto vale come
    «prima battaglia» per l'investitura. Gli incarichi del borgo (bestia smarrita, pacco al villaggio, guardia
    all'ovile) restano possibili, con l'animale pescato allo stesso modo.
+   **Stato: fatto, da provare dall'utente.** Otto bestie in `js/data/enemies.js` (lupo, branco di lupi, cinghiale, orso,
+   vipera, aquila reale, cani inselvatichiti, cervo in amore) con `habitat` (peso per bioma), `ore` (giorno, sera,
+   notte), `tratti`, `danno` e il testo della carta d'incontro. **Tratti** (`js/combat.js`): *veloce* (fuga −30 %, e
+   sottrarsi all'incontro è difficile), *branco* (a ogni Round un morso in più può arrivare da un fianco), *carica*
+   (primo Round: se non la reggi ti travolge, se la schivi Slancio +1), *veleno* (dopo lo scontro, se ha morso, Salute
+   −12, mai fino a 0), *timido* (scappa quando lo Slancio arriva a +3: vittoria). **Formula ritoccata** (prima
+   l'equipaggiamento decideva quasi da solo): l'arma spinge lo Slancio (`colpo` in `js/data/items.js`: coltello 1,
+   lancia 2, spada 3, spada bastarda 4), armatura e scudo riducono soprattutto le ferite (`difesa`, 15 % per punto),
+   il caso pesa di più (due dadi, ±4); ferite anche nei Round pari o vinti di poco. **Incontri** (`main.js`,
+   `cercaIncontro`): ogni 25 m di cammino fuori dai luoghi (350 m dal centro di una rocca), probabilità
+   `Combat.probIncontro` (0,35 per km fuori strada di giorno; su strada ×0,3; a Vespri ×1,6; di notte ×2,2; in sella
+   ×0,6), animale `Combat.pescaIncontro` per bioma e ora; nella Veglia, prima della prima battaglia, niente orso né
+   branco. Dopo un incontro 400 m di quiete. **Carta d'incontro**: «Affrontarlo» o sottrarsi
+   (`Combat.probSottrarsi`: a piedi 20 % con i veloci, 85 % con i timidi, 50 % gli altri; se non riesce, lo scontro
+   comincia con Slancio −1). **In sella** [approvato dall'utente, 28/11]: al galoppo si scappa sempre, tranne ai veloci
+   (lupi, aquila) una volta su due; senza galoppo (cavallo sfiancato o Forza 0) 80 %, i veloci 30 %. **Prima
+   battaglia**: il primo scontro in cui si è combattuto davvero (almeno un Round o un colpo disperato) e da cui si
+   esce in piedi imposta `Knight.primaSangue`; il diario (Propositi) lo segna, la cronaca del diario ha una riga per
+   ogni scontro. In Libera gli incontri sono spenti, tranne se attivati nella prova (`K`), che ha anche «Un incontro
+   qui, adesso».
+   **Numeri (Node, 1000 scontri ciascuno, Forza piena)**: garzone col coltello contro il lupo nel bosco vince 29 %,
+   pareggia 61 % (il lupo se ne va), perde 10 %, Salute −6 in media; a mani nude 7 / 61 / 33 %; col coltello, giaco e
+   scudo 47 / 49 / 4 %. Cinghiale col coltello 53 / 43 / 4 %. Orso e branco: il garzone perde quasi sempre (il branco
+   anche lo scudiero), il cavaliere della Libera regge il branco e perde con l'orso più della metà delle volte. Primo
+   incontro a corsetta fuori strada: ~11 minuti reali di giorno, ~7 a Vespri, ~5 di notte; sulle strade di giorno ~36.
 6. **Investitura e fine della Veglia.** Requisiti come oggi (rango scudiero, prima battaglia, oro);
    cerimonia nella Carta del cronista, con la prima scelta tra **giurare fedeltà** alla casata del
    castello o **partire libero** (`docs/FACTIONS.md` §3; in G1 è solo la scelta registrata, gli effetti

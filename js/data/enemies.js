@@ -33,6 +33,7 @@
 //   porta addosso un nemico è deciso al momento, non a priori).
 // - 'parlamento' è ammesso solo per tipo 'umano' e con Onore alto (gestito
 //   in combat.js, non serve un flag per nemico).
+// - Le bestie degli incontri fuori porta hanno campi in più (habitat, ore, tratti, danno…): vedi più sotto.
 
 const Enemies = {
   catalog: {},
@@ -91,34 +92,77 @@ Enemies.register({
   descr: 'Pari rango e pari ferro. Un duello che decide reputazioni.',
 });
 
-// ─── Bestie selvatiche (terreno conta — affinità leggere) ──────────────────
+// ─── Bestie selvatiche: gli incontri fuori porta (G1 passo 5, docs/EARLY_GAME.md §7) ──────────────────────
+// Si incontrano camminando fuori dai borghi (Combat.pescaIncontro), più spesso lontano dalle strade, di sera e di
+// notte. Campi in più delle bestie:
+//   habitat  { bioma: peso } — dove vivono (codici sopra); senza, nessun incontro casuale
+//   ore      { giorno, sera, notte } — moltiplicatori del peso per momento del giorno (default 1)
+//   tratti   caratteristiche di combattimento (js/combat.js):
+//            veloce — fuggire è difficile (anche in sella, se non si galoppa)
+//            branco — più Round, e a ogni Round un morso in più può arrivare da un fianco
+//            carica — il primo Round è una carica: se non la reggi ti travolge, se la schivi guadagni terreno
+//            veleno — se ti ha ferito, dopo lo scontro il veleno toglie ancora Salute (veleno: quanta)
+//            timido — se lo Slancio gira a tuo favore (≥ 3, Combat.TIMIDO_FUGGE) l'animale scappa: è una vittoria
+//   danno    [min, max] Salute di un colpo pieno (prima dell'armatura)
+//   forte    non lo si incontra nella Veglia prima della prima battaglia (un garzone non regge un orso)
+//   incontro testo della carta che lo annuncia
+// sfida, Round e danni [DA BILANCIARE]: tarati in Node (1000 scontri per animale) perché il garzone con il
+// coltello vinca più spesso di quanto perda contro un lupo, e non regga un orso.
 Enemies.register({
-  id: 'bestie.lupo', nome: 'Lupo', tipo: 'bestia',
-  categoria: 'lupo', numerosita: 'singolo',
-  sfida: 10, roundMin: 2, roundMax: 3, accettaResa: false,
-  terreni: { favorevole: [2, 7], sfavorevole: [1, 11, 12] },  // bosco/neve
-  descr: 'Affamato e rapido. Pericoloso fra gli alberi, esposto in pianura.',
+  id: 'bestie.lupo', nome: 'Lupo', tipo: 'bestia', categoria: 'lupo', numerosita: 'singolo',
+  sfida: 5.5, roundMin: 2, roundMax: 3, accettaResa: false, tratti: ['veloce'], danno: [8, 14],
+  habitat: { 2: 3, 3: 2, 4: 1, 7: 3, 8: 1, 5: 0.5 }, ore: { giorno: 0.5, sera: 1.5, notte: 2 },
+  incontro: 'Un lupo grigio esce dal folto e si ferma a una ventina di passi. Ti guarda con la testa bassa, le orecchie dritte. Non scappa.',
+  descr: 'Affamato e rapido. Fuggirgli è difficile; affrontarlo, possibile.',
 });
 Enemies.register({
-  id: 'bestie.branco', nome: 'Branco di lupi', tipo: 'bestia',
-  categoria: 'lupo', numerosita: 'orda',
-  sfida: 12, roundMin: 3, roundMax: 5, accettaResa: false,
-  terreni: { favorevole: [2, 7], sfavorevole: [1, 11, 12] },
-  descr: 'Molti occhi nel buio. Il numero li rende audaci.',
+  id: 'bestie.branco', nome: 'Branco di lupi', tipo: 'bestia', categoria: 'lupo', numerosita: 'orda',
+  sfida: 8, roundMin: 3, roundMax: 4, accettaResa: false, tratti: ['veloce', 'branco'], danno: [6, 11], forte: true,
+  habitat: { 2: 2, 3: 1, 4: 1, 7: 3, 8: 1 }, ore: { giorno: 0.15, sera: 1, notte: 2.5 },
+  incontro: 'Un ululato, poi un altro, più vicino. Fra gli alberi si accendono occhi, tre, cinque. Il branco ti ha preso in mezzo.',
+  descr: 'Molti occhi nel buio. Il numero li rende audaci, e uno ti morde sempre da dove non guardi.',
 });
 Enemies.register({
-  id: 'bestie.orso', nome: 'Orso', tipo: 'bestia',
-  categoria: 'orso', numerosita: 'singolo',
-  sfida: 13, roundMin: 4, roundMax: 6, accettaResa: false,
-  terreni: { favorevole: [2, 3], sfavorevole: [1] },
-  descr: 'Una montagna di muscoli e artigli. Pochi colpi, ma devastanti.',
+  id: 'bestie.cinghiale', nome: 'Cinghiale', tipo: 'bestia', categoria: 'cinghiale', numerosita: 'singolo',
+  sfida: 5, roundMin: 2, roundMax: 3, accettaResa: false, tratti: ['carica'], danno: [8, 15],
+  habitat: { 2: 3, 3: 2, 5: 2.5, 1: 0.3 }, ore: { giorno: 0.8, sera: 1.5, notte: 1.2 },
+  incontro: 'Un grugnito fra i cespugli, un fruscio pesante: un cinghiale maschio, le setole ritte, raspa la terra con lo zoccolo.',
+  descr: 'Carica a testa bassa. Chi regge il primo urto ha già fatto metà del lavoro.',
 });
 Enemies.register({
-  id: 'bestie.cinghiale', nome: 'Cinghiale', tipo: 'bestia',
-  categoria: 'cinghiale', numerosita: 'singolo',
-  sfida: 11, roundMin: 2, roundMax: 4, accettaResa: false,
-  terreni: { favorevole: [2, 5], sfavorevole: [1] },
-  descr: 'Caricatore cieco e testardo. Sottovalutarlo costa caro.',
+  id: 'bestie.orso', nome: 'Orso', tipo: 'bestia', categoria: 'orso', numerosita: 'singolo',
+  sfida: 10, roundMin: 3, roundMax: 5, accettaResa: false, tratti: ['carica'], danno: [14, 24], forte: true,
+  habitat: { 4: 3, 2: 0.6, 3: 0.4, 7: 0.5 }, ore: { giorno: 1, sera: 1.2, notte: 0.6 },
+  incontro: 'L\'orso si alza sulle zampe posteriori, più alto di un uomo, e soffia. Fra te e lui ci sono solo pochi passi di sassi.',
+  descr: 'Una montagna di muscoli e artigli. Meglio non farsi trovare; se ti trova, meglio non restare.',
+});
+Enemies.register({
+  id: 'bestie.vipera', nome: 'Vipera', tipo: 'bestia', categoria: 'vipera', numerosita: 'singolo',
+  sfida: 4, roundMin: 1, roundMax: 2, accettaResa: false, tratti: ['veleno', 'timido'], danno: [3, 6], veleno: 12,
+  habitat: { 10: 3, 6: 3, 3: 1.2, 1: 0.4, 11: 0.4, 12: 0.6 }, ore: { giorno: 1.5, sera: 0.8, notte: 0.2 },
+  incontro: 'Fra le pietre calde, a un palmo dal tuo piede, una vipera si raccoglie a spirale e sibila.',
+  descr: 'Piccola e lenta, ma il suo morso brucia per ore.',
+});
+Enemies.register({
+  id: 'bestie.aquila', nome: 'Aquila reale', tipo: 'bestia', categoria: 'aquila', numerosita: 'singolo',
+  sfida: 5, roundMin: 1, roundMax: 2, accettaResa: false, tratti: ['veloce', 'timido'], danno: [4, 9],
+  habitat: { 4: 2, 10: 2, 7: 0.5 }, ore: { giorno: 1.5, sera: 0.5, notte: 0 },
+  incontro: 'Un\'ombra passa sulle rocce, poi un grido: un\'aquila scende in picchiata, gli artigli aperti. Il nido deve essere vicino.',
+  descr: 'Difende il nido dall\'alto. Non la si sfugge correndo; la si scaccia tenendo testa.',
+});
+Enemies.register({
+  id: 'bestie.cani', nome: 'Cani inselvatichiti', tipo: 'bestia', categoria: 'cani', numerosita: 'gruppo',
+  sfida: 6, roundMin: 2, roundMax: 4, accettaResa: false, tratti: ['branco', 'timido'], danno: [4, 8],
+  habitat: { 1: 3, 11: 3, 12: 3, 6: 1, 3: 0.6 }, ore: { giorno: 0.6, sera: 1.5, notte: 1.5 },
+  incontro: 'Cani senza padrone, magri e spelacchiati, ti vengono incontro nell\'erba alta abbaiando. Uno ringhia più degli altri.',
+  descr: 'Un branco di randagi della pianura: coraggiosi in molti, vigliacchi appena uno guaisce.',
+});
+Enemies.register({
+  id: 'bestie.cervo', nome: 'Cervo in amore', tipo: 'bestia', categoria: 'cervo', numerosita: 'singolo',
+  sfida: 5.5, roundMin: 1, roundMax: 2, accettaResa: false, tratti: ['carica', 'timido'], danno: [8, 14],
+  habitat: { 2: 1.5, 1: 1.2, 11: 1, 12: 1, 3: 0.8 }, ore: { giorno: 0.8, sera: 1.5, notte: 0.8 },
+  incontro: 'Un bramito ti fa voltare: un cervo con un palco enorme abbassa la testa e ti punta, come fossi un rivale.',
+  descr: 'Nella stagione degli amori non cede il passo. Regge una carica, poi di solito se ne va.',
 });
 
 // ─── Creature mitiche (scontri lunghi, 5–12 Round) ─────────────────────────

@@ -88,7 +88,13 @@ non disponibile dopo che è stato versato sangue significativo).
 
 ## 5. Formula di Round
 
-`[TBD]` — fissata in S9. Fattori in input:
+**Oggi (G1 passo 5, `js/combat.js` `_formulaRound`)** [DA BILANCIARE]: vigoreEff = Forza (0–4) + Volontà (0–2) + `colpo`
+dell'arma + metà della `difesa` dello scudo + terreno (±1) + cavallo in sella − ferite (0–4); Δ Slancio =
+vigoreEff − `sfida` + due dadi (±4), fra −3 e +3. Armatura e scudo riducono le ferite (15 % per punto di `difesa`);
+le ferite arrivano anche nei Round pari o vinti di poco; danni per nemico (`danno`); tratti delle bestie (veloce,
+branco, carica, veleno, timido) in `js/data/enemies.js`. Numeri della taratura in `docs/EARLY_GAME.md` §7 passo 5.
+
+Restava `[TBD]` — fissata in S9. Fattori in input previsti:
 
 - Attributi base (Vigore, Volontà)
 - Arma equipaggiata (danno base, tipo)
