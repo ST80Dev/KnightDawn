@@ -97,6 +97,10 @@ export function mostraMenuAvvio(opzioni) {
       </div>
       <div class="nota">Le due modalità hanno salvataggi separati: provare in Libera non tocca la Storia. F8 in gioco salva e
         riporta qui, dove la partita si può scaricare in un file.</div>
+      <div class="nota crediti">Musica: «Teller of the Tales», «Suonatore di Liuto», «Midnight Tale», «Heavy Heart» di Kevin
+        MacLeod (incompetech.com), licenza Creative Commons By Attribution 4.0 (creativecommons.org/licenses/by/4.0);
+        «The Bard's Tale», «Exploration», «The Old Tower Inn», «Market Day» di RandomMind (opengameart.org), CC0. U in gioco:
+        musica sì/no.</div>
     </div>`;
     document.body.appendChild(el);
 
