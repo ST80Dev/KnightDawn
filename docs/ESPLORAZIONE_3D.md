@@ -307,6 +307,15 @@ Nel 2D 1 Passo era 1 tile; ora il **Passo è solo un'unità di tempo** (~3 ore, 
   debole; la nebbia, del colore del cielo notturno, si stringe attorno al punto osservato (nitido
   fino a ~15 m, buio pieno a ~110 m oltre la camera): si vede bene solo vicino, il castello a 225 m
   sparisce. Parametri in `CICLO` (`cielo.js`, prima in `main.js`).
+- **Luce ambiente scollegata dal sole** (28/11/2026, richiesta dell'utente: bosco meno buio nelle ore
+  scure). Il sole conserva la sua curva lunga (pieno a 20°: luce bassa, calda, ombre lunghe nella prima
+  ora), l'emisfera torna a salire su `smoothstep(−5°, 8°)`. Sotto la chioma l'emisfera è l'unica luce che
+  arriva, e con la curva del sole il sottobosco restava quasi nero per due ore: all'alba (5:45) l'ambiente
+  passa da 0,210 a 0,256, alle 6:00 da 0,278 a **0,364**, alle 6:30 da 0,416 a 0,450; il giorno pieno e la
+  notte non cambiano. Insieme: colore «da terra» dell'emisfera notturna da `#2c2a2a` a `#363330` (illumina
+  le facce verticali e in basso, cioè i tronchi e il sotto delle chiome, non il suolo, che guarda in su) ed
+  estremo scuro della lettiera alzato (sotto, «Shader del suolo»). Misurato nella pagina: emisfera 0,256
+  alle 5:45 e alle 18:45, 0,364 alle 6:00, 0,160 di notte con terra `#363330`.
 - **HUD in HTML:** data (o «Veglia · giorno N») con l'ora, Forza, Salute, Volontà, Onore.
 - **Salvataggio locale** (localStorage, come da `CLAUDE.md`): posizione e direzione del cavaliere,
   terreno corrente, stato di `Knight` e `Calendar`, autosalvataggio. Supabase abbandonato (deciso
@@ -2196,6 +2205,9 @@ negli ultimi ~150 m; colore del terreno sotto il bosco già scuro. Se non basta,
        marrone scuro, quasi nero e muschio (tre scale di rumore), **fango** vicino all'acqua. Bosco e acqua arrivano
        per vertice dal posizionamento (`suolo`, attributo `aSuolo`); niente lettiera nella spianata di rocca e borgo;
        negli ultimi 120 m del blocco terra, lettiera e fango sfumano (l'orizzonte ha il solo colore).
+       Lettiera, secondo giro (28/11/2026): alzato **solo l'estremo scuro** (0,011 → 0,018 e la chiazza più nera
+       0,006 → 0,0095), il chiaro resta a 0,085. Con la luce ambiente delle ore scure quei valori finivano a 3–4 su
+       255 e il sottobosco era una macchia unica; ora la chiazza nera fa 8 all'alba e 14 in pieno giorno (prima 4 e 9).
      - *Erba e felci vicine* (anticipato dal passo 5): ciuffi di 14 fili entro 32 m (griglia del mondo di 0,6 m, colore
        dal terreno sotto), felci nel sottobosco umido entro 45 m, quasi niente erba sotto gli alberi; vento nello
        shader; si rimpiccioliscono verso il limite. Ricalcolati ogni 4 m (`erbaAttorno`, deterministico).
