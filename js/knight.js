@@ -356,17 +356,21 @@ const Knight = {
     this.forza.cur = Math.max(0, this.forza.cur - costo);
   },
 
-  // Vigore del cavallo nelle Scene 3D (milestone Cavallo, passo 3): il galoppo lo consuma; a vigore 0 niente galoppo
-  // e niente sconto di Forza (isMounted). andatura: 'passo' | 'trotto' | 'galoppo'.
+  // Vigore del cavallo nelle Scene 3D (milestone Cavallo): ogni andatura in sella lo consuma (VIAGGIO.METRI_PER_VIGORE);
+  // a vigore 0 solo il passo e niente sconto di Forza (isMounted). andatura: 'passo' | 'trotto' | 'galoppo'.
   consumaVigoreMetri(metri, andatura) {
-    if (!this.cavallo || andatura !== 'galoppo' || !(metri > 0)) return;
-    this.cavallo.vigore = Math.max(0, this.cavallo.vigore - metri / VIAGGIO.METRI_GALOPPO_PER_VIGORE);
+    const m = VIAGGIO.METRI_PER_VIGORE[andatura];
+    if (!this.cavallo || !m || !(metri > 0)) return;
+    this.cavallo.vigore = Math.max(0, this.cavallo.vigore - metri / m);
   },
-  // Recupero del vigore per il tempo di gioco (frazione di Passo): da fermo pieno, al passo in parte.
-  riposaCavallo(passi, fermo, andatura) {
-    if (!this.cavallo || !(passi > 0)) return;
-    const f = fermo ? 1 : andatura === 'passo' ? VIAGGIO.RECUPERO_VIGORE_PASSO : 0;
-    this.cavallo.vigore = Math.min(this.cavallo.vigoreMax, this.cavallo.vigore + VIAGGIO.VIGORE_RIPOSO_PER_PASSO * passi * f);
+  /** Metri che il cavallo fa ancora all'andatura data, col vigore che ha. */
+  metriCavallo(andatura) {
+    return this.cavallo ? this.cavallo.vigore * (VIAGGIO.METRI_PER_VIGORE[andatura] ?? 0) : 0;
+  },
+  // Recupero del vigore per il tempo di gioco (frazione di Passo): solo da fermo.
+  riposaCavallo(passi, fermo) {
+    if (!this.cavallo || !(passi > 0) || !fermo) return;
+    this.cavallo.vigore = Math.min(this.cavallo.vigoreMax, this.cavallo.vigore + VIAGGIO.VIGORE_RIPOSO_PER_PASSO * passi);
   },
 
   // Recupero da fermi nelle Scene 3D, proporzionale al tempo di gioco trascorso (frazione di Passo):
