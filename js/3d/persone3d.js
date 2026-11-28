@@ -57,11 +57,17 @@ const CAPELLI = [
 
 // Pesi delle tinte di un vertice: (veste, pelle, capelli). Un peso sotto 1 sulla veste la scurisce senza
 // disegnare un vestito a parte: calzoni e scarpe sono la stessa stoffa più scura.
-const T_VESTE = [1, 0, 0];
-const T_GAMBE = [0.70, 0, 0];
-const T_SCARPE = [0.52, 0, 0];
-const T_PELLE = [0, 1, 0];
-const T_CAPELLI = [0, 0, 1];
+// La quarta componente non è un peso: sceglie una tinta fissa (1 = acciaio, 2 = legno) per l'equipaggiamento,
+// che non cambia da persona a persona.
+const T_VESTE = [1, 0, 0, 0];
+const T_GAMBE = [0.70, 0, 0, 0];
+const T_SCARPE = [0.52, 0, 0, 0];
+const T_PELLE = [0, 1, 0, 0];
+const T_CAPELLI = [0, 0, 1, 0];
+const T_ACCIAIO = [0, 0, 0, 1];
+const T_LEGNO = [0, 0, 0, 2];
+const COL_ACCIAIO = '#8e949b';
+const COL_LEGNO = '#6b5236';
 
 // ─── Costruzione della geometria comune ────────────────────────────────────────────────────────────────────
 
@@ -191,6 +197,24 @@ function pezziDelCorpo() {
     metti(avambraccio, snodoB, T_VESTE);
     metti(mano, snodoB, T_PELLE);
   }
+
+  // ── Da guardia: cappello di ferro e lancia ──────────────────────────────────────────────────────────────
+  // Stanno nella geometria condivisa da tutti e si chiudono a volume zero per chi non è una guardia (lo stesso
+  // modo dei calvi): costano vertici, zero pixel e **zero chiamate di disegno**. Volutamente rozzi: la guardia
+  // deve leggersi come una guardia a 3–5 m, non assomigliare al cavaliere.
+  const calotta = new THREE.SphereGeometry(0.116, 10, 5, 0, Math.PI * 2, 0, Math.PI * 0.56);
+  calotta.scale(1, 0.98, 1);
+  calotta.translate(0, H.testa + 0.018, 0);
+  metti(calotta, FERMO, T_ACCIAIO);
+  const tesa = cono(0.206, 0.138, H.testa - 0.012, H.testa + 0.018, 14);   // falda che scende verso fuori
+  metti(tesa, FERMO, T_ACCIAIO);
+
+  const MANO_X = -0.272, MANO_Z = 0.065;                                   // dove cade la mano destra a riposo
+  metti(cono(0.021, 0.019, 0.0, 2.02, 5).translate(MANO_X, 0, MANO_Z), FERMO, T_LEGNO);
+  const cuspide = new THREE.ConeGeometry(0.036, 0.20, 6);
+  cuspide.translate(MANO_X, 2.11, MANO_Z);
+  metti(cuspide, FERMO, T_ACCIAIO);
+
   return P;
 }
 
@@ -200,7 +224,7 @@ function geometriaPersona() {
   let n = 0;
   for (const p of pezzi) n += p.geo.attributes.position.count;
   const pos = new Float32Array(n * 3), nrm = new Float32Array(n * 3);
-  const snodo = new Float32Array(n * 4), tinta = new Float32Array(n * 3);
+  const snodo = new Float32Array(n * 4), tinta = new Float32Array(n * 4);
   let i = 0;
   for (const p of pezzi) {
     const c = p.geo.attributes.position.count;
@@ -208,7 +232,7 @@ function geometriaPersona() {
     nrm.set(p.geo.attributes.normal.array, i * 3);
     for (let k = 0; k < c; k++) {
       snodo.set(p.snodo, (i + k) * 4);
-      tinta.set(p.tinta, (i + k) * 3);
+      tinta.set(p.tinta, (i + k) * 4);
     }
     i += c;
     p.geo.dispose();
@@ -217,7 +241,7 @@ function geometriaPersona() {
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
   geo.setAttribute('aSnodo', new THREE.BufferAttribute(snodo, 4));
-  geo.setAttribute('aTinta', new THREE.BufferAttribute(tinta, 3));
+  geo.setAttribute('aTinta', new THREE.BufferAttribute(tinta, 4));
   geo.computeBoundingSphere();
   return geo;
 }
@@ -229,11 +253,12 @@ function innesta(shader) {
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', `#include <common>
       attribute vec4 aSnodo;     // verso dell'oscillazione, quota dello snodo, piega secondaria, quota della piega
-      attribute vec3 aTinta;     // pesi di veste, pelle, capelli
+      attribute vec4 aTinta;     // pesi di veste, pelle, capelli; w: 0 corpo · 1 acciaio · 2 legno
       attribute vec3 iVeste;
       attribute vec3 iPelle;
       attribute vec3 iCapelli;
       attribute vec4 iMoto;      // fase del passo, ampiezza, lunghezza e volume della capigliatura
+      attribute float iDota;     // 1 = porta elmo e lancia (guardia), 0 = l'equipaggiamento si chiude a zero
       const float KD_TESTA_Y = ${H.testa.toFixed(3)};
       void kdRuota(inout vec3 p, float y0, float a) {
         float c = cos(a), s = sin(a);
@@ -242,8 +267,10 @@ function innesta(shader) {
         p.z = dy * s + dz * c;
       }`)
     // Le tinte: un peso sotto 1 sulla veste scurisce senza aggiungere un vestito a parte (calzoni, scarpe).
-    .replace('#include <color_vertex>',
-      'vColor = vec4(aTinta.x * iVeste + aTinta.y * iPelle + aTinta.z * iCapelli, 1.0);')
+    .replace('#include <color_vertex>', `
+      vec3 kdTinta = aTinta.x * iVeste + aTinta.y * iPelle + aTinta.z * iCapelli;
+      if (aTinta.w > 0.5) kdTinta = aTinta.w < 1.5 ? vec3(${tinta(COL_ACCIAIO)}) : vec3(${tinta(COL_LEGNO)});
+      vColor = vec4(kdTinta, 1.0);`)
     // Gli angoli si calcolano una volta sola qui e servono anche a `begin_vertex`, più sotto nello stesso main().
     .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
       float kdS = sin(iMoto.x);
@@ -273,7 +300,15 @@ function innesta(shader) {
         if (d.y < 0.0) d.y *= mix(1.0, abs(iMoto.z), dietro);
         transformed = vec3(0.0, KD_TESTA_Y, 0.0) + d;
       }
+      // Elmo e lancia: chi non è una guardia li chiude in un punto (triangoli degeneri, zero pixel).
+      if (aTinta.w > 0.5) transformed = mix(vec3(0.0, 1.0, 0.0), transformed, iDota);
       transformed.y += abs(kdS) * 0.035 * iMoto.y;`);                           // il corpo sale e scende col passo
+}
+
+/** Colore esadecimale → terna GLSL nello spazio di lavoro (come fa THREE.Color per i colori dei vertici). */
+function tinta(hex) {
+  const c = new THREE.Color(hex);
+  return `${c.r.toFixed(4)}, ${c.g.toFixed(4)}, ${c.b.toFixed(4)}`;
 }
 
 // Un solo materiale per tutta la partita: `userData.condivisa` dice a `libera()` di non cancellarlo al cambio di
@@ -321,7 +356,9 @@ export function creaPersone() {
     const scala = new THREE.Vector3(larga, alta, larga * (0.92 + r() * 0.14));
 
     // Capigliatura: colore dalla tavola, lunghezza sulla nuca e volume dal seme; qualche adulto è calvo.
-    const calvo = !bambino && r() < 0.09;
+    // Le guardie portano cappello di ferro e lancia (sotto l'elmo i capelli non si vedono).
+    const guardia = ruolo === 'guardia';
+    const calvo = guardia || (!bambino && r() < 0.09);
     const capelli = new THREE.Color(CAPELLI[Math.floor(r() * CAPELLI.length)]);
     // Il segno della lunghezza dice da che parte sta la scriminatura (lo legge lo shader).
     const lung = (bambino ? 0.6 + r() * 0.7 : 0.6 + r() * 1.6) * (r() < 0.5 ? -1 : 1);
@@ -339,6 +376,7 @@ export function creaPersone() {
       capelli,
       lung,
       vol,
+      dota: guardia ? 1 : 0,
       fase: r() * Math.PI * 2,
       amp: 0,
     };
@@ -368,10 +406,12 @@ export function creaPersone() {
     const pelle = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3);
     const cap = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3);
     const moto = new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4);
+    const dota = new THREE.InstancedBufferAttribute(new Float32Array(n), 1);
     geo.setAttribute('iVeste', veste);
     geo.setAttribute('iPelle', pelle);
     geo.setAttribute('iCapelli', cap);
     geo.setAttribute('iMoto', moto);
+    geo.setAttribute('iDota', dota);
 
     const mesh = new THREE.InstancedMesh(geo, materialePersone(), n);
     mesh.name = 'persone';
@@ -394,11 +434,13 @@ export function creaPersone() {
         moto.array[k * 4 + 1] = d.amp;
         moto.array[k * 4 + 2] = d.lung;
         moto.array[k * 4 + 3] = d.vol;
+        dota.array[k] = d.dota;
         k++;
       }
       mesh.count = k;
       mesh.instanceMatrix.needsUpdate = true;
-      veste.needsUpdate = true; pelle.needsUpdate = true; cap.needsUpdate = true; moto.needsUpdate = true;
+      veste.needsUpdate = true; pelle.needsUpdate = true; cap.needsUpdate = true;
+      moto.needsUpdate = true; dota.needsUpdate = true;
     };
 
     const gruppo = new THREE.Group();

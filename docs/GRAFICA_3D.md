@@ -71,8 +71,14 @@ riflessi, vestiti definiti e altri particolari che hai fatto sul cavaliere».
 - **Materiale**: `MeshLambertMaterial` opaco, un solo materiale. Niente mappe d'ambiente, niente satinature.
   I colori stanno nei pesi per vertice (veste, pelle, capelli): un peso sotto 1 sulla veste scurisce senza
   aggiungere un vestito a parte, così calzoni e scarpe sono la stessa stoffa più scura.
+- **Guardie**: cappello di ferro (calotta e falda che scende verso fuori) e lancia nella mano destra; sotto
+  l'elmo i capelli non si vedono. Volutamente rozze: devono leggersi come guardie a 3–5 m, non assomigliare al
+  cavaliere. Le due parti stanno **nella geometria condivisa da tutti** e per chi non è una guardia si chiudono
+  in un punto (`iDota` a 0): triangoli degeneri, zero pixel, **zero chiamate di disegno in più**. È lo stesso
+  meccanismo dei calvi ed è la via da seguire per ogni futuro attributo di ruolo (arco, grembiule, bastone).
 - **Varietà**: statura e corporatura dal seme nella matrice di istanza; la tavola delle vesti è in
   `abitanti3d.js` ed è stretta (bruni e verdi), quindi ogni persona schiarisce o scurisce la sua di ±15 %.
+  Le guardie prendono già il tono della casata da `abitanti3d.js`.
 - **Costo**: vedi `docs/PRESTAZIONI.md`. Una sola chiamata di disegno per tutte le persone del blocco.
 
 ## Terreno
