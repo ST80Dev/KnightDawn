@@ -292,6 +292,13 @@ poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un
    cavaliere»; nebbia della conoscenza; luoghi, approdi, ponti, valichi e gruppi montuosi solo se conosciuti; sul
    cursore solo bioma, quota arrotondata e luogo conosciuto («terre ignote» altrove); niente clic che sposta; il
    gioco è fermo; `M` o `Esc` la chiudono. `N` resta la minimappa piccola/grande.
+   *Seconda correzione (novembre 2026, richiesta dell'utente):* la nebbia non fa più capire dove finisce il mondo:
+   in Storia continua uguale oltre il confine (niente tinta più scura né linea), nella minimappa e nella Carta; il
+   cursore oltre il confine dice «terre ignote». Aspetto di pergamena antica, più scura, a macchie e toni variabili
+   (`NEBBIA`, `mascheraNebbia`, `disegnaNebbia` in `cartaVista.js`): una tessera di rumore periodico generata una
+   volta, a tre scale ancorate al mondo; bordi della parte nota sfumati dall'interpolazione delle celle; l'intravisto
+   resta più chiaro dell'ignoto. Nella minimappa sta nel fondo in cache e, quando cambia solo la nebbia, si rifà il
+   solo rettangolo scoperto. In Libera il confine resta com'era (fondo scuro e linea).
 2. **Carta del cronista vera.** Riquadro con titolo, testo, pulsanti tematici, prerequisiti visibili
    («Richiede…») ed esito; usa il motore di `js/events.js` così com'è. Effetto di tempo nuovo
    `{ type:'tempo', minuti:N }` accanto a `passi` (`Calendar.avanzaMinuti`); i costi della Veglia passano
