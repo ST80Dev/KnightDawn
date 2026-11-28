@@ -22,6 +22,7 @@ import { creaCaseCampagna, quotaFinestre } from './edifici3d.js';
 import { createBorgoAPezzi } from './borgo3d.js';
 import { createVillaggioAPezzi, createMonasteroAPezzi, createEremoAPezzi, createMulinoAPezzi, pianoDelSito } from './villaggio3d.js';
 import { createRovinaAPezzi, createMisteroAPezzi } from './rovine3d.js';
+import { approdiDelBlocco, creaApprodo } from './approdi3d.js';
 import { raggioSito, climaDelLuogo } from '../mondo/siti.js';
 import { NOMI_BIOMI } from '../mondo/carta.js';
 import { createCartaVista, CLASSI_ROCCA } from './cartaVista.js';
@@ -1148,6 +1149,8 @@ function* costruisciVillaggi(cx, cz, ter) {
     if (Math.abs(x) > half + m || Math.abs(z) > half + m) continue;
     out.push(yield* createMonasteroAPezzi(suoloMondo, l, x, z, carta));
   }
+  // Approdi (pontile e barca, js/3d/approdi3d.js): stessa interfaccia dei villaggi; l'impalcato è suolo (applicaMondo).
+  for (const ap of approdiDelBlocco(carta, cx, cz, half)) { out.push(creaApprodo(suoloMondo, ap, cx, cz, carta)); yield; }
   return out;
 }
 
@@ -1313,7 +1316,8 @@ function applicaMondo(p) {
   if (acqua) scene.add(acqua);
   // Le strade per ultime: sotto un ponte la carreggiata nell'alveo non deve vincere sull'impalcato.
   // Le rocce basse (fino a 40 cm) fanno suolo: ci si sale sopra come su un gradino (knight3d.js).
-  _suolo = componiSuolo(terrain, [...rocche, ...ponti, p.strade ?? suoloStrade(acqueScena, (x, z) => terrain.getHeight(x, z))],
+  _suolo = componiSuolo(terrain, [...rocche, ...ponti, ...villaggi.filter((v) => v.tipo === 'approdo'),
+    p.strade ?? suoloStrade(acqueScena, (x, z) => terrain.getHeight(x, z))],
     vegetazione?.quotaOstacoli ? [vegetazione] : []);
   // Persone ai loro posti e per le strade (passo 7), sul suolo composto. Al cambio di blocco (scambiaBlocco) si rifanno
   // con rocche e borghi, già nelle coordinate del blocco nuovo: non serve spostarle (abitanti.sposta resta per altri usi).
