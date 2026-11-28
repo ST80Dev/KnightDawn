@@ -195,6 +195,17 @@ Tono da manoscritto e da opera incorniciata, senza esagerare. Codice in `js/3d/i
   ritagli); lo sfondo si rifà quando il riquadro cambia misura (`ResizeObserver`). Niente immagini. La Carta di
   sviluppo (M) e il pannello F3 restano come sono.
 
+## Musica di sottofondo (`js/3d/musica.js`, `assets/audio/`) — deciso con l'utente, 28/11/2026
+
+Ambientale, lieve, in loop, senza effetti sonori. Otto brani con licenza libera (CC0 e CC-BY 4.0, crediti in
+`assets/audio/README.md` e nel menu d'avvio), MP3 a 112 kbps (~17 MB in tutto, scaricati uno alla volta quando servono).
+Tre gruppi: **giorno** (4 brani), **notte** (2, quando la luce del giorno scende sotto 0,3), **borgo** (2, dentro le mura).
+Un brano alla volta con dissolvenza di 3 s, i brani nati per il loop ripetuti 2–3 volte, 18 s di silenzio tra un brano
+e il successivo; il gruppo cambia solo se la condizione dura 6 s. Parte al primo clic o tasto (i browser bloccano
+l'audio prima), si ferma con la scheda nascosta; **U** accende e spegne (ricordato nel browser). Volume 0,32. Nessun
+lavoro per fotogramma: si aggiorna una volta al secondo. Da decidere dopo l'ascolto dell'utente: quali brani tenere, volume,
+un brano per il combattimento.
+
 ## Prestazioni
 
 Budget, misure, cause note e piano della milestone «Prestazioni»: `docs/PRESTAZIONI.md` (scheda di riferimento:

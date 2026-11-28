@@ -42,6 +42,7 @@ import { creaAbitanti } from './abitanti3d.js';
 import { creaPersone } from './persone3d.js';
 import { semeDaTesto, completa } from '../mondo/rumore.js';
 import { creaCielo, posizioneSole, visibilitaDelGiorno } from './cielo.js';
+import { creaMusica } from './musica.js';
 import { creaProfilatore, creaPercorso, GRUPPI, FAMIGLIE, BUDGET_GPU, budgetDi, creaQualita } from './prestazioni.js';
 
 const LONTANO = 130000;                   // m: distanza massima disegnata dalla camera
@@ -133,6 +134,7 @@ function raccogliEmissivi(radice) {
 // Copia di cieloScena.luceGiorno (0 notte → 1 giorno) con il nome di prima del passo 0: altre sessioni la usano
 // già nei loro branch (luci lontane, luci di rocche e borghi), così le loro unioni restano valide.
 let _luceGiorno = 1;
+const musica = creaMusica();             // musica di sottofondo (musica.js, assets/audio/)
 function aggiornaCielo() {
   const cambiato = cieloScena.aggiorna(Calendar.oraDelGiorno());
   _luceGiorno = cieloScena.luceGiorno;
@@ -1701,7 +1703,7 @@ async function init() {
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no · Spazio: scavalca'
     + ` · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: ${inStoria() ? 'Carta' : 'Carta (clic: vai lì) · T: avanza · K: prova di combattimento'}`
-    + ' · N: minimappa (icona, piccola, grande) · +/−: zoom minimappa · J: scrittoio e avvisi · I: diario'
+    + ' · N: minimappa (icona, piccola, grande) · +/−: zoom minimappa · J: scrittoio e avvisi · I: diario · U: musica'
     + ` · F2: qualità · F3: info · F8: menu · modalità ${inStoria() ? 'Storia' : 'Libera'}`,
   'aiuto');
 }
@@ -1932,6 +1934,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyJ' && !e.repeat && knight) { scrittoio.apri(); return; }
   if (e.code === 'KeyI' && !e.repeat && knight) { diario.apri('zaino'); return; }
   if (e.code === 'KeyK' && !e.repeat && knight) { mostraProvaCombattimento(); return; }   // G1 passo 4: solo Libera
+  if (e.code === 'KeyU' && !e.repeat) { messaggio(musica.alterna() ? 'Musica accesa (U per spegnerla).' : 'Musica spenta (U per riaccenderla).'); return; }
   if (e.code === PORTA.tasto && !e.repeat) {
     const azione = AZIONI_TASTO.find((a) => a.pronta());
     if (azione) { azione.esegui(); return; }
@@ -2453,6 +2456,10 @@ function frame(now) {
       luciVicine(now / 1000, 1 - _luceGiorno);
     }
     orizzonte?.luciLontane?.(1 - _luceGiorno);   // M7, passo 8: luci dei borghi lontani (orizzonte.js)
+    if (!percorso) {                     // musica: notte con il buio, borgo dentro le mura (lavora una volta al secondo)
+      const k = knight.stato;
+      musica.aggiorna(now, { notte: _luceGiorno < 0.3, borgo: rocche.some((r) => r.dentro?.(k.x, k.z)) });
+    }
     tt = segna('cielo e luci', tt);
     diario.aggiorna();
     aggiornaIndicatoreAndatura();

@@ -23,13 +23,13 @@ Percorso di prova: `?seme=570549&prova`. Generatore: verifiche in Node, senza br
   qualità), `terrain.js`, `orizzonte.js`, `acqua.js`, `blocchi.js` (blocco che segue il cavaliere), `cielo.js` (giorno/notte,
   nebbia, meteo), `camera.js`, `knight3d.js`, `cavallo3d.js`, `abitanti3d.js` (persone di rocche e borghi), `castle3d.js`
   (Tavullia), `rocca3d.js`, `borgo3d.js`, `edifici3d.js` (kit unico degli edifici), `villaggio3d.js` (villaggi, ovili, mulini),
-  `rovine3d.js`, `approdi3d.js` (pontili e barche), `vegetazione3d.js`, `minimappa.js`, `cartaVista.js`, `interfaccia.js` (menu d'avvio, Carta del cronista, combattimento), `avvisi.js` (riquadro avvisi), `diario.js` (diario del cavaliere)
+  `rovine3d.js`, `approdi3d.js` (pontili e barche), `vegetazione3d.js`, `minimappa.js`, `cartaVista.js`, `interfaccia.js` (menu d'avvio, Carta del cronista, combattimento), `avvisi.js` (riquadro avvisi), `diario.js` (diario del cavaliere), `musica.js` (sottofondo)
 - `js/mondo/` — generatore del mondo, moduli ES senza grafica né DOM (`rumore.js`, `carta.js`, `verifica.js`,
   `scena.js`, `fiumi.js`, `luoghi.js`, `strade.js`, `siti.js`, `vegetazione.js`; `lavoratore.js` = Web Worker con cache IndexedDB, `generatore.js` = lato pagina); la vista di
   sviluppo della Carta è `js/3d/cartaVista.js`. Cambiando le Carte generate: aggiornare `VERSIONE_GENERATORE`
 - `js/` — logica di gioco ereditata, script classici senza grafica (`config` `calendar` `knight`
   `combat` `events` `news` `save` + `data/`). I moduli 3D li leggono come globali.
-- `assets/terrain/` — heightmap reali (`.bin` + `.json`); `assets/fonts/` — font dell'interfaccia (SIL OFL, `README.md`)
+- `assets/terrain/` — heightmap reali (`.bin` + `.json`); `assets/fonts/` — font dell'interfaccia (SIL OFL, `README.md`); `assets/audio/` — musica (licenze nel `README.md`)
 - `tools/dem/` — script Python per generare le heightmap (istruzioni nel suo `README.md`)
 - `lib/three/` — Three.js r187 vendorizzato (`three.module.js` + `three.core.js` + `LICENSE`, addon usati
   in `addons/`, importati come `three/addons/...`): NON modificare
@@ -56,7 +56,8 @@ Percorso di prova: `?seme=570549&prova`. Generatore: verifiche in Node, senza br
    Unica eccezione (solo **modalità reale**, dopo M6): scaricare dati di terreno da fonti che lo
    permettono dal browser, con cache e avviso se non rispondono. Il mondo generato non scarica nulla
 6. Grafica procedurale: mesh costruite via codice con primitive Three.js, niente modelli `.glb` esterni
-   (per ora). Unici asset ammessi: dati di terreno e i font di `assets/fonts/` (approvati, licenza OFL)
+   (per ora). Unici asset ammessi: dati di terreno, i font di `assets/fonts/` (OFL) e la musica di `assets/audio/`
+   (CC0 e CC-BY, crediti nel suo `README.md` e nel menu; approvata il 28/11/2026)
 7. Test incrementale: ogni milestone deve essere provata nel browser (anche su Pages) prima di passare avanti
 8. Prestazioni: obiettivo 60 FPS su PC medio; contatore FPS sempre attivabile con il tasto `F3`
 9. La logica di gioco (`js/*.js` senza grafica) non deve dipendere da Three.js
