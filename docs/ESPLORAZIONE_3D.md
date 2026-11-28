@@ -3658,6 +3658,38 @@ semilarghezza il nastro prende un azzurro più chiaro (#7aa3b3), sfumando fino a
 chiare a chiazze di ~15 m, da un rumore in coordinate del mondo. Solo colori per vertice (nessun costo per fotogramma);
 larghezza, bordi sfumati e rilievo invariati. L'orizzonte (oltre il blocco) resta col colore di prima.
 
+## Strade che convergono si fondono (novembre 2026) — fatto, misurato, da provare
+
+> Segnalato dall'utente (seme 259699, rocca 1): due strade per la stessa rocca si incrociano chilometri prima e da lì
+> corrono quasi sovrapposte fino al borgo, «a tratti doppie e a tratti fuse», con un'ansa a tornante davanti al borgo.
+> Regola chiesta: quando due strade convergono verso la stessa meta si **fondono** in una sola, con la classe della più
+> importante, dal punto d'incontro fino alla meta. Mai due nastri paralleli.
+
+**Causa.** Sulla Carta i due rami passavano per celle diverse (1 km), quindi non diventavano un tronco comune; nel
+tracciato fine ciascuno cercava il percorso migliore verso la stessa porta e trovava lo stesso fondovalle. Alla rocca
+10 dello stesso seme le due strade si intrecciavano a 5–90 m l'una dall'altra per ~1 km. `innestaAllaPorta` faceva già
+la fusione, ma solo alle porte, entro 400 m e sotto ~8 m di distanza.
+
+**Rimedio** (`fondiConvergenti` in `precalcolaStrade`, `FUSIONE`): dopo il tracciato fine di tutte le strade, due
+tratti con un capo in comune (porta, incrocio, villaggio), o col capo dell'uno sul fianco dell'altro, che da lì corrono
+entro 60 m (buchi fino a 150 m) per almeno 120 m sono una strada sola. Il meno importante (classe; a parità il più
+corto) si taglia dove i due si separano e si innesta sull'altro con un raccordo (cercato come le strade se il tronco è a
+più di 15 m); il più importante porta il tronco fino alla meta. I primi 60 m dal capo non contano: i tratti consecutivi
+dello stesso ramo e le strade che arrivano di traverso restano come sono.
+
+**Misure** (strade fini entro 25 m l'una dall'altra per più di 200 m):
+
+| | prima | dopo |
+|---|---|---|
+| 30 semi (259699, 825177, 327914, 825636, 570549, 8899, 42424, 1–23) | 598 coppie, 314 km | 126 coppie, 83 km |
+| seme 259699 | 20 coppie, 11,1 km | 4 coppie, 1,7 km |
+| seme 259699, rocca 1 (due maestre alla porta) | 510 m affiancate | 0 (resta un innesto di 110 m con una carrareccia) |
+| tracciato fine di tutte le strade | 10,7–11,0 s | 11,0–11,6 s (+3–5 %) |
+
+Fusioni: ~81 tratti per mondo, ~25 km di doppioni tolti. Le coppie che restano sono affiancamenti discontinui (le due
+strade si separano per più di 150 m e poi si riavvicinano) o paralleli senza un capo in comune. `VERSIONE_GENERATORE`
+`+strade-fuse-1`.
+
 ## Fuori dal prototipo (non farlo ora)
 
 Multiplayer, server/VPS, NPC con IA, mobile/touch, modelli esterni, combattimento in 3D, ombre di
