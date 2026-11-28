@@ -522,6 +522,7 @@ html, body {
 #menu-avvio button, #menu-avvio input, #menu-avvio select { font-family: var(--kd-testo); font-size: 19px; border-radius: 0; }
 #menu-avvio .comincia { font: 600 24px var(--kd-titolo); letter-spacing: .12em; }
 #menu-avvio .nota { font: italic 17px/1.55 var(--kd-testo); color: #ab9970; }
+#menu-avvio .nota.crediti { font-size: 14px; margin-top: 6px; opacity: .8; }
 /* Due colonne sugli schermi larghi: partite salvate a sinistra, nuova partita a destra (niente scorrimento a 1920×1080) */
 @media (min-width: 900px) {
   #menu-avvio .riquadro:has(.corpo.due) { width: min(1400px, 100%); }
