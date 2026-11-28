@@ -783,3 +783,158 @@ export function avvisoFoglio(d, testo, sotto = 'J: scrittoio') {
   setTimeout(() => el.classList.add('via'), 5000);
   setTimeout(() => el.remove(), 6200);
 }
+
+// ─── Combattimento nel riquadro (G1 passo 4, docs/COMBAT.md §9) ─────────────────────────────────────────────────
+// Riquadro a sé sopra la scena ferma, con la stessa pergamena della Carta del cronista: tre colonne (il cavaliere |
+// le scelte del Round e lo Slancio | il nemico) e sotto la cronaca dei Round. È solo una vista: il motore è
+// js/combat.js, l'ordine delle cose lo tiene main.js (combatti). Zona dello schermo fissata con la sessione HUD
+// (1920×1080): x 300–1570, y 170–850, al massimo 1270×680; avvisi, diario, meridiana e minimappa restano liberi.
+// Le figure sono sagome statiche disegnate in SVG (niente modelli, CLAUDE.md regola 6).
+
+/** Sagoma del cavaliere, rivolto a destra: elmo, cotta, scudo e arma solo se li porta. */
+function sagomaCavaliere(eq = {}) {
+  const testa = eq.armatura ? '<path d="M88 20h24v24H88z"/><path d="M92 31h16" stroke="#e9dcb8" stroke-width="2.5"/>'
+    : '<circle cx="100" cy="32" r="12"/>';
+  const scudo = eq.scudo ? '<path d="M112 62h28v26c0 16-14 26-14 26s-14-10-14-26z" fill="#7a1f12" stroke="#8a6424" stroke-width="2.5"/>'
+    + '<path d="M126 66v42M114 80h24" stroke="#d9b25a" stroke-width="2"/>' : '';
+  const arma = eq.arma ? '<path d="M82 64L52 18" stroke="#3a2a18" stroke-width="5" stroke-linecap="round"/>'
+    + '<path d="M70 52l16-10" stroke="#3a2a18" stroke-width="4" stroke-linecap="round"/>' : '';
+  return `<svg viewBox="0 0 200 160" class="sagoma">${arma}<g fill="#3a2a18">${testa}`
+    + '<path d="M84 48h32l7 48h-7l-2 46h-10l-4-38-4 38H86l-2-46h-7z"/></g>' + scudo + '</svg>';
+}
+
+const SAGOME_NEMICO = {
+  lupo: '<path d="M30 92l14-14 8-12 6 6 4 12 34-4 36 2 18-6 18 8 8 20-6 2-6-14-4 20 10 16-8 2-12-18-4 16-8 2 2-24-28 2-16 2-4 18-8 2v-20l-10 16-8 2 6-24-14-6-18 2z"/>',
+  cinghiale: '<path d="M28 108l8-12 14-10 20-14 30-8 30 2 22 8 14 16 4 18-8 4-2 18h-10l-2-16-28 2-4 16h-10l-2-16H80l-4 16H66l-2-20H44z"/>'
+    + '<path d="M70 72l-4-12 14 10z"/><path d="M36 104q-8-8 2-16" fill="none" stroke="#efe2c2" stroke-width="3"/>',
+  orso: '<path d="M24 112l6-14 14-10 6-10 10 2 14-10 36-8 36 6 22 18 8 22-4 28h-16l-2-20-26 4-2 18h-16l-2-20-24-2-4 22H64v-24H44z"/>',
+  umano: '<circle cx="110" cy="38" r="13"/><path d="M96 56h28l8 44h-6l-2 40h-10l-4-36-4 36H96l-2-40h-6z"/>'
+    + '<path d="M98 64L72 84" stroke="#3a2a18" stroke-width="6" stroke-linecap="round"/><path d="M64 70l14 2-4 20-14-6z"/>',
+  mitico: '<path d="M100 18c30 0 40 42 46 82l14 50H40l14-50c6-40 16-82 46-82z"/>'
+    + '<circle cx="90" cy="54" r="4" fill="#c8401c"/><circle cx="110" cy="54" r="4" fill="#c8401c"/>',
+};
+/** Sagoma del nemico, rivolto a sinistra; un gruppo o un'orda sono più figure. */
+function sagomaNemico(n = {}) {
+  const forma = n.tipo === 'mitico' ? 'mitico' : n.tipo === 'umano' ? 'umano'
+    : SAGOME_NEMICO[n.categoria] ? n.categoria : n.categoria === 'orso' ? 'orso' : 'lupo';
+  const g = SAGOME_NEMICO[forma];
+  const molti = n.numerosita === 'orda' ? 3 : n.numerosita === 'gruppo' ? 2 : 1;
+  const copie = molti === 1 ? `<g fill="#3a2a18">${g}</g>`
+    : Array.from({ length: molti }, (_, i) => `<g fill="#3a2a18" opacity="${1 - i * 0.25}" transform="translate(${i * 34 - 10} ${-i * 14}) scale(${0.82 - i * 0.08})"`
+      + ` transform-origin="100 140">${g}</g>`).reverse().join('');
+  return `<svg viewBox="0 0 200 160" class="sagoma">${copie}</svg>`;
+}
+
+const _barra = (nome, v, cls = '') => {
+  const f = v.max ? Math.max(0, Math.min(1, v.cur / v.max)) : 0;
+  return `<div class="stat ${cls}"><span>${_esc(nome)}</span><i><b style="width:${(f * 100).toFixed(1)}%"></b></i>`
+    + `<em>${Math.ceil(v.cur)}</em></div>`;
+};
+
+/**
+ * Riquadro di combattimento. `mostra(v)` lo apre o lo rifà con la vista v; `chiudi()`; `tasto(e)` (1–9 scelgono;
+ * Invio e Spazio la prima scelta: di solito «Combattere» o, a scontro finito, «Continua»).
+ * @param {{ onApri?: () => void, onChiudi?: () => void }} [opzioni]
+ */
+export function creaCombattimento(opzioni = {}) {
+  let el = null, scelte = [], stacca = null;
+  function chiudi() {
+    if (!el) return;
+    stacca?.();
+    el.remove();
+    el = null;
+    scelte = [];
+    opzioni.onChiudi?.();
+  }
+  /**
+   * @param {{ titolo: string, nota?: string,
+   *   cavaliere: { nome: string, titolo?: string, salute: {cur:number,max:number}, forza: {cur:number,max:number},
+   *     volonta: {cur:number,max:number}, equip: Object<string,string|null>, cavallo?: string|null },
+   *   nemico: { nome: string, tipo: string, categoria?: string, numerosita?: string, descr?: string, pericolo?: number },
+   *   round: number, roundMax: number, minuti: number, slancio: number, soglia: number,
+   *   cronaca: { testo: string, segno?: 'piu'|'meno'|'' }[],
+   *   esito?: { titolo: string, testo?: string, segno?: 'piu'|'meno'|'' },
+   *   opzioni: { testo: string, nota?: string, disponibile?: boolean, scegli: () => void }[] }} v
+   */
+  function mostra(v) {
+    const nuova = !el;
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'combattimento';
+      el.innerHTML = '<div class="contenuto"></div>';
+      document.body.appendChild(el);
+      stacca = sfondoSvg(el, (w, h) => cornice(w, h, semeDaTesto(v.titolo), { arco: 260 }).svg);
+    }
+    const c = el.querySelector('.contenuto');
+    const k = v.cavaliere, n = v.nemico;
+    const eq = Object.entries(k.equip ?? {}).filter(([, x]) => x).map(([, x]) => x);
+    if (k.cavallo) eq.push(k.cavallo);
+    // Slancio come tiro alla fune: il nodo va verso chi sta vincendo (a sinistra il cavaliere). Scala fino a ±3 soglie.
+    const S = Math.max(1, v.soglia), lim = S * 3;
+    const pos = 50 - Math.max(-lim, Math.min(lim, v.slancio)) / lim * 50;
+    const tacca = (x) => `<i class="tacca" style="left:${50 - x / lim * 50}%"></i>`;
+    const dice = v.slancio >= S ? 'sei in vantaggio' : v.slancio <= -S ? 'sei in svantaggio' : v.slancio > 0 ? 'guadagni terreno'
+      : v.slancio < 0 ? 'cedi terreno' : 'nessuno prevale';
+    const pericolo = Math.max(1, Math.min(5, v.nemico.pericolo ?? 3));
+    scelte = v.opzioni.filter((o) => o.disponibile !== false);
+    let num = 0;
+    c.innerHTML = `<div class="titolo">${_esc(v.titolo)}</div>`
+      + (v.nota ? `<div class="nota">${_esc(v.nota)}</div>` : '')
+      + '<div class="colonne">'
+      + `<section class="lato cavaliere">${sagomaCavaliere(k.equip)}<div class="nome">${_esc(k.nome)}</div>`
+      + `<div class="sotto">${_esc(k.titolo ?? '')}</div>`
+      + _barra('Salute', k.salute, 'salute') + _barra('Forza', k.forza) + _barra('Volontà', k.volonta)
+      + `<div class="equip">${eq.length ? eq.map((x) => `<span>${_esc(x)}</span>`).join('') : '<span class="vuoto">a mani nude</span>'}</div></section>`
+      + '<section class="centro">'
+      + `<div class="round">${v.round ? `Round ${v.round} di ${v.roundMax}` : `Fino a ${v.roundMax} Round`} · ${v.minuti} minuti</div>`
+      + `<div class="slancio"><div class="fune">${tacca(S)}${tacca(-S)}<b style="left:${pos.toFixed(1)}%"></b></div>`
+      + `<div class="ai-lati"><span>tu</span><span>Slancio ${v.slancio > 0 ? '+' : ''}${v.slancio}: ${dice}</span><span>${_esc(n.nome)}</span></div></div>`
+      + (v.esito ? `<div class="esito ${v.esito.segno ?? ''}"><b>${_esc(v.esito.titolo)}</b>${v.esito.testo ? `<span>${_esc(v.esito.testo)}</span>` : ''}</div>` : '')
+      + `<div class="scelte">${v.opzioni.map((o, i) => {
+        const ok = o.disponibile !== false;
+        return `<button type="button" data-i="${i}"${ok ? '' : ' disabled'}><span class="n">${ok ? ++num : '·'}</span>`
+          + `<span>${_esc(o.testo)}${o.nota ? ` <span class="req">${_esc(o.nota)}</span>` : ''}</span></button>`;
+      }).join('')}</div></section>`
+      + `<section class="lato nemico">${sagomaNemico(n)}<div class="nome">${_esc(n.nome)}</div>`
+      + `<div class="sotto">${'◆'.repeat(pericolo)}${'◇'.repeat(5 - pericolo)} pericolo</div>`
+      + (n.descr ? `<div class="descr">${_esc(n.descr)}</div>` : '') + '</section>'
+      + '</div>'
+      + `<div class="cronaca">${v.cronaca.length ? v.cronaca.map((r) => `<div class="${r.segno ?? ''}">${_esc(r.testo)}</div>`).join('')
+        : '<div class="vuota">Vi fronteggiate. Nessuno ha ancora colpito.</div>'}</div>`;
+    c.querySelectorAll('.scelte button').forEach((b) => b.addEventListener('click', () => v.opzioni[+b.dataset.i].scegli()));
+    const cr = c.querySelector('.cronaca');
+    cr.scrollTop = cr.scrollHeight;
+    if (nuova) opzioni.onApri?.();
+  }
+  /** Tasti mentre il riquadro è aperto: true se il tasto è stato usato (non si esce con Esc: lo scontro va chiuso). */
+  function tasto(e) {
+    if (!el) return false;
+    const m = /^(Digit|Numpad)([1-9])$/.exec(e.code);
+    if (m) { scelte[+m[2] - 1]?.scegli(); return true; }
+    if (['Enter', 'NumpadEnter', 'Space'].includes(e.code)) { e.preventDefault?.(); scelte[0]?.scegli(); return true; }
+    return true;
+  }
+  return { mostra, chiudi, tasto, get aperto() { return !!el; } };
+}
+
+/**
+ * Schermata di morte (G1 passo 4): il velo scuro su tutto e una pergamena con il racconto della fine e i pulsanti.
+ * @param {{ titolo: string, testo: string, righe?: string[], opzioni: { testo: string, scegli: () => void }[] }} c
+ * @returns {{ chiudi: () => void }}
+ */
+export function mostraMorte(c) {
+  document.querySelector('.schermata-morte')?.remove();
+  const el = document.createElement('div');
+  el.className = 'schermata-morte';
+  el.innerHTML = '<div class="foglio-morte"><div class="contenuto">'
+    + `<div class="croce">✠</div><div class="titolo">${_esc(c.titolo)}</div><div class="fregio"></div>`
+    + `<div class="testo">${_esc(c.testo)}</div>`
+    + (c.righe?.length ? `<div class="righe">${c.righe.map((r) => `<div>${_esc(r)}</div>`).join('')}</div>` : '')
+    + `<div class="scelte">${c.opzioni.map((o, i) => `<button type="button" data-i="${i}">${_esc(o.testo)}</button>`).join('')}</div>`
+    + '</div></div>';
+  document.body.appendChild(el);
+  const foglio = el.querySelector('.foglio-morte');
+  const stacca = sfondoSvg(foglio, (w, h) => cornice(w, h, semeDaTesto(c.titolo)).svg);
+  el.querySelectorAll('.scelte button').forEach((b) => b.addEventListener('click', () => c.opzioni[+b.dataset.i].scegli()));
+  return { chiudi: () => { stacca(); el.remove(); } };
+}

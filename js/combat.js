@@ -1,10 +1,10 @@
 // Knight Dawn — Sistema combattimento (motore)
-// Scontro a Round interattivi. Un Round di combattimento = un Passo del
-// calendario (~3 ore in-fiction): nessuna sotto-unità tattica, stessa
-// griglia temporale del viaggio. Ogni Round avanza Calendar di 1 Passo.
-// Zero UI, zero scelte forzate qui dentro. La UI (scena, scelte del
-// giocatore, Carta del cronista) sarà innestata in scenes.js/game.js.
-// Il catalogo nemici sta in js/data/enemies.js (sottofase successiva).
+// Scontro a Round interattivi. Ogni Round consumato avanza il calendario dei
+// suoi MINUTI di gioco (docs/COMBAT.md §2, rivisto con l'utente a novembre 2026:
+// prima valeva un Passo, ~3 ore), secondo il tipo di scontro (minutiRound).
+// Zero UI qui dentro: il riquadro di combattimento sta in js/3d/interfaccia.js
+// (creaCombattimento), il collegamento agli eventi in js/3d/main.js (G1 passo 4).
+// Il catalogo nemici sta in js/data/enemies.js.
 //
 // Design: docs/COMBAT.md
 //
@@ -20,7 +20,9 @@
 //     knight,           // ref a Knight (default = singleton globale)
 //     round,            // numero Round corrente (1-based)
 //     roundMax,         // limite Round prima dell'esito automatico
+//     minutiRound,      // minuti di gioco per Round (minutiRound(enemy))
 //     slancio,          // ±N: vantaggio cumulato del cavaliere
+//     ultimo,           // ultimo Round: { scelta, delta, danno } (per la UI)
 //     usate,            // set di azioni contestuali già usate (es. 'parlamento')
 //     cronaca,          // [string] log narrativo dei Round
 //     finito,           // bool
@@ -51,7 +53,9 @@ const Combat = {
     return {
       enemy, terrain, knight,
       round: 0, roundMax,
+      minutiRound: opts.minutiRound || this.minutiRound(enemy),
       slancio: 0,
+      ultimo: null,
       usate: new Set(),
       cronaca: [],
       finito: false, esito: null,
@@ -84,6 +88,15 @@ const Combat = {
     return lo + Math.floor(Math.random() * (hi - lo + 1));
   },
 
+  // Minuti di gioco per Round (docs/COMBAT.md §2) [DA BILANCIARE]: dal nemico
+  // (enemy.minutiRound) o, se non li dice, dalla sua durata in Round:
+  //   1 Round → 2 · fino a 3 → 3 · fino a 6 → 4 · oltre → 5.
+  minutiRound(enemy) {
+    if (enemy && enemy.minutiRound) return enemy.minutiRound;
+    const hi = (enemy && (enemy.roundMax | 0)) || 1;
+    return hi <= 1 ? 2 : hi <= 3 ? 3 : hi <= 6 ? 4 : 5;
+  },
+
   // ─── Passo del giocatore ────────────────────────────────────────────────
   // choice ∈ { 'continua', 'fuga', 'resa', 'colpoDisperato',
   //            'parlamento', 'oggetto', ... } — sblocco dipende da contesto
@@ -91,6 +104,15 @@ const Combat = {
   step(state, choice) {
     if (state.finito) return { state, outcome: state.esito };
     choice = choice || 'continua';
+    state.ultimo = { scelta: choice, delta: 0, danno: 0 };
+    const salute0 = state.knight.salute.cur, slancio0 = state.slancio;
+    const res = this._esegui(state, choice);
+    state.ultimo.delta = state.slancio - slancio0;
+    state.ultimo.danno = Math.max(0, Math.round(salute0 - state.knight.salute.cur));
+    return res;
+  },
+
+  _esegui(state, choice) {
 
     if (choice === 'fuga')        return this._tryFuga(state);
     if (choice === 'resa')        return this._tryResa(state);
@@ -101,20 +123,22 @@ const Combat = {
     return this._roundAuto(state);
   },
 
-  // Avanza Calendar di 1 Passo per ogni Round consumato (auto, fuga, resa,
-  // parlamento, colpo disperato). Spunta anche le scadenze attive, per
-  // coerenza col viaggio (vedi GDD §3 "Modello del tempo"): ogni Passo
-  // reale che scatta deve ticchettare le deadlines.
-  // Sicuro se Calendar/Events non sono disponibili (es. test in Node).
-  _avanzaCalendar() {
-    if (typeof Calendar !== 'undefined' && Calendar.avanza) Calendar.avanza(1);
+  // Avanza il calendario dei minuti di un Round per ogni Round consumato (auto,
+  // fuga, resa, parlamento, colpo disperato). Spunta anche le scadenze attive
+  // (GDD §3 "Modello del tempo"): scattano solo se il Passo scatta davvero.
+  // Sicuro se Calendar/Events non sono disponibili.
+  _avanzaCalendar(state) {
+    if (typeof Calendar !== 'undefined') {
+      if (Calendar.avanzaMinuti) Calendar.avanzaMinuti(state.minutiRound || 3);
+      else if (Calendar.avanza) Calendar.avanza(1);
+    }
     if (typeof Events !== 'undefined' && Events.tickDeadlines) Events.tickDeadlines();
   },
 
   // Avanza il Round automatico: calcola delta Slancio + narra.
   _roundAuto(state) {
     state.round++;
-    this._avanzaCalendar();
+    this._avanzaCalendar(state);
     const delta = this._formulaRound(state);
     state.slancio += delta;
     state.cronaca.push(this._narraRound(state, delta));
@@ -199,7 +223,7 @@ const Combat = {
   // ─── Azioni speciali ────────────────────────────────────────────────────
   _tryFuga(state) {
     state.round++;
-    this._avanzaCalendar();
+    this._avanzaCalendar(state);
     const k = state.knight;
     const chance = 0.35 + (k.volonta.cur / k.volonta.max) * 0.35
                        + this._terrenoBonus(state.terrain, state.enemy) * 0.05;
@@ -214,7 +238,7 @@ const Combat = {
 
   _tryResa(state) {
     state.round++;
-    this._avanzaCalendar();
+    this._avanzaCalendar(state);
     const e = state.enemy;
     state.cronaca.push(`${state.round}. Getti le armi.`);
     if (e.accettaResa === false) {
@@ -230,7 +254,7 @@ const Combat = {
     if (state.usate.has('parlamento')) return this._roundAuto(state);
     state.usate.add('parlamento');
     state.round++;
-    this._avanzaCalendar();
+    this._avanzaCalendar(state);
     const e = state.enemy;
     const k = state.knight;
     if (e.tipo !== 'umano' || k.onore < 2) {
@@ -247,7 +271,7 @@ const Combat = {
 
   _colpoDisperato(state) {
     state.round++;
-    this._avanzaCalendar();
+    this._avanzaCalendar(state);
     state.knight.danneggia(8, 'salute');
     if (state.knight.salute.cur <= 0) {
       state.cronaca.push(`${state.round}. Tutto in un colpo: cadi con lui.`);
@@ -280,6 +304,37 @@ const Combat = {
     state.finito = true;
     state.esito  = esito;
     return { state, outcome: esito };
+  },
+
+  // ─── Dopo lo scontro (G1 passo 4, decisioni dell'utente, docs/EARLY_GAME.md §7) ─
+  // Durante la Veglia non si muore: a Salute 0 il garzone sviene e si risveglia
+  // nel borgo, curato, con qualche ora persa e senza l'oro che aveva addosso.
+  // Dopo l'investitura la morte è vera (il motore 3D mostra la schermata di morte).
+  // Valori [DA BILANCIARE].
+  SVENIMENTO: { minuti: 360, salute: 40 },
+
+  /** Esito che conta per il gioco: 'morte' diventa 'svenuto' se `veglia`. */
+  esitoFinale(esito, { veglia = false } = {}) {
+    return (esito === 'morte' && veglia) ? 'svenuto' : esito;
+  },
+
+  /**
+   * Svenimento della Veglia: passano SVENIMENTO.minuti (con il recupero di Forza
+   * da fermi), la Salute torna almeno a SVENIMENTO.salute, l'oro addosso è perso.
+   * Ritorna { oroPerso, minuti }. Non sposta il cavaliere (lo fa il motore 3D).
+   */
+  svieni(knight) {
+    const k = knight || Knight;
+    const S = this.SVENIMENTO;
+    const oroPerso = k.oro;
+    k.oro = 0;
+    if (typeof Calendar !== 'undefined' && Calendar.avanzaMinuti) {
+      Calendar.avanzaMinuti(S.minuti);
+      if (typeof Events !== 'undefined' && Events.tickDeadlines) Events.tickDeadlines();
+    }
+    if (k.riposaPassi && typeof CALENDAR !== 'undefined') k.riposaPassi(S.minuti * 60 / CALENDAR.SECONDI_PER_PASSO);
+    k.salute.cur = Math.min(k.salute.max, Math.max(k.salute.cur, S.salute));
+    return { oroPerso, minuti: S.minuti };
   },
 
   // ─── Helper di test (console) ───────────────────────────────────────────
