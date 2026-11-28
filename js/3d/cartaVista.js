@@ -299,6 +299,130 @@ export function disegnaRilievo(carta, pixel = new Uint8ClampedArray(carta.cols *
   return pixel;
 }
 
+// ─── Nebbia della conoscenza a pergamena (Storia) ────────────────────────────────────────────────────────────────
+// Richiesta dell'utente (novembre 2026): la nebbia non deve far capire dove finisce il mondo (continua uguale oltre il
+// confine) e ha l'aspetto di una pergamena antica: più scura, a macchie e variazioni di tono, bordi della parte nota
+// sfumati; l'intravisto resta distinguibile da ignoto e noto. Il motivo è una tessera generata una volta (rumore a più
+// ottave, periodico: si ripete senza giunture), ripetuta a tre scale ancorate alle coordinate del mondo (non scivola
+// muovendosi). Chi la usa la disegna solo quando rifà il proprio fondo, non a ogni fotogramma.
+/** Opacità della nebbia per stato della cella (0 ignoto, 1 intravisto, 2 percorso) e celle di bordo attorno alla
+ *  maschera (ignoto pieno: lo sfumato non schiarisce il confine del mondo). */
+export const NEBBIA = { alfa: [255, 150, 0], bordo: 16, tessera: 256, scale: [[100000, 1], [25000, 0.3], [3000, 0.16]],
+  scuro: [96, 72, 44], medio: [138, 110, 72], chiaro: [176, 148, 102] };
+let _tessera = null;
+function tesseraPergamena() {
+  if (_tessera) return _tessera;
+  const N = NEBBIA.tessera, c = document.createElement('canvas');
+  c.width = c.height = N;
+  const g = c.getContext('2d'), img = g.createImageData(N, N), px = img.data;
+  let seme = 1234567;
+  const caso = () => ((seme = (seme * 1103515245 + 12345) >>> 0) / 4294967296);
+  // Rumore di valore periodico: griglie di lato 4…64 che dividono N, indici avvolti.
+  const ottava = (L) => {
+    const v = new Float32Array(L * L);
+    for (let i = 0; i < v.length; i++) v[i] = caso();
+    return (x, y) => {
+      const fx = x * L / N, fy = y * L / N, i0 = Math.floor(fx), j0 = Math.floor(fy);
+      const u = fx - i0, w = fy - j0, su = u * u * (3 - 2 * u), sw = w * w * (3 - 2 * w);
+      const a = v[(j0 % L) * L + (i0 % L)], b = v[(j0 % L) * L + ((i0 + 1) % L)];
+      const c2 = v[((j0 + 1) % L) * L + (i0 % L)], d = v[((j0 + 1) % L) * L + ((i0 + 1) % L)];
+      return (a + (b - a) * su) * (1 - sw) + (c2 + (d - c2) * su) * sw;
+    };
+  };
+  const tono = [4, 8, 16, 32, 64].map(ottava), macchie = [4, 8, 16].map(ottava);
+  const { scuro, medio, chiaro } = NEBBIA;
+  for (let y = 0; y < N; y++) {
+    for (let x = 0; x < N; x++) {
+      let t = 0, m = 0, k = 0.5;
+      for (const f of tono) { t += f(x, y) * k; k *= 0.5; }
+      t /= 0.97;
+      k = 0.5; for (const f of macchie) { m += f(x + 37, y + 91) * k; k *= 0.5; }
+      m /= 0.875;
+      const lum = Math.min(1, Math.max(0, (t - 0.25) * 1.6));
+      let col = medio.map((v, i) => v + (lum < 0.5 ? (scuro[i] - v) * (1 - 2 * lum) * 0.6 : (chiaro[i] - v) * (2 * lum - 1) * 0.6));
+      const macchia = smussa(0.58, 0.72, m);                 // macchie scure, come d'umido o di fumo
+      col = col.map((v, i) => v + (scuro[i] * 0.85 - v) * macchia * 0.55);
+      const p = (y * N + x) * 4;
+      px[p] = col[0]; px[p + 1] = col[1]; px[p + 2] = col[2]; px[p + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  return (_tessera = c);
+}
+const smussa = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const _strato = typeof document !== 'undefined' ? document.createElement('canvas') : null;
+const _alfa = typeof document !== 'undefined' ? document.createElement('canvas') : null;
+
+/**
+ * Maschera della nebbia per la Conoscenza `k`: un pixel per cella con alfa = NEBBIA.alfa[stato] e un bordo di
+ * NEBBIA.bordo celle di ignoto attorno. Da `stato` (oggetto del chiamante) si riusa e si aggiorna solo ciò che serve:
+ * `rettangolo` (x0, y0, x1, y1 in celle) o tutto.
+ * @returns {HTMLCanvasElement}
+ */
+export function mascheraNebbia(k, stato, rettangolo = null) {
+  const B = NEBBIA.bordo, w = k.w + 2 * B, h = k.h + 2 * B;
+  let tutto = false;
+  if (!stato.canvas || stato.gen !== k.generazione || stato.canvas.width !== w || stato.canvas.height !== h) {
+    stato.canvas = document.createElement('canvas');
+    stato.canvas.width = w; stato.canvas.height = h;
+    stato.img = stato.canvas.getContext('2d').createImageData(w, h);
+    stato.img.data.fill(255);                             // nero opaco: bordo e ignoto
+    stato.gen = k.generazione;
+    tutto = true;
+  }
+  const r = tutto || !rettangolo ? { x0: 0, y0: 0, x1: k.w - 1, y1: k.h - 1 } : rettangolo;
+  const px = stato.img.data;
+  for (let j = r.y0; j <= r.y1; j++) {
+    for (let i = r.x0; i <= r.x1; i++) px[((j + B) * w + i + B) * 4 + 3] = NEBBIA.alfa[k.dati[j * k.w + i]] ?? 255;
+  }
+  if (tutto) stato.canvas.getContext('2d').putImageData(stato.img, 0, 0);
+  else stato.canvas.getContext('2d').putImageData(stato.img, 0, 0, r.x0 + B, r.y0 + B, r.x1 - r.x0 + 1, r.y1 - r.y0 + 1);
+  return stato.canvas;
+}
+
+/**
+ * Disegna la nebbia a pergamena su `ctx` (W × H pixel del dispositivo, trasformazione azzerata alla fine): `a` pixel
+ * per metro, (tx, ty) pixel dell'origine del mondo; `maschera` da mascheraNebbia con celle di `cellaM` metri. Fuori
+ * dalla maschera (oltre il confine) nebbia piena e uguale: il confine del mondo non si vede. `zona` (facoltativa,
+ * { x, y, w, h } in pixel): si lavora solo lì (la minimappa rifà solo il rettangolo scoperto camminando).
+ */
+export function disegnaNebbia(ctx, W, H, a, tx, ty, maschera, cellaM, zona = null) {
+  for (const c of [_strato, _alfa]) if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+  const Z = zona ?? { x: 0, y: 0, w: W, h: H };
+  const ritaglia = (g) => { g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.beginPath(); g.rect(Z.x, Z.y, Z.w, Z.h); g.clip(); };
+  // Alfa: opaca ovunque, poi la maschera al suo posto (niente filtro di sfocatura: costava ~60 ms a fondo in software).
+  const ga = _alfa.getContext('2d');
+  ritaglia(ga);
+  ga.globalCompositeOperation = 'source-over';
+  ga.fillStyle = '#000'; ga.fillRect(Z.x, Z.y, Z.w, Z.h);
+  const B = NEBBIA.bordo, k = a * cellaM;                 // pixel per cella
+  ga.setTransform(k, 0, 0, k, tx - B * k, ty - B * k);
+  ga.globalCompositeOperation = 'destination-out';
+  ga.fillRect(0, 0, maschera.width, maschera.height);
+  ga.globalCompositeOperation = 'source-over';
+  ga.imageSmoothingEnabled = true;                        // bordi sfumati: interpolazione tra celle di 100 m
+  ga.drawImage(maschera, 0, 0);
+  ga.restore();
+  // Pergamena: la tessera a tre scale (m per tessera), ancorata al mondo.
+  const gs = _strato.getContext('2d'), tessera = tesseraPergamena(), N = NEBBIA.tessera;
+  ritaglia(gs);
+  gs.globalCompositeOperation = 'source-over';
+  for (const [metri, opacita] of NEBBIA.scale) {
+    const motivo = gs.createPattern(tessera, 'repeat'), q = a * metri / N;
+    motivo.setTransform(new DOMMatrix([q, 0, 0, q, tx, ty]));
+    gs.globalAlpha = opacita;
+    gs.fillStyle = motivo;
+    gs.fillRect(Z.x, Z.y, Z.w, Z.h);
+  }
+  gs.globalAlpha = 1;
+  gs.globalCompositeOperation = 'destination-in';
+  gs.drawImage(_alfa, 0, 0);
+  gs.restore();
+  ritaglia(ctx);
+  ctx.drawImage(_strato, 0, 0);
+  ctx.restore();
+}
+
 const fmt = (n, d = 0) => n.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d });
 
 /**
@@ -481,29 +605,12 @@ export function createCartaVista(contenitore, opzioni = {}) {
   // mappa e legenda: niente strumenti di sviluppo, nebbia sopra l'ignoto, luoghi solo se conosciuti, niente clic che
   // sposta. Oltre il confine del mondo, in entrambe le modalità, niente terreno «a specchio».
   let gioco = null;                              // la Conoscenza in modalità di gioco, o null
-  const NEBBIA = { colore: [196, 172, 124], alfa: [255, 150, 0], oltre: 'rgb(122, 100, 66)' };
-  let maschera = null, mImg = null, mGen = -1, mVer = -1;
-  /** Strato della nebbia: una cella della Conoscenza (100 m) per pixel; si rifà solo il rettangolo cambiato. */
+  const statoMaschera = {};                       // maschera della nebbia (mascheraNebbia), rifatta a ogni versione
+  let maschera = null, mVer = -1;
   function preparaMaschera(k) {
-    if (!maschera || mGen !== k.generazione || maschera.width !== k.w || maschera.height !== k.h) {
-      maschera = document.createElement('canvas');
-      maschera.width = k.w; maschera.height = k.h;
-      mImg = maschera.getContext('2d').createImageData(k.w, k.h);
-      mGen = k.generazione; mVer = -1;
-      const px = mImg.data;                       // tutto da rifare: la minimappa può aver già preso il rettangolo
-      for (let c = 0; c < k.w * k.h; c++) {
-        const p = c * 4;
-        px[p] = NEBBIA.colore[0]; px[p + 1] = NEBBIA.colore[1]; px[p + 2] = NEBBIA.colore[2]; px[p + 3] = NEBBIA.alfa[k.dati[c]] ?? 0;
-      }
-      maschera.getContext('2d').putImageData(mImg, 0, 0);
-      mVer = k.versione;
-      return;
-    }
-    if (mVer === k.versione) return;
-    mVer = k.versione;                           // la minimappa consuma il rettangolo cambiato: qui si rifà tutto
-    const px = mImg.data;
-    for (let c = 0; c < k.w * k.h; c++) px[c * 4 + 3] = NEBBIA.alfa[k.dati[c]] ?? 0;
-    maschera.getContext('2d').putImageData(mImg, 0, 0);
+    if (maschera && mVer === k.versione && statoMaschera.gen === k.generazione) return;
+    maschera = mascheraNebbia(k, statoMaschera);       // la minimappa consuma il rettangolo cambiato: qui si rifà tutto
+    mVer = k.versione;
   }
   /** Il punto (km della Carta) è conosciuto? Sempre vero fuori dalla modalità di gioco. */
   const noto = (x, y) => !gioco || gioco.livello(x * carta.cella, y * carta.cella) >= 1;
@@ -861,18 +968,18 @@ export function createCartaVista(contenitore, opzioni = {}) {
     }
     // Nebbia della conoscenza (modalità di gioco) e, sempre, niente terreno oltre il confine.
     if (gioco) {
+      // Storia: nebbia a pergamena, anche oltre il confine (nessuna linea: il confine non si vede).
       preparaMaschera(gioco);
-      ctx.imageSmoothingEnabled = true;
-      ctx.drawImage(maschera, 0, 0, carta.cols, carta.rows);
-    }
-    {
+      disegnaNebbia(ctx, larghezza, altezza, s / carta.cella, tx, ty, maschera, gioco.CELLA);
+      ctx.setTransform(s, 0, 0, s, tx, ty);
+    } else {
       const m = Math.max(carta.cols, carta.rows) * 4;
-      ctx.fillStyle = gioco ? NEBBIA.oltre : '#1a0e04';
+      ctx.fillStyle = '#1a0e04';
       ctx.beginPath();
       ctx.rect(-m, -m, carta.cols + 2 * m, carta.rows + 2 * m);
       ctx.rect(0, 0, carta.cols, carta.rows);
       ctx.fill('evenodd');
-      ctx.strokeStyle = gioco ? 'rgba(110, 76, 36, 0.8)' : 'rgba(216, 178, 90, 0.6)';
+      ctx.strokeStyle = 'rgba(216, 178, 90, 0.6)';
       ctx.lineWidth = 1.5 * dpr / s;
       ctx.strokeRect(0, 0, carta.cols, carta.rows);
     }
@@ -1232,7 +1339,7 @@ export function createCartaVista(contenitore, opzioni = {}) {
     }
     const [xf, yf] = inKm(e);
     const x = Math.floor(xf), y = Math.floor(yf);
-    if (x < 0 || y < 0 || x >= carta.cols || y >= carta.rows) { elCursore.textContent = gioco ? 'oltre il confine del mondo' : '\u00a0'; return; }
+    if (x < 0 || y < 0 || x >= carta.cols || y >= carta.rows) { elCursore.textContent = gioco ? 'terre ignote' : '\u00a0'; return; }
     const i = y * carta.cols + x;
     if (gioco) {                                  // solo ciò che il cavaliere sa: niente numeri del generatore
       if (!noto(xf, yf)) { elCursore.textContent = 'terre ignote'; return; }

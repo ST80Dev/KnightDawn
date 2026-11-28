@@ -19,6 +19,7 @@ import { ACQUA } from '../mondo/carta.js';
 import {
   disegnaRilievo, coloreNaturale, segnoSito, tinta, LUCE, LAGO, MARE_BASSO, MARE_FONDO, COLORE_FIUME,
   COLORE_STRADA, COLORE_SENTIERO, STILE_STRADE, STRADE_ZOOM, COLORE_CAVALIERE, CLASSI_ROCCA, TIPI_LUOGO,
+  mascheraNebbia, disegnaNebbia,
 } from './cartaVista.js';
 
 export const MINIMAPPA = {
@@ -147,29 +148,21 @@ export function creaMinimappa(contenitore, opzioni) {
     return piatta;
   }
 
-  // ─── Nebbia della conoscenza: uno strato di pergamena, una cella (100 m) per pixel ───
-  // Ignoto coperto del tutto, intravisto sbiadito, percorso libero. Si rifà solo il rettangolo cambiato.
-  const NEBBIA = { colore: [196, 172, 124], alfa: [255, 150, 0] };
-  let maschera = null, mImg = null, mGen = -1, mVer = -1;
+  // ─── Nebbia della conoscenza (Storia): maschera comune con la Carta (cartaVista.js, mascheraNebbia), una cella
+  // (100 m) per pixel; si rifà solo il rettangolo cambiato. La pergamena si disegna nel fondo (disegnaNebbia).
+  const statoMaschera = {};
+  let maschera = null, mVer = -1, mGen = -1;
+  let nebbiaZona = null;                       // celle scoperte dall'ultimo fondo ({x0,y0,x1,y1}), null = tutto
   function preparaMaschera(k) {
-    if (!maschera || mGen !== k.generazione || maschera.width !== k.w || maschera.height !== k.h) {
-      maschera = document.createElement('canvas');
-      maschera.width = k.w; maschera.height = k.h;
-      mImg = maschera.getContext('2d').createImageData(k.w, k.h);
-      mGen = k.generazione;
-    }
-    if (mVer === k.versione) return;
-    mVer = k.versione;
+    if (maschera && mGen === k.generazione && mVer === k.versione) return;
+    const nuova = !maschera || mGen !== k.generazione;
+    mVer = k.versione; mGen = k.generazione;
     const r = k.prendiSporco();
-    if (!r) return;
-    const px = mImg.data, [R, G, B] = NEBBIA.colore;
-    for (let j = r.y0; j <= r.y1; j++) {
-      for (let i = r.x0; i <= r.x1; i++) {
-        const c = j * k.w + i, p = c * 4;
-        px[p] = R; px[p + 1] = G; px[p + 2] = B; px[p + 3] = NEBBIA.alfa[k.dati[c]] ?? 0;
-      }
-    }
-    maschera.getContext('2d').putImageData(mImg, 0, 0, r.x0, r.y0, r.x1 - r.x0 + 1, r.y1 - r.y0 + 1);
+    if (!nuova && !r) return;
+    maschera = mascheraNebbia(k, statoMaschera, nuova ? null : r);
+    if (nuova) fondoSporco = true;
+    else if (r) nebbiaZona = nebbiaZona ? { x0: Math.min(nebbiaZona.x0, r.x0), y0: Math.min(nebbiaZona.y0, r.y0),
+      x1: Math.max(nebbiaZona.x1, r.x1), y1: Math.max(nebbiaZona.y1, r.y1) } : { ...r };
     sporca = nebbiaNuova = true;
   }
 
@@ -309,12 +302,15 @@ export function creaMinimappa(contenitore, opzioni) {
    * Il fondo: tutto ciò che non si muove col cavaliere, attorno a (pos), con `margine` di lato in più per parte, in
    * pixel del dispositivo alla scala attuale. Linee fuori dal fondo scartate dal loro riquadro, punti semplificati.
    */
-  function rifaiFondo(W, s) {
+  function rifaiFondo(W, s, zona = null) {
     const t0 = performance.now();
     const M = Math.round(W * MINIMAPPA.fondo.margine), F = W + 2 * M;
     if (fondo.width !== F) { fondo.width = fondo.height = F; }
     const g = fctx, c = cartaFatta, C = c.cella, Wm = c.cols * C, Hm = c.rows * C;
-    const fx = pos.x, fz = pos.z, tx = F / 2 - fx * s, ty = F / 2 - fz * s;
+    // Con `zona` (pixel del fondo) si rifà solo quel rettangolo, con il fondo dove sta (nebbia scoperta camminando).
+    const fx = zona ? fondoInfo.x : pos.x, fz = zona ? fondoInfo.z : pos.z, tx = F / 2 - fx * s, ty = F / 2 - fz * s;
+    g.save();
+    if (zona) { g.beginPath(); g.rect(zona.x, zona.y, zona.w, zona.h); g.clip(); }
     const v = lavoro ?? corrente, det = v?.det ?? dettaglio();
     // Rettangolo del fondo in metri (per scartare)
     const r0x = -tx / s, r0z = -ty / s, r1x = (F - tx) / s, r1z = (F - ty) / s;
@@ -359,23 +355,21 @@ export function creaMinimappa(contenitore, opzioni) {
       }
       g.setLineDash([]);
     }
-    // Nebbia della conoscenza (Storia): sopra rilievo, fiumi e strade, sotto i segni.
+    // Nebbia della conoscenza (Storia): pergamena sopra rilievo, fiumi e strade, sotto i segni; continua uguale oltre
+    // il confine del mondo, che non si vede (richiesta dell'utente).
     const k = opzioni.conoscenza?.() ?? null;
     if (k && maschera) {
-      g.setTransform(s * k.CELLA, 0, 0, s * k.CELLA, tx, ty);
-      g.drawImage(maschera, 0, 0);
+      disegnaNebbia(g, F, F, s, tx, ty, maschera, k.CELLA, zona);
       g.setTransform(s, 0, 0, s, tx, ty);
-    }
-    // Oltre il confine del mondo niente terreno «a specchio»: nebbia piena in Storia, fondo scuro in Libera,
-    // e una linea sul confine (richiesta dell'utente: capire la forma del mondo e dove si è).
-    {
+    } else {
+      // Libera: oltre il confine niente terreno «a specchio», fondo scuro e una linea sul confine (per lo sviluppo).
       const m = F / s + Math.max(Wm, Hm);
-      g.fillStyle = k ? 'rgb(122, 100, 66)' : '#1a0e04';     // più scuro della nebbia: si distingue dall'ignoto
+      g.fillStyle = '#1a0e04';
       g.beginPath();                                          // un solo tracciato pari-dispari: niente giunture
       g.rect(-m, -m, Wm + 2 * m, Hm + 2 * m);
       g.rect(0, 0, Wm, Hm);
       g.fill('evenodd');
-      g.strokeStyle = k ? 'rgba(110, 76, 36, 0.8)' : 'rgba(216, 178, 90, 0.7)';
+      g.strokeStyle = 'rgba(216, 178, 90, 0.7)';
       g.lineWidth = 1.5 * dpr / s;
       g.strokeRect(0, 0, Wm, Hm);
     }
@@ -417,8 +411,10 @@ export function creaMinimappa(contenitore, opzioni) {
         if (grande) { g.fillStyle = '#f4ead0'; g.fillText(`${lettera}${l.id + 1}`, x + m + 3 * dpr, y); }
       }
     }
+    g.restore();
     fondoInfo = { x: fx, z: fz, s, F, M };
     fondoSporco = progresso = nebbiaNuova = false;
+    nebbiaZona = null;
     misure.fondi++;
     misure.msFondo = performance.now() - t0;
   }
@@ -431,9 +427,20 @@ export function creaMinimappa(contenitore, opzioni) {
     const fuoriMargine = !fi || fi.s !== s || fi.F !== W + 2 * Math.round(W * MINIMAPPA.fondo.margine)
       || Math.max(Math.abs(pos.x - fi.x), Math.abs(pos.z - fi.z)) * s > fi.M;
     const passato = now - tFondo;
-    if (fuoriMargine || fondoSporco || (progresso && passato >= MINIMAPPA.fondo.progressoMs)
-      || (nebbiaNuova && passato >= MINIMAPPA.fondo.nebbiaMs)) {
+    if (fuoriMargine || fondoSporco || (progresso && passato >= MINIMAPPA.fondo.progressoMs)) {
       rifaiFondo(W, s);
+      tFondo = now;
+    } else if (nebbiaNuova && passato >= MINIMAPPA.fondo.nebbiaMs) {
+      // Solo la nebbia è cambiata: si rifà il rettangolo scoperto (celle → pixel del fondo, con un pixel di bordo).
+      const k = opzioni.conoscenza?.(), z = nebbiaZona, fi2 = fondoInfo;
+      if (k && z) {
+        const ox = fi2.F / 2 - fi2.x * s, oz = fi2.F / 2 - fi2.z * s;
+        const x0 = Math.floor(z.x0 * k.CELLA * s + ox) - 2, y0 = Math.floor(z.y0 * k.CELLA * s + oz) - 2;
+        const x1 = Math.ceil((z.x1 + 1) * k.CELLA * s + ox) + 2, y1 = Math.ceil((z.y1 + 1) * k.CELLA * s + oz) + 2;
+        const zx = Math.max(0, x0), zy = Math.max(0, y0), zw = Math.min(fi2.F, x1) - zx, zh = Math.min(fi2.F, y1) - zy;
+        if (zw > 0 && zh > 0) rifaiFondo(W, s, { x: zx, y: zy, w: zw, h: zh });
+        else { nebbiaNuova = false; nebbiaZona = null; }
+      } else rifaiFondo(W, s);
       tFondo = now;
     }
     const { x: fx, z: fz, F } = fondoInfo;
@@ -527,11 +534,11 @@ export function creaMinimappa(contenitore, opzioni) {
   canvas.addEventListener('pointermove', (e) => {
     if (!grande || !pos || !cartaFatta) return;
     const p = nelMondo(e), dx = p.x - pos.x, dz = p.z - pos.z, d = Math.hypot(dx, dz);
-    if (p.x < 0 || p.z < 0 || p.x > cartaFatta.cols * cartaFatta.cella || p.z > cartaFatta.rows * cartaFatta.cella) {
-      elPiede.textContent = 'oltre il confine del mondo'; return;
-    }
     const k = opzioni.conoscenza?.();
-    if (k && k.livello(p.x, p.z) < 1) { elPiede.textContent = 'terre ignote · rotella o +/−: zoom'; return; }
+    const fuoriMondo = p.x < 0 || p.z < 0 || p.x > cartaFatta.cols * cartaFatta.cella || p.z > cartaFatta.rows * cartaFatta.cella;
+    // In Storia il confine del mondo non si rivela: oltre è «terre ignote» come l'ignoto.
+    if (k && (fuoriMondo || k.livello(p.x, p.z) < 1)) { elPiede.textContent = 'terre ignote · rotella o +/−: zoom'; return; }
+    if (fuoriMondo) { elPiede.textContent = 'oltre il confine del mondo'; return; }
     const verso = PUNTI[Math.round(((Math.atan2(dx, -dz) * 180 / Math.PI + 360) % 360) / 45) % 8];
     const q = quotaFinale(cartaFatta, p.x, p.z);
     elPiede.textContent = `${d >= 1000 ? `${(d / 1000).toLocaleString('it-IT', { maximumFractionDigits: 1 })} km` : `${Math.round(d)} m`}`
