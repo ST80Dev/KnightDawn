@@ -2945,6 +2945,26 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
 2. **Segue a piedi.** Tracce, distanza, andature animate (passo, trotto, galoppo), sosta e brucare, attesa se bloccato
    (bosco fitto, acqua, pendii), avviso «rimasto indietro», fischio con F, ostacolo per il cavaliere. *Prova:* correre e
    scattare nel bosco, guadare, salire un pendio ripido, fischiare da lontano.
+   **Stato: fatto, da provare dall'utente** (tutto in `js/3d/cavallo3d.js`; in `main.js` solo agganci: `update` con lo
+   stato del cavaliere, F, avviso, tracce spostate al cambio di blocco, riga F3 «cavallo: …»). Tracce: un punto per
+   metro, gli ultimi 80; il cavallo va al punto più vicino più due metri. Entro 45 m, se la linea è libera (terreno,
+   pendenze, ostacoli ogni 1,5 m, ricontrollata 3 volte al secondo), taglia dritto verso un posto a ~4,5 m dal
+   cavaliere, fuori dal cono di ±29° alle sue spalle (la camera) e, se lui cammina, non davanti a lui (si scansa);
+   preferisce la sinistra. Velocità voluta = 0,9 × quella del cavaliere + 1,1 × il distacco, fino a 13 m/s; passo,
+   trotto (da 2,8 m/s) e galoppo (da 10 m/s) con isteresi. Gambe: zoccoli che vanno indietro a terra e tornano avanti
+   sollevati, con lo sfasamento di ogni andatura (passo laterale a 4 tempi, trotto a diagonali, galoppo a 3 tempi);
+   gomito e grassella scorrono di ±0,2 m (spalla e anca che ruotano), il corpo scende solo per gli zoccoli a terra;
+   sobbalzo, dondolo al galoppo, collo che pompa, coda alzata. Pendenze con la curva propria (`pendenzaCavallo`):
+   fino a 15° quasi piena velocità, oltre 28° in salita e 30° in discesa non va, in discesa oltre 12° al più trotto e
+   oltre 20° passo. Non entra in acqua profonda né su pareti (> 48°), ostacoli con due cerchi da 0,45 m; bloccato per
+   2,5 s o oltre 60 m smette di seguire e compare l'avviso; riprende da sé se il cavaliere torna entro 20 m con la linea
+   libera. Fermo da 5 s: a tratti bruca (6–14 s), altrimenti gira testa e collo verso il cavaliere. F: entro 12 m alza
+   la testa; entro 250 m con la linea libera arriva dritto (anche oltre i 60 m); altrimenti ricompare 12–24 m dietro il
+   cavaliere, su un punto libero e fuori dall'inquadratura (prima uno da cui la linea fino a lui è libera). Fermo oltre
+   120 m: animato a metà frequenza. Provato in Node (piano, varco tra i tronchi, fiume, pendio a 35°, fischio) e in
+   headless (pagina senza errori, segue a 5,1 m al trotto dietro un cavaliere a 4,5 m/s).
+   [Ipotesi] da guardare su Pages: il brucare arriva con il muso a ~0,3 m da terra (pezzi rigidi: oltre il collo si
+   stacca dal petto); al galoppo gli zoccoli scivolano un poco (falcata limitata a 0,95 m).
 3. **In sella.** E per montare e smontare, posa del cavaliere seduto, camera, andature con Ctrl e Shift, pendenze,
    collisioni, Forza ×0,7, `Knight.inSella` e `isMounted` corretto. *Prova:* galoppo in pianura e nel bosco (scatti?),
    discesa ripida, cortile della rocca, smontare in un punto stretto; percorso di prova con il cavaliere in sella.
