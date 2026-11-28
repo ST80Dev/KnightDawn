@@ -682,6 +682,8 @@ html, body {
 .schermata-morte { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; background: rgba(6, 3, 1, .82); }
 .schermata-morte .foglio-morte { position: relative; width: min(560px, calc(100vw - 32px)); color: var(--kd-inchiostro);
   font: 18px/1.5 var(--kd-testo); filter: drop-shadow(0 16px 30px rgba(0, 0, 0, .8)); }
+.schermata-morte .fondo { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.schermata-morte .fondo svg { display: block; }
 .schermata-morte .contenuto { position: relative; z-index: 1; padding: 52px 48px 38px; text-align: center; }
 .schermata-morte .croce { font-size: 34px; color: var(--kd-rubrica); line-height: 1; }
 .schermata-morte .titolo { font: 600 27px var(--kd-titolo); letter-spacing: .1em; color: var(--kd-rubrica); }
