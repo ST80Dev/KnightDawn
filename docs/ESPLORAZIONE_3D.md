@@ -286,8 +286,8 @@ Nel 2D 1 Passo era 1 tile; ora il **Passo è solo un'unità di tempo** (~3 ore, 
   Veglia: il giorno si ricava dai Passi (8 Passi = 1 giorno), non più un giorno per Passo.
 - **Forza per distanza:** nuova funzione in `Knight` che riceve metri, dislivello e andatura (solo
   numeri: niente Three.js, regola 9). Scala: 1 di Forza ≈ 300 m in piano per il moltiplicatore dell'andatura
-  (deciso con l'utente, 28/11/2026; prima camminata ×1 e corsetta ×1,5): **camminata ×0** in piano, **corsetta ×0,5**
-  (80 di Forza ≈ 48 km, ~3 h reali), **scatto ×3** (80 ≈ 8 km, ~17 min reali); un metro di salita vale ~6,7 m in piano
+  (deciso con l'utente, 28/11/2026; prima camminata ×1 e corsetta ×1,5): **camminata ×0** in piano, **corsetta ×1**
+  (80 di Forza ≈ 24 km, ~1,5 h reali, ~15 h di gioco; una giornata di corsa continua di 14 km ≈ 47), **scatto ×3** (80 ≈ 8 km, ~17 min reali); un metro di salita vale ~6,7 m in piano
   e pesa almeno ×1 a qualunque andatura (600 m di salita ≈ 13 di Forza anche camminando). `TRAVEL_COST` per
   bioma resta per la Carta.
 - **Forza a 0:** niente corsa né scatto, solo camminata.
