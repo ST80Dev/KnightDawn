@@ -59,7 +59,7 @@ armatura completa con elmo chiuso è il caso più favorevole: niente volto, mani
 Oggi il modello è sempre lo stesso (grande elmo, cotta, scudo con la croce, spada, mantello rosso) anche per il
 garzone con 3 oro: non è coerente. Regola: **il modello si compone da ciò che il cavaliere indossa e da ciò che è**,
 e continua a cambiare per tutta la partita, non solo nella Veglia. Tre strati, ciascuno legato a un sistema che esiste
-o è previsto (ranghi e vie in `docs/EARLY_GAME.md` §2, Onore in `docs/GDD.md` §2, casate in `docs/FACTIONS.md`).
+o è previsto (livelli, ruoli ed Esperienza in `docs/EARLY_GAME.md` §2, Onore in `docs/GDD.md` §2, casate in `docs/FACTIONS.md`).
 
 **1. Equipaggiamento** (`Knight.equip`: arma, armatura, scudo, viaggio; cataloghi in `js/data/items.js`). Ogni pezzo
 del catalogo ha il suo pezzo 3D; comprarlo, trovarlo o perderlo si vede addosso.
@@ -74,13 +74,13 @@ del catalogo ha il suo pezzo 3D; comprarlo, trovarlo o perderlo si vede addosso.
 
 Il catalogo dopo la Veglia va allungato (pezzi alti costosi, nelle botteghe degli altri borghi: G4).
 
-**2. Rango e via** (insegne, non armatura). Si leggono da lontano.
+**2. Livello e ruolo** (insegne, non armatura). Si leggono da lontano.
 - **Garzone:** nessuna insegna. **Scudiero:** cuffia di maglia e cintura con il fodero.
 - **Cavaliere Errante** (investitura): **speroni dorati** (il segno storico del cavaliere) e pennoncello triangolare
   sulla lancia, quando la porta.
 - **Via del vessillo** (giurato): sopravveste, scudo e gualdrappa del cavallo nei **colori della casata** (generati in G3).
   **Via della ventura** (libero): colori e stemma propri.
-- **Bannerale:** il pennoncello diventa **stendardo quadrato** (come storicamente il banneret). **Ranghi alti** delle due
+- **Capitano della casata:** il pennoncello diventa **stendardo quadrato** (come storicamente il banneret). **Livelli alti** delle due
   vie: cimiero sull'elmo, gualdrappa ricca.
 
 **3. Onore** (−5…+5): piccoli segni, non premi.
