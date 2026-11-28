@@ -244,12 +244,36 @@ function braccio(m, x) {
     cubitiera, ala,
     pivot(0, -0.24, 0, guanto(m)),
   );
+  const mano = gomito.children[gomito.children.length - 1];
   const spalla = pivot(x, 0.42, 0,
     tornio([[0.0, 0.02], [0.064, 0.02], [0.068, -0.08], [0.058, -0.28], [0.0, -0.28]], m.acciaio,
       { sz: 1.05 }),                                           // cannone del braccio
     gomito,
   );
-  return { spalla, gomito };
+  return { spalla, gomito, mano };
+}
+
+/**
+ * Torcia nella mano destra (viaggio di notte, docs/GDD.md §2): manico di legno, testa di stoppa e pece, fiamma.
+ * Tre forme in tre chiamate di disegno; la luce non è qui: la fiamma è una delle luci vicine (main.js, luciVicine).
+ * Asse della torcia lungo +Y del gruppo, ruotato perché con il braccio alzato (posaTorcia) stia quasi in verticale.
+ */
+function torciaInMano(m) {
+  const g = new THREE.Group();
+  g.name = 'torcia';
+  g.add(cyl(0.017, 0.014, 0.56, 6, m.legno, 0, 0.12, 0));                       // manico
+  g.add(cyl(0.036, 0.028, 0.11, 7, m.fessura, 0, 0.42, 0));                     // stoppa e pece
+  const fiamma = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.26, 7, 1, true),
+    new THREE.MeshBasicMaterial({ color: '#ffb35a', transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending,
+      depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true, fog: false }));
+  fiamma.geometry.translate(0, 0.13, 0);                                          // la base sulla stoppa
+  fiamma.position.set(0, 0.46, 0);
+  fiamma.name = 'fiamma-torcia';
+  g.add(fiamma);
+  g.position.set(0, -0.14, 0.03);
+  g.rotation.x = 1.6;
+  g.visible = false;
+  return { g, fiamma };
 }
 
 /** Spallaccio a lamine sovrapposte, appoggiato sulla spalla (lato: -1 destra, +1 sinistra). */
@@ -480,6 +504,8 @@ function buildModel() {
   sc.rotation.y = Math.PI / 2;               // faccia verso l'esterno (+X)
   sc.position.set(0.09, -0.14, 0.04);
   braccioS.gomito.add(sc);
+  const torcia = torciaInMano(m);
+  braccioD.mano.add(torcia.g);
 
   // Spada al fianco sinistro, inclinata con l'elsa in avanti
   const spada = spadaNelFodero(m);
@@ -494,7 +520,7 @@ function buildModel() {
 
   return {
     root, corpo, busto, testa, mantello: attaccoMantello,
-    gambaD, gambaS, braccioD, braccioS,
+    gambaD, gambaS, braccioD, braccioS, torcia,
   };
 }
 
@@ -906,10 +932,22 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     mod.braccioS.spalla.rotation.z = 0.13 + respiro * 0.02 * riposo;
     mod.braccioD.gomito.rotation.x = -(0.15 + corsaF * 1.0);
     mod.braccioS.gomito.rotation.x = -(0.75 + corsaF * 0.25);
+    if (mod.torcia.g.visible) posaTorcia(0.5 + 0.12 * ampBraccia * s);
 
     // Mantello: si solleva all'indietro con la velocità e sventola col passo
     mod.mantello.rotation.x = 0.05 + passoF * 0.12 + slancio * 0.45
       + Math.sin(stato.fase * 2) * 0.05 * passoF + respiro * 0.01 * riposo;
+  }
+
+  // ─── Torcia accesa: braccio destro alzato in avanti, fiamma che tremola ───
+  /** Braccio destro che regge la torcia (spalla in avanti di `spalla` rad, avambraccio quasi orizzontale). */
+  function posaTorcia(spalla) {
+    mod.braccioD.spalla.rotation.x = -spalla;
+    mod.braccioD.spalla.rotation.z = -0.12;
+    mod.braccioD.gomito.rotation.x = -(1.6 - spalla);           // avambraccio a 1,6 rad: la torcia sta dritta
+    const t = stato.tempo, f = mod.torcia.fiamma;
+    f.scale.set(1 + 0.12 * Math.sin(t * 17.3), 0.85 + 0.2 * Math.sin(t * 11.1) + 0.08 * Math.sin(t * 29.7), 1 + 0.12 * Math.sin(t * 13.9 + 1));
+    f.rotation.y = t * 2.1;
   }
 
   // ─── Ombra adagiata sul terreno ───
@@ -951,6 +989,7 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     mod.braccioS.spalla.rotation.x = -0.3 * e;
     mod.braccioS.spalla.rotation.z = 0.13;
     mod.braccioS.gomito.rotation.x = -(0.75 + 0.35 * e);
+    if (mod.torcia.g.visible) posaTorcia(0.45);
     mod.mantello.rotation.x = 0.05 + e * (0.75 + 0.3 * corsa + 0.04 * Math.sin(t * 7) * s.moto);
     mod.mantello.scale.y = 1 - 0.3 * e;
     ombra.visible = peso < 0.5;
@@ -998,6 +1037,10 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     aggiornaSella,
     /** Scavalcamento possibile davanti (per l'invito «Spazio» nel HUD), o null. */
     cercaScavalco,
+    /** Torcia in mano, accesa o no (viaggio di notte). */
+    torcia(accesa) { mod.torcia.g.visible = !!accesa; },
+    /** Posizione della fiamma della torcia (coordinate della scena), per la luce vicina. */
+    puntoTorcia(out = new THREE.Vector3()) { return mod.torcia.fiamma.getWorldPosition(out); },
     /** Punto da inquadrare (petto del cavaliere), in coordinate del mondo. */
     puntoMira(out = new THREE.Vector3()) {
       return out.set(stato.x, stato.y + 1.3, stato.z);

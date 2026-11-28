@@ -75,6 +75,7 @@ const Save = {
       inSella: Knight.inSella,
       cronaca: Knight.cronaca.slice(-60),
       zaino: [...Knight.zaino],
+      torcia: Knight.torcia ? { ...Knight.torcia } : null,
       ultimoPasto: Knight.ultimoPasto,
       giornoControllato: Knight.giornoControllato,
       addestramento: Knight.addestramento,
@@ -103,6 +104,7 @@ const Save = {
     Knight.cavallo     = k.cavallo || null;
     Knight.inSella     = !!k.inSella;
     Knight.zaino       = Array.isArray(k.zaino) ? k.zaino : [];
+    Knight.torcia      = k.torcia && Number.isFinite(k.torcia.finoA) ? k.torcia : null;
     Knight.cronaca     = Array.isArray(k.cronaca) ? k.cronaca : [];
     // Salvataggi di prima del passo 3: si considera mangiato fino a oggi (niente fame retroattiva).
     const oggi = Math.floor(((blob.calendar && blob.calendar.passiTotali) || 0) / 8);

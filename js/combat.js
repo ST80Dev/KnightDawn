@@ -433,9 +433,10 @@ const Combat = {
 
   /**
    * L'animale dell'incontro, pesato per habitat del bioma e ora; null se lì non vive niente. Nella Veglia, prima della
-   * prima battaglia, niente bestie «forti» (orso, branco).
+   * prima battaglia, niente bestie «forti» (orso, branco). `luce`: il cavaliere porta una torcia accesa (o dorme al
+   * fuoco): gli animali timidi la evitano e non si fanno incontrare; i lupi, in branco o da soli, no.
    */
-  pescaIncontro({ bioma = 1, momento = 'giorno', veglia = false, primaSangue = true, rnd = Math.random } = {}) {
+  pescaIncontro({ bioma = 1, momento = 'giorno', veglia = false, primaSangue = true, luce = false, rnd = Math.random } = {}) {
     if (typeof Enemies === 'undefined') return null;
     const b = bioma === 9 ? 1 : bioma;                       // lungo i fiumi: come in pianura
     const pool = [];
@@ -443,6 +444,7 @@ const Combat = {
     for (const e of Enemies.all()) {
       if (!e.habitat || !e.habitat[b]) continue;
       if (veglia && !primaSangue && e.forte) continue;
+      if (luce && this._tratto(e, 'timido')) continue;
       const w = e.habitat[b] * (e.ore && e.ore[momento] != null ? e.ore[momento] : 1);
       if (w <= 0) continue;
       pool.push([e, w]);
