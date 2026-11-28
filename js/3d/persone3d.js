@@ -259,6 +259,7 @@ function innesta(shader) {
       attribute vec3 iCapelli;
       attribute vec4 iMoto;      // fase del passo, ampiezza, lunghezza e volume della capigliatura
       attribute float iDota;     // 1 = porta elmo e lancia (guardia), 0 = l'equipaggiamento si chiude a zero
+      attribute vec2 iPosa;      // seduto (0 in piedi, 1 su una panca, ~0,65 in sella), gambe divaricate (rad)
       const float KD_TESTA_Y = ${H.testa.toFixed(3)};
       void kdRuota(inout vec3 p, float y0, float a) {
         float c = cos(a), s = sin(a);
@@ -276,8 +277,17 @@ function innesta(shader) {
       float kdS = sin(iMoto.x);
       float kdA1 = aSnodo.x * kdS * iMoto.y * 0.40;                             // anca o spalla
       float kdA2 = aSnodo.z * iMoto.y * 0.58 * max(0.0, aSnodo.x * kdS);        // ginocchio: piega all'indietro
+      // Seduti (conducenti, cavalieri dei veicoli: js/3d/carri3d.js): cosce in avanti, stinchi di nuovo giù, braccia
+      // avanti alle redini; in sella le gambe si aprono attorno al cavallo. In piedi iPosa è zero: niente cambia.
+      float kdGamba = step(0.8, abs(aSnodo.x));                                 // gambe 1,0 · braccia 0,62
+      float kdBraccio = step(0.3, abs(aSnodo.x)) * (1.0 - kdGamba);
+      kdA1 += iPosa.x * (-1.35 * kdGamba - 0.8 * kdBraccio);
+      kdA2 += iPosa.x * 1.45 * aSnodo.z;
+      float kdApri = sign(aSnodo.x) * iPosa.y * kdGamba;
+      float kdCa = cos(kdApri), kdSa = sin(kdApri);
       kdRuota(objectNormal, 0.0, kdA2);
       kdRuota(objectNormal, 0.0, kdA1);
+      objectNormal.xy = vec2(objectNormal.x * kdCa - objectNormal.y * kdSa, objectNormal.x * kdSa + objectNormal.y * kdCa);
       // La capigliatura gira attorno alla testa (il segno di iMoto.z): sposta la scriminatura senza specchiare
       // la geometria, che rovescerebbe il verso delle facce.
       float kdGiro = (iMoto.z < 0.0 ? -0.26 : 0.16);
@@ -290,6 +300,11 @@ function innesta(shader) {
     .replace('#include <begin_vertex>', `#include <begin_vertex>
       kdRuota(transformed, aSnodo.w, kdA2);
       kdRuota(transformed, aSnodo.y, kdA1);
+      if (kdGamba > 0.5) {                                                      // gambe aperte attorno all'anca
+        vec2 kdD = transformed.xy - vec2(sign(aSnodo.x) * ${ANCA_X.toFixed(3)}, ${H.anca.toFixed(3)});
+        transformed.xy = vec2(sign(aSnodo.x) * ${ANCA_X.toFixed(3)}, ${H.anca.toFixed(3)})
+          + vec2(kdD.x * kdCa - kdD.y * kdSa, kdD.x * kdSa + kdD.y * kdCa);
+      }
       if (aTinta.z > 0.5) {                                                     // capigliatura
         vec3 d = transformed - vec3(0.0, KD_TESTA_Y, 0.0);
         float px = d.x * kdCg - d.z * kdSg;
@@ -342,9 +357,10 @@ export function creaPersone() {
   /**
    * Una persona. L'oggetto restituito non disegna nulla da solo: porta solo posizione, verso e visibilità, che
    * la mesh condivisa legge a ogni fotogramma.
-   * @param {{ ruolo:string, colori:{ veste:string, pelle:string }, seme:number }} p
+   * @param {{ ruolo:string, colori:{ veste:string, pelle:string }, seme:number, posa?:[number, number] }} p
+   *   posa: [seduto, gambe aperte] per chi sta su un carro o in sella (js/3d/carri3d.js); assente = in piedi
    */
-  function creaPersona({ ruolo, colori, seme = 1 }) {
+  function creaPersona({ ruolo, colori, seme = 1, posa = null }) {
     const r = generatore(seme);
     const bambino = ruolo === 'bambino';
     const object = new THREE.Object3D();
@@ -377,6 +393,7 @@ export function creaPersone() {
       lung,
       vol,
       dota: guardia ? 1 : 0,
+      posa: posa ?? [0, 0],
       fase: r() * Math.PI * 2,
       amp: 0,
     };
@@ -384,6 +401,8 @@ export function creaPersone() {
 
     return {
       object,
+      /** Statura (× 1,72 m): l'anca sta a 0,90 × questo sopra l'origine (per mettere a sedere). */
+      altezza: alta,
       /** @param {{ modo:'fermo'|'cammina', velocita:number }} stato */
       update(dt, stato) {
         const cammina = stato.modo === 'cammina';
@@ -407,11 +426,13 @@ export function creaPersone() {
     const cap = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3);
     const moto = new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4);
     const dota = new THREE.InstancedBufferAttribute(new Float32Array(n), 1);
+    const posa = new THREE.InstancedBufferAttribute(new Float32Array(n * 2), 2);
     geo.setAttribute('iVeste', veste);
     geo.setAttribute('iPelle', pelle);
     geo.setAttribute('iCapelli', cap);
     geo.setAttribute('iMoto', moto);
     geo.setAttribute('iDota', dota);
+    geo.setAttribute('iPosa', posa);
 
     const mesh = new THREE.InstancedMesh(geo, materialePersone(), n);
     mesh.name = 'persone';
@@ -435,12 +456,14 @@ export function creaPersone() {
         moto.array[k * 4 + 2] = d.lung;
         moto.array[k * 4 + 3] = d.vol;
         dota.array[k] = d.dota;
+        posa.array[k * 2] = d.posa[0];
+        posa.array[k * 2 + 1] = d.posa[1];
         k++;
       }
       mesh.count = k;
       mesh.instanceMatrix.needsUpdate = true;
       veste.needsUpdate = true; pelle.needsUpdate = true; cap.needsUpdate = true;
-      moto.needsUpdate = true; dota.needsUpdate = true;
+      moto.needsUpdate = true; dota.needsUpdate = true; posa.needsUpdate = true;
     };
 
     const gruppo = new THREE.Group();
