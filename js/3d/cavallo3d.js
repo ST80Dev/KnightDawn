@@ -40,6 +40,14 @@ export const CAVALLO_CFG = {
   attesa: 2.5,        // s bloccato prima di smettere di seguire
   indietro: 60,       // m: oltre smette di seguire e aspetta
   fischio: 250,       // m: entro questa distanza, con la strada libera, al fischio arriva
+  // Passo 3: in sella (andature riviste con l'utente il 28/11/2026: a cavallo le distanze devono sembrare più corte)
+  sella: {
+    vel: { passo: 1.8, trotto: 8, galoppo: 18 },   // m/s: Ctrl, normale, Shift
+    indietro: 1,                                    // m/s
+    accelerazione: 4, frenata: 7,                   // m/s²
+    giro: { passo: 1.6, trotto: 1.3, galoppo: 0.8 },// rad/s con A/D: curve più larghe al galoppo
+    accelGiro: 4, arrestoGiro: 14,
+  },
 };
 
 // Colori (sRGB) nei vertici. Baio: mantello bruno rossiccio, criniera, coda e gambe nere.
@@ -569,6 +577,8 @@ export function createCavallo(terrain, ostacoli = []) {
     fermoDa: 0,             // s da fermo
     bruca: 0,               // 0 → 1: testa giù a brucare
     sobbalzo: 0, dondolo: 0, abbassa: 0,
+    passiGiro: 0,           // m/s «equivalenti» dei passi fatti girando sul posto (animazione)
+    limitePendenza: null,   // in sella: 'trotto' | 'passo' se la pendenza limita l'andatura, 'rifiuta' se non va
   };
   const tracce = [];        // { x, z } del cavaliere, un punto ogni cfg.passoTraccia m, dal più vecchio
   const pesi = { passo: 1, trotto: 0, galoppo: 0 };          // andature mescolate nel cambio
@@ -670,26 +680,26 @@ export function createCavallo(terrain, ostacoli = []) {
     return n;
   }
 
-  /** Pendenza (tangente) lungo la direzione del corpo, dal centro a 1 m più avanti. */
-  function pendenzaAvanti() {
-    const e = 1.0;
+  /** Pendenza (tangente) lungo la direzione del corpo, dal centro a 1 m più avanti (verso -1: più indietro). */
+  function pendenzaAvanti(verso = 1) {
+    const e = verso;
     return (terrain.getHeight(stato.x + Math.sin(stato.direzione) * e, stato.z + Math.cos(stato.direzione) * e)
-      - terrain.getHeight(stato.x, stato.z)) / e;
+      - terrain.getHeight(stato.x, stato.z)) / Math.abs(e);
   }
 
-  /** Avanza di `passo` m lungo la direzione del corpo; restituisce i metri fatti davvero. */
+  /** Avanza di `passo` m lungo la direzione del corpo (negativo: indietro); restituisce i metri fatti, col segno. */
   function avanza(passo, evita) {
-    if (!(passo > 0)) return 0;
+    if (!passo) return 0;
     const sd = Math.sin(stato.direzione), cd = Math.cos(stato.direzione);
     const [nx, nz] = spingiCorpo(stato.x + sd * passo, stato.z + cd * passo, stato.direzione, evita);
     // Non entra in acqua profonda né su una parete; se ci si trova già (ricomparsa, cambio di Scena) ne può uscire
     const dopo = inadatto(nx, nz, stato.direzione);
     if (dopo > 0 && dopo >= inadatto(stato.x, stato.z, stato.direzione)) return 0;
     const d = Math.hypot(nx - stato.x, nz - stato.z);
-    if (d > passo * 1.5 + 0.05) return 0;               // spinto lontano (incastrato): resta dov'è
+    if (d > Math.abs(passo) * 1.5 + 0.05) return 0;     // spinto lontano (incastrato): resta dov'è
     stato.x = nx;
     stato.z = nz;
-    return d;
+    return d * Math.sign(passo);
   }
 
   /** Linea libera per il corpo da a a b: terreno, pendenze e ostacoli ogni ~1,5 m. */
@@ -865,7 +875,7 @@ export function createCavallo(terrain, ostacoli = []) {
 
   // ─── Andature: zoccoli avanti e indietro secondo la fase, corpo che sobbalza ───
   function animaGambe(dt, percorso) {
-    const v = stato.velEffettiva;
+    const v = Math.max(stato.velEffettiva, stato.passiGiro);
     stato.andatura = sceltaAndatura(v, stato.andatura);
     const A = ANDATURE[stato.andatura];
     const r = avvicina(6, dt);
@@ -877,7 +887,7 @@ export function createCavallo(terrain, ostacoli = []) {
     anda.appoggio += (A.appoggio - anda.appoggio) * r;
     anda.alza += (A.alza - anda.alza) * r;
     anda.ciclo += (A.ciclo(v) - anda.ciclo) * r;
-    stato.fase = (stato.fase + Math.abs(percorso) / anda.ciclo) % 1;
+    stato.fase = ((stato.fase + percorso / anda.ciclo) % 1 + 1) % 1;   // all'indietro il ciclo va a ritroso
     const moto = clamp(v / 0.6, 0, 1);       // 0 fermo → 1 in marcia
     const S = Math.min(anda.appoggio * anda.ciclo, FALCATA_MAX) * moto;
     mod.gambe.forEach((g, i) => {
@@ -1011,13 +1021,84 @@ export function createCavallo(terrain, ostacoli = []) {
     ombra.position.set(stato.x, terrain.getHeight(stato.x, stato.z), stato.z).addScaledVector(_n, 0.05);
   }
 
+  // ─── In sella (passo 3): il cavaliere comanda andatura e direzione ───
+  // Andature: passo (Ctrl, interruttore), trotto (normale), galoppo (Shift); all'indietro piano. Curve più larghe al
+  // galoppo; niente giro sul posto al galoppo (da fermo si gira al passo). Pendenze con la curva del cavallo: in
+  // discesa ripida l'andatura scende da sola, oltre i limiti non va.
+  let velAngolare = 0;
+  function guida(dt, input) {
+    const S = cfg.sella;
+    const voluta = input.camminata ? 'passo' : input.corsa && !input.senzaGaloppo ? 'galoppo' : 'trotto';
+    // Rotazione: i tasti con accelerazione (come il cavaliere), il mouse diretto
+    const v0 = Math.abs(stato.velocita);
+    const velRot = v0 > 9 ? S.giro.galoppo : v0 > 2.5 ? S.giro.trotto : S.giro.passo;
+    if (input.gira !== 0) {
+      const obiettivo = input.gira * velRot, manca = obiettivo - velAngolare;
+      const inverte = velAngolare !== 0 && Math.sign(velAngolare) !== Math.sign(obiettivo);
+      velAngolare += Math.sign(manca) * Math.min(Math.abs(manca), S.accelGiro * (inverte ? 3 : 1) * dt);
+    } else {
+      velAngolare *= Math.exp(-S.arrestoGiro * dt);
+      if (Math.abs(velAngolare) < 1e-3) velAngolare = 0;
+    }
+    const dGiro = velAngolare * dt + (input.giroMouse || 0);
+    if (dGiro !== 0) {
+      // Girando, la groppa o il petto possono toccare un muro: il corpo ne viene spinto fuori, se di poco
+      const dir = angolo(stato.direzione - dGiro);
+      const [nx, nz] = spingiCorpo(stato.x, stato.z, dir, null);
+      if (Math.hypot(nx - stato.x, nz - stato.z) < 0.3 && inadatto(nx, nz, dir) <= inadatto(stato.x, stato.z, stato.direzione)) {
+        stato.direzione = dir; stato.x = nx; stato.z = nz;
+      } else velAngolare = 0;
+    }
+    stato.passiGiro += (Math.abs(dGiro) * 0.6 / Math.max(dt, 1e-4) - stato.passiGiro) * avvicina(10, dt);
+
+    // Velocità: andatura voluta, poi pendenza nel verso di marcia
+    const verso = input.avanti > 0 ? 1 : input.avanti < 0 ? -1 : 0;
+    let v = verso > 0 ? S.vel[voluta] : verso < 0 ? -S.indietro : 0;
+    stato.limitePendenza = null;
+    if (verso !== 0) {
+      const r = pendenzaCavallo(pendenzaAvanti(verso), terrain.suStrada?.(stato.x, stato.z), cfg);
+      if (!r) { v = 0; stato.limitePendenza = 'rifiuta'; }
+      else {
+        const vmax = S.vel[r.massima] ?? Infinity;
+        if (Math.abs(v) * r.fattore > vmax) stato.limitePendenza = r.massima;
+        v = Math.sign(v) * Math.min(Math.abs(v) * r.fattore, vmax);
+      }
+    }
+    const acc = Math.abs(v) > Math.abs(stato.velocita) ? S.accelerazione : S.frenata;
+    stato.velocita += clamp(v - stato.velocita, -acc * dt, acc * dt);
+    if (Math.abs(stato.velocita) < 0.02 && v === 0) stato.velocita = 0;
+    const voluto = stato.velocita * dt;
+    const fatto = avanza(voluto, null);
+    // Contro un ostacolo o il bordo il cavallo si ferma (niente slittamento a 18 m/s lungo un muro)
+    if (voluto && Math.abs(fatto) < Math.abs(voluto) * 0.3) stato.velocita *= Math.exp(-10 * dt);
+    stato.distanza = 0;
+    return fatto;
+  }
+
+  // Sella: radice del cavaliere seduto, nel sistema del corpo (anca ~8 cm sopra il seggio, ANCA = 0,92 m)
+  const SELLA = new THREE.Vector3(0, sezioneTronco(0.04).c.y + sezioneTronco(0.04).hs + 0.03 + 0.08 - 0.92 - CENTRO_Y, 0.02);
+  const _s = new THREE.Vector3();
+  const _sella = { x: 0, y: 0, z: 0, direzione: 0, beccheggio: 0, cx: 0, cz: 0, velocita: 0, velEffettiva: 0,
+    andatura: 'passo', fase: 0, galoppo: 0, moto: 0 };
+  /** Dove sta il cavaliere seduto, e quanto si muove (per la sua posa). */
+  function sella() {
+    mod.corpo.updateWorldMatrix(true, false);
+    _s.copy(SELLA).applyMatrix4(mod.corpo.matrixWorld);
+    return Object.assign(_sella, { x: _s.x, y: _s.y, z: _s.z, direzione: stato.direzione,
+      beccheggio: stato.beccheggio + stato.dondolo, cx: stato.x, cz: stato.z, velocita: stato.velocita,
+      velEffettiva: stato.velEffettiva, andatura: stato.andatura, fase: stato.fase, galoppo: pesi.galoppo,
+      moto: clamp(stato.velEffettiva / 0.6, 0, 1) });
+  }
+
   /**
-   * @param dt secondi dall'ultimo fotogramma
-   * @param k  stato del cavaliere da seguire (null: resta dov'è, es. nel percorso di prova)
+   * @param dt    secondi dall'ultimo fotogramma
+   * @param k     stato del cavaliere da seguire (null: resta dov'è, es. nel percorso di prova)
+   * @param input comandi del cavaliere in sella (passo 3): se c'è, il cavallo è guidato e non segue
    */
-  function update(dt, k = null) {
-    const percorso = k ? segui(dt, k) : 0;
-    stato.velEffettiva += (percorso / Math.max(dt, 1e-4) - stato.velEffettiva) * avvicina(10, dt);
+  function update(dt, k = null, input = null) {
+    const percorso = input ? guida(dt, input) : k ? segui(dt, k) : 0;
+    if (!input) stato.passiGiro *= Math.exp(-10 * dt);
+    stato.velEffettiva += (Math.abs(percorso) / Math.max(dt, 1e-4) - stato.velEffettiva) * avvicina(10, dt);
     if (stato.velEffettiva < 0.01) stato.velEffettiva = 0;
     // Fermo e lontano: animazione a metà frequenza (regola delle persone)
     if (stato.velEffettiva === 0 && stato.distanza > 120) {
@@ -1048,7 +1129,9 @@ export function createCavallo(terrain, ostacoli = []) {
   }
 
   const api = {
-    object, cfg, stato, update, posizionaAccanto, spingiFuori, fischia,
+    object, cfg, stato, update, posizionaAccanto, spingiFuori, fischia, sella,
+    /** Il cavallo esattamente in (x, z), con la direzione data (in sella al cambio di Scena). */
+    posiziona(x, z, direzione) { stato.x = x; stato.z = z; stato.direzione = direzione; azzera(); posa(0, true); },
     /** Rimasto indietro: bloccato o troppo lontano, aspetta il fischio. */
     get indietro() { return stato.modo === 'aspetta'; },
     /** Stato e tracce da spostare al cambio di blocco (blocchi.js, trasla). */

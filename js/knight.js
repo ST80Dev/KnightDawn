@@ -274,6 +274,19 @@ const Knight = {
     this.forza.cur = Math.max(0, this.forza.cur - costo);
   },
 
+  // Vigore del cavallo nelle Scene 3D (milestone Cavallo, passo 3): il galoppo lo consuma; a vigore 0 niente galoppo
+  // e niente sconto di Forza (isMounted). andatura: 'passo' | 'trotto' | 'galoppo'.
+  consumaVigoreMetri(metri, andatura) {
+    if (!this.cavallo || andatura !== 'galoppo' || !(metri > 0)) return;
+    this.cavallo.vigore = Math.max(0, this.cavallo.vigore - metri / VIAGGIO.METRI_GALOPPO_PER_VIGORE);
+  },
+  // Recupero del vigore per il tempo di gioco (frazione di Passo): da fermo pieno, al passo in parte.
+  riposaCavallo(passi, fermo, andatura) {
+    if (!this.cavallo || !(passi > 0)) return;
+    const f = fermo ? 1 : andatura === 'passo' ? VIAGGIO.RECUPERO_VIGORE_PASSO : 0;
+    this.cavallo.vigore = Math.min(this.cavallo.vigoreMax, this.cavallo.vigore + VIAGGIO.VIGORE_RIPOSO_PER_PASSO * passi * f);
+  },
+
   // Recupero da fermi nelle Scene 3D, proporzionale al tempo di gioco trascorso (frazione di Passo):
   // stesso ritmo che si aspetti davvero, si usi Avanza o si riposi (docs/ESPLORAZIONE_3D.md, M5).
   riposaPassi(passi) {
