@@ -184,7 +184,7 @@ export function mostraMenuAvvio(opzioni) {
 // invecchiata con bordo strappato. Fogli delle notizie: voce (ritaglio), lettera (sigillo), bando (affisso).
 // Gli id interni agli SVG hanno un prefisso per istanza: due SVG nella stessa pagina non si rubano i ritagli.
 
-function rng(seme) {
+export function rng(seme) {
   let a = seme >>> 0;
   return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
@@ -240,7 +240,7 @@ const FREGI = {
 
 /** Bordo strappato: curva lungo il rettangolo (x0,y0)-(x1,y1) con piccole irregolarità e qualche strappo
  * graduale (rientro a campana su più punti, mai una punta secca). Lisciata con curve quadratiche. */
-function strappo(x0, y0, x1, y1, r, forza = 1) {
+export function strappo(x0, y0, x1, y1, r, forza = 1) {
   const pts = [];
   const lato = (ax, ay, bx, by, nx, ny) => {
     const L = Math.hypot(bx - ax, by - ay), n = Math.max(2, Math.round(L / 6));
@@ -342,7 +342,7 @@ function foglio(w, h, seme, { tipo = 'lettera', usura = 0.3, sigillo = '#8a1a12'
   const u = Math.max(0, Math.min(1, usura));
   const carta = tipo === 'voce' ? ['#e6dcc0', '#d6c8a2', '#b8a478'] : ['#e8d4a4', '#d6b880', '#a8824a'];
   const m = tipo === 'voce' ? 6 : 6;
-  const bordo = strappo(m, m, w - m, h - m, r, tipo === 'voce' ? 1.7 : 0.9 + u);
+  const bordo = strappo(m, m, w - m, h - m, r, tipo === 'voce' ? 0.8 : 0.7 + u * 0.6);
   // pieghe: la lettera è stata piegata in tre, il ritaglio in due a caso
   const pieghe = tipo === 'lettera' ? [h / 3, 2 * h / 3] : tipo === 'voce' ? [h * (0.4 + r() * 0.2)] : [];
   const linee = pieghe.map((y) => `
@@ -387,18 +387,8 @@ function foglio(w, h, seme, { tipo = 'lettera', usura = 0.3, sigillo = '#8a1a12'
   return svg;
 }
 
-/** Lettera chiusa (icona d'arrivo): rettangolo piegato con il sigillo al centro. */
-function letteraChiusa(sigillo = '#8a1a12', iniziale = 'C') {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="44" viewBox="0 0 64 44">
-    <rect x="2" y="4" width="60" height="36" rx="2" fill="#d6b880" stroke="#6b4415" stroke-width="1"/>
-    <path d="M2 6 L32 26 L62 6" fill="none" stroke="#9a7440" stroke-width="1.4"/>
-    <circle cx="32" cy="25" r="8.5" fill="${sigillo}" stroke="rgba(0,0,0,.4)"/>
-    <text x="32" y="29.5" text-anchor="middle" font-family="UnifrakturMaguntia" font-size="12" fill="rgba(0,0,0,.5)">${iniziale}</text>
-  </svg>`;
-}
-
 /** Mette dietro a `el` (position: relative) uno sfondo SVG rifatto alla misura di `el` quando cambia. */
-function sfondoSvg(el, disegna) {
+export function sfondoSvg(el, disegna) {
   const f = document.createElement('div');
   f.className = 'fondo';
   el.prepend(f);
@@ -714,12 +704,15 @@ function elementoFoglio(d, seme) {
 }
 
 /**
- * Scrittoio (J): i fogli ricevuti, dal più recente; un clic su una riga apre il foglio. Mentre è aperto il gioco è
- * fermo. `elenco()` ritorna i documenti (con `id`).
- * @param {{ elenco: () => object[], onApri?: () => void, onChiudi?: () => void }} opzioni
+ * Scrittoio (J): i fogli ricevuti, dal più recente, divisi per sezioni (Notizie, Voci, Bandi, Consigli: le linguette del
+ * riquadro degli avvisi aprono la loro); un clic su una riga apre il foglio. Mentre è aperto il gioco è fermo.
+ * `elenco()` ritorna i documenti (con `id`); `sezioneDi(doc)` dice in quale sezione sta; `nonLetti(sezione)` accende il
+ * pallino della linguetta; `onSezione(sezione)` quando una sezione viene mostrata (i suoi fogli diventano letti).
+ * @param {{ elenco: () => object[], sezioni: [string, string][], sezioneDi: (d: object) => string,
+ *   nonLetti?: (s: string) => boolean, onSezione?: (s: string) => void, onApri?: () => void, onChiudi?: () => void }} opzioni
  */
 export function creaScrittoio(opzioni) {
-  let el = null, stacchi = [];
+  let el = null, stacchi = [], sezione = null;
   function chiudi() {
     if (!el) return;
     stacchi.forEach((f) => f());
@@ -732,33 +725,49 @@ export function creaScrittoio(opzioni) {
     stacchi.forEach((f) => f());
     stacchi = [];
     contenitore.innerHTML = '';
-    const { el: f } = elementoFoglio(d);
+    const tipo = d.tipo === 'consiglio' || d.tipo === 'notizia' ? 'voce' : d.tipo;   // consigli e fatti: ritagli come le voci
+    const { el: f } = elementoFoglio({ ...d, tipo });
     contenitore.appendChild(f);
     stacchi.push(sfondoSvg(f, (w, h) => foglio(w, h, semeDaTesto(d.id + d.testo), {
-      tipo: d.tipo, usura: d.usura ?? 0.3, sigillo: d.sigillo, iniziale: d.iniziale })));
+      tipo, usura: d.usura ?? 0.3, sigillo: d.sigillo, iniziale: d.iniziale })));
   }
-  function apri(scelto = null) {
+  const VUOTO = {
+    notizie: 'Nessuna notizia, per ora. Le lettere e i fatti del mondo finiscono qui.',
+    voci: 'Nessuna voce, per ora. Chi serve in taverna ne sente parecchie.',
+    bandi: 'Nessun bando, per ora.',
+    consigli: 'Nessun consiglio, per ora.',
+  };
+  /** Apre lo scrittoio sul foglio `scelto` (id) o sulla `sezione` indicata (altrimenti quella dell'ultimo foglio). */
+  function apri(scelto = null, sez = null) {
     const nuovo = !el;
     if (!el) {
       el = document.createElement('div');
       el.className = 'scrittoio';
       document.body.appendChild(el);
     }
-    const docs = opzioni.elenco();
-    const nomi = { voce: 'Voce', lettera: 'Lettera', bando: 'Bando' };
-    el.innerHTML = `<div class="tavolo"><div class="intestazione">Scrittoio<span>J o Esc per chiudere</span></div>`
+    const tutti = opzioni.elenco();
+    const doc = scelto ? tutti.find((d) => d.id === scelto) : null;
+    sezione = sez ?? (doc ? opzioni.sezioneDi(doc) : null) ?? (tutti.length ? opzioni.sezioneDi(tutti[0]) : opzioni.sezioni[0][0]);
+    const linguette = opzioni.sezioni.map(([id, n]) => `<button type="button" data-s="${id}" class="${id === sezione ? 'su' : ''}`
+      + `${id !== sezione && opzioni.nonLetti?.(id) ? ' nuovo' : ''}">${n}</button>`).join('');
+    opzioni.onSezione?.(sezione);
+    const docs = tutti.filter((d) => opzioni.sezioneDi(d) === sezione);
+    const nomi = { voce: 'Voce', lettera: 'Lettera', bando: 'Bando', consiglio: 'Consiglio', notizia: 'Notizia' };
+    el.innerHTML = `<div class="tavolo"><div class="intestazione">Scrittoio<span>J o Esc per chiudere · il tempo è fermo</span></div>`
+      + `<div class="sezioni">${linguette}</div>`
       + (docs.length
         ? `<div class="elenco">${docs.map((d, i) => `<button type="button" data-i="${i}" class="${d.tipo}">`
-          + `<b>${nomi[d.tipo] ?? 'Foglio'}</b><span>${_esc(d.testo.length > 70 ? d.testo.slice(0, 68) + '…' : d.testo)}</span></button>`).join('')}</div>`
+          + `<b>${_esc(d.chi || nomi[d.tipo] || 'Foglio')}</b><span>${_esc(d.testo.length > 70 ? d.testo.slice(0, 68) + '…' : d.testo)}</span></button>`).join('')}</div>`
           + '<div class="lettura"></div>'
-        : '<div class="vuoto">Nessun foglio, per ora. Le voci raccolte in taverna, le lettere e i bandi finiscono qui.</div>')
+        : `<div class="vuoto">${VUOTO[sezione] ?? 'Nessun foglio, per ora.'}</div>`)
       + '</div>';
+    el.querySelectorAll('.sezioni button').forEach((b) => b.addEventListener('click', () => apri(null, b.dataset.s)));
     const lettura = el.querySelector('.lettura');
     el.querySelectorAll('.elenco button').forEach((b) => b.addEventListener('click', () => {
       el.querySelectorAll('.elenco button').forEach((x) => x.classList.toggle('su', x === b));
       apriFoglio(docs[+b.dataset.i], lettura);
     }));
-    const i = Math.max(0, scelto ? docs.findIndex((d) => d.id === scelto) : 0);
+    const i = Math.max(0, doc ? docs.indexOf(doc) : 0);
     el.querySelectorAll('.elenco button')[i]?.click();
     if (nuovo) opzioni.onApri?.();
   }
@@ -768,18 +777,4 @@ export function creaScrittoio(opzioni) {
     return false;
   }
   return { apri, chiudi, tasto, get aperto() { return !!el; } };
-}
-
-/** Avviso d'arrivo di un foglio, in alto al centro, che sparisce da solo; non ferma il gioco. */
-export function avvisoFoglio(d, testo, sotto = 'J: scrittoio') {
-  document.querySelector('.avviso-foglio')?.remove();
-  const el = document.createElement('div');
-  el.className = 'avviso-foglio';
-  const icona = d.tipo === 'voce'
-    ? '<svg width="48" height="36" viewBox="0 0 48 36"><path d="M4 6 L40 3 L44 14 L41 30 L8 33 L3 20 Z" fill="#d6c8a2" stroke="#6b4415"/><path d="M10 12h26M10 18h22M10 24h18" stroke="#6b4415" stroke-width="1.4"/></svg>'
-    : letteraChiusa(d.sigillo || '#8a1a12', d.iniziale || '');
-  el.innerHTML = `${icona}<div><b>${_esc(testo)}</b><span>${_esc(sotto)}</span></div>`;
-  document.body.appendChild(el);
-  setTimeout(() => el.classList.add('via'), 5000);
-  setTimeout(() => el.remove(), 6200);
 }

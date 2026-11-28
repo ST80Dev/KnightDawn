@@ -23,8 +23,9 @@ import { createBorgoAPezzi } from './borgo3d.js';
 import { createVillaggioAPezzi, createMonasteroAPezzi, createEremoAPezzi, createMulinoAPezzi, pianoDelSito } from './villaggio3d.js';
 import { createRovinaAPezzi, createMisteroAPezzi } from './rovine3d.js';
 import { raggioSito, climaDelLuogo } from '../mondo/siti.js';
-import { createCartaVista } from './cartaVista.js';
-import { mostraMenuAvvio, creaCartaCronista, creaScrittoio, avvisoFoglio, nomeCasuale, creaMeridiana } from './interfaccia.js';
+import { createCartaVista, CLASSI_ROCCA } from './cartaVista.js';
+import { mostraMenuAvvio, creaCartaCronista, creaScrittoio, nomeCasuale, creaMeridiana } from './interfaccia.js';
+import { creaAvvisi, SEZIONI, sezioneDi } from './avvisi.js';
 import { creaMinimappa } from './minimappa.js';
 import { creaOrizzonteAPezzi } from './orizzonte.js';
 import { creaAcqueScena, creaPonti, suoloStrade } from './acqua.js';
@@ -686,18 +687,77 @@ function mostraZaino(righe = []) {
     opzioni: [{ testo: 'Chiudi', scegli: () => cartaCronista.chiudi() }],
   });
 }
-/** Una notizia diventa un foglio nello scrittoio (J), con l'avviso d'arrivo. */
+/** Una notizia diventa un foglio nello scrittoio (J) e compare, col sigillo, nella striscia «dal mondo» degli avvisi. */
 function annotaNotizia(doc) {
   const quando = `${Calendar.oraCanonica()} del ${Calendar.inVeglia ? `giorno ${Calendar.giornoVeglia}` : `Diario ${Calendar.diario}`}`;
-  const d = { ...doc, fonte: doc.fonte ? `${doc.fonte}, a ${quando}` : null };
+  const d = { ...doc, fonte: doc.fonte ? `${doc.fonte}, a ${quando}` : null, letto: false };
   News.emit({ tipo: d.tipo === 'voce' ? 'rumor' : 'evento', tag: d.tag || d.tipo, testo: d.testo, doc: d }, true);
-  avvisoFoglio(d, d.tipo === 'voce' ? 'Una voce annotata nello scrittoio' : d.tipo === 'bando' ? 'Un bando è stato affisso' : 'Una lettera giunge da lontano');
+  avvisi?.aggiorna();
+}
+
+// ─── Avvisi in alto a sinistra (js/3d/avvisi.js) ────────────────────────
+// Striscia «dal mondo»: i fogli delle notizie (News con `doc`). Striscia «consiglio»: vegliaConsigli dallo stato del
+// garzone, ricalcolati solo quando cambia qualcosa che conta (controllo ogni secondo reale, nessun lavoro per fotogramma).
+let avvisi = null;
+const fogliNotizie = () => (typeof News === 'undefined' ? [] : News.ultime(200).filter((t) => t.doc).map((t) => { t.doc.id ??= t.id; return t.doc; }));
+function preparaAvvisi() {
+  avvisi ??= creaAvvisi({ notizie: fogliNotizie, onApri: (s) => { if (!cronista) scrittoio.apri(null, s); } });
+  _firmaConsigli = null;
+  for (const d of fogliNotizie()) d.letto ??= true;          // fogli dei salvataggi di prima: già letti
+  _luoghiVisti = null;
+  if (typeof Conoscenza !== 'undefined' && Conoscenza.attiva) annunciaLuoghi(0, 0);   // quelli già noti non si annunciano
+  if (inStoria() && Calendar.inVeglia && !News.sa('veglia.bando.inizio')) {
+    annotaNotizia({ tipo: 'bando', tag: 'veglia.bando.inizio', chi: 'Bando alla porta', titolo: 'Bando',
+      sottotitolo: 'del castellano', testo: 'Il castellano fa sapere: alla stalla e al pozzo cercano braccia. Si paga a sera.' });
+  }
+  aggiornaAvvisi(Infinity);
+}
+let _firmaConsigli = null, _tAvvisi = 0;
+const DIREZIONI = ['a nord', 'a nord-est', 'a est', 'a sud-est', 'a sud', 'a sud-ovest', 'a ovest', 'a nord-ovest'];
+/** Ogni secondo reale: consigli se lo stato è cambiato; in Veglia, il mercato del giorno nella striscia «dal mondo». */
+function aggiornaAvvisi(dt) {
+  if (!avvisi || (_tAvvisi += dt) < 1) return;
+  _tAvvisi = 0;
+  const oggi = giornoDiGioco(), ora = Calendar.indiceNelGiorno();
+  const pasto = Knight.zaino.some((n) => Items.catalog[n]?.pasto);
+  const firma = [ora, oggi, Knight.oro, Knight.rango, Knight.addestramento, Knight.primaSangue, Knight.forza.cur < 25,
+    Knight.salute.cur < Knight.salute.max * 0.3, Knight.ultimoPasto >= oggi, pasto, inStoria()].join();
+  if (firma !== _firmaConsigli) {
+    _firmaConsigli = firma;
+    avvisi.consigli(inStoria() && typeof vegliaConsigli === 'function'
+      ? vegliaConsigli({ knight: Knight, ora, mangiato: Knight.ultimoPasto >= oggi, pastoNelloZaino: pasto }) : []);
+  }
+  if (inStoria() && Calendar.inVeglia && ora <= 3 && !News.sa('veglia.mercato.' + oggi)) {
+    const prezzo = (n) => Items.catalog[n]?.prezzo;
+    annotaNotizia({ tipo: 'notizia', tag: 'veglia.mercato.' + oggi, chi: 'Dal borgo', fonte: 'il banditore del mercato',
+      testo: `Giorno di mercato alla loggia: pane e formaggio a ${prezzo('Pane e formaggio')} oro, bende di lino a ${prezzo('Bende di lino')}.` });
+  }
+}
+/** Luoghi appena intravisti (nebbia della conoscenza): un fatto nella striscia «dal mondo». */
+const NOMI_SITI = { villaggio: 'un villaggio', monastero: 'un monastero', eremo: 'un eremo', mulino: 'un mulino', ospizio: 'un ospizio di valico',
+  rovina: 'delle rovine', citta: 'una città' };
+let _luoghiVisti = null;
+function annunciaLuoghi(x, z) {
+  if (!carta || !avvisi) return;
+  const tutti = [...(carta.luoghi ?? []).map((l) => ({ l, nome: `una rocca (${CLASSI_ROCCA[l.classe]?.[0] ?? 'rocca'})` })),
+    ...(carta.siti ?? []).filter((s) => NOMI_SITI[s.tipo]).map((s) => ({ l: s, nome: NOMI_SITI[s.tipo] }))];
+  const noto = (l) => Conoscenza.livello(l.x, l.z) >= 1;
+  if (!_luoghiVisti) { _luoghiVisti = new Set(tutti.filter((t) => noto(t.l)).map((t) => t.l)); return; }
+  for (const { l, nome } of tutti) {
+    if (_luoghiVisti.has(l) || Math.abs(l.x - x) > CONOSCENZA.intravisto || Math.abs(l.z - z) > CONOSCENZA.intravisto || !noto(l)) continue;
+    _luoghiVisti.add(l);
+    const dir = DIREZIONI[Math.round(((Math.atan2(l.x - x, -(l.z - z)) / (Math.PI * 2)) * 8 + 8)) % 8];
+    annotaNotizia({ tipo: 'notizia', tag: 'scoperto', chi: 'Scoperto', fonte: 'visto con i tuoi occhi',
+      testo: `Più avanti, ${dir}, si scorge ${nome}.` });
+  }
 }
 const contestoEventi = () => ({ casata: nomeCasata(), dormi: dormiNelBorgo, notizia: annotaNotizia, mangia: mangiaSulPosto });
 
 // Scrittoio (J): i fogli delle notizie che il cavaliere ha ricevuto, dal più recente. Mentre è aperto il gioco è fermo.
 const scrittoio = creaScrittoio({
-  elenco: () => (typeof News === 'undefined' ? [] : News.ultime(200).filter((t) => t.doc).map((t) => ({ ...t.doc, id: t.id }))),
+  elenco: () => [...fogliNotizie(), ...(avvisi?.consigliAttuali() ?? []).map((k, i) => ({ id: 'consiglio' + i, tipo: 'consiglio', chi: k.chi,
+    testo: k.testo, fonte: k.chi }))],
+  sezioni: SEZIONI, sezioneDi, nonLetti: (s) => !!avvisi?.nonLetti(s), onSezione: (s) => avvisi?.segnaLetti(s),
   onApri: () => { cronista = true; tasti.clear(); if (_invitoPorta) _invitoPorta.hidden = true; },
   onChiudi: () => { cronista = null; tasti.clear(); },
 });
@@ -1347,6 +1407,7 @@ async function init() {
     if (document.visibilityState === 'hidden') salvaOra();
   });
   pannelloStato.hidden = false;
+  preparaAvvisi();
   if (ripresa) messaggio(`Partita ${inStoria() ? 'Storia' : 'Libera'} ripresa dall'ultimo salvataggio.`);
 
   cam = createFollowCamera(camera, suoloCamera, knight, renderer.domElement, occlusori);
@@ -1375,7 +1436,7 @@ async function init() {
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no · Spazio: scavalca'
     + ` · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: ${inStoria() ? 'Carta' : 'Carta (clic: vai lì) · T: avanza'}`
-    + ' · N: minimappa (icona, piccola, grande) · +/−: zoom minimappa · J: scrittoio · I: zaino'
+    + ' · N: minimappa (icona, piccola, grande) · +/−: zoom minimappa · J: scrittoio e avvisi · I: zaino'
     + ` · F2: qualità · F3: info · F8: menu · modalità ${inStoria() ? 'Storia' : 'Libera'}`,
   'aiuto');
 }
@@ -1523,6 +1584,7 @@ function aggiornaConoscenza(dt) {
   const notte = Calendar.eNotte();
   Conoscenza.rivela(x, z, notte ? CONOSCENZA.percorsoNotte : CONOSCENZA.percorso, 2);
   Conoscenza.rivela(x, z, notte ? CONOSCENZA.intravistoNotte : CONOSCENZA.intravisto, 1);
+  annunciaLuoghi(x, z);
 }
 
 // Minimappa (js/3d/minimappa.js): in basso a destra durante il gioco di persona, solo nel mondo generato.
@@ -2126,6 +2188,8 @@ function frame(now) {
     minimappa.nascondi(!!percorso);        // percorso di prova: misure confrontabili con quelle di prima
     aggiornaConoscenza(dtReale);
     meridiana.nascondi(!!percorso);
+    avvisi?.nascondi(!!percorso);
+    aggiornaAvvisi(dtReale);
     meridiana.aggiorna(oraForzata ?? Calendar.oraDelGiorno(), oraForzata != null ? 0.25 : 0.5);
     aggiornaPasti(dtReale);
     minimappa.aggiorna(now);

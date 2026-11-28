@@ -372,6 +372,16 @@ poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un
    sinistra) a Prima (6, a destra) passando per Mattutino; tacche ogni ora e mezza; **lune** al posto dei soli (falce
    crescente a Compieta, piena a mezzanotte, calante a Lodi) e una lancetta argento.
    Corretto anche `Calendar.fineVeglia`: all'investitura l'ora del giorno ripartiva da Prima.
+3c. **Avvisi in alto a sinistra** [richiesta dell'utente, novembre 2026]. **Stato: fatto, da provare dall'utente.**
+   `js/3d/avvisi.js` (file nuovo approvato): linguette Notizie · Voci · Bandi · Consigli (pallino se c'è qualcosa di non
+   letto; il clic apre quella sezione dello scrittoio, `J`) e due strisce di carta da piccione viaggiatore. Striscia «dal
+   mondo»: gli ultimi 3 fogli (voci di taverna, bandi, il mercato del giorno, i luoghi appena intravisti). Striscia
+   «consiglio»: `vegliaConsigli` in `js/data/events_veglia.js`, suggerimenti scritti dentro il mondo calcolati dallo stato
+   del garzone (oro, lezioni, Forza, Salute, pasto, ora). Ogni striscia cambia ogni ~25 s fra i messaggi recenti; un
+   messaggio nuovo resta fermo col sigillo finché non lo si legge (mouse sopra o clic); ferma col mouse sopra. Il DOM cambia
+   solo all'arrivo di un messaggio o allo scatto del ciclo. Sostituisce l'avviso d'arrivo dei fogli; lo scrittoio è diviso
+   nelle stesse sezioni; il pannello F3 scende sotto gli avvisi. Zona libera per i riquadri al centro (combattimento):
+   ~1270×680, x 300–1570, y 170–850 a 1920×1080. A regime gli avvisi ricorderanno anche le missioni (G4).
 4. **Combattimento nel riquadro.** Tre colonne (cavaliere, scelte e Slancio, nemico) e cronaca dei Round;
    la scena dietro è ferma. Ogni Round confermato avanza il calendario dei suoi minuti; i rami di esito
    tornano all'evento. In Veglia a Salute 0 si sviene; dopo l'investitura **schermata di morte** con

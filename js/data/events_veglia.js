@@ -75,6 +75,36 @@ const VEGLIA_VOCI = [
   'Dicono che l\'eremita del bosco sappia guarire le febbri con le erbe.',
 ];
 
+// ─── Consigli per la striscia degli avvisi (js/3d/avvisi.js) ──────────────────
+// Suggerimenti non espliciti, scritti dentro il mondo, calcolati dallo stato del garzone. Dal più urgente; la striscia ne
+// mostra al più tre a turno. Solo durante la Veglia (dopo l'investitura arriveranno quelli delle missioni, G4).
+// ctx: { knight, ora (indice canonico 0–7, vedi _ora), mangiato (oggi), pastoNelloZaino }.
+function vegliaConsigli(ctx) {
+  if (!_vegliaCond()) return [];
+  const k = ctx.knight, out = [];
+  const add = (peso, chi, testo) => out.push({ peso, chi, testo });
+  const lezioni = k.addestramento || 0;
+  if (k.salute.cur < k.salute.max * 0.3) add(90, 'Voce di popolo', 'Il guaritore dietro la piazza cuce ferite fino a Nona.');
+  if (!ctx.mangiato && !ctx.pastoNelloZaino && ctx.ora >= 2 && ctx.ora <= 4) add(80, "L'oste", '«Stomaco vuoto non regge la lancia. Una minestra, una moneta.»');
+  if (ctx.ora >= 4) add(70, 'Voce di popolo', 'La taverna chiude a Vespri; il fienile della stalla non chiede moneta.');
+  if (k.forza.cur < 25) add(60, 'Detto del maestro', '«Braccio stanco, lama storta. Prima il fieno, poi la spada.»');
+  if (k.rango === 'garzone') {
+    if (lezioni === 0 && k.oro < VEGLIA_PREZZO_LEZIONE) add(40, 'Voce di cortile', 'Il maestro d\'armi non insegna gratis, ma la stalla cerca braccia.');
+    else if (lezioni === 0) add(40, 'Detto del maestro', '«Chi paga impara; chi non paga guarda.» Si comincia con la luce.');
+    else add(40, 'Voce di cortile', 'Il maestro conta le lezioni su una mano sola, e gliene bastano tre.');
+  } else if (!k.primaSangue) {
+    add(40, 'Bando del signore', 'Il signore cerca scudieri che tengano testa alle bestie delle colline.');
+  } else if (k.oro < VEGLIA_SOGLIA_INVESTITURA) {
+    add(40, 'Il cappellano', '«La veglia d\'armi si paga in cera e in monete: ' + VEGLIA_SOGLIA_INVESTITURA + ', non una di meno.»');
+  } else {
+    add(40, 'Il cappellano', 'Le candele della cappella sono accese. Si aspetta qualcuno.');
+  }
+  if (k.rango === 'garzone' && k.oro >= VEGLIA_PREZZO_LEZIONE + 2 && lezioni < VEGLIA_SOGLIA_ADDESTRAMENTO) {
+    add(20, 'Voce di cortile', 'Alla loggia del mercato il pane costa una moneta, e dura più di una promessa.');
+  }
+  return out.sort((a, b) => b.peso - a.peso);
+}
+
 // ─── Stalla: lavoro e letto del garzone ───────────────────────────────────────
 Events.register({
   id: 'veglia.stalla', kind: 'location', where: 'castle', condition: _vegliaCond, cooldown: 0,
