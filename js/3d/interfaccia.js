@@ -791,38 +791,127 @@ export function avvisoFoglio(d, testo, sotto = 'J: scrittoio') {
 // (1920×1080): x 300–1570, y 170–850, al massimo 1270×680; avvisi, diario, meridiana e minimappa restano liberi.
 // Le figure sono sagome statiche disegnate in SVG (niente modelli, CLAUDE.md regola 6).
 
-/** Sagoma del cavaliere, rivolto a destra: elmo, cotta, scudo e arma solo se li porta. */
-function sagomaCavaliere(eq = {}) {
-  const testa = eq.armatura ? '<path d="M88 20h24v24H88z"/><path d="M92 31h16" stroke="#e9dcb8" stroke-width="2.5"/>'
-    : '<circle cx="100" cy="32" r="12"/>';
-  const scudo = eq.scudo ? '<path d="M112 62h28v26c0 16-14 26-14 26s-14-10-14-26z" fill="#7a1f12" stroke="#8a6424" stroke-width="2.5"/>'
-    + '<path d="M126 66v42M114 80h24" stroke="#d9b25a" stroke-width="2"/>' : '';
-  const arma = eq.arma ? '<path d="M82 64L52 18" stroke="#3a2a18" stroke-width="5" stroke-linecap="round"/>'
-    + '<path d="M70 52l16-10" stroke="#3a2a18" stroke-width="4" stroke-linecap="round"/>' : '';
-  return `<svg viewBox="0 0 200 160" class="sagoma">${arma}<g fill="#3a2a18">${testa}`
-    + '<path d="M84 48h32l7 48h-7l-2 46h-10l-4-38-4 38H86l-2-46h-7z"/></g>' + scudo + '</svg>';
+// ─── Sagome del riquadro di combattimento ─────────────────────────────────────────────────────────────────────
+// Figure piene a inchiostro sulla pergamena, di profilo (il cavaliere guarda a destra, il nemico a sinistra), disegnate
+// con curve in un riquadro 240×180 con il suolo a y 166. Gli arti lontani sono in un tono più chiaro: danno profondità
+// senza contorni. Un'ombra ovale le appoggia a terra.
+const INK = '#2b1d10', LONTANO = '#6b5234', CARTA = '#e6d6ae';
+const ombra = (cx, rx) => `<ellipse cx="${cx}" cy="168" rx="${rx}" ry="4.5" fill="rgba(70,45,20,.28)"/>`;
+
+const FIGURE = {
+  lupo: {
+    ombra: [112, 82],
+    lontano: 'M98 124C100 136 93 148 87 157L85 163C83 167 77 167 75 165L79 157C85 145 86 135 88 126Z'
+      + 'M160 128C164 140 161 151 161 159L161 164C159 167 153 167 152 165L154 157C152 147 150 138 150 130Z',
+    vicino: 'M28 97C30 92 38 90 46 88C52 84 56 80 60 78L63 63L71 79L77 65L81 82C87 86 93 88 100 90'
+      + 'C122 92 150 90 172 94C182 96 188 102 192 110C200 122 206 136 204 150C200 153 196 150 194 146'
+      + 'C190 136 184 126 178 119C180 128 180 136 184 146L186 161C186 166 182 167 176 166L176 163'
+      + 'C178 159 178 153 172 146C166 138 160 132 154 130C138 134 122 134 110 132L106 146L104 162'
+      + 'C104 166 100 167 94 166L94 162L96 146C94 136 90 128 86 122C80 116 72 112 64 110C56 108 48 106 40 104'
+      + 'C34 103 29 101 28 97Z',
+    dettagli: '<circle cx="51" cy="91" r="2" fill="#d8b040"/>'
+      + '<path d="M30 100C36 101 42 102 48 101" stroke="' + CARTA + '" stroke-width="1.2" fill="none" opacity=".6"/>'
+      + '<path d="M96 92C104 98 108 104 110 112M156 98C164 104 170 110 174 118" stroke="#4a3520" stroke-width="1.4" fill="none"/>',
+  },
+  cinghiale: {
+    ombra: [112, 80],
+    lontano: 'M100 140L98 161C98 166 92 167 88 166L90 141Z M168 140L167 161C167 166 161 167 157 166L158 141Z',
+    vicino: 'M30 122L34 119C42 112 52 104 62 98L66 85L73 97C84 88 100 82 118 82C140 82 160 88 176 100'
+      + 'C186 108 190 118 188 128C194 124 199 119 203 114C204 121 197 130 189 134C186 140 184 146 182 151L182 161'
+      + 'C182 166 178 167 172 166L172 152C168 146 162 143 156 143C140 145 120 145 106 143L104 161C104 166 98 167 94 166'
+      + 'L94 152C88 148 82 144 74 141C62 139 50 137 42 135C36 134 32 133 29 130Z',
+    dettagli: '<path d="M70 92l4-9 4 7 4-10 5 8 5-11 5 9 5-11 5 9 5-10 5 9 6-9 5 8 6-7" fill="' + INK + '"/>'
+      + '<path d="M42 131C36 127 35 120 41 115" stroke="' + CARTA + '" stroke-width="3" stroke-linecap="round" fill="none"/>'
+      + '<circle cx="58" cy="111" r="2" fill="#d8b040"/>',
+  },
+  orso: {
+    ombra: [108, 90],
+    lontano: 'M112 146L106 164C105 168 96 168 92 166L96 146Z M170 148L166 164C165 168 156 168 152 166L154 148Z',
+    vicino: 'M16 124C16 117 22 112 30 110C36 101 44 94 54 92C53 84 61 80 67 86C76 83 84 79 92 75'
+      + 'C108 63 132 61 152 69C174 77 190 94 196 114C200 128 198 142 192 150L192 162C192 167 184 168 174 166'
+      + 'L172 152C166 148 158 146 150 148C136 152 124 152 116 150L116 162C116 167 108 168 96 166L96 150'
+      + 'C90 142 84 136 76 132C66 128 56 130 48 132C38 134 26 134 20 131C16 129 15 127 16 124Z',
+    dettagli: '<circle cx="42" cy="106" r="2.2" fill="#d8b040"/><circle cx="18" cy="122" r="3" fill="#120a04"/>'
+      + '<path d="M97 165l-3 3M103 165l-2 3M109 165l-1 3M175 165l-3 3M181 165l-2 3M187 165l-1 3" stroke="' + INK + '" stroke-width="1.6"/>'
+      + '<path d="M96 84C110 92 118 106 118 124M160 84C176 96 184 110 184 130" stroke="#4a3520" stroke-width="1.4" fill="none"/>',
+  },
+  umano: {   // fuorilegge incappucciato con l'ascia alzata
+    ombra: [108, 44],
+    lontano: 'M108 136L112 160L124 162C128 163 128 167 124 167L106 167L100 138Z'
+      + 'M120 74C128 82 132 92 130 104L124 104C124 94 120 86 114 80Z',
+    vicino: 'M104 28C92 28 85 40 85 52C85 60 89 66 95 68L92 70C84 92 80 116 78 140L94 140L90 162L78 164'
+      + 'C74 165 74 167 78 167L98 167L104 140L132 140C130 116 128 92 124 70C126 54 120 30 104 28Z'
+      + 'M94 78C84 76 74 68 68 58L74 54C80 62 88 68 98 70Z',
+    dettagli: '<path d="M71 58L52 20" stroke="#4a2e12" stroke-width="5" stroke-linecap="round"/>'
+      + '<path d="M47 11C38 18 37 32 45 39L55 27C53 21 51 15 47 11Z" fill="#5d5a55" stroke="' + INK + '" stroke-width="1.5"/>'
+      + '<path d="M88 50C88 46 92 44 96 46" stroke="#4a3520" stroke-width="1.5" fill="none"/>'
+      + '<path d="M84 96L130 96" stroke="#5a3e20" stroke-width="3"/>',
+  },
+  mitico: {   // spettro: veste lacera, mano adunca, occhi accesi
+    ombra: [112, 46],
+    lontano: 'M134 70C144 84 150 98 150 112L142 112C140 98 136 86 128 76Z',
+    vicino: 'M120 22C100 22 90 40 88 60C86 80 78 110 70 140L76 134L80 152L88 138L94 158L102 140L110 160L118 140'
+      + 'L126 158L132 138L140 154L144 134L150 146C146 116 140 86 138 60C136 40 132 22 120 22Z'
+      + 'M92 76C80 80 66 84 54 82L46 76L50 83L42 85L50 88L44 92L54 91C68 93 84 91 96 88Z',
+    dettagli: '<g filter="drop-shadow(0 0 3px #ff5a1c)"><path d="M104 52l7 2-7 2z M118 52l7 2-7 2z" fill="#ff6a2a"/></g>',
+  },
+  cavaliere: {
+    ombra: [114, 48],
+  },
+};
+
+function figura(f) {
+  return `<path d="${f.lontano}" fill="${LONTANO}"/><path d="${f.vicino}" fill="${INK}"/>${f.dettagli ?? ''}`;
 }
 
-const SAGOME_NEMICO = {
-  lupo: '<path d="M30 92l14-14 8-12 6 6 4 12 34-4 36 2 18-6 18 8 8 20-6 2-6-14-4 20 10 16-8 2-12-18-4 16-8 2 2-24-28 2-16 2-4 18-8 2v-20l-10 16-8 2 6-24-14-6-18 2z"/>',
-  cinghiale: '<path d="M28 108l8-12 14-10 20-14 30-8 30 2 22 8 14 16 4 18-8 4-2 18h-10l-2-16-28 2-4 16h-10l-2-16H80l-4 16H66l-2-20H44z"/>'
-    + '<path d="M70 72l-4-12 14 10z"/><path d="M36 104q-8-8 2-16" fill="none" stroke="#efe2c2" stroke-width="3"/>',
-  orso: '<path d="M24 112l6-14 14-10 6-10 10 2 14-10 36-8 36 6 22 18 8 22-4 28h-16l-2-20-26 4-2 18h-16l-2-20-24-2-4 22H64v-24H44z"/>',
-  umano: '<circle cx="110" cy="38" r="13"/><path d="M96 56h28l8 44h-6l-2 40h-10l-4-36-4 36H96l-2-40h-6z"/>'
-    + '<path d="M98 64L72 84" stroke="#3a2a18" stroke-width="6" stroke-linecap="round"/><path d="M64 70l14 2-4 20-14-6z"/>',
-  mitico: '<path d="M100 18c30 0 40 42 46 82l14 50H40l14-50c6-40 16-82 46-82z"/>'
-    + '<circle cx="90" cy="54" r="4" fill="#c8401c"/><circle cx="110" cy="54" r="4" fill="#c8401c"/>',
-};
-/** Sagoma del nemico, rivolto a sinistra; un gruppo o un'orda sono più figure. */
+/** Sagoma del cavaliere, rivolto a destra: elmo, cotta e sopravveste se ha l'armatura, scudo e spada se li porta. */
+function sagomaCavaliere(eq = {}) {
+  const armato = !!eq.armatura;
+  // Gamba lontana, braccio della spada (dietro), corpo, gamba vicina, testa, scudo davanti.
+  const gambaLontana = `<path d="M104 124L100 160L88 163C84 164 84 167 88 167L106 167L112 126Z" fill="${LONTANO}"/>`;
+  const gambaVicina = `<path d="M114 126L122 160L134 163C138 164 138 167 134 167L116 167L106 128Z" fill="${INK}"/>`;
+  const corpo = armato
+    // sopravveste svasata fino alle ginocchia, cintura, spalle larghe
+    ? `<path d="M96 66C92 70 90 78 90 86L86 136L134 136L130 86C130 78 128 70 124 66C118 63 102 63 96 66Z" fill="${INK}"/>`
+      + `<path d="M88 112L132 112" stroke="#6e4c18" stroke-width="3"/><path d="M110 70L110 134" stroke="#4a3520" stroke-width="1.3"/>`
+    // garzone: tunica corta, maniche
+    : `<path d="M98 68C94 72 92 80 92 88L90 126L130 126L128 88C128 80 126 72 122 68C116 65 104 65 98 68Z" fill="${INK}"/>`
+      + `<path d="M91 104L129 104" stroke="#5a3e20" stroke-width="2.5"/>`;
+  const testa = armato
+    // elmo a secchio con fessura e croce di respiro
+    ? `<path d="M97 38C97 28 103 22 110 22C117 22 123 28 123 38L124 62L96 62Z" fill="${INK}"/>`
+      + `<path d="M104 40L124 40" stroke="${CARTA}" stroke-width="2.4"/><path d="M116 46L116 56M112 51L120 51" stroke="${CARTA}" stroke-width="1.4"/>`
+    // capo scoperto, capelli
+    : `<path d="M104 62L116 62L116 56L104 56Z" fill="${INK}"/><circle cx="111" cy="44" r="12" fill="${INK}"/>`
+      + `<path d="M99 42C99 32 106 29 113 30C120 31 124 36 122 42C116 38 106 38 99 42Z" fill="#4a3520"/>`;
+  // braccio della spada: dalla spalla, alzato all'indietro
+  const braccio = eq.arma
+    ? `<path d="M98 70C92 64 86 56 82 48L88 44C92 52 98 60 104 66Z" fill="${INK}"/>`
+      + `<path d="M84 46L58 8" stroke="#8d8a82" stroke-width="4.5" stroke-linecap="round"/>`
+      + `<path d="M76 54L92 42" stroke="${INK}" stroke-width="4" stroke-linecap="round"/><path d="M88 50L84 45" stroke="#6e4c18" stroke-width="5" stroke-linecap="round"/>`
+    : `<path d="M98 70C92 80 90 92 92 104L98 104C96 94 98 82 104 74Z" fill="${INK}"/>`;
+  const scudo = eq.scudo
+    ? `<path d="M118 74L152 74C154 104 148 124 135 138C122 124 116 104 118 74Z" fill="#7a1f12" stroke="#8a6424" stroke-width="2.5"/>`
+      + `<path d="M135 78L135 132M121 94L150 94" stroke="#d9b25a" stroke-width="3"/>`
+    : `<path d="M120 70C128 78 132 90 130 102L124 102C124 92 120 84 114 78Z" fill="${INK}"/>`;
+  return `<svg viewBox="0 0 240 180" class="sagoma">${ombra(112, 40)}${braccio}${gambaLontana}${corpo}${gambaVicina}${testa}${scudo}</svg>`;
+}
+
+/** Sagoma del nemico, rivolto a sinistra; un gruppo o un'orda sono più figure, le lontane più piccole e più chiare. */
 function sagomaNemico(n = {}) {
   const forma = n.tipo === 'mitico' ? 'mitico' : n.tipo === 'umano' ? 'umano'
-    : SAGOME_NEMICO[n.categoria] ? n.categoria : n.categoria === 'orso' ? 'orso' : 'lupo';
-  const g = SAGOME_NEMICO[forma];
+    : FIGURE[n.categoria] && n.categoria !== 'cavaliere' ? n.categoria : 'lupo';
+  const f = FIGURE[forma];
   const molti = n.numerosita === 'orda' ? 3 : n.numerosita === 'gruppo' ? 2 : 1;
-  const copie = molti === 1 ? `<g fill="#3a2a18">${g}</g>`
-    : Array.from({ length: molti }, (_, i) => `<g fill="#3a2a18" opacity="${1 - i * 0.25}" transform="translate(${i * 34 - 10} ${-i * 14}) scale(${0.82 - i * 0.08})"`
-      + ` transform-origin="100 140">${g}</g>`).reverse().join('');
-  return `<svg viewBox="0 0 200 160" class="sagoma">${copie}</svg>`;
+  let g = '';
+  // In gruppo tutto rimpicciolisce perché le figure di dietro (a destra, più in alto) restino nel riquadro.
+  const base = molti === 1 ? 1 : molti === 2 ? 0.82 : 0.7;
+  for (let i = molti - 1; i >= 0; i--) {
+    const s = base * (1 - i * 0.14), tx = i * (forma === 'umano' || forma === 'mitico' ? 40 : 50) + 6, ty = 166 * (1 - s) - i * 12;
+    g += `<g transform="translate(${tx.toFixed(1)} ${ty.toFixed(1)}) scale(${s})"${i ? ` opacity="${1 - i * 0.3}"` : ''}>`
+      + `${ombra(f.ombra[0], f.ombra[1])}${figura(f)}</g>`;
+  }
+  return `<svg viewBox="0 0 240 180" class="sagoma">${g}</svg>`;
 }
 
 const _barra = (nome, v, cls = '') => {
