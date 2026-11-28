@@ -584,6 +584,7 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     pendenzaMarcia: 0,     // tangente della pendenza nella direzione di marcia (+ = salita)
     yVis: NaN,             // quota disegnata: segue `y` in fretta, così salendo un gradino il corpo non scatta
     scavalco: null,        // scavalcamento in corso (vedi cercaScavalco)
+    seduto: false,         // seduto accanto al fuoco del campo (siedi)
     fattorePendenza: 1,    // moltiplicatore di velocità dovuto alla pendenza
   };
 
@@ -784,6 +785,11 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
       aggiornaOmbra();
       return;
     }
+    if (stato.seduto) {                      // accanto al fuoco del campo: seduto, i comandi aspettano
+      posaSeduta();
+      stato.velocita = stato.velEffettiva = stato.velAngolare = 0;
+      return;
+    }
     if (input.scavalca) {
       const p = cercaScavalco();
       if (p) { avviaScavalco(p); aggiornaScavalco(0); aggiornaOmbra(); return; }
@@ -950,6 +956,28 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     f.rotation.y = t * 2.1;
   }
 
+  // ─── Seduto per terra (fuoco del campo): ginocchia alzate, braccia sulle ginocchia, busto in avanti ───
+  function posaSeduta() {
+    mod.corpo.position.y = -(ALTEZZA_ANCA - 0.12);
+    for (const g of gambe) {
+      const esterno = Math.sign(g.lato);
+      g.mod.anca.rotation.x = -1.25;
+      g.mod.anca.rotation.z = 0.18 * esterno;
+      g.mod.ginocchio.rotation.x = 2.0;
+      g.mod.caviglia.rotation.x = -0.6;
+      g.mod.caviglia.rotation.z = 0;
+    }
+    const respiro = Math.sin(stato.tempo * 1.4);
+    mod.busto.rotation.x = 0.22 + 0.01 * respiro;
+    mod.busto.rotation.y = 0;
+    mod.busto.position.y = 0.98;
+    mod.testa.rotation.x = 0.15;
+    mod.braccioD.spalla.rotation.x = -0.75; mod.braccioD.spalla.rotation.z = -0.12; mod.braccioD.gomito.rotation.x = -0.5;
+    mod.braccioS.spalla.rotation.x = -0.75; mod.braccioS.spalla.rotation.z = 0.15; mod.braccioS.gomito.rotation.x = -0.6;
+    mod.mantello.rotation.x = 0.9;
+    mod.mantello.scale.y = 0.75;
+  }
+
   // ─── Ombra adagiata sul terreno ───
   const _n = new THREE.Vector3();
   const _z = new THREE.Vector3(0, 0, 1);
@@ -1037,6 +1065,17 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     aggiornaSella,
     /** Scavalcamento possibile davanti (per l'invito «Spazio» nel HUD), o null. */
     cercaScavalco,
+    /** Seduto per terra (fuoco del campo) o in piedi; `direzione` facoltativa: verso dove guarda. */
+    siedi(seduto, direzione) {
+      stato.seduto = !!seduto;
+      if (Number.isFinite(direzione)) stato.direzione = direzione;
+      if (!seduto) { mod.corpo.position.y = 0; mod.mantello.scale.y = 1; return; }
+      stato.y = stato.yVis = terrain.getHeight(stato.x, stato.z);
+      mod.root.position.set(stato.x, stato.y, stato.z);
+      mod.root.rotation.set(0, stato.direzione, 0);
+      posaSeduta();
+      aggiornaOmbra();
+    },
     /** Torcia in mano, accesa o no (viaggio di notte). */
     torcia(accesa) { mod.torcia.g.visible = !!accesa; },
     /** Posizione della fiamma della torcia (coordinate della scena), per la luce vicina. */

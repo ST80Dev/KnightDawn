@@ -418,7 +418,8 @@ const Combat = {
   // scelto per bioma e ora (Enemies: habitat, ore). Più spesso lontano dalle strade, di sera e di notte; in sella un
   // po' meno (il cavallo si sente da lontano). Il motore 3D chiama probIncontro sui metri fatti e, se capita,
   // pescaIncontro. Valori [DA BILANCIARE]: incontri per km lontano dalle strade, di giorno, a piedi.
-  INCONTRI: { perKm: 0.35, strada: 0.3, sera: 1.6, notte: 2.2, sella: 0.6, borgo: 350, pausa: 400 },
+  // sonno: probabilità di un incontro in una notte all'aperto, senza fuoco e accanto al fuoco (che tiene lontani i timidi).
+  INCONTRI: { perKm: 0.35, strada: 0.3, sera: 1.6, notte: 2.2, sella: 0.6, borgo: 350, pausa: 400, sonno: { addiaccio: 0.25, fuoco: 0.08 } },
 
   /** Momento del giorno per gli incontri dall'ora canonica (0 Prima … 7 Lodi): giorno, sera (Vespri), notte. */
   momento(indice) { return indice <= 3 ? 'giorno' : indice === 4 ? 'sera' : 'notte'; },

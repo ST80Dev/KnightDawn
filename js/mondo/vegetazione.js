@@ -1417,3 +1417,51 @@ export function* boscoLontanoAPezzi(carta, cx, cz, half, quota, stagione = 0, bu
   return { dati: Float32Array.from(out), n: out.length / 5, ms: performance.now() - t0 - attesa };
 }
 
+
+// ─── Legna per il fuoco del campo (viaggio di notte, docs/GDD.md §2) ─────────────────────────────────────────
+// «C'è legna vicino» se entro LEGNA.raggio m ci sono almeno LEGNA.alberi alberi (anche secchi) o LEGNA.arbusti arbusti
+// (cespugli, arbusti alti, sterpi, siepi): la stessa soglia della misura per bioma in docs/ESPLORAZIONE_3D.md.
+export const LEGNA = {
+  raggio: 50, alberi: 3, arbusti: 6, passo: 10,
+  tipiAlberi: ['latifoglia', 'conifera', 'pino', 'riva', 'secco'],
+  tipiArbusti: ['cespuglio', 'arbusto alto', 'sterpo', 'siepe'],
+};
+
+/**
+ * Conteggio della legna di un blocco su una griglia a celle di LEGNA.passo m (coordinate locali del blocco, da −half
+ * a +half): `pos` è il risultato di posizionaVegetazione. Pochi KB, da tenere accanto al blocco.
+ */
+export function contaLegna(pos, half) {
+  const P = LEGNA.passo, n = Math.ceil((2 * half) / P) + 1;
+  const alberi = new Uint16Array(n * n), arbusti = new Uint16Array(n * n);
+  const metti = (nomi, dest) => {
+    for (const nm of nomi) {
+      const T = pos.tipi[nm];
+      if (!T) continue;
+      for (let k = 0; k < T.n; k++) {
+        const c = Math.floor((T.dati[k * STRIDE] + half) / P), r = Math.floor((T.dati[k * STRIDE + 2] + half) / P);
+        if (c >= 0 && r >= 0 && c < n && r < n && dest[r * n + c] < 65535) dest[r * n + c]++;
+      }
+    }
+  };
+  metti(LEGNA.tipiAlberi, alberi);
+  metti(LEGNA.tipiArbusti, arbusti);
+  return { half, n, alberi, arbusti };
+}
+
+/** Legna entro `raggio` m dal punto locale (x, z) del blocco: { alberi, arbusti, basta }. Fuori dal blocco: niente. */
+export function legnaEntro(G, x, z, raggio = LEGNA.raggio) {
+  const P = LEGNA.passo, out = { alberi: 0, arbusti: 0, basta: false };
+  if (!G) return out;
+  const c0 = Math.floor((x - raggio + G.half) / P), c1 = Math.floor((x + raggio + G.half) / P);
+  const r0 = Math.floor((z - raggio + G.half) / P), r1 = Math.floor((z + raggio + G.half) / P);
+  for (let r = Math.max(0, r0); r <= Math.min(G.n - 1, r1); r++) {
+    for (let c = Math.max(0, c0); c <= Math.min(G.n - 1, c1); c++) {
+      const cx = -G.half + (c + 0.5) * P, cz = -G.half + (r + 0.5) * P;      // centro della cella dentro il cerchio
+      if (Math.hypot(cx - x, cz - z) > raggio) continue;
+      out.alberi += G.alberi[r * G.n + c]; out.arbusti += G.arbusti[r * G.n + c];
+    }
+  }
+  out.basta = out.alberi >= LEGNA.alberi || out.arbusti >= LEGNA.arbusti;
+  return out;
+}
