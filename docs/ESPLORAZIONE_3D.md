@@ -3736,8 +3736,10 @@ Decisioni dell'utente (28/11, sessione «Piano di lavoro»): torcia comprata (un
 tizzone dal fuoco, acciarino alla cintura, accampamento con `R` di notte se c'è legna, zaino ritarato con le bisacce,
 legna nei biomi poveri da misurare prima dei rimedi. Regole di gioco in `docs/GDD.md` §2 «Pasti e zaino».
 
-**Divisione in tre PR** (proposta): **(a)** zaino a 12 posti, bisacce +6, torcia e acciarino — *fatta*; **(b)** fuoco
-del campo e tizzone; **(c)** fascina e ripari, dopo la misura qui sotto e la scelta dell'utente.
+**Divisione in tre PR**: **(a)** zaino a 12 posti, bisacce +6, torcia e acciarino — *fatta* (#272); **(b)** fuoco
+del campo e tizzone — *fatta*; **(c)** mucchietti di legna sparsa nei biomi poveri [deciso dall'utente il 28/11: niente
+fascina; obiettivo da proporre, ~un mucchietto entro 150–200 m dalle strade, misurato prima e dopo]. Capanne dei
+pastori in sospeso.
 
 ### (a) Zaino, bisacce, torcia, acciarino — fatta, da provare
 - Logica in `js/knight.js` (`postiZaino`, `zainoPieno`, `haAcciarino`, `luceTorcia`, `torciaAccesa`, `controllaTorcia`;
@@ -3751,6 +3753,23 @@ del campo e tizzone; **(c)** fascina e ripari, dopo la misura qui sotto e la sce
   203 → 206 con la torcia accesa, triangoli 658.711 → 658.770 (la fiamma in un solo passaggio: prima 207); nessun errore. Logica provata in Node (16 controlli:
   posti, bisacce, cavallo non vendibile con le bisacce piene, acciarino fuori dallo zaino, torcia di giorno rifiutata,
   spenta e riaccesa, consumata a Prima, niente animali timidi con la luce).
+
+### (b) Fuoco del campo e tizzone — fatta, da provare
+- `R` di notte (da Vespri) all'aperto: se c'è un fuoco acceso entro 8 m, o si può accenderne uno (acciarino, fuori
+  da borghi e villaggi, `legnaEntro` del blocco), si accende davanti al cavaliere e si apre la carta del fuoco:
+  dormire fino a Prima, prendere un tizzone, spegnere. Altrimenti si dorme all'addiaccio come prima (con la riga «Qui
+  attorno non c'è legna» se manca solo quella). In sella: «Smonta per accamparti».
+- Legna: `contaLegna` / `legnaEntro` in `js/mondo/vegetazione.js` (`LEGNA`): il blocco conta alberi e arbusti su celle
+  di 10 m (201×201, ~160 KB) quando si prepara; stessa soglia della misura per bioma (provato in Node: stessa risposta
+  del conteggio diretto in 40 punti su 40).
+- Logica: `Knight.prendiTizzone`, `Knight.notteAllAperto` (`NOTTE_APERTO`), `Combat.INCONTRI.sonno` (addiaccio 25 %,
+  fuoco 8 %; solo dove gli incontri sono attivi, fuori dai borghi). Un incontro nel sonno apre la carta dell'incontro al
+  risveglio.
+- In scena: `creaFuocoCampo` in `js/3d/edifici3d.js` (vicino alle torce del kit; un file a sé solo se l'utente lo
+  vuole): pietre, legna, fiamme (tre coni additivi uniti), fumo (7 punti) — quattro chiamate; la luce è una delle 4
+  luci vicine (`FUOCO_CAMPO`, 16 m). Spento: pietre, legna bruciata, cenere. Il cavaliere siede (`knight3d.siedi`,
+  posa a terra con le ginocchia alzate), il cavallo è messo a 4,5 m. Il fuoco non è nel salvataggio: ricaricando
+  sparisce (anche la cenere).
 
 ### Legna lungo le strade, per bioma (misura per la PR (c))
 [Certo, Node, 4 semi (570549, 48213, 1234, 99001), 8 blocchi di 2×2 km per bioma centrati su strade, pipeline del

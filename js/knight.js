@@ -253,6 +253,33 @@ const Knight = {
     return { ok: true, testo: 'Accendi una torcia: farà luce fino a Prima.' };
   },
 
+  /** Dal fuoco del campo: un tizzone acceso che vale una torcia fino a Prima (stessa regola). */
+  prendiTizzone(adesso, finoA) {
+    this.controllaTorcia(adesso);
+    if (this.torcia) return { ok: false, testo: 'Hai già una luce in mano.' };
+    this.torcia = { nome: 'Tizzone', finoA, accesa: true };
+    return { ok: true, testo: 'Prendi un tizzone dal fuoco: farà luce fino a Prima.' };
+  },
+
+  // ─── Notte all'aperto (fuoco del campo, docs/GDD.md §2) ─────────────────────
+  // Dormire accanto al fuoco ristora più dell'addiaccio; senza fuoco, nei biomi freddi, il gelo toglie Salute.
+  // [Decisi con l'utente il 28/11: −5 al freddo senza fuoco; il resto DA BILANCIARE.]
+  NOTTE_APERTO: { fuocoForza: 10, fuocoSalute: 5, gelo: 5 },
+
+  /** Dopo il sonno fino a Prima: { fuoco, freddo } → righe da raccontare. */
+  notteAllAperto({ fuoco = false, freddo = false } = {}) {
+    const N = this.NOTTE_APERTO, testi = [];
+    if (fuoco) {
+      this.forza.cur = Math.min(this.forza.max, this.forza.cur + N.fuocoForza);
+      this.salute.cur = Math.min(this.salute.max, this.salute.cur + N.fuocoSalute);
+      testi.push('Il fuoco ti ha tenuto caldo: dormi meglio che all\'addiaccio.');
+    } else if (freddo) {
+      this.salute.cur = Math.max(1, this.salute.cur - N.gelo);
+      testi.push(`Il gelo della notte ti è entrato nelle ossa (Salute −${N.gelo}).`);
+    }
+    return testi;
+  },
+
   /** A Prima la torcia è consumata. Ritorna la riga da dire, o null. */
   controllaTorcia(adesso) {
     if (!this.torcia || adesso < this.torcia.finoA) return null;

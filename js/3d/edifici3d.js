@@ -1666,3 +1666,126 @@ export function creaCaseCampagna(suolo, siti, cx, cz, seme = 7, clima = 'tempera
   return { tipo: 'campagna', object: r.object, solidi: r.solidi, spingiFuori, quotaSuolo: () => null, dentro: () => false,
     aggiornaLuci: r.aggiornaLuci, sorgenti: r.sorgenti, misure: r.misure, edifici: r.edifici };
 }
+
+// ─── Fuoco del campo (viaggio di notte, docs/GDD.md §2) ──────────────────────────────────────────────────────
+// Cerchio di pietre, legna a capanna, fiamme che tremolano e un filo di fumo: quattro chiamate di disegno (pietre,
+// legna, fiamme, fumo); spento resta la cenere (pietre, legna bruciata, cenere: tre). La luce non è qui: il fuoco è una
+// delle luci vicine (main.js, luciVicine). Origine al centro, sul terreno.
+export const FUOCO_CAMPO = { colore: '#ff8a3a', intensita: 26, distanza: 16, fumo: 7 };
+
+/** Unisce geometrie (posizioni e normali, senza indici) in una sola. */
+function uniscePezzi(parti) {
+  const g = parti.map((p) => (p.index ? p.toNonIndexed() : p));
+  const n = g.reduce((s, x) => s + x.attributes.position.count, 0);
+  const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3);
+  let o = 0;
+  for (const x of g) {
+    if (!x.attributes.normal) x.computeVertexNormals();
+    pos.set(x.attributes.position.array, o * 3); nor.set(x.attributes.normal.array, o * 3);
+    o += x.attributes.position.count;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  return out;
+}
+
+export function creaFuocoCampo(seme = 1) {
+  const object = new THREE.Group();
+  object.name = 'fuoco-campo';
+  let s = seme >>> 0;
+  const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+  // Pietre: nove sassi irregolari in cerchio.
+  const sassi = [];
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2 + rnd() * 0.3, r = 0.52 + rnd() * 0.06;
+    const g = new THREE.DodecahedronGeometry(0.11 + rnd() * 0.05, 0);
+    g.scale(1.2, 0.7, 1);
+    g.rotateY(rnd() * Math.PI);
+    g.translate(Math.cos(a) * r, 0.05, Math.sin(a) * r);
+    sassi.push(g);
+  }
+  const pietre = new THREE.Mesh(uniscePezzi(sassi), new THREE.MeshLambertMaterial({ color: '#77736c' }));
+  // Legna a capanna (cinque ciocchi inclinati) e due a terra.
+  const ciocchi = [];
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2 + rnd() * 0.4;
+    const g = new THREE.CylinderGeometry(0.035, 0.045, 0.62, 5);
+    g.translate(0, 0.31, 0);
+    g.rotateX(0.55); g.rotateY(a);
+    g.translate(-Math.sin(a) * 0.22, 0, -Math.cos(a) * 0.22);
+    ciocchi.push(g);
+  }
+  for (const a of [0.4, 2.2]) {
+    const g = new THREE.CylinderGeometry(0.05, 0.05, 0.7, 5);
+    g.rotateZ(Math.PI / 2); g.rotateY(a); g.translate(0, 0.05, 0);
+    ciocchi.push(g);
+  }
+  const matLegna = new THREE.MeshLambertMaterial({ color: '#5b3c22' });
+  const legna = new THREE.Mesh(uniscePezzi(ciocchi), matLegna);
+  // Fiamme: tre coni additivi (una chiamata), che tremolano in aggiorna().
+  const lingue = [[0, 0, 0.17, 0.62], [0.09, 0.04, 0.11, 0.42], [-0.08, -0.05, 0.12, 0.46]].map(([x, z, r, h]) => {
+    const g = new THREE.ConeGeometry(r, h, 7, 1, true);
+    g.translate(x, h / 2 + 0.04, z);
+    return g;
+  });
+  const fiamme = new THREE.Mesh(uniscePezzi(lingue), new THREE.MeshBasicMaterial({ color: '#ffa24a', transparent: true, opacity: 0.85,
+    blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true, fog: false }));
+  fiamme.name = 'fiamme-fuoco';
+  // Fumo: pochi sbuffi grigi che salgono (punti, una chiamata).
+  const N = FUOCO_CAMPO.fumo, fase = Float32Array.from({ length: N }, (_, i) => i / N);
+  const gf = new THREE.BufferGeometry();
+  gf.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+  const fumo = new THREE.Points(gf, new THREE.PointsMaterial({ color: '#8c8780', size: 0.9, sizeAttenuation: true, map: texturaFumo(),
+    transparent: true, opacity: 0.32, depthWrite: false }));
+  fumo.frustumCulled = false;
+  fumo.name = 'fumo-fuoco';
+  // Cenere: un disco grigio scuro, visibile da spento.
+  const gc = new THREE.CircleGeometry(0.42, 12);
+  gc.rotateX(-Math.PI / 2); gc.translate(0, 0.02, 0);
+  const cenere = new THREE.Mesh(gc, new THREE.MeshLambertMaterial({ color: '#3a3632' }));
+  cenere.visible = false;
+  object.add(pietre, legna, fiamme, fumo, cenere);
+  let acceso = true;
+  return {
+    object,
+    get acceso() { return acceso; },
+    /** Fiamme e fumo (t in secondi); da spento niente. */
+    aggiorna(t) {
+      if (!acceso) return;
+      fiamme.scale.set(1 + 0.1 * Math.sin(t * 9.1), 0.85 + 0.2 * Math.sin(t * 6.3) + 0.08 * Math.sin(t * 17.9), 1 + 0.1 * Math.sin(t * 7.7 + 1));
+      fiamme.rotation.y = t * 1.3;
+      const p = gf.attributes.position;
+      for (let i = 0; i < N; i++) {
+        const f = (fase[i] + t * 0.12) % 1;
+        p.setXYZ(i, Math.sin(t * 0.7 + i * 2.1) * 0.25 * f + 0.4 * f * f, 0.7 + f * 4.5, Math.cos(t * 0.5 + i * 1.3) * 0.2 * f);
+      }
+      p.needsUpdate = true;
+      fumo.material.opacity = 0.32;
+    },
+    /** Spegne il fuoco: restano pietre, legna bruciata e cenere. */
+    spegni() {
+      acceso = false;
+      fiamme.visible = fumo.visible = false;
+      cenere.visible = true;
+      matLegna.color.set('#231c17');
+      legna.scale.set(1, 0.45, 1);
+    },
+    libera() { object.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); }); },
+  };
+}
+
+let _fumo = null;
+/** Sbuffo di fumo: un cerchio morbido grigio. */
+function texturaFumo() {
+  if (_fumo) return _fumo;
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const g = c.getContext('2d'), grad = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+  grad.addColorStop(0, 'rgba(255,255,255,0.9)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 32, 32);
+  _fumo = new THREE.CanvasTexture(c);
+  return _fumo;
+}

@@ -18,7 +18,7 @@ import { createCavallo } from './cavallo3d.js';
 import { createFollowCamera } from './camera.js';
 import { createCastle } from './castle3d.js';
 import { createRoccaAPezzi } from './rocca3d.js';
-import { creaCaseCampagna, quotaFinestre } from './edifici3d.js';
+import { creaCaseCampagna, quotaFinestre, creaFuocoCampo, FUOCO_CAMPO } from './edifici3d.js';
 import { createBorgoAPezzi } from './borgo3d.js';
 import { createVillaggioAPezzi, createMonasteroAPezzi, createEremoAPezzi, createMulinoAPezzi, pianoDelSito } from './villaggio3d.js';
 import { createRovinaAPezzi, createMisteroAPezzi } from './rovine3d.js';
@@ -36,7 +36,7 @@ import { vicinoAlBordo, trasla } from './blocchi.js';
 import { generaCartaAsincrona, verificaSemi } from '../mondo/generatore.js';
 import { generaScenaAPezzi, centroBlocco, quotaFinale } from '../mondo/scena.js';
 import { distanzaStrada, percorsiStrade } from '../mondo/strade.js';
-import { posizionaVegetazione, posizionaVegetazioneAPezzi, coperturaMondo, coperturaTavullia } from '../mondo/vegetazione.js';
+import { posizionaVegetazione, posizionaVegetazioneAPezzi, coperturaMondo, coperturaTavullia, contaLegna, legnaEntro } from '../mondo/vegetazione.js';
 import { creaVegetazione, creaVegetazioneAPezzi } from './vegetazione3d.js';
 import { creaAbitanti } from './abitanti3d.js';
 import { creaCarri } from './carri3d.js';
@@ -217,6 +217,7 @@ let carta = null;                         // Carta del mondo generato (null a Ta
 let scenaAttuale = null;                  // { tipo: 'tavullia' } | { tipo: 'mondo', cx, cz } (centro, m del mondo)
 let statPendenze = '';                    // percentili della pendenza della Scena (F3)
 let vegetazione = null;                   // alberi, arbusti, rocce della Scena (vegetazione3d.js)
+let legnaBlocco = null;                   // conteggio della legna del blocco (contaLegna), coordinate della Scena
 let villaggi = [];                        // M8: villaggi, ovili, monasteri ed eremi del blocco (villaggio3d.js)
 let campagna = null;                      // M7, passo 5: case di campagna del blocco (edifici3d.js)
 let abitanti = null;                      // M7, passo 7: persone di rocche e borghi (abitanti3d.js)
@@ -363,16 +364,12 @@ function riposa() {
   const sera = Calendar.eNotte() || Calendar.indiceNelGiorno() === CALENDAR.INDICE_NOTTE - 1;
   let titolo, frasi;
   if (sera) {
-    const passi = Calendar.avanzaFinoA(0);
-    Knight.riposaPassi(passi);
-    const p = controllaGiornata();
-    if (p.digiuno) Knight.forza.cur = prima;               // a stomaco vuoto il sonno non ristora
-    const finita = Knight.controllaTorcia(adessoPassi());   // a Prima la torcia è consumata
-    if (finita) p.testi.push(finita);
-    messaggio(`Dormi all'addiaccio fino a Prima (${_ore(passi)})${_guadagno(prima)}${p.testi.length ? ' ' + p.testi.join(' ') : ''}`);
-    titolo = 'La notte all\'addiaccio';
-    frasi = ['Ti avvolgi nel mantello e cerchi un riparo dal vento.', 'La notte passa lenta, fra versi lontani e il freddo che sale dalla terra.',
-      ...(p.testi.length ? p.testi : []), 'All\'alba ti rialzi, intirizzito.'];
+    // Fuoco del campo: con l'acciarino, all'aperto e con legna vicino (o accanto a un fuoco che arde già).
+    const k = knight.stato, f = fuocoCampo?.f.acceso ? fuocoCampo : null;
+    const alFuoco = f && Math.hypot(f.lx - k.x, f.lz - k.z) < FUOCO.vicino;
+    if (alFuoco || puoAccendere().ok) { apriFuoco(!alFuoco); return; }
+    dormiAllAperto(false, puoAccendere().perche);
+    return;
   } else {
     if (Knight.forza.cur >= Knight.forza.max) {
       messaggio('Sei riposato: la Forza è piena.');
@@ -387,6 +384,117 @@ function riposa() {
   salvaOra();
   // Racconto della sosta (la meridiana segue le ore); poi la pergamena si chiude.
   raccontaAzione({ titolo, frasi, prima: stato, dopo: istantanea() }).then((fatto) => { if (fatto) cartaCronista.chiudi(); });
+}
+
+// ─── Fuoco del campo (R di notte all'aperto, docs/GDD.md §2 «Pasti e zaino») ─────────────────────────────────
+// Con l'acciarino alla cintura e legna vicino (alberi o arbusti, legnaEntro) R accende il fuoco: cerchio di pietre,
+// legna, fiamme, fumo (edifici3d.js, creaFuocoCampo), luce fra le luci vicine; il cavaliere siede accanto e il cavallo
+// sta legato lì vicino. Dormire al fuoco ristora di più (Knight.notteAllAperto) e porta meno incontri nel sonno
+// (Combat.INCONTRI.sonno); senza fuoco, nei biomi freddi, il gelo toglie Salute. Dal fuoco si prende un tizzone, che
+// vale una torcia fino a Prima. A Prima il fuoco si spegne: resta la cenere. Un fuoco alla volta.
+const FUOCO = { davanti: 1.7, vicino: 8, cavallo: 4.5, freddi: new Set([4, 7, 8, 10, 11]) };   // biomi freddi: montagna, neve, ghiaccio, roccia, pianura settentrionale
+let fuocoCampo = null;                     // { f (creaFuocoCampo), wx, wz (m del mondo), lx, lz (della Scena), finoA }
+const _origine = () => (scenaAttuale?.tipo === 'mondo' ? scenaAttuale : { cx: 0, cz: 0 });
+/** Si può accendere un fuoco qui? { ok, perche } (perche: la riga da dire quando no, o ''). */
+function puoAccendere() {
+  if (!knight) return { ok: false, perche: '' };
+  if (!Knight.haAcciarino()) return { ok: false, perche: '' };
+  const k = knight.stato, o = _origine();
+  if (scenaAttuale?.tipo === 'mondo' && vicinoAiLuoghi(o.cx + k.x, o.cz + k.z)) return { ok: false, perche: '' };
+  if (!legnaEntro(legnaBlocco, k.x, k.z).basta) return { ok: false, perche: 'Qui attorno non c\'è legna per un fuoco.' };
+  return { ok: true, perche: '' };
+}
+function accendiFuoco() {
+  if (fuocoCampo) { scene.remove(fuocoCampo.f.object); fuocoCampo.f.libera(); }
+  const k = knight.stato, o = _origine();
+  const lx = k.x + Math.sin(k.direzione) * FUOCO.davanti, lz = k.z + Math.cos(k.direzione) * FUOCO.davanti;
+  const f = creaFuocoCampo(Math.floor(Calendar.passiTotali * 31 + lx * 7 + lz * 13));
+  scene.add(f.object);
+  fuocoCampo = { f, wx: o.cx + lx, wz: o.cz + lz, lx, lz, finoA: primaSeguente(), cx: NaN };
+  aggiornaFuocoCampo(0);
+  annotaCronaca('Accendi un fuoco per la notte.');
+}
+/** Ogni fotogramma: il fuoco segue i cambi di blocco, tremola, e a Prima si spegne (resta la cenere). */
+function aggiornaFuocoCampo(t) {
+  if (!fuocoCampo) return;
+  const F = fuocoCampo, o = _origine();
+  if (F.cx !== o.cx || F.cz !== o.cz) {
+    F.cx = o.cx; F.cz = o.cz;
+    F.lx = F.wx - o.cx; F.lz = F.wz - o.cz;
+    const dentro = Math.abs(F.lx) < suolo.half - 2 && Math.abs(F.lz) < suolo.half - 2;
+    F.f.object.visible = dentro;
+    if (dentro) F.f.object.position.set(F.lx, suolo.getHeight(F.lx, F.lz), F.lz);
+  }
+  if (F.f.acceso && adessoPassi() >= F.finoA) F.f.spegni();
+  F.f.aggiorna(t);
+  // In piedi quando la carta del fuoco è chiusa e non si dorme.
+  if (knight.stato.seduto && !cronista) knight.siedi(false);
+}
+/** Il cavaliere siede accanto al fuoco, rivolto alle fiamme; il cavallo legato poco più in là. */
+function siediAlFuoco() {
+  const F = fuocoCampo, k = knight.stato;
+  let dx = k.x - F.lx, dz = k.z - F.lz;
+  const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d;
+  k.x = F.lx + dx * 1.3; k.z = F.lz + dz * 1.3; k.y = suolo.getHeight(k.x, k.z);
+  knight.siedi(true, Math.atan2(-dx, -dz));
+  if (cavallo && !Knight.inSella) {
+    const cx = F.lx - dz * FUOCO.cavallo, cz = F.lz + dx * FUOCO.cavallo;
+    cavallo.posiziona(cx, cz, Math.atan2(F.lx - cx, F.lz - cz) + Math.PI / 2);
+  }
+}
+/** R di notte con un fuoco possibile: la carta del fuoco (dormire, tizzone, spegnere). */
+function apriFuoco(accendere) {
+  if (Knight.inSella) { messaggio('Smonta (E) per accamparti.'); return; }
+  if (accendere) accendiFuoco();
+  siediAlFuoco();
+  const conLuce = !!Knight.torcia;
+  cartaCronista.mostra({
+    titolo: 'Il fuoco del campo',
+    testo: accendere ? 'Raccogli rami secchi e sterpi, li ammucchi dentro un cerchio di pietre e batti l\'acciarino finché la stoppa non prende. Il fuoco scoppietta.'
+      : 'Il fuoco arde ancora. Ti siedi accanto e tendi le mani alle fiamme.',
+    nota: `${Calendar.oraCanonica()} · ${NOMI_BIOMI[biomaQui()] ?? ''} · Forza ${Math.ceil(Knight.forza.cur)} · Salute ${Math.ceil(Knight.salute.cur)}`,
+    opzioni: [
+      { testo: 'Dormire accanto al fuoco fino a Prima', scegli: () => dormiAllAperto(true) },
+      { testo: 'Prendere un tizzone e rimetterti in cammino', disponibile: !conLuce, etichetta: 'Hai già una luce in mano',
+        scegli: () => {
+          const r = Knight.prendiTizzone(adessoPassi(), fuocoCampo.finoA);
+          messaggio(r.testo); annotaCronaca(r.testo); aggiornaTorcia(); salvaOra();
+          cartaCronista.chiudi();
+        } },
+      { testo: 'Spegnere il fuoco e ripartire', scegli: () => { fuocoCampo.f.spegni(); cartaCronista.chiudi(); } },
+    ],
+  });
+}
+/** Notte all'aperto fino a Prima, accanto al fuoco o all'addiaccio; poi forse un incontro nel sonno. */
+function dormiAllAperto(fuoco, perche = '') {
+  const prima = Knight.forza.cur, stato = istantanea();
+  const freddo = scenaAttuale?.tipo === 'mondo' && FUOCO.freddi.has(biomaQui());
+  const passi = Calendar.avanzaFinoA(0);
+  Knight.riposaPassi(passi);
+  const p = controllaGiornata();
+  if (p.digiuno) Knight.forza.cur = prima;               // a stomaco vuoto il sonno non ristora
+  const notte = Knight.notteAllAperto({ fuoco, freddo });
+  const finita = Knight.controllaTorcia(adessoPassi());   // a Prima la torcia è consumata
+  if (finita) p.testi.push(finita);
+  if (fuoco && fuocoCampo) fuocoCampo.f.spegni();         // al risveglio resta la cenere
+  messaggio(`Dormi ${fuoco ? 'accanto al fuoco' : 'all\'addiaccio'} fino a Prima (${_ore(passi)})${_guadagno(prima)}${p.testi.length ? ' ' + p.testi.join(' ') : ''}`);
+  const titolo = fuoco ? 'La notte accanto al fuoco' : 'La notte all\'addiaccio';
+  const frasi = fuoco
+    ? ['Ti stendi accanto alle braci, con il mantello sotto la testa.', 'Ogni tanto ti svegli e ci butti un ramo; le fiamme tengono lontani il freddo e le bestie.',
+      ...notte, ...p.testi, 'All\'alba del fuoco resta solo la cenere.']
+    : [...(perche ? [perche] : []), 'Ti avvolgi nel mantello e cerchi un riparo dal vento.', 'La notte passa lenta, fra versi lontani e il freddo che sale dalla terra.',
+      ...notte, ...p.testi, 'All\'alba ti rialzi, intirizzito.'];
+  salvaOra();
+  // Un incontro nel sonno (solo dove gli incontri sono attivi, fuori dai borghi): meno spesso al fuoco, e niente timidi.
+  const k = knight.stato, o = _origine();
+  const S = Combat.INCONTRI.sonno;
+  const bestia = incontriAttivi() && nelMondo() && !vicinoAiLuoghi(o.cx + k.x, o.cz + k.z) && Math.random() < (fuoco ? S.fuoco : S.addiaccio)
+    ? Combat.pescaIncontro({ bioma: biomaQui(), momento: 'notte', veglia: inStoria() && Calendar.inVeglia, primaSangue: Knight.primaSangue, luce: fuoco })
+    : null;
+  raccontaAzione({ titolo, frasi, prima: stato, dopo: istantanea() }).then((fatto) => {
+    if (bestia) apriIncontro(bestia);
+    else cartaCronista.chiudi();                           // anche la carta del fuoco, se il racconto è spento
+  });
 }
 
 // ─── Torcia (L): viaggio di notte (docs/GDD.md §2 «Pasti e zaino») ───────────────────────────────────────────
@@ -1247,6 +1355,7 @@ async function combattiIncontro(e, slancio, raggiunto = false) {
 // restano fiamme e aloni. Con la luce della torre-porta di ogni rocca si resta nelle 4–6 previste.
 const LUCI_VICINE = { quante: 4, raggio: 70 };
 const _luciVicine = [];
+const _sgFuoco = { x: 0, y: 0, z: 0, colore: FUOCO_CAMPO.colore, intensita: FUOCO_CAMPO.intensita, distanza: FUOCO_CAMPO.distanza };
 const _vTorcia = new THREE.Vector3(), _sgTorcia = { x: 0, y: 0, z: 0, colore: TORCIA.colore, intensita: TORCIA.intensita, distanza: TORCIA.distanza };
 function luciVicine(t, buio) {
   if (!_luciVicine.length) {
@@ -1266,6 +1375,13 @@ function luciVicine(t, buio) {
       knight.puntoTorcia(_vTorcia);
       Object.assign(_sgTorcia, { x: _vTorcia.x, y: _vTorcia.y + 0.15, z: _vTorcia.z });
       tutte.push({ sg: _sgTorcia, d: -1 });
+    }
+    if (fuocoCampo?.f.acceso && fuocoCampo.f.object.visible) {
+      const F = fuocoCampo, d = Math.hypot(F.lx - st.x, F.lz - st.z);
+      if (d < LUCI_VICINE.raggio) {
+        Object.assign(_sgFuoco, { x: F.lx, y: F.f.object.position.y + 0.6, z: F.lz });
+        tutte.push({ sg: _sgFuoco, d });
+      }
     }
     for (const r of [...rocche, ...villaggi, campagna]) for (const sg of r?.sorgenti ?? []) {
       const d = Math.hypot(sg.x - st.x, sg.z - st.z);
@@ -1450,6 +1566,7 @@ function* preparaMondo(desc) {
       // Grotte e luoghi del fantastico: cerchio ancora più stretto, stanno dentro il paesaggio che li circonda.
       ...(carta.siti || []).filter((s) => s.tipo === 'grotta' || s.tipo === 'fantastico').map((s) => pianoDelSito(s, 0.4))], mare: true,
   }, MS_PEZZO);
+  const legna = contaLegna(posVeg, meta.cellSize * (meta.cols - 1) / 2);   // per il fuoco del campo
   yield 'posizione vegetazione';
   const veg = yield* creaVegetazioneAPezzi(posVeg, ter, renderer, MS_PEZZO);   // il terreno nuovo, mai quello in scena
   yield 'vegetazione';
@@ -1481,7 +1598,7 @@ function* preparaMondo(desc) {
   yield* preparaScheda([ter.mesh, acque, pp.gruppo, ...roc.map((r) => r.object), ...vil.map((r) => r.object), veg.oggetto, camp?.object,
     oriz.oggetto, oriz.acqua]);
   return { desc: { ...desc, cx, cz }, scostamento: { x: desc.cx - cx, z: desc.cz - cz }, meta, dati, ter, acque, strade, pp, roc, vil,
-    veg, camp, msCot, msCotOriz, oriz };
+    veg, camp, msCot, msCotOriz, oriz, legna };
 }
 
 /**
@@ -1536,6 +1653,7 @@ function applicaMondo(p, scambio = false) {
     occlusori.push(...r.solidi);
   }
   vegetazione = p.veg;
+  legnaBlocco = p.legna;
   campagna = p.camp;
   if (campagna) {
     scene.add(campagna.object);
@@ -1626,12 +1744,14 @@ async function caricaScena(desc) {
   if (desc.tipo === 'tavullia') {
     // Profilo fisso di collina temperata; niente vegetazione sul colle del castello e sulla rampa.
     const m = terrain.meta, C = castle.cfg;
-    vegetazione = creaVegetazione(posizionaVegetazione({
+    const pos = posizionaVegetazione({
       heights: terrain.heights, cols: m.cols, cell: m.cellSize, cx: 0, cz: 0, acqua: null,
       copertura: coperturaTavullia(), seme: 7,
       piani: [{ cx: C.x, cz: C.z, ux: 1, uz: 0, a: C.lato / 2 + 9, b: C.lato / 2 + 9, r: 4, s: 10 }],
       mare: terrain.minElev < 0,
-    }), terrain, renderer);
+    });
+    vegetazione = creaVegetazione(pos, terrain, renderer);
+    legnaBlocco = contaLegna(pos, m.cellSize * (m.cols - 1) / 2);
   }
   vegetazione.oggetto.visible = vegetazioneVisibile;
   scene.add(vegetazione.oggetto);
@@ -2823,6 +2943,7 @@ function frame(now) {
       campagna?.aggiornaLuci(now / 1000, 1 - _luceGiorno, quota);
       for (const r of villaggi) r.aggiornaLuci(now / 1000, 1 - _luceGiorno, quota);
       aggiornaTorcia();
+      aggiornaFuocoCampo(now / 1000);
       luciVicine(now / 1000, 1 - _luceGiorno);
     }
     orizzonte?.luciLontane?.(1 - _luceGiorno);   // M7, passo 8: luci dei borghi lontani (orizzonte.js)

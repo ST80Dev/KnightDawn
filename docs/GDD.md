@@ -104,8 +104,16 @@ niente albero abilità. Dettaglio completo (apertura, azioni, mercato) in
   conoscenza (percorso 180 m e intravisto 320 m invece di 120 e 200), e gli animali **timidi** non si fanno
   incontrare (vipera, aquila, cani randagi, cervo); i lupi, soli o in branco, sì;
 - **acciarino e pietra focaia** [deciso, 28/11]: si compra una volta alla loggia (3 oro), sta alla cintura, serve ad
-  accendere il **fuoco del campo** (`R` di notte all'aperto, se c'è legna vicina: seconda PR del viaggio di notte, con
-  il **tizzone**; piano in `docs/ESPLORAZIONE_3D.md`, «Viaggio di notte»);
+  accendere il **fuoco del campo**;
+- **fuoco del campo** [deciso, 28/11]: `R` di notte all'aperto (fuori da borghi e villaggi), con l'acciarino e **legna
+  vicino** (entro 50 m almeno 3 alberi, anche secchi, o 6 arbusti, sterpi compresi), accende il fuoco: cerchio di
+  pietre, legna, fiamme con luce tremolante, filo di fumo; il cavaliere siede accanto, il cavallo resta legato lì
+  vicino. Poi si sceglie: **dormire accanto al fuoco** fino a Prima (Forza +10 e Salute +5 oltre al sonno; incontri
+  nel sonno 8 % invece di 25 %, e niente animali timidi), **prendere un tizzone** (vale una torcia per il resto di
+  quella notte, stessa regola) o spegnere e ripartire. A Prima il fuoco si spegne e resta la **cenere**. Senza fuoco,
+  nei biomi freddi (montagna, roccia, neve, ghiaccio, pianura settentrionale), il gelo toglie **Salute −5** (mai sotto
+  1). Dove la legna manca (neve, sentieri d'alta quota) arriveranno **mucchietti di legna sparsa** a terra, che valgono
+  come alberi (deciso con l'utente: niente fascina nello zaino); le capanne dei pastori sono in sospeso; piano in `docs/ESPLORAZIONE_3D.md`, «Viaggio di notte»);
 - **un pasto al giorno**: si compra in taverna e al mercato, si trova negli eventi; mangiare in taverna non
   consuma lo zaino. Se il giorno passa senza mangiare: niente recupero di Forza nel sonno e un poco di Salute
   persa (proposta: −3), come la Resistenza persa nel librogame. Il pasto si consuma da sé al risveglio, se
