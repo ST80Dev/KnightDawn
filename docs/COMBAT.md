@@ -177,6 +177,9 @@ minuti dei Round confermati. Layout desktop a tre colonne:
   barra simbolica "tiro alla fune" tra cavaliere e nemico.
 - **Destra** — il nemico: silhouette, nome, numerosità, descrizione.
 
+**Fatto in G1 passo 4** (`js/3d/interfaccia.js`, `creaCombattimento`; `docs/EARLY_GAME.md` §7): pergamena
+in x 300–1570, y 170–850 a 1920×1080; Esc non chiude, lo scontro va finito.
+
 In basso, la cronaca scorrevole dei Round. Niente sprite animate: le
 silhouette statiche + la narrazione reggono la scena. La variante mobile
 (compact) impila i pannelli — affrontata dopo il desktop.

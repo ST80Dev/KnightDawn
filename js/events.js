@@ -38,9 +38,11 @@
 //   enemy: id stringa del catalogo (js/data/enemies.js) o oggetto nemico.
 //   Rami esito: onWin (vittoria), onFlee (fuga), onSurrender (resa),
 //   onDefeat (sconfitta = battuto ma vivo), onDeath (morte = Salute 0),
-//   onStallo (default → onFlee). Per ora risolve in automatico
-//   (Combat.resolveAuto); quando la UI scena combattimento sarà disponibile,
-//   l'effetto sospenderà l'evento e il ramo verrà applicato al ritorno.
+//   onStallo (default → onFlee). Se il contesto ha combatti(eff, terrain) (il motore
+//   3D lo passa in applyEffects, G1 passo 4), l'effetto lo chiama e si ferma lì: il
+//   riquadro di combattimento si gioca e il ramo dell'esito si applica al ritorno
+//   (Events.ramoCombattimento). Senza (prove in Node) risolve in automatico
+//   (Combat.resolveAuto) come prima.
 
 const Events = {
   registry: [],
@@ -252,8 +254,10 @@ const Events = {
         }
         break;
       case 'combat': {
-        // Risoluzione automatica (stub finché manca scena UI).
         if (typeof Combat === 'undefined' || !eff.enemy) break;
+        // Nel gioco: il riquadro di combattimento (il chiamante applica il ramo al ritorno).
+        if (typeof ctx.combatti === 'function') { ctx.combatti(eff, eff.terrain); break; }
+        // Senza riquadro (prove in Node): risoluzione automatica.
         // Terreno: esplicito nell'effetto, altrimenti il bioma del tile corrente
         // (così le affinità di terreno del nemico si attivano da sole).
         let terrain = eff.terrain;
@@ -268,18 +272,23 @@ const Events = {
         });
         for (const line of res.cronaca) ctx.log(line);
         ctx.log(`Esito scontro: ${res.esito}.`);
-        const ramo = ({
-          vittoria:  eff.onWin,
-          fuga:      eff.onFlee,
-          resa:      eff.onSurrender,
-          sconfitta: eff.onDefeat,        // battuto ma vivo: conseguenza scelta dall'evento
-          morte:     eff.onDeath,         // Salute a 0: game over
-          stallo:    eff.onStallo || eff.onFlee,
-        })[res.esito];
+        const ramo = this.ramoCombattimento(eff, res.esito);
         if (ramo) this.applyEffects(ramo).forEach(m => ctx.log(m));
         break;
       }
     }
+  },
+
+  /** Effetti del ramo di un effetto combat per un esito (vittoria, fuga, resa, sconfitta, morte, stallo). */
+  ramoCombattimento(eff, esito) {
+    return ({
+      vittoria:  eff.onWin,
+      fuga:      eff.onFlee,
+      resa:      eff.onSurrender,
+      sconfitta: eff.onDefeat,        // battuto ma vivo: conseguenza scelta dall'evento
+      morte:     eff.onDeath,         // Salute a 0: game over (nella Veglia: svenimento, vedi main.js)
+      stallo:    eff.onStallo || eff.onFlee,
+    })[esito] || null;
   },
 
   // ─── Scadenze ────────────────────────────────────────────────────────────

@@ -17,8 +17,10 @@
 //     sfida,        // difficoltà nella formula di Round (vedi combat.js §5).
 //                   //   Scala di riferimento (TBD bilanciamento S9):
 //                   //   ~9 debole · ~11 medio · ~13 forte · ~15 letale
-//     roundMin,     // durata minima scontro in Round (= Passi calendario)
+//     roundMin,     // durata minima scontro in Round
 //     roundMax,     // durata massima
+//     minutiRound,  // opz. minuti di gioco per Round (docs/COMBAT.md §2); senza,
+//                   //   Combat.minutiRound li ricava dalla durata (2–5 minuti)
 //     accettaResa,  // se false, il nemico non concede quartiere
 //     terreni,      // opz. affinità LEGGERE (±1, mai decisive). Dal punto di
 //                   //   vista del NEMICO: { favorevole:[biomi], sfavorevole:[biomi] }
@@ -197,18 +199,18 @@ Enemies.register({
 Enemies.register({
   id: 'guerra.scaramuccia', nome: 'Scaramuccia', tipo: 'umano',
   categoria: 'battaglia', numerosita: 'gruppo',
-  sfida: 11, roundMin: 4, roundMax: 6, accettaResa: false,
+  sfida: 11, roundMin: 4, roundMax: 6, minutiRound: 10, accettaResa: false,
   descr: 'Due drappelli che si urtano lungo una strada o un guado.',
 });
 Enemies.register({
   id: 'guerra.battaglia', nome: 'Battaglia campale', tipo: 'umano',
   categoria: 'battaglia', numerosita: 'orda',
-  sfida: 12, roundMin: 10, roundMax: 20, accettaResa: false,
+  sfida: 12, roundMin: 10, roundMax: 20, minutiRound: 60, accettaResa: false,
   descr: 'Eserciti schierati. Schieramento, urto, mischia, rotta.',
 });
 Enemies.register({
   id: 'guerra.assedio', nome: 'Assedio', tipo: 'umano',
   categoria: 'battaglia', numerosita: 'orda',
-  sfida: 14, roundMin: 30, roundMax: 60, accettaResa: false,
+  sfida: 14, roundMin: 30, roundMax: 60, minutiRound: 180, accettaResa: false,
   descr: 'Giorni sotto le mura. Fame, macchine d\'assedio, sortite.',
 });

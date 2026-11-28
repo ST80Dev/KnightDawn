@@ -195,6 +195,9 @@ const Save = {
     }
   },
 
+  /** Cancella la partita salvata di una modalità (G1 passo 4: la morte dopo l'investitura chiude la Storia). */
+  cancella(modalita) { return this.delete(this.slotAutosave(modalita)); },
+
   async delete(slot) {
     if (slot == null) return false;
     try {

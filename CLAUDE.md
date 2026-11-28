@@ -74,5 +74,5 @@ architettura: quelle stanno in `docs/`. Aggiornare la fase corrente a ogni cambi
 
 ## Fase corrente
 
-**G1, Veglia giocabile** (`docs/EARLY_GAME.md` §7; passi 1–3 uniti, prossimo il 4: combattimento); ordine delle milestone
+**G1, Veglia giocabile** (`docs/EARLY_GAME.md` §7; passi 1–3 uniti, passo 4 combattimento da provare, poi il 5: incontri con gli animali); ordine delle milestone
 in `docs/GDD.md` §5. La grafica prosegue quando un passo di gioco la richiede, nel budget di `docs/PRESTAZIONI.md`.

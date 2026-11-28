@@ -387,6 +387,28 @@ poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un
    tornano all'evento. In Veglia a Salute 0 si sviene; dopo l'investitura **schermata di morte** con
    ritorno al menu. In Libera un comando di prova apre un
    combattimento con un nemico a scelta.
+   **Stato: fatto, da provare dall'utente.** Riquadro in `js/3d/interfaccia.js` (`creaCombattimento`, `mostraMorte`;
+   stile in `style.css`, blocco «Combattimento nel riquadro»): pergamena nella zona fissata con la sessione HUD
+   (1920×1080: x 300–1570, y 170–850), a sinistra il cavaliere (sagoma con elmo, scudo e arma solo se li porta;
+   Salute, Forza, Volontà; equipaggiamento), al centro Round, minuti, **Slancio** come fune con il nodo che va verso chi
+   vince (tacche alle soglie ±3) e le scelte del motore (Combattere, Tentare la fuga, Arrenderti, Colpo disperato,
+   Parlamento) con tasti 1–9, Invio la prima; a destra il nemico (sagoma per tipo, più figure se in gruppo o in branco,
+   pericolo da 1 a 5, descrizione); sotto la cronaca dei Round con la Salute persa. Esc non chiude: lo scontro va finito.
+   Motore `js/combat.js` com'era, tranne il tempo: ogni Round avanza i suoi **minuti** (`Combat.minutiRound`: dal
+   nemico o dalla durata, 2–5 minuti; scaramuccia 10, battaglia 60, assedio 180), non più un Passo. Eventi
+   (`js/events.js`): l'effetto `combat` con `combatti` nel contesto si ferma e il motore 3D (`applicaConCombattimenti`
+   in `main.js`) gioca lo scontro e applica il ramo dell'esito al ritorno (`Events.ramoCombattimento`); senza, in Node,
+   risolve in automatico come prima. **Svenimento** (Veglia, `Combat.svieni`): 6 ore perse con il recupero di Forza da
+   fermi, Salute almeno 40, oro azzerato, risveglio fuori dalla porta del borgo di partenza, con una carta che lo
+   racconta; si applica il ramo `onDefeat`. **Morte** dopo l'investitura: schermata di morte, salvataggio Storia
+   cancellato (`Save.cancella`), «Torna al menu»; in Libera anche «Rialzarti». **Prova** (`K`, solo Libera): tabella
+   degli avversari del catalogo (non battaglie e assedi), passando dallo stesso effetto `combat` degli eventi;
+   «Entrare già ferito» (Salute 10) e «A Salute 0: si sviene / si muore» per provare svenimento e morte.
+   Provato in Node (minuti per Round, fuga, esiti, svenimento, rami) e in headless (K, scontro aperto e chiuso, morte in
+   Libera, nessun errore).
+   **Da sapere [Certo, misurato in Node, 2000 scontri]:** con la formula di oggi il garzone a mani nude non vince mai
+   contro una bestia (lupo: 88 % sconfitte, 12 % stallo), e anche armato l'esito dipende quasi solo
+   dall'equipaggiamento; la Salute a 0 è rara (danno solo su un Round pessimo). La taratura è del passo 5.
 5. **Incontri fuori porta con gli animali** [rivisto con l'utente, novembre 2026: non i lupi sempre e solo
    all'ovile]. Camminando fuori dal borgo, soprattutto lontano dalle strade, di sera e di notte, può capitare un
    incontro casuale con un animale **scelto per bioma** (lupi e cinghiali nei boschi e in collina, orsi in

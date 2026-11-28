@@ -778,3 +778,344 @@ export function creaScrittoio(opzioni) {
   }
   return { apri, chiudi, tasto, get aperto() { return !!el; } };
 }
+
+// ─── Combattimento nel riquadro (G1 passo 4, docs/COMBAT.md §9) ─────────────────────────────────────────────────
+// Riquadro a sé sopra la scena ferma, con la stessa pergamena della Carta del cronista: tre colonne (il cavaliere |
+// le scelte del Round e lo Slancio | il nemico) e sotto la cronaca dei Round. È solo una vista: il motore è
+// js/combat.js, l'ordine delle cose lo tiene main.js (combatti). Zona dello schermo fissata con la sessione HUD
+// (1920×1080): x 300–1570, y 170–850, al massimo 1270×680; avvisi, diario, meridiana e minimappa restano liberi.
+// Le figure sono sagome statiche disegnate in SVG (niente modelli, CLAUDE.md regola 6).
+
+// ─── Sagome del riquadro di combattimento ─────────────────────────────────────────────────────────────────────
+// Figure di profilo (il cavaliere guarda a destra, il nemico a sinistra) in un riquadro 240×180 con il suolo a y 166,
+// colorate con tinte smorzate da miniatura e un contorno a inchiostro: si leggono sulla pergamena. Gli animali hanno il
+// mantello dal dorso scuro al ventre chiaro e le zampe lontane più scure; le persone sono uno scheletro di articolazioni
+// (anca, ginocchio, caviglia, spalla, gomito, mano) con arti arrotondati, vesti sopra e una posa d'attacco.
+const INK = '#2b1d10', CARTA = '#e6d6ae';
+const ombraTerra = (cx, rx) => `<ellipse cx="${cx}" cy="168" rx="${rx}" ry="4.5" fill="rgba(70,45,20,.28)"/>`;
+let _gradiente = 0;
+
+const FIGURE = {
+  lupo: {
+    ombra: [112, 82],
+    lontano: 'M98 124C100 136 93 148 87 157L85 163C83 167 77 167 75 165L79 157C85 145 86 135 88 126Z'
+      + 'M160 128C164 140 161 151 161 159L161 164C159 167 153 167 152 165L154 157C152 147 150 138 150 130Z',
+    vicino: 'M28 97C30 92 38 90 46 88C52 84 56 80 60 78L63 63L71 79L77 65L81 82C87 86 93 88 100 90'
+      + 'C122 92 150 90 172 94C182 96 188 102 192 110C200 122 206 136 204 150C200 153 196 150 194 146'
+      + 'C190 136 184 126 178 119C180 128 180 136 184 146L186 161C186 166 182 167 176 166L176 163'
+      + 'C178 159 178 153 172 146C166 138 160 132 154 130C138 134 122 134 110 132L106 146L104 162'
+      + 'C104 166 100 167 94 166L94 162L96 146C94 136 90 128 86 122C80 116 72 112 64 110C56 108 48 106 40 104'
+      + 'C34 103 29 101 28 97Z',
+    dettagli: '<circle cx="51" cy="91" r="2" fill="#d8b040"/>'
+      + '<path d="M30 100C36 101 42 102 48 101" stroke="' + CARTA + '" stroke-width="1.2" fill="none" opacity=".6"/>'
+      + '<path d="M96 92C104 98 108 104 110 112M156 98C164 104 170 110 174 118" stroke="#4a3520" stroke-width="1.4" fill="none"/>',
+  },
+  cinghiale: {
+    ombra: [112, 80],
+    lontano: 'M100 140L98 161C98 166 92 167 88 166L90 141Z M168 140L167 161C167 166 161 167 157 166L158 141Z',
+    vicino: 'M30 122L34 119C42 112 52 104 62 98L66 85L73 97C84 88 100 82 118 82C140 82 160 88 176 100'
+      + 'C186 108 190 118 188 128C194 124 199 119 203 114C204 121 197 130 189 134C186 140 184 146 182 151L182 161'
+      + 'C182 166 178 167 172 166L172 152C168 146 162 143 156 143C140 145 120 145 106 143L104 161C104 166 98 167 94 166'
+      + 'L94 152C88 148 82 144 74 141C62 139 50 137 42 135C36 134 32 133 29 130Z',
+    dettagli: '<path d="M70 92l4-9 4 7 4-10 5 8 5-11 5 9 5-11 5 9 5-10 5 9 6-9 5 8 6-7" fill="#1e140c"/>'
+      + '<path d="M42 131C36 127 35 120 41 115" stroke="' + CARTA + '" stroke-width="3" stroke-linecap="round" fill="none"/>'
+      + '<circle cx="58" cy="111" r="2" fill="#d8b040"/>',
+  },
+  orso: {
+    ombra: [108, 90],
+    lontano: 'M112 146L106 164C105 168 96 168 92 166L96 146Z M170 148L166 164C165 168 156 168 152 166L154 148Z',
+    vicino: 'M16 124C16 117 22 112 30 110C36 101 44 94 54 92C53 84 61 80 67 86C76 83 84 79 92 75'
+      + 'C108 63 132 61 152 69C174 77 190 94 196 114C200 128 198 142 192 150L192 162C192 167 184 168 174 166'
+      + 'L172 152C166 148 158 146 150 148C136 152 124 152 116 150L116 162C116 167 108 168 96 166L96 150'
+      + 'C90 142 84 136 76 132C66 128 56 130 48 132C38 134 26 134 20 131C16 129 15 127 16 124Z',
+    dettagli: '<circle cx="42" cy="106" r="2.2" fill="#d8b040"/><circle cx="18" cy="122" r="3" fill="#120a04"/>'
+      + '<path d="M97 165l-3 3M103 165l-2 3M109 165l-1 3M175 165l-3 3M181 165l-2 3M187 165l-1 3" stroke="' + INK + '" stroke-width="1.6"/>'
+      + '<path d="M96 84C110 92 118 106 118 124M160 84C176 96 184 110 184 130" stroke="#4a3520" stroke-width="1.4" fill="none"/>',
+  },
+  mitico: {   // spettro: veste lacera, mano adunca, occhi accesi
+    ombra: [112, 46],
+    lontano: 'M134 70C144 84 150 98 150 112L142 112C140 98 136 86 128 76Z',
+    vicino: 'M120 22C100 22 90 40 88 60C86 80 78 110 70 140L76 134L80 152L88 138L94 158L102 140L110 160L118 140'
+      + 'L126 158L132 138L140 154L144 134L150 146C146 116 140 86 138 60C136 40 132 22 120 22Z'
+      + 'M92 76C80 80 66 84 54 82L46 76L50 83L42 85L50 88L44 92L54 91C68 93 84 91 96 88Z',
+    dettagli: '<g filter="drop-shadow(0 0 3px #ff5a1c)"><path d="M104 52l7 2-7 2z M118 52l7 2-7 2z" fill="#ff6a2a"/></g>',
+  },
+};
+
+// Mantelli degli animali: dorso, ventre, zampe lontane.
+const MANTELLI = {
+  lupo: ['#4f4b45', '#a29a8c', '#3b3833'],
+  cinghiale: ['#3a2a1e', '#6e5640', '#2a1e15'],
+  orso: ['#4a2f1c', '#7e5636', '#352113'],
+  mitico: ['#1c1a1e', '#3a3540', '#121014'],
+};
+
+function figura(f, forma) {
+  const [dorso, ventre, lontano] = MANTELLI[forma] ?? MANTELLI.lupo;
+  const id = `kd-mantello-${++_gradiente}`;
+  return `<defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset=".35" stop-color="${dorso}"/>`
+    + `<stop offset="1" stop-color="${ventre}"/></linearGradient></defs>`
+    + `<path d="${f.lontano}" fill="${lontano}" stroke="${INK}" stroke-width="1.2"/>`
+    + `<path d="${f.vicino}" fill="url(#${id})" stroke="${INK}" stroke-width="1.6" stroke-linejoin="round"/>${f.dettagli ?? ''}`;
+}
+
+// ─── Persone ───
+// Pose: articolazioni [x, y] per il personaggio rivolto a destra. «attacco»: la guardia delle miniature di battaglia,
+// gamba davanti piegata e gamba dietro tesa sul tallone sollevato, l'arma impugnata davanti e puntata verso
+// l'avversario (richiesta dell'utente: non alzata dietro la testa), lo scudo davanti al busto.
+// «pugni»: stesse gambe, i pugni alzati in guardia (chi non ha un'arma).
+const POSE = {
+  attacco: { testa: [119, 38], collo: [116, 54], spalle: [[108, 60], [121, 60]], anche: [[103, 100], [113, 100]],
+    gambaDietro: [[103, 100], [90, 128], [78, 156]], piedeDietro: [[76, 158], [91, 165]],
+    gambaAvanti: [[113, 100], [133, 122], [131, 158]], piedeAvanti: [[128, 163], [146, 164]],
+    braccioDietro: [[108, 60], [128, 72], [150, 68]], braccioAvanti: [[121, 60], [129, 78], [137, 84]] },
+  pugni: { testa: [119, 38], collo: [116, 54], spalle: [[108, 60], [121, 60]], anche: [[103, 100], [113, 100]],
+    gambaDietro: [[103, 100], [92, 128], [82, 157]], piedeDietro: [[80, 160], [94, 165]],
+    gambaAvanti: [[113, 100], [130, 124], [128, 158]], piedeAvanti: [[125, 163], [143, 164]],
+    braccioDietro: [[108, 60], [118, 82], [128, 68]], braccioAvanti: [[121, 60], [135, 74], [141, 58]] },
+};
+const _pt = (p) => `${p[0]} ${p[1]}`;
+/** Un arto: linea spezzata dalle estremità tonde, contornata (prima l'inchiostro più largo, poi il colore). */
+function arto(punti, colore, largo) {
+  const d = `M${punti.map(_pt).join('L')}`;
+  return `<path d="${d}" fill="none" stroke="${INK}" stroke-width="${largo + 3}" stroke-linecap="round" stroke-linejoin="round"/>`
+    + `<path d="${d}" fill="none" stroke="${colore}" stroke-width="${largo}" stroke-linecap="round" stroke-linejoin="round"/>`;
+}
+/** Arto in due parti di spessore diverso (coscia e stinco, braccio e avambraccio). */
+const arto2 = ([a, b, c], colore, l1, l2, colore2 = colore) => arto([a, b], colore, l1) + arto([b, c], colore2, l2);
+const scuro = (hex, f = 0.72) => '#' + [1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * f).toString(16).padStart(2, '0')).join('');
+
+/** L'arma impugnata in `mano`, puntata verso l'avversario (davanti, un po' in alto). */
+function arma(tipo, mano) {
+  if (!tipo) return '';
+  const [x, y] = mano;
+  const dir = { spada: [40, -18], coltello: [40, -12], ascia: [18, -36] }[tipo];
+  const l = Math.hypot(dir[0], dir[1]), u = [dir[0] / l, dir[1] / l], n = [-u[1], u[0]];   // n: perpendicolare
+  const P = (a, b = 0) => `${(x + u[0] * a + n[0] * b).toFixed(1)} ${(y + u[1] * a + n[1] * b).toFixed(1)}`;
+  const linea = (a, b, colore, largo) => `<path d="M${P(a)}L${P(b)}" stroke="${INK}" stroke-width="${largo + 2.6}" stroke-linecap="round"/>`
+    + `<path d="M${P(a)}L${P(b)}" stroke="${colore}" stroke-width="${largo}" stroke-linecap="round"/>`;
+  if (tipo === 'spada' || tipo === 'coltello') {
+    const L = tipo === 'spada' ? 46 : 18;
+    return linea(-8, 0, '#5a3a1a', 3.6)                                         // impugnatura
+      + `<circle cx="${P(-9).split(' ')[0]}" cy="${P(-9).split(' ')[1]}" r="2.8" fill="#b8892e" stroke="${INK}" stroke-width="1.2"/>`
+      + `<path d="M${P(4, 0)}L${P(L - 5, 1.6)}L${P(L, 0)}L${P(L - 5, -1.6)}Z" fill="#d4d8dd" stroke="${INK}" stroke-width="1.4" stroke-linejoin="round"/>`
+      + (tipo === 'spada' ? `<path d="M${P(3, -8)}L${P(3, 8)}" stroke="${INK}" stroke-width="5" stroke-linecap="round"/>`
+        + `<path d="M${P(3, -8)}L${P(3, 8)}" stroke="#b8892e" stroke-width="2.6" stroke-linecap="round"/>` : '');
+  }
+  // ascia: manico che sale davanti, lama in cima rivolta verso l'avversario
+  const s = n[0] > 0 ? 1 : -1;
+  return linea(-10, 30, '#7a5228', 3.4)
+    + `<path d="M${P(24, 0)}L${P(34, 0)}L${P(38, 14 * s)}Q${P(29, 18 * s)} ${P(20, 14 * s)}Z" fill="#8e9196" stroke="${INK}" stroke-width="1.6" stroke-linejoin="round"/>`;
+}
+
+/**
+ * Una persona in posa d'attacco, rivolta a destra.
+ * o: { pelle, capelli, capo: 'elmo'|'cappuccio'|'capelli', elmo, cappuccio, veste, vesteLunga, maglia (cotta sugli arti),
+ *   calze, stivali, cintura, arma: 'spada'|'ascia'|'coltello'|null, scudo: { campo, pezza } | null, araldo (croce sulla veste) }
+ */
+function persona(o) {
+  const P = o.arma ? POSE.attacco : POSE.pugni;
+  const gambe = o.maglia ?? o.calze, braccia = o.maglia ?? o.veste;
+  const mani = o.maglia ? '#7d8086' : o.pelle;
+  let g = ombraTerra(112, 40);
+  // braccio dietro (con l'arma), gamba dietro
+  g += arto2(P.braccioDietro, scuro(braccia, 0.8), 9, 8) + `<circle cx="${P.braccioDietro[2][0]}" cy="${P.braccioDietro[2][1]}" r="4.6" fill="${mani}" stroke="${INK}" stroke-width="1.4"/>`;
+  g += arma(o.arma, P.braccioDietro[2]);
+  g += arto2(P.gambaDietro, scuro(gambe, 0.8), 13, 10) + arto(P.piedeDietro, scuro(o.stivali, 0.8), 6);
+  g += arto2(P.gambaAvanti, gambe, 13, 10) + arto(P.piedeAvanti, o.stivali, 6);
+  // busto
+  const [s1, s2] = P.spalle, [h1, h2] = P.anche;
+  g += `<path d="M${s1[0] - 6} ${s1[1] - 3}C${s1[0]} ${s1[1] - 8} ${s2[0] + 2} ${s2[1] - 8} ${s2[0] + 6} ${s2[1] - 2}L${h2[0] + 6} ${h2[1] + 2}L${h1[0] - 5} ${h1[1] + 2}Z" fill="${o.maglia ?? o.veste}" stroke="${INK}" stroke-width="1.6"/>`;
+  // veste: lunga (sopravveste fino alle ginocchia, aperta sul davanti) o corta (tunica)
+  const [ga, gd] = [P.gambaAvanti[1], P.gambaDietro[1]];
+  const fondo = o.vesteLunga ? 1 : 0.62;
+  const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  const va = lerp(P.gambaAvanti[0], ga, fondo), vd = lerp(P.gambaDietro[0], gd, fondo);
+  g += `<path d="M${s1[0] - 5} ${s1[1] - 2}C${s1[0]} ${s1[1] - 6} ${s2[0] + 2} ${s2[1] - 6} ${s2[0] + 5} ${s2[1] - 1}`
+    + `L${h2[0] + 6} ${h2[1] - 4}L${va[0] + 7} ${va[1] + 1}L${va[0] - 5} ${va[1] + 6}L${(h1[0] + h2[0]) / 2} ${h1[1] + 8}`
+    + `L${vd[0] + 4} ${vd[1] + 6}L${vd[0] - 7} ${vd[1]}L${h1[0] - 6} ${h1[1] - 4}Z" fill="${o.veste}" stroke="${INK}" stroke-width="1.6" stroke-linejoin="round"/>`;
+  if (o.araldo) g += `<path d="M${(s1[0] + s2[0]) / 2 + 2} ${s1[1] + 2}L${(h1[0] + h2[0]) / 2 + 1} ${h1[1] - 6}M${s1[0] - 1} ${s1[1] + 16}L${s2[0] + 4} ${s2[1] + 16}" stroke="${o.araldo}" stroke-width="3.4"/>`;
+  g += `<path d="M${h1[0] - 6} ${h1[1] - 4}L${h2[0] + 6} ${h2[1] - 4}" stroke="${INK}" stroke-width="4.5"/><path d="M${h1[0] - 5} ${h1[1] - 4}L${h2[0] + 5} ${h2[1] - 4}" stroke="${o.cintura ?? '#6e4c18'}" stroke-width="2.6"/>`;
+  // collo e testa (profilo rivolto a destra: naso, mento)
+  const [tx, ty] = P.testa;
+  g += `<path d="M${tx - 5} ${ty + 8}L${tx - 4} ${ty + 17}L${tx + 3} ${ty + 17}L${tx + 2} ${ty + 8}Z" fill="${o.pelle}" stroke="${INK}" stroke-width="1.4"/>`;
+  const viso = `M${tx - 9} ${ty - 1}C${tx - 9} ${ty - 10} ${tx - 3} ${ty - 13} ${tx + 2} ${ty - 12}C${tx + 8} ${ty - 11} ${tx + 9} ${ty - 5} ${tx + 9} ${ty - 2}`
+    + `L${tx + 12} ${ty + 3}L${tx + 9} ${ty + 4}C${tx + 10} ${ty + 6} ${tx + 9} ${ty + 8} ${tx + 8} ${ty + 9}C${tx + 6} ${ty + 12} ${tx + 1} ${ty + 13} ${tx - 3} ${ty + 12}`
+    + `C${tx - 8} ${ty + 10} ${tx - 9} ${ty + 5} ${tx - 9} ${ty - 1}Z`;
+  if (o.capo === 'elmo') {
+    g += `<path d="M${tx - 11} ${ty - 6}C${tx - 11} ${ty - 15} ${tx - 4} ${ty - 18} ${tx + 2} ${ty - 18}C${tx + 9} ${ty - 18} ${tx + 12} ${ty - 13} ${tx + 12} ${ty - 6}`
+      + `L${tx + 13} ${ty + 14}L${tx - 11} ${ty + 14}Z" fill="${o.elmo}" stroke="${INK}" stroke-width="1.8"/>`
+      + `<path d="M${tx - 1} ${ty - 3}L${tx + 13} ${ty - 3}" stroke="${INK}" stroke-width="2.6"/>`
+      + `<path d="M${tx + 5} ${ty - 16}L${tx + 5} ${ty + 13}" stroke="${scuro(o.elmo, 0.7)}" stroke-width="1.6"/>`
+      + `<path d="M${tx + 8} ${ty + 4}h2M${tx + 8} ${ty + 8}h2" stroke="${INK}" stroke-width="1.6"/>`;
+  } else {
+    g += `<path d="${viso}" fill="${o.pelle}" stroke="${INK}" stroke-width="1.5"/><circle cx="${tx + 4}" cy="${ty - 3}" r="1.3" fill="${INK}"/>`;
+    if (o.capo === 'cappuccio') g += `<path d="M${tx - 7} ${ty + 17}C${tx - 16} ${ty + 6} ${tx - 14} ${ty - 16} ${tx + 1} ${ty - 17}C${tx + 10} ${ty - 17} ${tx + 14} ${ty - 10} ${tx + 12} ${ty - 4}`
+      + `C${tx + 6} ${ty - 10} ${tx - 2} ${ty - 9} ${tx - 3} ${ty - 1}C${tx - 4} ${ty + 6} ${tx} ${ty + 12} ${tx + 4} ${ty + 17}Z" fill="${o.cappuccio}" stroke="${INK}" stroke-width="1.6"/>`;
+    else g += `<path d="M${tx - 10} ${ty + 2}C${tx - 12} ${ty - 10} ${tx - 4} ${ty - 15} ${tx + 3} ${ty - 14}C${tx + 9} ${ty - 13} ${tx + 11} ${ty - 8} ${tx + 10} ${ty - 5}`
+      + `C${tx + 4} ${ty - 8} ${tx - 2} ${ty - 7} ${tx - 4} ${ty - 1}L${tx - 6} ${ty + 4}Z" fill="${o.capelli}" stroke="${INK}" stroke-width="1.3"/>`;
+  }
+  // braccio davanti, con lo scudo
+  g += arto2(P.braccioAvanti, braccia, 9, 8) + `<circle cx="${P.braccioAvanti[2][0]}" cy="${P.braccioAvanti[2][1]}" r="4.6" fill="${mani}" stroke="${INK}" stroke-width="1.4"/>`;
+  if (o.scudo) {
+    const [x, y] = P.braccioAvanti[2];
+    g += `<path d="M${x - 14} ${y - 10}L${x + 16} ${y - 10}C${x + 18} ${y + 16} ${x + 12} ${y + 34} ${x + 1} ${y + 46}C${x - 10} ${y + 34} ${x - 16} ${y + 16} ${x - 14} ${y - 10}Z"`
+      + ` fill="${o.scudo.campo}" stroke="${INK}" stroke-width="2"/>`
+      + `<path d="M${x - 11} ${y - 7}L${x + 13} ${y - 7}C${x + 14} ${y + 14} ${x + 9} ${y + 30} ${x + 1} ${y + 41}C${x - 7} ${y + 30} ${x - 12} ${y + 14} ${x - 11} ${y - 7}Z" fill="none" stroke="#b8892e" stroke-width="1.6"/>`
+      + `<path d="M${x + 1} ${y - 6}L${x + 1} ${y + 38}M${x - 11} ${y + 8}L${x + 13} ${y + 8}" stroke="${o.scudo.pezza}" stroke-width="4"/>`;
+  }
+  return g;
+}
+
+// Corredi: il cavaliere (colori del giocatore), il garzone, il fuorilegge, il soldato o cavaliere di casata.
+const PELLE = '#d6a27a';
+const CORREDI = {
+  fuorilegge: { pelle: '#c99470', capelli: '#3a2a1a', capo: 'cappuccio', cappuccio: '#4d5a2e', veste: '#6b5236', calze: '#4a3c2c',
+    stivali: '#3a2a1a', cintura: '#2e2014', arma: 'ascia' },
+  soldato: { pelle: PELLE, capo: 'elmo', elmo: '#8d9096', veste: '#2b2b2b', vesteLunga: true, maglia: '#7d8086', calze: '#555',
+    stivali: '#2e2418', araldo: '#c9a23a', arma: 'spada', scudo: { campo: '#2b2b2b', pezza: '#c9a23a' } },
+};
+
+/** Sagoma del cavaliere, rivolto a destra: elmo, cotta e sopravveste se ha l'armatura; scudo e spada se li porta. */
+export function sagomaCavaliere(eq = {}) {
+  const armato = !!eq.armatura;
+  const o = armato
+    ? { pelle: PELLE, capo: 'elmo', elmo: '#a3a7ad', veste: '#2f4a7a', vesteLunga: true, maglia: '#8a8e95', calze: '#6a6e75',
+      stivali: '#3a2a1a', araldo: '#e2c46a' }
+    : { pelle: PELLE, capelli: '#7a4a22', capo: 'capelli', veste: '#9a7a4a', calze: '#5e4a36', stivali: '#4a3220' };
+  o.arma = eq.arma ? (/coltel|pugnal/i.test(eq.arma) ? 'coltello' : 'spada') : null;
+  o.scudo = eq.scudo ? { campo: '#7a1f12', pezza: '#e2c46a' } : null;
+  return `<svg viewBox="0 0 240 180" class="sagoma">${persona(o)}</svg>`;
+}
+
+/** Sagoma del nemico, rivolto a sinistra; un gruppo o un'orda sono più figure, le lontane più piccole e più chiare. */
+export function sagomaNemico(n = {}) {
+  const umano = n.tipo === 'umano';
+  const forma = n.tipo === 'mitico' ? 'mitico' : umano ? null : FIGURE[n.categoria] ? n.categoria : 'lupo';
+  const disegna = () => (umano
+    ? `<g transform="matrix(-1 0 0 1 240 0)">${persona(/soldato|cavaliere|battaglia/.test(n.categoria) ? CORREDI.soldato : CORREDI.fuorilegge)}</g>`
+    : ombraTerra(FIGURE[forma].ombra[0], FIGURE[forma].ombra[1]) + figura(FIGURE[forma], forma));
+  const molti = n.numerosita === 'orda' ? 3 : n.numerosita === 'gruppo' ? 2 : 1;
+  // In gruppo tutto rimpicciolisce perché le figure di dietro (a destra, più in alto) restino nel riquadro.
+  const base = molti === 1 ? 1 : molti === 2 ? 0.82 : 0.7;
+  let g = '';
+  for (let i = molti - 1; i >= 0; i--) {
+    const s = base * (1 - i * 0.14), tx = i * (umano || forma === 'mitico' ? 40 : 50) + 6 + (umano ? 30 * (1 - s) : 0), ty = 166 * (1 - s) - i * 12;
+    g += `<g transform="translate(${tx.toFixed(1)} ${ty.toFixed(1)}) scale(${s})"${i ? ` opacity="${1 - i * 0.25}"` : ''}>${disegna()}</g>`;
+  }
+  return `<svg viewBox="0 0 240 180" class="sagoma">${g}</svg>`;
+}
+
+const _barra = (nome, v, cls = '') => {
+  const f = v.max ? Math.max(0, Math.min(1, v.cur / v.max)) : 0;
+  return `<div class="stat ${cls}"><span>${_esc(nome)}</span><i><b style="width:${(f * 100).toFixed(1)}%"></b></i>`
+    + `<em>${Math.ceil(v.cur)}</em></div>`;
+};
+
+/**
+ * Riquadro di combattimento. `mostra(v)` lo apre o lo rifà con la vista v; `chiudi()`; `tasto(e)` (1–9 scelgono;
+ * Invio e Spazio la prima scelta: di solito «Combattere» o, a scontro finito, «Continua»).
+ * @param {{ onApri?: () => void, onChiudi?: () => void }} [opzioni]
+ */
+export function creaCombattimento(opzioni = {}) {
+  let el = null, scelte = [], stacca = null;
+  function chiudi() {
+    if (!el) return;
+    stacca?.();
+    el.remove();
+    el = null;
+    scelte = [];
+    opzioni.onChiudi?.();
+  }
+  /**
+   * @param {{ titolo: string, nota?: string,
+   *   cavaliere: { nome: string, titolo?: string, salute: {cur:number,max:number}, forza: {cur:number,max:number},
+   *     volonta: {cur:number,max:number}, equip: Object<string,string|null>, cavallo?: string|null },
+   *   nemico: { nome: string, tipo: string, categoria?: string, numerosita?: string, descr?: string, pericolo?: number },
+   *   round: number, roundMax: number, minuti: number, slancio: number, soglia: number,
+   *   cronaca: { testo: string, segno?: 'piu'|'meno'|'' }[],
+   *   esito?: { titolo: string, testo?: string, segno?: 'piu'|'meno'|'' },
+   *   opzioni: { testo: string, nota?: string, disponibile?: boolean, scegli: () => void }[] }} v
+   */
+  function mostra(v) {
+    const nuova = !el;
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'combattimento';
+      el.innerHTML = '<div class="contenuto"></div>';
+      document.body.appendChild(el);
+      stacca = sfondoSvg(el, (w, h) => cornice(w, h, semeDaTesto(v.titolo), { arco: 260 }).svg);
+    }
+    const c = el.querySelector('.contenuto');
+    const k = v.cavaliere, n = v.nemico;
+    const eq = Object.entries(k.equip ?? {}).filter(([, x]) => x).map(([, x]) => x);
+    if (k.cavallo) eq.push(k.cavallo);
+    // Slancio come tiro alla fune: il nodo va verso chi sta vincendo (a sinistra il cavaliere). Scala fino a ±3 soglie.
+    const S = Math.max(1, v.soglia), lim = S * 3;
+    const pos = 50 - Math.max(-lim, Math.min(lim, v.slancio)) / lim * 50;
+    const tacca = (x) => `<i class="tacca" style="left:${50 - x / lim * 50}%"></i>`;
+    const dice = v.slancio >= S ? 'sei in vantaggio' : v.slancio <= -S ? 'sei in svantaggio' : v.slancio > 0 ? 'guadagni terreno'
+      : v.slancio < 0 ? 'cedi terreno' : 'nessuno prevale';
+    const pericolo = Math.max(1, Math.min(5, v.nemico.pericolo ?? 3));
+    scelte = v.opzioni.filter((o) => o.disponibile !== false);
+    let num = 0;
+    c.innerHTML = `<div class="titolo">${_esc(v.titolo)}</div>`
+      + (v.nota ? `<div class="nota">${_esc(v.nota)}</div>` : '')
+      + '<div class="colonne">'
+      + `<section class="lato cavaliere">${sagomaCavaliere(k.equip)}<div class="nome">${_esc(k.nome)}</div>`
+      + `<div class="sotto">${_esc(k.titolo ?? '')}</div>`
+      + _barra('Salute', k.salute, 'salute') + _barra('Forza', k.forza) + _barra('Volontà', k.volonta)
+      + `<div class="equip">${eq.length ? eq.map((x) => `<span>${_esc(x)}</span>`).join('') : '<span class="vuoto">a mani nude</span>'}</div></section>`
+      + '<section class="centro">'
+      + `<div class="round">${v.round ? `Round ${v.round} di ${v.roundMax}` : `Fino a ${v.roundMax} Round`} · ${v.minuti} minuti</div>`
+      + `<div class="slancio"><div class="fune">${tacca(S)}${tacca(-S)}<b style="left:${pos.toFixed(1)}%"></b></div>`
+      + `<div class="ai-lati"><span>tu</span><span>Slancio ${v.slancio > 0 ? '+' : ''}${v.slancio}: ${dice}</span><span>${_esc(n.nome)}</span></div></div>`
+      + (v.esito ? `<div class="esito ${v.esito.segno ?? ''}"><b>${_esc(v.esito.titolo)}</b>${v.esito.testo ? `<span>${_esc(v.esito.testo)}</span>` : ''}</div>` : '')
+      + `<div class="scelte">${v.opzioni.map((o, i) => {
+        const ok = o.disponibile !== false;
+        return `<button type="button" data-i="${i}"${ok ? '' : ' disabled'}><span class="n">${ok ? ++num : '·'}</span>`
+          + `<span>${_esc(o.testo)}${o.nota ? ` <span class="req">${_esc(o.nota)}</span>` : ''}</span></button>`;
+      }).join('')}</div></section>`
+      + `<section class="lato nemico">${sagomaNemico(n)}<div class="nome">${_esc(n.nome)}</div>`
+      + `<div class="sotto">${'◆'.repeat(pericolo)}${'◇'.repeat(5 - pericolo)} pericolo</div>`
+      + (n.descr ? `<div class="descr">${_esc(n.descr)}</div>` : '') + '</section>'
+      + '</div>'
+      + `<div class="cronaca">${v.cronaca.length ? v.cronaca.map((r) => `<div class="${r.segno ?? ''}">${_esc(r.testo)}</div>`).join('')
+        : '<div class="vuota">Vi fronteggiate. Nessuno ha ancora colpito.</div>'}</div>`;
+    c.querySelectorAll('.scelte button').forEach((b) => b.addEventListener('click', () => v.opzioni[+b.dataset.i].scegli()));
+    const cr = c.querySelector('.cronaca');
+    cr.scrollTop = cr.scrollHeight;
+    if (nuova) opzioni.onApri?.();
+  }
+  /** Tasti mentre il riquadro è aperto: true se il tasto è stato usato (non si esce con Esc: lo scontro va chiuso). */
+  function tasto(e) {
+    if (!el) return false;
+    const m = /^(Digit|Numpad)([1-9])$/.exec(e.code);
+    if (m) { scelte[+m[2] - 1]?.scegli(); return true; }
+    if (['Enter', 'NumpadEnter', 'Space'].includes(e.code)) { e.preventDefault?.(); scelte[0]?.scegli(); return true; }
+    return true;
+  }
+  return { mostra, chiudi, tasto, get aperto() { return !!el; } };
+}
+
+/**
+ * Schermata di morte (G1 passo 4): il velo scuro su tutto e una pergamena con il racconto della fine e i pulsanti.
+ * @param {{ titolo: string, testo: string, righe?: string[], opzioni: { testo: string, scegli: () => void }[] }} c
+ * @returns {{ chiudi: () => void }}
+ */
+export function mostraMorte(c) {
+  document.querySelector('.schermata-morte')?.remove();
+  const el = document.createElement('div');
+  el.className = 'schermata-morte';
+  el.innerHTML = '<div class="foglio-morte"><div class="contenuto">'
+    + `<div class="croce">✠</div><div class="titolo">${_esc(c.titolo)}</div><div class="fregio"></div>`
+    + `<div class="testo">${_esc(c.testo)}</div>`
+    + (c.righe?.length ? `<div class="righe">${c.righe.map((r) => `<div>${_esc(r)}</div>`).join('')}</div>` : '')
+    + `<div class="scelte">${c.opzioni.map((o, i) => `<button type="button" data-i="${i}">${_esc(o.testo)}</button>`).join('')}</div>`
+    + '</div></div>';
+  document.body.appendChild(el);
+  const foglio = el.querySelector('.foglio-morte');
+  const stacca = sfondoSvg(foglio, (w, h) => cornice(w, h, semeDaTesto(c.titolo)).svg);
+  el.querySelectorAll('.scelte button').forEach((b) => b.addEventListener('click', () => c.opzioni[+b.dataset.i].scegli()));
+  return { chiudi: () => { stacca(); el.remove(); } };
+}

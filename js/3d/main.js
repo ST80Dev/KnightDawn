@@ -23,8 +23,9 @@ import { createBorgoAPezzi } from './borgo3d.js';
 import { createVillaggioAPezzi, createMonasteroAPezzi, createEremoAPezzi, createMulinoAPezzi, pianoDelSito } from './villaggio3d.js';
 import { createRovinaAPezzi, createMisteroAPezzi } from './rovine3d.js';
 import { raggioSito, climaDelLuogo } from '../mondo/siti.js';
+import { NOMI_BIOMI } from '../mondo/carta.js';
 import { createCartaVista, CLASSI_ROCCA } from './cartaVista.js';
-import { mostraMenuAvvio, creaCartaCronista, creaScrittoio, nomeCasuale, creaMeridiana } from './interfaccia.js';
+import { mostraMenuAvvio, creaCartaCronista, creaScrittoio, nomeCasuale, creaMeridiana, creaCombattimento, mostraMorte } from './interfaccia.js';
 import { creaAvvisi, SEZIONI, sezioneDi } from './avvisi.js';
 import { creaMinimappa } from './minimappa.js';
 import { creaOrizzonteAPezzi } from './orizzonte.js';
@@ -798,13 +799,18 @@ async function scegliOpzione(ev, o, luogo) {
   }
   if (!o.effects?.length && !o.reply) { cartaCronista.chiudi(); return; }
   const prima = istantanea();
-  const righe = Events.applyEffects(o.effects, contestoEventi());
+  // Un effetto combat apre il riquadro di combattimento e applica il ramo dell'esito al ritorno (G1 passo 4).
+  const { righe, combattuto, finita } = await applicaConCombattimenti(o.effects);
   Events.markSeen(ev);
   salvaOra();
+  if (finita) return;                      // svenimento o morte hanno preso la scena
   // Racconto tra la scelta e l'esito: le frasi dell'opzione (o il suo esito spezzato in frasi), le ore, il registro.
+  // Dopo uno scontro no: il riquadro ha già raccontato i Round.
   const frasi = o.racconto ?? (o.reply ? o.reply.split(/(?<=[.!?…»])\s+/) : [o.text]);
-  await raccontaAzione({ titolo: ev.title, frasi, prima, dopo: istantanea() });
-  if (!cartaCronista.aperta) return;
+  if (!combattuto) {
+    await raccontaAzione({ titolo: ev.title, frasi, prima, dopo: istantanea() });
+    if (!cartaCronista.aperta) return;
+  }
   // Dopo l'investitura la Veglia è finita: la carta non torna agli eventi della Veglia.
   const ancora = Calendar.inVeglia ? [{ testo: 'Indietro', scegli: () => mostraEvento(ev, luogo) }] : [];
   cartaCronista.mostra({ titolo: ev.title, testo: o.reply ?? '', righe, opzioni: [...ancora, ESCI] });
@@ -825,6 +831,193 @@ function apriCronista(e, luogo = null) {
   });
 }
 function chiudiCronista() { cartaCronista.chiudi(); }
+
+// ─── Combattimento nel riquadro (G1 passo 4, docs/COMBAT.md §9, interfaccia.js creaCombattimento) ─────────────────
+// Mentre il riquadro è aperto la scena è ferma (come con la Carta del cronista); ogni Round confermato avanza il
+// calendario dei suoi minuti (js/combat.js, minutiRound). Un effetto { type:'combat' } di un evento sospende l'evento:
+// si gioca lo scontro e il ramo dell'esito (onWin, onFlee, …) si applica al ritorno. Nella Veglia a Salute 0 si sviene
+// (Combat.svieni: ci si risveglia fuori dalla porta del borgo di partenza, curati, ore perse, senza l'oro); dopo
+// l'investitura la morte è vera: schermata di morte, la partita Storia si cancella, si torna al menu. In Libera la
+// schermata di morte permette anche di rialzarsi (è la modalità delle prove) e K apre una prova con un nemico a scelta.
+const riquadroCombattimento = creaCombattimento({
+  onApri: () => { cronista = true; tasti.clear(); if (_invitoPorta) _invitoPorta.hidden = true; },
+  onChiudi: () => { cronista = null; tasti.clear(); salvaOra(); },
+});
+let morteAperta = false;
+const SCELTE_COMBATTIMENTO = {
+  continua: { testo: 'Combattere', nota: 'un altro Round' },
+  fuga: { testo: 'Tentare la fuga', nota: 'se fallisce, Slancio −2' },
+  resa: { testo: 'Arrenderti' },
+  parlamento: { testo: 'Chiedere parlamento', nota: 'una volta sola' },
+  colpoDisperato: { testo: 'Colpo disperato', nota: 'Salute −8, Slancio +3' },
+};
+const ESITI_COMBATTIMENTO = {
+  vittoria: { titolo: 'Vittoria', testo: 'L\'avversario cede il campo.', segno: 'piu' },
+  sconfitta: { titolo: 'Sconfitta', testo: 'Sei battuto, ma vivo.', segno: 'meno' },
+  stallo: { titolo: 'Nessuno prevale', testo: 'Vi separate senza un vincitore.' },
+  fuga: { titolo: 'In salvo', testo: 'Hai trovato un varco e ti sei messo in salvo.' },
+  resa: { titolo: 'Resa', testo: 'Hai gettato le armi.', segno: 'meno' },
+  svenuto: { titolo: 'Svieni', testo: 'Le gambe cedono e il mondo si fa buio.', segno: 'meno' },
+  morte: { titolo: 'Cadi', testo: 'Le forze ti abbandonano.', segno: 'meno' },
+};
+const pericoloDi = (sfida) => (sfida <= 9 ? 1 : sfida <= 11 ? 2 : sfida <= 13 ? 3 : sfida <= 15 ? 4 : 5);
+
+/** Bioma della Carta sotto il cavaliere (codici World.BIOME: le affinità di terreno dei nemici); pianura altrove. */
+function biomaQui() {
+  if (!nelMondo() || !carta.bioma) return 1;
+  const c = Math.floor((scenaAttuale.cx + knight.stato.x) / carta.cella), r = Math.floor((scenaAttuale.cz + knight.stato.z) / carta.cella);
+  if (c < 0 || r < 0 || c >= carta.cols || r >= carta.rows) return 1;
+  return carta.bioma[r * carta.cols + c] ?? 1;
+}
+
+/**
+ * Gioca uno scontro nel riquadro. Ritorna { esito, round, minuti }: l'esito di Combat ('vittoria', 'sconfitta',
+ * 'stallo', 'fuga', 'resa', 'morte') o 'svenuto' (Salute 0 con la regola della Veglia). Le conseguenze di svenimento e
+ * morte le applica dopoLoScontro.
+ */
+function combatti({ enemy, terrain = null, veglia = Calendar.inVeglia }) {
+  return new Promise((risolvi) => {
+    if (cartaCronista.aperta) cartaCronista.chiudi();
+    const st = Combat.start({ enemy, terrain: terrain ?? biomaQui(), knight: Knight });
+    const cronaca = [];
+    const e = st.enemy;
+    const ridisegna = (fine = null) => riquadroCombattimento.mostra({
+      titolo: `Scontro: ${e.nome}`,
+      nota: `${Calendar.oraCanonica()} · ${NOMI_BIOMI[st.terrain] ?? 'terre ignote'} · ${st.minutiRound} minuti per Round`,
+      cavaliere: { nome: Knight.nome, titolo: Knight.titolo, salute: Knight.salute, forza: Knight.forza, volonta: Knight.volonta,
+        equip: Knight.equip, cavallo: Knight.isMounted() ? Knight.cavallo?.nome : null },
+      nemico: { nome: e.nome, tipo: e.tipo, categoria: e.categoria, numerosita: e.numerosita, descr: e.descr, pericolo: pericoloDi(e.sfida ?? 10) },
+      round: st.round, roundMax: st.roundMax, minuti: st.round * st.minutiRound, slancio: st.slancio, soglia: Combat.SLANCIO_VITTORIA,
+      cronaca,
+      esito: fine ? ESITI_COMBATTIMENTO[fine] : null,
+      opzioni: fine
+        ? [{ testo: 'Continua', scegli: () => { riquadroCombattimento.chiudi(); risolvi({ esito: fine, round: st.round, minuti: st.round * st.minutiRound }); } }]
+        : Combat.scelteDisponibili(st).map((id) => {
+          const s = SCELTE_COMBATTIMENTO[id] ?? { testo: id };
+          const nota = id === 'resa' && e.accettaResa === false ? (e.tipo === 'umano' ? 'non concede quartiere' : 'una bestia non ha pietà') : s.nota;
+          return { testo: s.testo, nota, scegli: () => scegli(id) };
+        }),
+    });
+    const scegli = (id) => {
+      if (st.finito) return;
+      const n0 = st.cronaca.length;
+      Combat.step(st, id);
+      const u = st.ultimo, nuove = st.cronaca.slice(n0);
+      nuove.forEach((t, i) => cronaca.push({
+        testo: t + (i === nuove.length - 1 && u.danno ? ` Salute −${u.danno}.` : ''),
+        segno: u.delta > 0 ? 'piu' : u.delta < 0 ? 'meno' : '',
+      }));
+      ridisegna(st.finito ? Combat.esitoFinale(st.esito, { veglia }) : null);
+    };
+    ridisegna();
+  });
+}
+
+/** Dopo uno scontro: svenimento (Veglia) o morte. true se hanno preso la scena (l'evento non prosegue). */
+async function dopoLoScontro(esito) {
+  if (esito === 'svenuto') {
+    const r = Combat.svieni(Knight);
+    await risvegliaNelBorgo();
+    const p = controllaGiornata();
+    salvaOra();
+    cartaCronista.mostra({
+      titolo: 'Il risveglio',
+      testo: 'Qualcuno ti ha trovato riverso a terra e ti ha riportato al borgo. Ti risvegli sulla paglia, con le ferite fasciate e la testa che pulsa.',
+      righe: [`Sono passate circa ${Math.round(r.minuti / 60)} ore.`,
+        r.oroPerso ? `La borsa è vuota: ${r.oroPerso} oro perduti mentre giacevi.` : 'Non avevi oro addosso: almeno quello non l\'hai perso.',
+        `Salute ${Math.round(Knight.salute.cur)}.`, ...p.testi],
+      opzioni: [ESCI],
+    });
+    return true;
+  }
+  if (esito === 'morte') { mostraLaMorte(); return true; }
+  return false;
+}
+
+/** Svenimento: il cavaliere torna fuori dalla porta del borgo di partenza (cambiando Scena se è lontano). */
+async function risvegliaNelBorgo() {
+  const sito = carta?.luoghi?.find((l) => l.partenza);
+  if (!sito || !nelMondo()) return;
+  const p = partenzaDelSito(sito), half = terrain.size / 2;
+  let lx = sito.x + p.x - scenaAttuale.cx, lz = sito.z + p.z - scenaAttuale.cz;
+  if (Math.max(Math.abs(lx), Math.abs(lz)) >= half - 5) {
+    await caricaScena({ tipo: 'mondo', cx: sito.x, cz: sito.z });
+    lx = p.x; lz = p.z;
+  }
+  posizionaCavaliere(lx - scostamento.x, lz - scostamento.z, p.direzione);
+}
+
+/** Schermata di morte. In Storia la partita finisce: il salvataggio si cancella e si torna al menu. */
+function mostraLaMorte() {
+  const storia = inStoria();
+  if (storia) { nonSalvare = true; Save.stopAutosave(); Save.cancella('storia'); }
+  morteAperta = true; cronista = true; tasti.clear();
+  const quando = Calendar.inVeglia ? `giorno ${Calendar.giornoVeglia} della Veglia` : `Diario ${Calendar.diario}`;
+  const s = mostraMorte({
+    titolo: 'Qui finisce la cronaca',
+    testo: `${Knight.titolo} ${Knight.nome} cade, all'ora di ${Calendar.oraCanonica()}, ${quando}. Il vento copre le sue ultime parole; i cronisti ne scriveranno poche righe.`,
+    righe: storia ? ['La partita Storia è finita: il suo salvataggio è cancellato. Un file scaricato prima resta tuo.'] : ['Modalità Libera: puoi rialzarti e continuare le prove.'],
+    opzioni: [
+      ...(storia ? [] : [{ testo: 'Rialzarti (Libera)', scegli: () => {
+        Knight.salute.cur = Math.max(Knight.salute.cur, Math.round(Knight.salute.max / 2));
+        s.chiudi(); morteAperta = false; cronista = null; salvaOra();
+      } }]),
+      { testo: 'Torna al menu', scegli: () => tornaAlMenu() },
+    ],
+  });
+}
+
+/**
+ * Applica gli effetti di una scelta; ogni effetto combat si gioca nel riquadro e il suo ramo si applica al ritorno.
+ * Ritorna { righe, combattuto, finita }: finita se svenimento o morte hanno preso la scena.
+ */
+async function applicaConCombattimenti(effetti, { veglia = Calendar.inVeglia } = {}) {
+  const coda = [];
+  const righe = Events.applyEffects(effetti, { ...contestoEventi(), combatti: (eff, terrain) => coda.push({ eff, terrain }) });
+  for (const { eff, terrain } of coda) {
+    const r = await combatti({ enemy: eff.enemy, terrain, veglia });
+    const E = ESITI_COMBATTIMENTO[r.esito];
+    righe.push(`Scontro: ${E?.titolo ?? r.esito} (${r.round} Round, ${r.minuti} minuti).`);
+    if (r.esito !== 'morte') {
+      const ramo = Events.ramoCombattimento(eff, r.esito === 'svenuto' ? 'sconfitta' : r.esito);
+      if (ramo) righe.push(...Events.applyEffects(ramo, contestoEventi()));
+    }
+    if (await dopoLoScontro(r.esito)) return { righe, combattuto: true, finita: true };
+  }
+  return { righe, combattuto: coda.length > 0, finita: false };
+}
+
+// Prova di combattimento (K, solo Libera): un nemico a scelta, passando dallo stesso effetto combat degli eventi.
+const PROVA_COMBATTIMENTO = { ferito: false, veglia: false };
+function mostraProvaCombattimento(righe = []) {
+  if (!soloInLibera('La prova di combattimento (K)')) return;
+  const P = PROVA_COMBATTIMENTO;
+  const nemici = Enemies.all().filter((e) => e.categoria !== 'battaglia');   // battaglie e assedi: decine di Round
+  cartaCronista.mostra({
+    titolo: 'Prova di combattimento',
+    testo: 'Solo nella modalità Libera. Scegli un avversario: lo scontro passa dall\'effetto combat degli eventi, con i suoi rami d\'esito.',
+    righe,
+    nota: `${Calendar.oraCanonica()} · Salute ${Math.ceil(Knight.salute.cur)} · ${Knight.oro} oro · terreno: ${NOMI_BIOMI[biomaQui()] ?? '—'}`,
+    tabelle: [{ titolo: 'Avversari', righe: nemici.map((e) => ({
+      nome: e.nome, info: `${e.tipo} · ${e.roundMin}–${e.roundMax} Round · ${Combat.minutiRound(e)} min per Round`,
+      prezzo: `sfida ${e.sfida}`, azione: 'Affronta', scegli: () => provaCombattimento(e.id),
+    })) }],
+    opzioni: [
+      { testo: `Entrare già ferito (Salute 10): ${P.ferito ? 'sì' : 'no'}`, scegli: () => { P.ferito = !P.ferito; mostraProvaCombattimento(); } },
+      { testo: `A Salute 0: ${P.veglia ? 'si sviene (regola della Veglia)' : 'si muore'}`, scegli: () => { P.veglia = !P.veglia; mostraProvaCombattimento(); } },
+      ESCI,
+    ],
+  });
+}
+async function provaCombattimento(id) {
+  if (PROVA_COMBATTIMENTO.ferito) Knight.salute.cur = Math.min(Knight.salute.cur, 10);
+  const ramo = (nome) => [{ type: 'log', text: `Ramo ${nome} dell'evento applicato.` }];
+  const eff = { type: 'combat', enemy: id, onWin: ramo('onWin'), onFlee: ramo('onFlee'), onSurrender: ramo('onSurrender'),
+    onDefeat: ramo('onDefeat'), onDeath: ramo('onDeath'), onStallo: ramo('onStallo') };
+  const r = await applicaConCombattimenti([eff], { veglia: PROVA_COMBATTIMENTO.veglia });
+  salvaOra();
+  if (!r.finita) mostraProvaCombattimento(r.righe);
+}
 
 // ─── Luci vicine (M7, passo 7) ──────────────────────────────────────────
 // Le sorgenti di borghi, rocche e campagna (torce, forge) sono molte; PointLight vere solo per le LUCI_VICINE più
@@ -1435,7 +1628,7 @@ async function init() {
   };
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no · Spazio: scavalca'
-    + ` · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: ${inStoria() ? 'Carta' : 'Carta (clic: vai lì) · T: avanza'}`
+    + ` · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: ${inStoria() ? 'Carta' : 'Carta (clic: vai lì) · T: avanza · K: prova di combattimento'}`
     + ' · N: minimappa (icona, piccola, grande) · +/−: zoom minimappa · J: scrittoio e avvisi · I: zaino'
     + ` · F2: qualità · F3: info · F8: menu · modalità ${inStoria() ? 'Storia' : 'Libera'}`,
   'aiuto');
@@ -1650,6 +1843,8 @@ const premuto = (azione) => TASTI_MOVIMENTO[azione].some((k) => tasti.has(k));
 
 window.addEventListener('keydown', (e) => {
   if (e.target instanceof HTMLInputElement) return;      // si sta scrivendo (es. il seme della Carta)
+  if (riquadroCombattimento.aperto) { if (!e.repeat) riquadroCombattimento.tasto(e); return; }   // scontro in corso
+  if (morteAperta) return;
   // M: la Carta. In Storia in modalità di gioco (nebbia della conoscenza, solo mappa e legenda, niente clic che
   // sposta); in Libera la Carta di sviluppo. Mentre è aperta il gioco è fermo; M o Esc la chiudono.
   if (e.code === 'KeyM' && !e.repeat) { if (!cronista) cartaVista.alterna(); return; }
@@ -1663,6 +1858,7 @@ window.addEventListener('keydown', (e) => {
   }
   if (e.code === 'KeyJ' && !e.repeat && knight) { scrittoio.apri(); return; }
   if (e.code === 'KeyI' && !e.repeat && knight) { mostraZaino(); return; }
+  if (e.code === 'KeyK' && !e.repeat && knight) { mostraProvaCombattimento(); return; }   // G1 passo 4: solo Libera
   if (e.code === PORTA.tasto && !e.repeat) {
     const azione = AZIONI_TASTO.find((a) => a.pronta());
     if (azione) { azione.esegui(); return; }
