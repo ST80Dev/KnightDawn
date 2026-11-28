@@ -2897,6 +2897,13 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
 - **Salvataggio**: posizione e direzione del cavallo nella Scena, `Knight.inSella`. Salvataggi vecchi: senza cavallo →
   ronzino nuovo accanto al cavaliere, a piedi.
 
+- **Camera che segue l'andatura** (approvata dall'utente il 28/11/2026): in sella la camera gira attorno al perno verso
+  un lato invece di spostarsi di spalla, per vedere il cavallo di tre quarti, la strada in curva e sentire la velocità.
+  Fermo e al passo 10° (come la spalla destra a piedi), trotto 15° e +1 m, galoppo 19° e +2 m; campo visivo +3° al
+  trotto e +6° al galoppo (mai oltre). Si passa con la velocità del cavallo, smorzata (~2 s), mai a scatti. **Q**
+  sceglie il lato (destra o sinistra), ricordato nel browser. A piedi la camera non cambia. `CAMERA_ANDATURA` in
+  `main.js`, `cfg.angolo` e `cfg.aggiunta` in `camera.js`; nessun costo (stessi raggi contro i muri).
+
 ### Budget e stile (regole di `docs/PRESTAZIONI.md` passo 6, `docs/GRAFICA_3D.md`)
 
 - **≤ 6.000 triangoli, ≤ 12 oggetti**, uno per snodo animato: corpo (con sella, gualdrappa, finimenti), collo, testa
@@ -3660,6 +3667,71 @@ azzurro-grigio scuro all'86 % su terra bagnata e ghiaia scure. Rimedio (`FIUME_S
 semilarghezza il nastro prende un azzurro più chiaro (#7aa3b3), sfumando fino a 8 m; al centro strisce di corrente più
 chiare a chiazze di ~15 m, da un rumore in coordinate del mondo. Solo colori per vertice (nessun costo per fotogramma);
 larghezza, bordi sfumati e rilievo invariati. L'orizzonte (oltre il blocco) resta col colore di prima.
+
+## Veicoli sulle strade (28/11/2026) — prima PR fatta (tipi 1–3), da provare; carro a buoi nella seconda
+
+> Dalla sessione cardine, deciso dall'utente: il mondo intorno deve sembrare vivo, con veicoli in movimento sulle strade.
+> Codice in `js/3d/carri3d.js` (file nuovo approvato dall'utente). Niente stile Ottocento, niente sospensioni da carrozza.
+
+**Tipi** (tutti a passo d'uomo, solo strade maestre e carrarecce, mai mulattiere e sentieri):
+
+| Tipo | Dove | Animali | Persone | Velocità in piano |
+|---|---|---|---|---|
+| **carrozza** (chariot branlant / whirlicote del Trecento): 4 ruote, cassone dipinto, copertura a botte di tela a bande | maestre (18 %) | 2–4 cavalli in fila con le tirelle | postiglione in sella all'ultimo cavallo, cavaliere di scorta dietro (elmo e lancia, gualdrappa nella livrea) | 1,35 m/s |
+| **carro** da trasporto: 4 ruote, sponde basse, sacchi, botti, una balla sotto un telo | maestre (52 %), carrarecce (15 %) | 1–2 cavalli | carrettiere a piedi alla testa | 1,2 m/s |
+| **carretto**: 2 ruote, stanghe, fascina e sacco | carrarecce (85 %), maestre (30 %) | mulo o asino (proporzioni del cavallo: più piccolo, orecchie lunghe) | conducente a piedi alla testa | 1,05 m/s |
+| carro a buoi (seconda PR) | vicino ai borghi | buoi (animale nuovo) | — | lentissimo |
+
+**Regole.**
+1. **Esistono solo vicino al cavaliere.** Altrove c'è un **orario**: per ogni ramo della rete (`carta.strade.rami`) partenze
+   dai due capi a intervalli regolari (maestre 1800 s di Scena, carrarecce 5500; ×0,5 sui rami che toccano una rocca, un
+   borgo o una città), ciascuna con tipo, velocità (±10 %), presenza ed esistenza (85 %) dal seme. Dov'è un veicolo è un
+   conto (`orarioRotta`), non uno stato: nessun calcolo e nessun disegno fuori dal blocco. Entro **1100 m** dal cavaliere
+   il veicolo prende vita; oltre 1200 m la lascia e resta solo il **ritardo** accumulato (fermate, salite), in memoria per la
+   sessione. Durante il gioco un veicolo nasce solo oltre 650 m (fuori vista), salvo chi esce da una porta; al
+   caricamento ovunque.
+2. **Tempo.** Le strade si percorrono 1:1 col tempo reale (1 s reale = 1 s di Scena = 10 s di gioco): una maestra di 20 km
+   richiede ~4 ore reali, quasi due giorni di gioco. Il riposo e il sonno fanno saltare l'orario: i veicoli si rimettono dove
+   devono essere. Presenza per ora: piena 7–17, crepuscoli graduali (6:00 → 53 %), di notte 6 %.
+3. **Movimento.** Lungo il tracciato fine dei tratti (quota e curve), sulla **corsia di sinistra** (semilarghezza della
+   strada − semilarghezza del veicolo − 0,35 m: due carri si incrociano anche sulla carrareccia), ruote che girano, gambe
+   al passo nello shader. In salita più lenti (×1/(1 + 6·pendenza), al più ×0,45), nelle discese oltre il 6 % prudenti. A un
+   incrocio proseguono su un altro ramo (le carrozze solo sulla stessa classe); a una rocca o a un villaggio arrivano e
+   spariscono. Dentro un villaggio (dove la strada è tagliata dalle case) passano non visti.
+4. **Strada sbarrata.** Se il cavaliere, il cavallo o un altro veicolo nello stesso verso stanno davanti (entro 4,5 m dal
+   primo animale, nella larghezza del veicolo + 0,35 m) o a ridosso dei fianchi, il veicolo frena e **aspetta**: niente
+   attraversamenti, niente investimenti. Collisioni semplici: capsule su animali, cassa e persone (`spingiFuori`).
+5. **Coordinate.** La posizione vera è (ramo, s, verso) sulla rete del mondo: al cambio di blocco non si sposta niente.
+
+**Prestazioni** (regole di `docs/PRESTAZIONI.md`, passo 6). Sette `InstancedMesh` per tutti i veicoli del blocco (animali,
+ruote, tirelle, una per tipo di cassa, persone di `persone3d.js`), geometrie e materiali creati una volta per partita
+(materiali `userData.condivisa`): **≤ 7 chiamate in più**, qualunque sia il numero dei veicoli, e 0 triangoli per chi è oltre
+**500 m** dalla camera o fuori dall'inquadratura. Animali dalle forme di `cavallo3d.js` (`FORME_CAVALLO`) con meno
+suddivisioni, collare o sella e gualdrappa, orecchie da cavallo o da mulo nella stessa geometria (chiuse in un punto per
+chi non le porta, come l'elmo delle guardie). Le persone sedute (postiglione, scorta) sono le persone di sempre con una
+posa (`posa: [seduto, gambe aperte]` in `creaPersona`, attributo d'istanza `iPosa`; 0 per gli abitanti: nulla cambia).
+Triangoli per istanza: animale 762, ruota 134, cassa 252 (carrozza) / 432 (carro) / 256 (carretto), persona 1070,
+tirella 12. Per veicolo: carretto ~2,3 mila, carro 2,8–3,6 mila, carrozza 3,5–5 mila (2–4 cavalli) più la scorta ~1,8 mila.
+CPU in Node: ~0,03 ms per fotogramma con 1–5 veicoli vivi.
+
+Misure headless (seme 570549, ora di partenza 6:00; chiamate e triangoli del fotogramma, i ms li misura l'utente con `F3`):
+
+| Punto | Prima | Dopo |
+|---|---|---|
+| partenza (`?seme=570549&prova`) | 210 · 661 mila | 210 · 661 mila (nessun veicolo entro 1100 m) |
+| bosco fitto (`&centro=99937,43289`) | 151 · 918 mila | 151 · 918 mila (nessun veicolo entro 1100 m) |
+| carrozza con 2 cavalli, postiglione e scorta (`&centro=101914,9857`) | — | **+5 chiamate, +5262 triangoli** |
+| carro con un cavallo e carrettiere (`&centro=95764,9515`) | — | +5 chiamate, +2824 triangoli |
+| carretto con il mulo (`&centro=51484,9400`) | — | +4 chiamate, +2356 triangoli |
+
+Con più veicoli in vista le chiamate restano quelle (al più 7), crescono solo i triangoli.
+
+**Numeri dell'orario** (Node, seme 570549, a mezzogiorno): 512 rami da carro (312 km di maestre, 1291 di carrarecce); nei
+blocchi di 2 km attraversati da una maestra **1,5 veicoli** in media sulla maestra (22 % dei blocchi senza nessuno);
+sulle carrarecce 0,3 per blocco.
+
+**Non fatto in questa PR.** Carro a buoi (seconda PR). Persone dentro la carrozza, frusta, lanterne di notte. Le ruote
+anteriori non sterzano (la cassa segue la corda tra gli assi). I veicoli non entrano nei borghi né nei cortili.
 
 ## Fuori dal prototipo (non farlo ora)
 

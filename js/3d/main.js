@@ -39,6 +39,7 @@ import { distanzaStrada, percorsiStrade } from '../mondo/strade.js';
 import { posizionaVegetazione, posizionaVegetazioneAPezzi, coperturaMondo, coperturaTavullia } from '../mondo/vegetazione.js';
 import { creaVegetazione, creaVegetazioneAPezzi } from './vegetazione3d.js';
 import { creaAbitanti } from './abitanti3d.js';
+import { creaCarri } from './carri3d.js';
 import { creaPersone } from './persone3d.js';
 import { semeDaTesto, completa } from '../mondo/rumore.js';
 import { creaCielo, posizioneSole, visibilitaDelGiorno } from './cielo.js';
@@ -219,6 +220,7 @@ let vegetazione = null;                   // alberi, arbusti, rocce della Scena 
 let villaggi = [];                        // M8: villaggi, ovili, monasteri ed eremi del blocco (villaggio3d.js)
 let campagna = null;                      // M7, passo 5: case di campagna del blocco (edifici3d.js)
 let abitanti = null;                      // M7, passo 7: persone di rocche e borghi (abitanti3d.js)
+let carri = null;                         // veicoli sulle strade (carri3d.js): uno per Carta, resta ai cambi di blocco
 let vegetazioneVisibile = true;           // tasto V
 // Il blocco del mondo si centra sulla griglia fissa del mondo (centroBlocco): le coordinate locali chieste per la
 // Scena (rispetto al centro richiesto) si spostano di tanto in posizionaCavaliere.
@@ -956,10 +958,11 @@ function biomaQui() {
  * 'stallo', 'fuga', 'resa', 'morte') o 'svenuto' (Salute 0 con la regola della Veglia). Le conseguenze di svenimento e
  * morte le applica dopoLoScontro.
  */
-function combatti({ enemy, terrain = null, veglia = Calendar.inVeglia }) {
+function combatti({ enemy, terrain = null, veglia = Calendar.inVeglia, slancio = 0 }) {
   return new Promise((risolvi) => {
     if (cartaCronista.aperta) cartaCronista.chiudi();
     const st = Combat.start({ enemy, terrain: terrain ?? biomaQui(), knight: Knight });
+    st.slancio = slancio;                  // un incontro a cui non si è sfuggiti comincia in svantaggio
     const cronaca = [];
     const e = st.enemy;
     const ridisegna = (fine = null) => riquadroCombattimento.mostra({
@@ -972,13 +975,26 @@ function combatti({ enemy, terrain = null, veglia = Calendar.inVeglia }) {
       cronaca,
       esito: fine ? ESITI_COMBATTIMENTO[fine] : null,
       opzioni: fine
-        ? [{ testo: 'Continua', scegli: () => { riquadroCombattimento.chiudi(); risolvi({ esito: fine, round: st.round, minuti: st.round * st.minutiRound }); } }]
+        ? [{ testo: 'Continua', scegli: () => { riquadroCombattimento.chiudi(); risolvi(conclusione(fine)); } }]
         : Combat.scelteDisponibili(st).map((id) => {
           const s = SCELTE_COMBATTIMENTO[id] ?? { testo: id };
           const nota = id === 'resa' && e.accettaResa === false ? (e.tipo === 'umano' ? 'non concede quartiere' : 'una bestia non ha pietà') : s.nota;
           return { testo: s.testo, nota, scegli: () => scegli(id) };
         }),
     });
+    // Dopo: il veleno, la prima battaglia (Knight.primaSangue, G1 passo 5: il primo scontro combattuto e sopravvissuto),
+    // una riga nella cronaca del diario.
+    const conclusione = (fine) => {
+      const righe = Combat.dopoScontro(st, fine);
+      let prima = false;
+      if (!Knight.primaSangue && Combat.valeBattaglia(st, fine)) {
+        Knight.primaSangue = prima = true;
+        righe.push(inStoria() && Calendar.inVeglia ? 'È la tua prima battaglia: ne porterai il segno, e la cappella potrà accoglierti.'
+          : 'È la tua prima battaglia.');
+      }
+      if (fine !== 'morte') annotaCronaca(`${prima ? 'Prima battaglia: ' : ''}${e.nome}, ${(ESITI_COMBATTIMENTO[fine]?.titolo ?? fine).toLowerCase()}.`);
+      return { esito: fine, round: st.round, minuti: st.round * st.minutiRound, righe, messoInFuga: !!st.messoInFuga };
+    };
     const scegli = (id) => {
       if (st.finito) return;
       const n0 = st.cronaca.length;
@@ -1056,9 +1072,10 @@ async function applicaConCombattimenti(effetti, { veglia = Calendar.inVeglia } =
   const coda = [];
   const righe = Events.applyEffects(effetti, { ...contestoEventi(), combatti: (eff, terrain) => coda.push({ eff, terrain }) });
   for (const { eff, terrain } of coda) {
-    const r = await combatti({ enemy: eff.enemy, terrain, veglia });
+    const r = await combatti({ enemy: eff.enemy, terrain, veglia, slancio: eff.slancio ?? 0 });
     const E = ESITI_COMBATTIMENTO[r.esito];
-    righe.push(`Scontro: ${E?.titolo ?? r.esito} (${r.round} Round, ${r.minuti} minuti).`);
+    righe.push(`Scontro: ${E?.titolo ?? r.esito} (${r.round} Round, ${r.minuti} minuti).`, ...r.righe);
+    ultimoScontro = r;
     if (r.esito !== 'morte') {
       const ramo = Events.ramoCombattimento(eff, r.esito === 'svenuto' ? 'sconfitta' : r.esito);
       if (ramo) righe.push(...Events.applyEffects(ramo, contestoEventi()));
@@ -1068,8 +1085,10 @@ async function applicaConCombattimenti(effetti, { veglia = Calendar.inVeglia } =
   return { righe, combattuto: coda.length > 0, finita: false };
 }
 
+let ultimoScontro = null;                 // l'ultimo esito di combatti (per la carta che chiude un incontro)
+
 // Prova di combattimento (K, solo Libera): un nemico a scelta, passando dallo stesso effetto combat degli eventi.
-const PROVA_COMBATTIMENTO = { ferito: false, veglia: false };
+const PROVA_COMBATTIMENTO = { ferito: false, veglia: false, incontri: false };
 function mostraProvaCombattimento(righe = []) {
   if (!soloInLibera('La prova di combattimento (K)')) return;
   const P = PROVA_COMBATTIMENTO;
@@ -1086,6 +1105,11 @@ function mostraProvaCombattimento(righe = []) {
     opzioni: [
       { testo: `Entrare già ferito (Salute 10): ${P.ferito ? 'sì' : 'no'}`, scegli: () => { P.ferito = !P.ferito; mostraProvaCombattimento(); } },
       { testo: `A Salute 0: ${P.veglia ? 'si sviene (regola della Veglia)' : 'si muore'}`, scegli: () => { P.veglia = !P.veglia; mostraProvaCombattimento(); } },
+      { testo: `Incontri casuali camminando (come in Storia): ${P.incontri ? 'sì' : 'no'}`, scegli: () => { P.incontri = !P.incontri; mostraProvaCombattimento(); } },
+      { testo: 'Un incontro qui, adesso (bioma e ora di questo punto)', scegli: () => {
+        const e = pescaQui();
+        if (e) apriIncontro(e); else mostraProvaCombattimento(['Qui non vive nessun animale degli incontri.']);
+      } },
       ESCI,
     ],
   });
@@ -1098,6 +1122,90 @@ async function provaCombattimento(id) {
   const r = await applicaConCombattimenti([eff], { veglia: PROVA_COMBATTIMENTO.veglia });
   salvaOra();
   if (!r.finita) mostraProvaCombattimento(r.righe);
+}
+
+// ─── Incontri fuori porta con gli animali (G1 passo 5, docs/EARLY_GAME.md §7) ──────────────────────────────────
+// Camminando o cavalcando fuori dai borghi, ogni INCONTRO.ogni metri si tira la probabilità di un incontro
+// (Combat.probIncontro: più spesso lontano dalle strade, di sera e di notte; in sella un po' meno) e l'animale si
+// pesca per bioma e ora (Combat.pescaIncontro; nella Veglia, prima della prima battaglia, niente orsi né branchi).
+// L'incontro ferma il gioco con una carta: affrontarlo, o provare a sottrarsi (Combat.probSottrarsi: i veloci
+// raggiungono; in sella al galoppo si scappa quasi sempre). Niente animali in 3D: tutto nel riquadro. In Storia sempre,
+// in Libera solo se attivati nella prova (K). Dopo un incontro, INCONTRI.pausa metri di quiete.
+const INCONTRO = { ogni: 25 };
+let _incMetri = 0, _incQuiete = 0;
+const _sullaStradaInc = { d: Infinity, lato: 0, semi: 0, h: 0, classe: '' };
+const incontriAttivi = () => inStoria() || PROVA_COMBATTIMENTO.incontri;
+/** Il punto (x, z) del mondo è in un borgo, in una rocca o in un villaggio (entro INCONTRI.borgo dal centro)? */
+function vicinoAiLuoghi(x, z) {
+  const r = Combat.INCONTRI.borgo;
+  for (const l of carta.luoghi ?? []) if (Math.hypot(l.x - x, l.z - z) < r) return true;
+  for (const l of carta.siti ?? []) if (Math.hypot(l.x - x, l.z - z) < r * 0.6) return true;
+  return false;
+}
+function pescaQui() {
+  return Combat.pescaIncontro({ bioma: biomaQui(), momento: Combat.momento(Calendar.indiceNelGiorno()),
+    veglia: inStoria() && Calendar.inVeglia, primaSangue: Knight.primaSangue });
+}
+/** Da contaPercorso: `d` metri appena fatti. */
+function cercaIncontro(d) {
+  if (!incontriAttivi() || !nelMondo() || cronista || percorso) return;
+  if (_incQuiete > 0) { _incQuiete -= d; return; }
+  if ((_incMetri += d) < INCONTRO.ogni) return;
+  const metri = _incMetri;
+  _incMetri = 0;
+  const x = scenaAttuale.cx + knight.stato.x, z = scenaAttuale.cz + knight.stato.z;
+  if (vicinoAiLuoghi(x, z)) return;
+  distanzaStrada(carta, x, z, _sullaStradaInc);
+  const p = Combat.probIncontro(metri, { momento: Combat.momento(Calendar.indiceNelGiorno()),
+    suStrada: _sullaStradaInc.d < 40, inSella: Knight.inSella });
+  if (Math.random() >= p) return;
+  const e = pescaQui();
+  if (e) apriIncontro(e);
+}
+
+/** La carta dell'incontro: chi è, e le due scelte. Il gioco è fermo. */
+function apriIncontro(e) {
+  _incQuiete = Combat.INCONTRI.pausa;
+  _incMetri = 0;
+  tasti.clear();
+  const galoppo = Knight.isMounted() && !Knight.isHorseTired() && !sfinito();
+  const p = Combat.probSottrarsi(e, { inSella: Knight.isMounted(), galoppo });
+  const fuga = Knight.isMounted()
+    ? (galoppo ? 'Spronare il cavallo al galoppo' : 'Allontanarti col cavallo (stanco: niente galoppo)')
+    : 'Allontanarti piano, senza voltargli le spalle';
+  cartaCronista.mostra({
+    titolo: `Un incontro: ${e.nome}`,
+    testo: e.incontro ?? e.descr,
+    nota: `${Calendar.oraCanonica()} · ${NOMI_BIOMI[biomaQui()] ?? ''} · Salute ${Math.ceil(Knight.salute.cur)} · Forza ${Math.ceil(Knight.forza.cur)}`,
+    righe: [e.descr],
+    opzioni: [
+      { testo: 'Affrontarlo', scegli: () => combattiIncontro(e, 0) },
+      { testo: `${fuga} (${p >= 1 ? 'sicuro' : p >= 0.7 ? 'probabile' : p >= 0.4 ? 'incerto' : 'difficile'})`, scegli: () => {
+        if (Math.random() < p) {
+          Calendar.avanzaMinuti(5);
+          cartaCronista.mostra({ titolo: e.nome, testo: Knight.isMounted() ? 'Il cavallo scarta e parte: in pochi istanti l\'animale è lontano, dietro di te.'
+            : 'Arretri passo dopo passo, senza movimenti bruschi. L\'animale ti segue con lo sguardo, poi perde interesse.', opzioni: [ESCI] });
+        } else combattiIncontro(e, -1, true);
+      } },
+    ],
+  });
+}
+
+/** Lo scontro di un incontro, con la carta che lo chiude. `raggiunto`: si è provato a sottrarsi senza riuscirci. */
+async function combattiIncontro(e, slancio, raggiunto = false) {
+  const r = await applicaConCombattimenti([{ type: 'combat', enemy: e.id, slancio }]);
+  salvaOra();
+  if (r.finita) return;
+  const s = ultimoScontro;
+  const bestia = e.tipo === 'bestia';
+  const testo = {
+    vittoria: s?.messoInFuga ? `${e.nome}: guaisce, volta le spalle e sparisce.` : bestia ? `${e.nome} resta a terra. Ti tremano le mani, ma sei in piedi.` : 'L\'avversario cede il campo.',
+    stallo: bestia ? 'Ti gira attorno un\'ultima volta, poi si allontana senza fretta. Nessuno dei due ha vinto.' : 'Vi separate senza un vincitore.',
+    sconfitta: bestia ? 'Ti lascia a terra, sanguinante, e se ne va. Sei vivo: per oggi basta.' : 'Sei battuto, ma vivo.',
+    fuga: 'Trovi un varco e corri finché il cuore non scoppia. Nessuno ti segue.',
+    resa: 'Getti l\'arma.',
+  }[s?.esito] ?? '';
+  cartaCronista.mostra({ titolo: e.nome, testo: (raggiunto ? 'Non ti lascia andare. ' : '') + testo, righe: r.righe, opzioni: [ESCI] });
 }
 
 // ─── Luci vicine (M7, passo 7) ──────────────────────────────────────────
@@ -1149,6 +1257,7 @@ function contaPercorso() {
   const andatura = k.velocita < 0 || Knight.inSella ? 'camminata' : k.andatura;   // all'indietro si va al passo
   Knight.consumaForzaMetri(d, salita, andatura);
   if (Knight.inSella && cavallo) Knight.consumaVigoreMetri(d, cavallo.stato.andatura);
+  if (d < 30) cercaIncontro(d);            // un salto (cambio di Scena, risveglio) non è cammino
 }
 
 // ─── Scene: Tavullia o un blocco del mondo generato ────────────────────
@@ -1361,7 +1470,7 @@ function* preparaScheda(oggetti) {
 }
 
 /** Mette in scena una Scena del mondo preparata da preparaMondo (la scena attuale è già stata tolta). */
-function applicaMondo(p) {
+function applicaMondo(p, scambio = false) {
   scostamento = p.scostamento;
   terrain = p.ter;
   acqueScena = p.acque;
@@ -1424,6 +1533,28 @@ function applicaMondo(p) {
     scene.add(abitanti.object);
     ostacoli.push(abitanti);
   }
+  // Veicoli sulle strade (carri3d.js): si crea una volta per Carta; la posizione dei veicoli è sulla rete del mondo,
+  // quindi al cambio di blocco non c'è niente da spostare, solo il suolo nuovo. Fuori dal blocco: quota della strada.
+  if (!carri || carri.carta !== carta) {
+    if (carri) { scene.remove(carri.object); libera(carri.object); }
+    carri = creaCarri(carta);
+    scene.add(carri.object);
+  }
+  carri.object.visible = true;
+  const paesiCarri = villaggi.filter((v) => v.coperto);
+  carri.blocco({
+    altezza: (x, z) => {
+      const m = terrain.meta.centroMondo, lx = x - m.x, lz = z - m.z;
+      return suolo.contains(lx, lz) ? suolo.getHeight(lx, lz) : NaN;
+    },
+    coperto: paesiCarri.length ? (x, z) => {
+      let c = 0;
+      for (const v of paesiCarri) { c = Math.max(c, v.coperto(x, z)); if (c >= 1) break; }
+      return c;
+    } : null,
+    iniziale: !scambio,                    // al caricamento la Scena non si vede ancora: possono nascere anche vicino
+  });
+  ostacoli.push(carri);
   scenaAttuale = p.desc;
   statPendenze = misuraPendenze(terrain);
   cieloScena.invalida();                   // ricalcola le luci
@@ -1443,6 +1574,7 @@ async function caricaScena(desc) {
     return;
   }
   if (desc.tipo === 'tavullia') {
+    if (carri) carri.object.visible = false;
     terrain = await loadTerrain('tavullia');
     if (terrain.isFallback) avvisoHud('Dati del terreno reale non trovati: terreno procedurale di prova.');
     castle = createCastle(terrain);
@@ -1722,6 +1854,7 @@ async function init() {
     get terrain() { return terrain; }, get knight() { return knight; }, get castle() { return castle; },
     get carta() { return carta; }, get scena() { return scenaAttuale; }, get orizzonte() { return orizzonte; },
     get rocche() { return rocche; }, get villaggi() { return villaggi; }, get campagna() { return campagna; }, get abitanti() { return abitanti; },
+    get carri() { return carri; },
     get vegetazione() { return vegetazione; }, get cavallo() { return cavallo; }, get ponti() { return ponti; },
     caricaScena, posizionaCavaliere, minimappa,
     /** M7, passo 9: ricentra il blocco (su { x, z } del mondo, o sul cavaliere) — per il percorso di prova. */
@@ -1941,7 +2074,7 @@ function aggiornaIndicatoreAndatura() {
 // Legenda dei comandi in basso a sinistra: a gruppi, tasto e azione (H la riduce a una riga e la riapre).
 const LEGENDA = () => [
   ['A piedi', [['W A S D', 'muovi'], ['Shift', 'scatto'], ['Ctrl', 'camminata sì/no'], ['Spazio', 'scavalca'], ['R', 'riposa · dormi']]],
-  ['In sella', [['E', 'monta · smonta'], ['W', 'trotto'], ['Shift', 'galoppo'], ['Ctrl', 'passo sì/no'], ['F', 'fischia il cavallo']]],
+  ['In sella', [['E', 'monta · smonta'], ['W', 'trotto'], ['Shift', 'galoppo'], ['Ctrl', 'passo sì/no'], ['F', 'fischia il cavallo'], ['Q', 'lato della camera']]],
   ['Azioni', [['E', 'parla · entra'], ['I', 'diario'], ['J', 'scrittoio'], ['M', 'Carta'], ['P', 'pausa']]],
   ['Vista', [['mouse', 'trascina: gira'], ['rotella', 'distanza'], ['C', 'camera libera'], ['N', 'minimappa'], ['+ −', 'zoom minimappa']]],
   ['Sistema', [['U', 'musica'], ['F2', 'qualità'], ['F3', 'info'], ['F8', 'menu'],
@@ -2060,10 +2193,38 @@ function guidaInSella(dt) {
   knight.aggiornaSella(dt, cavallo.sella());
 }
 /** Camera: perno più alto e distanza più lunga in sella; la rotella resta libera (si scala la sua distanza). */
+// Camera che segue l'andatura (approvato dall'utente il 28/11): in sella gira attorno al perno verso un lato (Q lo
+// cambia), più al trotto e al galoppo, e al galoppo si allontana e allarga un poco il campo visivo. Valori per
+// [fermo e passo, trotto, galoppo]; si passa dall'uno all'altro con la velocità del cavallo, smorzata.
+const CAMERA_ANDATURA = { angolo: [10, 15, 19], aggiunta: [0, 1, 2], fov: [0, 3, 6] };   // gradi, m, gradi
+const latoSalvato = () => { try { return localStorage.getItem('kd.latoCamera') === 'sinistra' ? -1 : 1; } catch { return 1; } };
+const camAnda = { lato: latoSalvato(), sella: 0, k: 0, fov: null, spalla: null };
+function cambiaLatoCamera() {
+  camAnda.lato = -camAnda.lato;
+  try { localStorage.setItem('kd.latoCamera', camAnda.lato > 0 ? 'destra' : 'sinistra'); } catch { /* resta per questa partita */ }
+  messaggio(`Camera in sella: lato ${camAnda.lato > 0 ? 'destro' : 'sinistro'} (Q per cambiarlo).`, 2500);
+}
+function cameraAndatura(dt, su) {
+  if (camAnda.fov === null) { camAnda.fov = camera.fov; camAnda.spalla = cam.cfg.spalla; }
+  const v = su && cavallo ? cavallo.stato.velEffettiva : 0;
+  const S = cavallo?.cfg.sella.vel ?? { passo: 1.8, trotto: 8, galoppo: 18 };
+  const obiettivo = THREE.MathUtils.clamp((v - S.passo) / (S.trotto - S.passo), 0, 1)
+    + THREE.MathUtils.clamp((v - S.trotto) / (S.galoppo - S.trotto), 0, 1);
+  camAnda.sella += ((su ? 1 : 0) - camAnda.sella) * (1 - Math.exp(-3.5 * dt));
+  camAnda.k += (obiettivo - camAnda.k) * (1 - Math.exp(-1.2 * dt));   // ~2 s per cambiare inquadratura
+  const val = (a) => (camAnda.k < 1 ? a[0] + (a[1] - a[0]) * camAnda.k : a[1] + (a[2] - a[1]) * (camAnda.k - 1));
+  const s = camAnda.sella;
+  cam.cfg.angolo = s * camAnda.lato * val(CAMERA_ANDATURA.angolo) * Math.PI / 180;
+  cam.cfg.spalla = camAnda.spalla * (1 - s);           // in sella il lato lo dà l'angolo, non la spalla
+  cam.cfg.aggiunta = s * val(CAMERA_ANDATURA.aggiunta);
+  const fov = camAnda.fov + s * val(CAMERA_ANDATURA.fov);
+  if (Math.abs(fov - camera.fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+}
 function aggiornaCameraSella(dt) {
   if (!cam) return;
   if (!sella.base) sella.base = { perno: cam.cfg.altezzaPerno, max: cam.cfg.distanzaMax };
   const su = Knight.inSella && !(sella.passaggio && sella.passaggio.verso < 0);
+  cameraAndatura(dt, su);
   const obiettivo = su ? SELLA.lontano : 1;
   if (Math.abs(obiettivo - sella.scalaCam) < 1e-4) return;
   const nuova = sella.scalaCam + (obiettivo - sella.scalaCam) * (1 - Math.exp(-3.5 * dt));
@@ -2104,6 +2265,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyU' && !e.repeat) { messaggio(musica.alterna() ? 'Musica accesa (U per spegnerla).' : 'Musica spenta (U per riaccenderla).'); return; }
   if (e.code === 'KeyF' && !e.repeat && knight) { fischia(); return; }
   if (e.code === 'KeyH' && !e.repeat) { impostaLegenda(!_legenda?.classList.contains('chiusa')); return; }
+  if (e.code === 'KeyQ' && !e.repeat && knight) { cambiaLatoCamera(); return; }
   if (e.code === PORTA.tasto && !e.repeat) {
     const azione = AZIONI_TASTO.find((a) => a.pronta());
     if (azione) { azione.esegui(); return; }
@@ -2228,7 +2390,8 @@ function gruppoDi(o) {
   if (orizzonte && top === orizzonte.oggetto) return 'ter. orizzonte';
   if (vegetazione && top === vegetazione.oggetto) return 'veg. resto';
   if ((castle && top === castle.object) || rocche.some((r) => r.object === top) || villaggi.some((r) => r.object === top) || (campagna && top === campagna.object)) return 'edifici';
-  if ((knight && top === knight.object) || (cavallo && top === cavallo.object) || (abitanti && top === abitanti.object)) return 'personaggi';
+  if ((knight && top === knight.object) || (cavallo && top === cavallo.object) || (abitanti && top === abitanti.object)
+    || (carri && top === carri.object)) return 'personaggi';
   return null;
 }
 
@@ -2250,7 +2413,7 @@ const MS_PEZZO = 2;                       // ms per pezzo chiesti ai generatori 
 function scambiaBlocco(p) {
   const c0 = terrain.meta.centroMondo, k = knight.stato;
   togliScenaAttuale(false);               // il blocco vecchio si libera a pezzi nei fotogrammi seguenti
-  applicaMondo(p);
+  applicaMondo(p, true);
   const c1 = terrain.meta.centroMondo;
   scostamento = { x: 0, z: 0 };
   trasla(c0.x - c1.x, c0.z - c1.z, [k, ...(cavallo?.puntiDaTraslare() ?? []), _prec], [camera.position]);
@@ -2518,6 +2681,11 @@ function aggiornaPannello(now) {
     const pelo = livelloAcquaIn(k.x, k.z);
     if (!Number.isNaN(pelo)) testo += `\nacqua: pelo a ${fmt(pelo, 1)} m · profondità ${fmt(Math.max(0, pelo - k.y), 1)} m`;
     testo += `\ncamera: ${modoCamera === 'segui' ? 'alle spalle' : 'libera (C per tornare)'}`;
+    if (carri && scenaAttuale?.tipo === 'mondo') {
+      const c = carri.info();
+      testo += `\nveicoli: ${c.vivi} sulle strade vicine, ${c.disegnati} disegnati (${c.animali} animali, ${c.persone} persone)`
+        + `${c.fermi ? `, ${c.fermi} fermi` : ''}${c.tipi.length ? ' · ' + c.tipi.join(', ') : ''}`;
+    }
     if (scenaAttuale?.tipo === 'mondo' && carta?.luoghi) {
       // M7, passo 2: terrapieno della rocca più vicina (entro 1,5 km).
       const X = scenaAttuale.cx + k.x, Z = scenaAttuale.cz + k.z;
@@ -2631,6 +2799,12 @@ function frame(now) {
     if (cavallo && !inPausa && !cronista && !Knight.inSella && !sella.passaggio) cavallo.update(dt, percorso ? null : knight.stato);
     avvisoCavallo();
     if (abitanti && !inPausa && !cronista && !percorso) abitanti.update(dt, knight.stato, 1 - _luceGiorno);
+    if (carri && scenaAttuale?.tipo === 'mondo') {
+      // Fermi in pausa e nel percorso di prova (misure confrontabili); tempo in s di Scena (1 s reale = 1 s di Scena)
+      carri.update(inPausa || cronista || percorso ? 0 : dt, { camera, centro: terrain.meta.centroMondo,
+        tempo: (Calendar.passiTotali + Calendar.frazione) * CALENDAR.SECONDI_PER_PASSO / TEMPO_SCENA.RAPPORTO_GIORNO,
+        ora: Calendar.oraDelGiorno(), cavaliere: knight.stato, cavallo: cavallo?.stato ?? null });
+    }
     cercaPortaVicina();
     cercaScavalcoVicino(dt);
     tt = segna('cavaliere e tempo', tt);

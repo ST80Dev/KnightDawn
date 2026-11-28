@@ -844,7 +844,41 @@ const FIGURE = {
       + 'M92 76C80 80 66 84 54 82L46 76L50 83L42 85L50 88L44 92L54 91C68 93 84 91 96 88Z',
     dettagli: '<g filter="drop-shadow(0 0 3px #ff5a1c)"><path d="M104 52l7 2-7 2z M118 52l7 2-7 2z" fill="#ff6a2a"/></g>',
   },
+  // G1 passo 5: gli animali degli incontri fuori porta.
+  vipera: {   // raccolta a spirale, la testa alzata verso il cavaliere; il corpo è un tratto spesso (sotto)
+    ombra: [146, 48],
+    lontano: '',
+    sotto: (dorso, ventre) => {
+      const d = 'M178 157C202 156 200 136 168 134C128 132 104 140 112 152C120 164 168 166 186 154C196 146 182 126 150 124'
+        + 'C122 122 110 128 104 112C100 98 92 88 80 88';
+      return `<path d="${d}" fill="none" stroke="${INK}" stroke-width="15" stroke-linecap="round"/>`
+        + `<path d="${d}" fill="none" stroke="${ventre}" stroke-width="11.5" stroke-linecap="round"/>`
+        + `<path d="${d}" fill="none" stroke="${dorso}" stroke-width="5" stroke-dasharray="7 5" stroke-linecap="round"/>`;
+    },
+    vicino: 'M82 81C74 76 62 77 54 83C51 87 55 92 63 92C70 93 76 91 82 94Z',
+    dettagli: '<circle cx="64" cy="84" r="1.6" fill="#e8c040"/><path d="M53 87L44 86M44 86L40 83M44 86L40 89" stroke="#a0281c" stroke-width="1.4" fill="none"/>',
+  },
+  aquila: {   // in picchiata con le ali aperte, artigli avanti
+    ombra: [124, 40],
+    lontano: 'M118 84C124 62 138 46 168 40L160 52L176 54L162 64C152 72 144 78 138 84Z',
+    vicino: 'M70 92C80 84 100 80 126 82C150 84 170 92 186 100L202 95L198 108L184 108C160 110 120 108 96 104C84 102 74 98 70 92Z'
+      + 'M104 86C108 60 120 36 150 16L148 30L162 22L156 38L172 34L160 48L174 48L158 60C148 72 138 80 130 86Z',
+    dettagli: '<path d="M64 89C60 89 57 91 56 94L52 99L58 96C61 96 64 95 66 94Z" fill="#d9a62a" stroke="' + INK + '" stroke-width="1.3"/>'
+      + '<circle cx="72" cy="89" r="1.8" fill="#1a1008"/>'
+      + '<path d="M110 104L102 124M102 124l-5 3M102 124l-1 5M126 106L120 126M120 126l-5 3M120 126l-1 5" stroke="#d9a62a" stroke-width="3" stroke-linecap="round"/>',
+  },
+  cervo: {   // il palco alzato, pronto a caricare
+    ombra: [124, 70],
+    lontano: 'M110 120L112 162L106 163L103 120Z M176 120L172 162L166 163L168 120Z',
+    vicino: 'M56 70C60 66 66 62 72 60L76 56L70 46L82 53C86 58 90 66 94 76C110 80 140 80 170 82C182 84 188 92 188 100L193 96'
+      + 'L190 107C188 112 186 116 184 120L186 162C186 166 180 167 178 166L176 126C170 122 160 120 150 122C130 124 116 124 106 122'
+      + 'L104 162C104 166 98 167 96 166L96 126C90 116 84 104 80 92C76 84 70 79 62 79C58 79 54 75 56 70Z',
+    dettagli: '<g fill="none" stroke-linecap="round"><path d="M74 58C70 44 66 30 58 16M69 38L55 32M66 28L74 15M60 21L48 15M80 56C83 42 87 28 95 15M84 38L97 33M88 27L84 14"'
+      + ' stroke="' + INK + '" stroke-width="5.4"/><path d="M74 58C70 44 66 30 58 16M69 38L55 32M66 28L74 15M60 21L48 15M80 56C83 42 87 28 95 15M84 38L97 33M88 27L84 14"'
+      + ' stroke="#dccaa0" stroke-width="3"/></g><circle cx="66" cy="68" r="1.8" fill="#1a1008"/>',
+  },
 };
+FIGURE.cani = { ...FIGURE.lupo, dettagli: '<circle cx="51" cy="91" r="2" fill="#d8b040"/>' };   // randagi: la forma del lupo, il pelo fulvo
 
 // Mantelli degli animali: dorso, ventre, zampe lontane.
 const MANTELLI = {
@@ -852,6 +886,10 @@ const MANTELLI = {
   cinghiale: ['#3a2a1e', '#6e5640', '#2a1e15'],
   orso: ['#4a2f1c', '#7e5636', '#352113'],
   mitico: ['#1c1a1e', '#3a3540', '#121014'],
+  vipera: ['#4a4234', '#9c8c66', '#3a3328'],
+  aquila: ['#4a3320', '#8a6a44', '#33230f'],
+  cervo: ['#6b4428', '#b08a5e', '#4a2e1a'],
+  cani: ['#7a5a38', '#c0a47a', '#56402a'],
 };
 
 function figura(f, forma) {
@@ -859,7 +897,7 @@ function figura(f, forma) {
   const id = `kd-mantello-${++_gradiente}`;
   return `<defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset=".35" stop-color="${dorso}"/>`
     + `<stop offset="1" stop-color="${ventre}"/></linearGradient></defs>`
-    + `<path d="${f.lontano}" fill="${lontano}" stroke="${INK}" stroke-width="1.2"/>`
+    + (f.lontano ? `<path d="${f.lontano}" fill="${lontano}" stroke="${INK}" stroke-width="1.2"/>` : '') + (f.sotto ? f.sotto(dorso, ventre) : '')
     + `<path d="${f.vicino}" fill="url(#${id})" stroke="${INK}" stroke-width="1.6" stroke-linejoin="round"/>${f.dettagli ?? ''}`;
 }
 

@@ -41,6 +41,8 @@ const Combat = {
   // Soglie di Slancio per esiti automatici a fine N Round.
   SLANCIO_VITTORIA: 3,
   SLANCIO_SCONFITTA: -3,
+  // Un animale timido scappa quando lo Slancio del cavaliere arriva qui (G1 passo 5).
+  TIMIDO_FUGGE: 3,
 
   // ─── Avvio ───────────────────────────────────────────────────────────────
   // opts.enemy può essere un oggetto nemico oppure un id stringa risolto
@@ -138,16 +140,26 @@ const Combat = {
   // Avanza il Round automatico: calcola delta Slancio + narra.
   _roundAuto(state) {
     state.round++;
+    state.combattuto = true;
     this._avanzaCalendar(state);
     const delta = this._formulaRound(state);
     state.slancio += delta;
     state.cronaca.push(this._narraRound(state, delta));
+    return this._dopoRound(state);
+  },
 
+  // Fine di un Round (normale o colpo disperato): morte, fuga dell'animale timido, limite dei Round.
+  _dopoRound(state) {
     // Morte immediata se Salute a zero (può capitare per colpo critico)
     if (state.knight.salute.cur <= 0) {
       return this._chiudi(state, 'morte');
     }
-
+    // Timido: se lo Slancio gira a tuo favore, l'animale scappa (G1 passo 5).
+    if (this._tratto(state.enemy, 'timido') && state.slancio >= this.TIMIDO_FUGGE) {
+      state.cronaca.push(`${state.enemy.nome}: ${state.enemy.tipo === 'bestia' ? 'volta le spalle e sparisce' : 'si ritira'}.`);
+      state.messoInFuga = true;
+      return this._chiudi(state, 'vittoria');
+    }
     // Limite Round raggiunto: esito automatico da Slancio.
     // NB: la morte la decide SOLO la Salute a 0 (intercettata sopra). Qui uno
     // Slancio molto negativo = sei stato battuto, non ucciso → 'sconfitta'.
@@ -159,17 +171,30 @@ const Combat = {
     return { state };
   },
 
-  // Formula di Round (semplice, TBD §5 docs/COMBAT.md).
-  // Δ slancio = (vigoreEff - sfidaNemico) + rumore.
+  _tratto(enemy, t) { return !!(enemy && enemy.tratti && enemy.tratti.includes(t)); },
+
+  /** Quanto valgono arma, armatura e scudo (Items: colpo, difesa); un oggetto sconosciuto vale come prima. */
+  _valoreEquip(k) {
+    const it = (n) => (n && typeof Items !== 'undefined' && Items.catalog && Items.catalog[n]) || null;
+    const v = (slot, campo, base) => {
+      const n = k.equip[slot];
+      if (!n) return 0;
+      const x = it(n);
+      return x && x[campo] != null ? x[campo] : base;
+    };
+    return { arma: v('arma', 'colpo', 2), armatura: v('armatura', 'difesa', 1), scudo: v('scudo', 'difesa', 1) };
+  },
+
+  // Formula di Round (docs/COMBAT.md §5). G1 passo 5: l'arma dal catalogo (colpo) spinge lo Slancio, armatura e scudo
+  // (difesa) riducono le ferite; il caso pesa di più (prima l'equipaggiamento decideva quasi da solo); danni per nemico.
+  // Δ slancio = (vigoreEff - sfidaNemico) + rumore, fra −3 e +3.
   _formulaRound(state) {
-    const k = state.knight;
-    const vigore  = (k.forza.cur   / k.forza.max)   * 5;     // 0..5
-    const volonta = (k.volonta.cur / k.volonta.max) * 3;     // 0..3
+    const k = state.knight, e = state.enemy;
+    const vigore  = (k.forza.cur   / k.forza.max)   * 4;     // 0..4
+    const volonta = (k.volonta.cur / k.volonta.max) * 2;     // 0..2
     const ferito  = (1 - k.salute.cur / k.salute.max) * 4;   // 0..4 malus
-    const armaBonus    = k.equip.arma     ? 2 : 0;
-    const armaturaBonus= k.equip.armatura ? 1 : 0;
-    const scudoBonus   = k.equip.scudo    ? 1 : 0;
-    const terrenoBonus = this._terrenoBonus(state.terrain, state.enemy);
+    const eq = this._valoreEquip(k);
+    const terrenoBonus = this._terrenoBonus(state.terrain, e);
     // Possa del cavallo: bonus solo se in sella (vigore > 0). La carica perde
     // efficacia su terreni chiusi (foresta/palude/montagna): possa dimezzata.
     let cavalloBonus = 0;
@@ -178,20 +203,42 @@ const Combat = {
       cavalloBonus = chiuso ? Math.floor((k.cavallo.possa || 0) / 2) : (k.cavallo.possa || 0);
     }
 
-    const vigoreEff = vigore + volonta + armaBonus + armaturaBonus
-                     + scudoBonus + terrenoBonus + cavalloBonus - ferito;
-    const sfida = (state.enemy.sfida != null) ? state.enemy.sfida : 4;
-    const rumore = (Math.random() * 2 - 1) * 2;              // ±2
+    // L'arma spinge; armatura e scudo soprattutto parano (riducono le ferite, _ferisci), lo scudo spinge poco.
+    const vigoreEff = vigore + volonta + eq.arma + eq.scudo * 0.5 + terrenoBonus + cavalloBonus - ferito;
+    const sfida = (e.sfida != null) ? e.sfida : 4;
+    const rumore = (Math.random() + Math.random() - 1) * 4;  // due dadi: ±4, più spesso vicino a 0
 
     let delta = Math.round(vigoreEff - sfida + rumore);
     delta = Math.max(-3, Math.min(3, delta));
 
-    // Possibile ferita su colpo subito grave.
-    if (delta <= -2 && Math.random() < 0.5) {
-      const danno = 5 + Math.floor(Math.random() * 10);
-      state.knight.danneggia(danno, 'salute');
+    // Carica (primo Round): se non la reggi ti travolge, se la schivi guadagni terreno.
+    if (state.round === 1 && this._tratto(e, 'carica')) {
+      state.carica = delta >= 1 ? 'schivata' : 'subita';
+      if (delta >= 1) delta = Math.min(3, delta + 1);
     }
+    // Ferite: un Round perso male fa male; armatura e scudo assorbono una parte del colpo.
+    let colpo = 0;
+    if (state.carica === 'subita' && state.round === 1) colpo = 1;
+    else if (delta <= -2) colpo = Math.random() < 0.8 ? 1 : 0;
+    else if (delta === -1) colpo = Math.random() < 0.6 ? 0.5 : 0;
+    else if (delta === 0) colpo = Math.random() < 0.35 ? 0.35 : 0;
+    else if (delta === 1) colpo = Math.random() < 0.15 ? 0.25 : 0;   // anche vincendo, qualche graffio
+    // Branco: da un fianco può sempre arrivare un morso (più piccolo).
+    if (this._tratto(e, 'branco') && Math.random() < 0.3) colpo += 0.35;
+    if (colpo > 0) this._ferisci(state, colpo);
     return delta;
+  },
+
+  /** Ferita di `quota` di un colpo pieno del nemico (enemy.danno, default 5–14), meno armatura e scudo (15 % per punto). */
+  _ferisci(state, quota) {
+    const d = state.enemy.danno || [5, 14];
+    const pieno = d[0] + Math.random() * (d[1] - d[0]);
+    const eq = this._valoreEquip(state.knight);
+    const riduzione = Math.min(0.6, (eq.armatura + eq.scudo) * 0.15);
+    const danno = Math.max(1, Math.round(pieno * quota * (1 - riduzione)));
+    state.knight.danneggia(danno, 'salute');
+    state.ferito = true;
+    return danno;
   },
 
   _terrenoBonus(terrain, enemy) {
@@ -213,6 +260,17 @@ const Combat = {
 
   _narraRound(state, delta) {
     const n = state.round;
+    if (state.round === 1 && state.carica) {
+      return state.carica === 'schivata' ? `${n}. Ti carica a testa bassa: ti scansi all'ultimo e lo colpisci al fianco.`
+        : `${n}. Ti carica a testa bassa e ti travolge.`;
+    }
+    if (state.enemy.tipo === 'bestia') {
+      if (delta >=  2) return `${n}. Lo colpisci in pieno: guaisce e arretra.`;
+      if (delta ===  1) return `${n}. Lo tieni a distanza e lo ferisci.`;
+      if (delta ===  0) return `${n}. Vi girate attorno, nessuno affonda.`;
+      if (delta === -1) return `${n}. Ti salta addosso, cedi un passo.`;
+      return                 `${n}. Zanne e artigli ti raggiungono.`;
+    }
     if (delta >=  2) return `${n}. Colpo netto: il nemico arretra.`;
     if (delta ===  1) return `${n}. Affondi e guadagni terreno.`;
     if (delta ===  0) return `${n}. Lame che si misurano, nessuno cede.`;
@@ -226,7 +284,8 @@ const Combat = {
     this._avanzaCalendar(state);
     const k = state.knight;
     const chance = 0.35 + (k.volonta.cur / k.volonta.max) * 0.35
-                       + this._terrenoBonus(state.terrain, state.enemy) * 0.05;
+                       + this._terrenoBonus(state.terrain, state.enemy) * 0.05
+                       - (this._tratto(state.enemy, 'veloce') ? 0.3 : 0);
     if (Math.random() < chance) {
       state.cronaca.push(`${state.round}. Approfitti di un varco e fuggi.`);
       return this._chiudi(state, 'fuga');
@@ -278,11 +337,12 @@ const Combat = {
       return this._chiudi(state, 'morte');
     }
     state.slancio += 3;
+    state.combattuto = true;
     state.cronaca.push(`${state.round}. Affondo disperato: ferito ma in vantaggio.`);
     if (state.round >= state.roundMax) {
       return this._chiudi(state, state.slancio > 0 ? 'vittoria' : 'sconfitta');
     }
-    return { state };
+    return this._dopoRound(state);
   },
 
   // ─── Scelte disponibili in questo Round ─────────────────────────────────
@@ -335,6 +395,73 @@ const Combat = {
     if (k.riposaPassi && typeof CALENDAR !== 'undefined') k.riposaPassi(S.minuti * 60 / CALENDAR.SECONDI_PER_PASSO);
     k.salute.cur = Math.min(k.salute.max, Math.max(k.salute.cur, S.salute));
     return { oroPerso, minuti: S.minuti };
+  },
+
+  // ─── Dopo lo scontro: veleno e prima battaglia (G1 passo 5) ─────────────
+  /** Ciò che arriva dopo lo scontro: il veleno, se il nemico ha morso (mai fino a 0). Ritorna le righe da mostrare. */
+  dopoScontro(state, esito) {
+    const righe = [], e = state.enemy, k = state.knight;
+    if (this._tratto(e, 'veleno') && state.ferito && esito !== 'morte' && esito !== 'svenuto') {
+      const prima = k.salute.cur;
+      k.salute.cur = Math.max(1, k.salute.cur - (e.veleno || 10));
+      righe.push(`Il veleno brucia per ore: Salute −${Math.round(prima - k.salute.cur)}.`);
+    }
+    return righe;
+  },
+  /** Conta come «prima battaglia» (Knight.primaSangue) se si è davvero combattuto e se ne è usciti in piedi. */
+  valeBattaglia(state, esito) {
+    return !!state.combattuto && esito !== 'morte' && esito !== 'svenuto';
+  },
+
+  // ─── Incontri fuori porta (G1 passo 5, docs/EARLY_GAME.md §7) ──────────
+  // Camminando (o cavalcando) fuori dai borghi, ogni tratto di strada fatta può portare un incontro con un animale
+  // scelto per bioma e ora (Enemies: habitat, ore). Più spesso lontano dalle strade, di sera e di notte; in sella un
+  // po' meno (il cavallo si sente da lontano). Il motore 3D chiama probIncontro sui metri fatti e, se capita,
+  // pescaIncontro. Valori [DA BILANCIARE]: incontri per km lontano dalle strade, di giorno, a piedi.
+  INCONTRI: { perKm: 0.35, strada: 0.3, sera: 1.6, notte: 2.2, sella: 0.6, borgo: 350, pausa: 400 },
+
+  /** Momento del giorno per gli incontri dall'ora canonica (0 Prima … 7 Lodi): giorno, sera (Vespri), notte. */
+  momento(indice) { return indice <= 3 ? 'giorno' : indice === 4 ? 'sera' : 'notte'; },
+
+  /** Probabilità che `metri` di cammino portino un incontro. */
+  probIncontro(metri, { momento = 'giorno', suStrada = false, inSella = false } = {}) {
+    const I = this.INCONTRI;
+    const per = I.perKm * (suStrada ? I.strada : 1) * (momento === 'sera' ? I.sera : momento === 'notte' ? I.notte : 1)
+      * (inSella ? I.sella : 1);
+    return 1 - Math.exp(-per * metri / 1000);
+  },
+
+  /**
+   * L'animale dell'incontro, pesato per habitat del bioma e ora; null se lì non vive niente. Nella Veglia, prima della
+   * prima battaglia, niente bestie «forti» (orso, branco).
+   */
+  pescaIncontro({ bioma = 1, momento = 'giorno', veglia = false, primaSangue = true, rnd = Math.random } = {}) {
+    if (typeof Enemies === 'undefined') return null;
+    const b = bioma === 9 ? 1 : bioma;                       // lungo i fiumi: come in pianura
+    const pool = [];
+    let tot = 0;
+    for (const e of Enemies.all()) {
+      if (!e.habitat || !e.habitat[b]) continue;
+      if (veglia && !primaSangue && e.forte) continue;
+      const w = e.habitat[b] * (e.ore && e.ore[momento] != null ? e.ore[momento] : 1);
+      if (w <= 0) continue;
+      pool.push([e, w]);
+      tot += w;
+    }
+    let r = rnd() * tot;
+    for (const [e, w] of pool) { if ((r -= w) <= 0) return e; }
+    return pool.length ? pool[pool.length - 1][0] : null;
+  },
+
+  /**
+   * Probabilità di sottrarsi a un incontro prima che cominci. A piedi: facile con i timidi, difficile con i veloci.
+   * In sella [approvato dall'utente, 28/11]: al galoppo si scappa sempre, tranne ai veloci (lupi, aquila),
+   * che ci riescono una volta su due; al passo o al trotto il cavallo aiuta, ma i veloci raggiungono.
+   */
+  probSottrarsi(enemy, { inSella = false, galoppo = false } = {}) {
+    const veloce = this._tratto(enemy, 'veloce'), timido = this._tratto(enemy, 'timido');
+    if (inSella) return galoppo ? (veloce ? 0.5 : 1) : (veloce ? 0.3 : 0.8);
+    return veloce ? 0.2 : timido ? 0.85 : 0.5;
   },
 
   // ─── Helper di test (console) ───────────────────────────────────────────
