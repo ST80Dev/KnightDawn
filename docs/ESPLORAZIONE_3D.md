@@ -301,7 +301,7 @@ Nel 2D 1 Passo era 1 tile; ora il **Passo è solo un'unità di tempo** (~3 ore, 
   all'addiaccio fino a Prima (da Compieta: 9 ore, +30 Forza); di giorno una sosta di un Passo
   (~3 ore, +10 Forza). Con la Forza piena di giorno rimanda a `T`.
 - **Pausa** con `P`: nulla scorre. La scheda nascosta ferma il ciclo di disegno: pausa automatica.
-- **Ciclo giorno/notte:** sole che segue l'ora (alba alle 5, tramonto alle 20, massimo 55°), colore
+- **Ciclo giorno/notte:** sole che segue l'ora (alba alle 5:45, tramonto alle 18:45, massimo 55°; dal 28/11/2026, prima alle 5 e alle 20), colore
   di luce, cielo e nebbia; crepuscolo caldo; la luce propria delle mura e l'ombra del cavaliere si
   abbassano. Niente stagioni per ora. **Notte (ritoccata dopo la prova dell'utente):** buia, luna
   debole; la nebbia, del colore del cielo notturno, si stringe attorno al punto osservato (nitido
