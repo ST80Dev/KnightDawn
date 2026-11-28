@@ -22,6 +22,7 @@ import { creaCaseCampagna, quotaFinestre } from './edifici3d.js';
 import { createBorgoAPezzi } from './borgo3d.js';
 import { createVillaggioAPezzi, createMonasteroAPezzi, createEremoAPezzi, createMulinoAPezzi, pianoDelSito } from './villaggio3d.js';
 import { createRovinaAPezzi, createMisteroAPezzi } from './rovine3d.js';
+import { approdiDelBlocco, creaApprodo } from './approdi3d.js';
 import { raggioSito, climaDelLuogo } from '../mondo/siti.js';
 import { NOMI_BIOMI } from '../mondo/carta.js';
 import { createCartaVista, CLASSI_ROCCA } from './cartaVista.js';
@@ -30,7 +31,7 @@ import { creaAvvisi, SEZIONI, sezioneDi } from './avvisi.js';
 import { creaDiario } from './diario.js';
 import { creaMinimappa } from './minimappa.js';
 import { creaOrizzonteAPezzi } from './orizzonte.js';
-import { creaAcqueScena, creaPonti, suoloStrade } from './acqua.js';
+import { creaAcqueScena, creaPonti, suoloStrade, ritagliaStradeNeiPaesi } from './acqua.js';
 import { vicinoAlBordo, trasla } from './blocchi.js';
 import { generaCartaAsincrona, verificaSemi } from '../mondo/generatore.js';
 import { generaScenaAPezzi, centroBlocco, quotaFinale } from '../mondo/scena.js';
@@ -1206,6 +1207,8 @@ function* costruisciVillaggi(cx, cz, ter) {
     if (Math.abs(x) > half + m || Math.abs(z) > half + m) continue;
     out.push(yield* createMonasteroAPezzi(suoloMondo, l, x, z, carta));
   }
+  // Approdi (pontile e barca, js/3d/approdi3d.js): stessa interfaccia dei villaggi; l'impalcato è suolo (applicaMondo).
+  for (const ap of approdiDelBlocco(carta, cx, cz, half)) { out.push(creaApprodo(suoloMondo, ap, cx, cz, carta)); yield; }
   return out;
 }
 
@@ -1244,15 +1247,25 @@ function* preparaMondo(desc) {
   const ter = yield* createTerrainAPezzi(meta, heights, false, coloreMondo(carta, Calendar.stagione));
   yield 'terreno';
   const acque = creaAcqueScena(dati, meta, COLORE_ACQUA, meta.centroMondo, coloreStrada(carta));
+  yield 'acque';
+  const roc = yield* costruisciRocche(cx, cz, ter);
+  yield 'rocche';
+  const vil = yield* costruisciVillaggi(cx, cz, ter);
+  yield 'villaggi';
+  // La strada della rete finisce al limite dei paesi e riprende all'uscita (acqua.js), prima del suolo delle carreggiate.
+  const paesi = vil.filter((v) => v.coperto);
+  if (paesi.length) {
+    ritagliaStradeNeiPaesi(acque, (x, z) => {
+      let c = 0;
+      for (const v of paesi) { c = Math.max(c, v.coperto(x, z)); if (c >= 1) break; }
+      return c;
+    }, (x, z) => ter.getHeight(x, z));
+  }
   // Suolo delle carreggiate: serve ai ponti (testate alla quota della strada, non del terreno: niente gradino) e poi
   // al suolo composto della Scena.
   const strade = suoloStrade(acque, (x, z) => ter.getHeight(x, z));   // con la rampa dal prato sul bordo (#181)
   const pp = creaPonti(dati.attraversamenti, dati.altezza, strade.quotaSuolo);
   yield 'acque e ponti';
-  const roc = yield* costruisciRocche(cx, cz, ter);
-  yield 'rocche';
-  const vil = yield* costruisciVillaggi(cx, cz, ter);
-  yield 'villaggi';
   const posVeg = yield* posizionaVegetazioneAPezzi({
     heights, cols: meta.cols, cell: meta.cellSize, cx, cz, acqua: dati,
     copertura: coperturaMondo(carta, Calendar.stagione), seme: carta.seme, carta,
@@ -1371,7 +1384,8 @@ function applicaMondo(p) {
   if (acqua) scene.add(acqua);
   // Le strade per ultime: sotto un ponte la carreggiata nell'alveo non deve vincere sull'impalcato.
   // Le rocce basse (fino a 40 cm) fanno suolo: ci si sale sopra come su un gradino (knight3d.js).
-  _suolo = componiSuolo(terrain, [...rocche, ...ponti, p.strade ?? suoloStrade(acqueScena, (x, z) => terrain.getHeight(x, z))],
+  _suolo = componiSuolo(terrain, [...rocche, ...ponti, ...villaggi.filter((v) => v.tipo === 'approdo'),
+    p.strade ?? suoloStrade(acqueScena, (x, z) => terrain.getHeight(x, z))],
     vegetazione?.quotaOstacoli ? [vegetazione] : []);
   // Persone ai loro posti e per le strade (passo 7), sul suolo composto. Al cambio di blocco (scambiaBlocco) si rifanno
   // con rocche e borghi, già nelle coordinate del blocco nuovo: non serve spostarle (abitanti.sposta resta per altri usi).

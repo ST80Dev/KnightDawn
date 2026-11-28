@@ -16,6 +16,18 @@ import { fbm, derivaSeme, smoothstep, hash2, mulberry32 } from './rumore.js';
 import { specchio, distanzaPiano, livelloLago, quotaFinale, tracciatiFiumi } from './scena.js';
 import { distanzaStrada } from './strade.js';
 
+/**
+ * Vero se il punto (quota h) non è sott'acqua di un lago. `livelloLago` vale in tutta la fascia attorno al lago, non
+ * solo sull'acqua: contarla come lago lasciava senza alberi, campi e case di campagna anche rive alte decine di metri
+ * sopra il pelo (lo stesso difetto che lasciava i villaggi senza case, villaggio3d.js). Come per il mare, si resta
+ * `SOPRA_LAGO` m sopra l'acqua: una striscia di riva nuda, non alberi coi piedi in acqua.
+ */
+const SOPRA_LAGO = 0.5;
+function fuoriLago(carta, x, z, h) {
+  return !(livelloLago(carta, x, z) > h - SOPRA_LAGO);
+}
+
+
 // ─── 1. Copertura del terreno (condivisa con il colore) ───────────────────
 
 /** Parametri della copertura: sono quelli del colore del terreno (in terrain.js anche come COLORI_MONDO). */
@@ -446,7 +458,7 @@ export function caseCampagna(carta) {
   const K = CASE_CAMPAGNA, out = [], es = { quota: 0, livello: NaN };
   const asciutto = (x, z) => {
     const h = quotaFinale(carta, x, z, undefined, es);
-    return Number.isNaN(es.livello) && h > 0.5 && Number.isNaN(livelloLago(carta, x, z)) ? h : NaN;
+    return Number.isNaN(es.livello) && h > 0.5 && fuoriLago(carta, x, z, h) ? h : NaN;
   };
   const pianiTutti = (carta.luoghi || []).flatMap((l) => l.piani || []);
   const sP1 = derivaSeme(carta.seme, 403), sP2 = derivaSeme(carta.seme, 404);   // piega dei campi, come nel blocco
@@ -869,7 +881,7 @@ export function* posizionaVegetazioneAPezzi(o, budget = 2.5) {
       const c = smoothstep(K.coltivato[0], K.coltivato[1], coltivatoIn(luoghi, x, z, semeCampagna));
       if (c <= 0) return 0;
       const h = quotaFinale(o.carta, x, z, undefined, es);
-      if (!Number.isNaN(es.livello) || h < 0.5 || !Number.isNaN(livelloLago(o.carta, x, z))) return 0;
+      if (!Number.isNaN(es.livello) || h < 0.5 || !fuoriLago(o.carta, x, z, h)) return 0;
       const gx = (quotaFinale(o.carta, x + dP, z) - quotaFinale(o.carta, x - dP, z)) / (2 * dP);
       const gz = (quotaFinale(o.carta, x, z + dP) - quotaFinale(o.carta, x, z - dP)) / (2 * dP);
       const pend = Math.atan(Math.hypot(gx, gz)) * 180 / Math.PI;
@@ -1313,7 +1325,7 @@ export function* boscoLontanoAPezzi(carta, cx, cz, half, quota, stagione = 0, bu
       if (Number.isNaN(h)) continue;
       const x = -R + c * G, z = -R + r * G;
       // Laghi e mare: niente alberi.
-      if (h < 0.5 || !Number.isNaN(livelloLago(carta, cx + x, cz + z))) continue;
+      if (h < 0.5 || !fuoriLago(carta, cx + x, cz + z, h)) continue;
       const hx = Hc(c + 1, r) - Hc(c - 1, r), hz = Hc(c, r + 1) - Hc(c, r - 1);
       const g = Number.isNaN(hx) || Number.isNaN(hz) ? 0 : Math.hypot(hx, hz) / (2 * G);
       const pend = Math.atan(g) * 180 / Math.PI;
@@ -1392,7 +1404,7 @@ export function* boscoLontanoAPezzi(carta, cx, cz, half, quota, stagione = 0, bu
               if (h / 4294967296 >= prob * dirada) continue;
               if (Math.max(Math.abs(x), Math.abs(z)) < half || campo(lim, x, z) < 0.3) continue;
               const y = quota(x, z);
-              if (Number.isNaN(y) || y < 0.5 || !Number.isNaN(livelloLago(carta, cx + x, cz + z))) continue;
+              if (Number.isNaN(y) || y < 0.5 || !fuoriLago(carta, cx + x, cz + z, y)) continue;
               const eta = 0.6 + 0.9 * (((h >>> 8) & 0xff) / 256) ** 1.4;
               out.push(x + ((h >>> 16) & 0xff) / 255 * 4 - 2, y, z, eta * (0.55 + 0.45 * campo(lim, x, z)),
                 h & 1 ? SAGOME.riva : SAGOME_LATIFOGLIA[h % 3]);

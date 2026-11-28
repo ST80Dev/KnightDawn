@@ -195,18 +195,36 @@ function geoChiazza(c, r, ox, oz, quota, sopra, rnd) {
  * dalla forma più vicina, 0 oltre; si tengono solo le celle con almeno un vertice dentro. `dist(u, v)` dà la distanza
  * dalla forma più vicina (case con aia, strade, piazzetta).
  */
+/**
+ * Copertura della terra battuta in (u, v): l'alpha di geoTerra (1 dentro, 0 fuori, bordo che ondeggia). Serve anche a
+ * tagliare la strada della rete dove comincia il suolo del paese (js/3d/acqua.js, ritagliaStradeNeiPaesi).
+ */
+export function coperturaTerra(dist, seme, M = SUOLO.margine) {
+  return (u, v) => {
+    const onda = 0.5 + 0.3 * Math.sin(u * 0.21 + v * 0.13 + seme % 7) + 0.2 * Math.sin(u * 0.07 - v * 0.17 + seme % 5);
+    const lim = M[0] + (M[1] - M[0]) * clamp(onda, 0, 1);
+    return clamp(0.5 + (lim - dist(u, v)) / 2.5, 0, 1);
+  };
+}
+
+/** Funzione (x, z) del blocco → copertura 0–1 del suolo del luogo, nulla oltre `raggio` m dal centro (ox, oz). */
+function copertoDa(ox, oz, raggio, ...coperture) {
+  return (x, z) => {
+    const u = x - ox, v = z - oz;
+    if (u * u + v * v > raggio * raggio) return 0;
+    let c = 0;
+    for (const f of coperture) { c = Math.max(c, f(u, v)); if (c >= 1) break; }
+    return c;
+  };
+}
+
 export function geoTerra(L, dist, ox, oz, quota, seme, M = SUOLO.margine) {
   // Vertici sulla sotto-griglia del terreno del blocco (x = −lato/2 + i·passo, coordinate del blocco).
   const P = SUOLO.passo, T = SUOLO.tessera, h = SCENA.lato / 2;
   const u0 = -h + P * Math.floor((ox - L + h) / P) - ox, v0 = -h + P * Math.floor((oz - L + h) / P) - oz;
   const nu = Math.ceil((L - u0) / P) + 1, nv = Math.ceil((L - v0) / P) + 1;
-  const alfa = new Float32Array(nu * nv), id = new Int32Array(nu * nv).fill(-1);
-  for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
-    const u = u0 + i * P, v = v0 + j * P;
-    const onda = 0.5 + 0.3 * Math.sin(u * 0.21 + v * 0.13 + seme % 7) + 0.2 * Math.sin(u * 0.07 - v * 0.17 + seme % 5);
-    const lim = M[0] + (M[1] - M[0]) * clamp(onda, 0, 1);
-    alfa[j * nu + i] = clamp(0.5 + (lim - dist(u, v)) / 2.5, 0, 1);
-  }
+  const alfa = new Float32Array(nu * nv), id = new Int32Array(nu * nv).fill(-1), copertura = coperturaTerra(dist, seme, M);
+  for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) alfa[j * nu + i] = copertura(u0 + i * P, v0 + j * P);
   const pos = [], uv = [], col = [], idx = [];
   const vert = (i, j) => {
     const k = j * nu + i;
@@ -336,8 +354,10 @@ export function* createVillaggioAPezzi(suolo, sito, ox, oz, carta, cx, cz) {
   };
   const asciutto = (u, v) => {
     const [x, z] = W(u, v);
-    quotaFinale(carta, x, z, undefined, es);
-    return Number.isNaN(es.livello) && Number.isNaN(livelloLago(carta, x, z));
+    // Il lago conta solo dove l'acqua copre davvero il terreno: `livelloLago` vale anche nella fascia attorno al lago, e
+    // un villaggio sulla riva alta (misurati 13–37 m sopra il pelo) restava senza case, con la sola terra battuta.
+    const h = quotaFinale(carta, x, z, undefined, es);
+    return Number.isNaN(es.livello) && !(livelloLago(carta, x, z) > h);
   };
   const vie = [];                                         // strade del villaggio: { punti, largo }
   const piazze = [];                                      // { c, r }
@@ -515,8 +535,11 @@ export function* createVillaggioAPezzi(suolo, sito, ox, oz, carta, cx, cz) {
   ];
   attaccaSuolo(r, pezzi);
   yield;
+  // Suolo del paese (terra, vie, piazza): lì la strada della rete finisce e riprende al limite (acqua.js).
+  const coperto = copertoDa(ox, oz, R + 12 + VILLAGGI.via.oltre, coperturaTerra(distNucleo, seme),
+    (u, v) => clamp(1 - fuoriVie(u, v) / 1.5, 0, 1));
   return { tipo: ovile ? 'ovile' : 'villaggio', sito, object: r.object, solidi: r.solidi,
-    spingiFuori: spintaDaScatole(r.scatole, ox, oz, R + 20), quotaSuolo: () => null,
+    spingiFuori: spintaDaScatole(r.scatole, ox, oz, R + 20), quotaSuolo: () => null, coperto,
     dentro: () => false, aggiornaLuci: r.aggiornaLuci, sorgenti: r.sorgenti, misure: r.misure, edifici: r.edifici, raggio: R };
 }
 
@@ -985,6 +1008,7 @@ export function* createEremoAPezzi(suolo, sito, ox, oz, carta) {
   yield;
   return { tipo: 'eremo', sito, object: r.object, solidi: r.solidi,
     spingiFuori: spintaDaScatole(r.scatole, ox, oz, E.raggio + 20), quotaSuolo: () => null,
+    coperto: copertoDa(ox, oz, E.raggio + 12, coperturaTerra(distForme, seme, EREMI.margine)),
     dentro: () => false, aggiornaLuci: r.aggiornaLuci, sorgenti: r.sorgenti, misure: r.misure, edifici: r.edifici,
     raggio: E.raggio };
 }
@@ -1195,6 +1219,7 @@ export function* createMulinoAPezzi(suolo, sito, ox, oz, carta) {
   const girata = M.giri * Math.PI * 2;
   return { tipo: 'mulino', sito, object: r.object, solidi: r.solidi,
     spingiFuori: spintaDaScatole(r.scatole, ox, oz, M.raggio + 20), quotaSuolo: () => null,
+    coperto: copertoDa(ox, oz, M.raggio + 12, coperturaTerra(distForme, seme, M.margine)),
     dentro: () => false, sorgenti: r.sorgenti, misure: r.misure, edifici: r.edifici, raggio: M.raggio,
     // La ruota gira qui: `aggiornaLuci` è l'unico aggancio per fotogramma che i villaggi hanno già.
     aggiornaLuci: (t, buio, q) => { r.aggiornaLuci(t, buio, q); if (ruota) ruota.rotation.z = -t * girata; },

@@ -1316,11 +1316,15 @@ export function generaScena(carta, cx, cz) { return completa(generaScenaAPezzi(c
  * triangoli sotto la carreggiata andavano da un vertice sul ripiano a uno sulla scarpata ed erano inclinati. Qui i
  * vertici delle celle che la carreggiata tocca prendono la quota della strada nel punto più vicino: un ripiano di una
  * cella sotto la strada, la scarpata nelle celle accanto. Non si toccano: il bordo del blocco (giunture con i vicini e
- * l'orizzonte), l'acqua, i terrapieni dei luoghi, i sentieri, i vertici che si sposterebbero più di `salto` m (l'altro
- * lato di un tornante), i dintorni delle porte di rocche e borghi (le rampe).
+ * l'orizzonte), l'acqua, i terrapieni dei luoghi, i vertici che si sposterebbero più di `salto` m (l'altro lato di un
+ * tornante), i dintorni delle porte di rocche e borghi (le rampe).
+ * I sentieri (0,6 m per lato) prima restavano fuori (`semiMinima` era 1 m) e si appoggiavano al pendio [segnalato
+ * dall'utente: «il pezzo dritto era un su e giù continuo ravvicinato, con la strada che si vedeva a pezzi, a gobbe e
+ * conche»]. Misurato sul terreno disegnato: 32–48 inversioni di pendenza per km lungo i sentieri contro 1–1,5 delle altre
+ * strade; con il ripiano anche sotto i sentieri, 0,1 per km.
  */
 // porta: striscia lasciata alla rampa fuori dalla porta (m lungo la normale della porta, dietro, di lato).
-export const SOTTO_STRADA = { semiMinima: 1, passoLato: 1, salto: 5, porta: { lungo: 32, dietro: 8, lato: 11 } };
+export const SOTTO_STRADA = { semiMinima: 0.5, passoLato: 1, salto: 5, porta: { lungo: 32, dietro: 8, lato: 11 } };
 function spianaSottoStrade(carta, cx, cz, heights, fiume, lago, n, cell, half, strade, quote) {
   const S = SOTTO_STRADA, meglio = new Float32Array(n * n).fill(Infinity), val = new Float32Array(n * n);
   strade.forEach((t, s) => {
