@@ -15,18 +15,21 @@ const Items = {
   RESALE: 0.5,
 
   // Ordine canonico degli slot (per liste ordinate e vendita).
-  SLOT_ORDER: ['arma', 'armatura', 'scudo', 'speciale', 'viaggio'],
+  SLOT_ORDER: ['arma', 'armatura', 'scudo', 'cintura', 'speciale', 'viaggio'],
 
   // Zaino (G1 passo 3, docs/GDD.md §2 «Pasti e zaino»): pochi posti per le cose che si consumano. Gli oggetti con
-  // slot 'provviste' vanno nello zaino, non si indossano.
-  ZAINO_POSTI: 8,
+  // slot 'provviste' vanno nello zaino (un posto ciascuno), non si indossano. Ritarato con l'utente (28/11, viaggio di
+  // notte): 12 posti a piedi; le BISACCE del cavallo ne aggiungono BISACCE_POSTI quando il cavallo è con te. Ciò che sta
+  // alla cintura (acciarino) non occupa posti, come l'arma. Zaino pieno: non si compra né si raccoglie.
+  ZAINO_POSTI: 12,
+  BISACCE_POSTI: 6,
 
   // Cosa vende ogni bottega del borgo (tipo di edificio, js/3d/edifici3d.js → categorie). Prezzi uguali ovunque.
   NEGOZI: {
     fabbro:       { nome: 'Il fabbro',          vende: ['arma', 'scudo'] },
     armeria:      { nome: "L'armeria",          vende: ['arma', 'armatura', 'scudo'] },
-    loggia:       { nome: 'Il mercato',         vende: ['provviste', 'viaggio'] },
-    loggiaGrande: { nome: 'Il mercato',         vende: ['provviste', 'viaggio', 'armatura'] },
+    loggia:       { nome: 'Il mercato',         vende: ['provviste', 'viaggio', 'cintura'] },
+    loggiaGrande: { nome: 'Il mercato',         vende: ['provviste', 'viaggio', 'cintura', 'armatura'] },
     taverna:      { nome: "L'oste",             vende: ['provviste'] },
     stalla:       { nome: 'Lo stalliere',       vende: ['cavalli'] },
   },
@@ -46,10 +49,14 @@ const Items = {
     // ── Da viaggio ──
     'Mantello da viandante': { slot: 'viaggio', prezzo: 5,  glyph: '◊' },
     'Mantello scuro':        { slot: 'viaggio', prezzo: 9,  glyph: '◊' },
+    // ── Alla cintura ── (non occupa posti nello zaino) fuoco: serve ad accendere il fuoco del campo.
+    'Acciarino e pietra focaia': { slot: 'cintura', prezzo: 3, glyph: '✧', fuoco: true },
     // ── Provviste (nello zaino) ── pasto: vale il pasto del giorno; forza/salute: quanto rende usarlo.
     'Pane e formaggio':      { slot: 'provviste', prezzo: 1, glyph: '❦', pasto: true },
     'Carne secca e mele':    { slot: 'provviste', prezzo: 2, glyph: '❦', pasto: true, forza: 8 },
     'Bende di lino':         { slot: 'provviste', prezzo: 2, glyph: '✚', salute: 15 },
+    // luce: si accende con L e illumina fino a Prima (una notte), poi è consumata (Knight.luceTorcia).
+    'Torcia':                { slot: 'provviste', prezzo: 1, glyph: '♨', luce: true },
   },
 
   /** Oggetti in vendita in una bottega (lista come buyList), cavalli esclusi. */

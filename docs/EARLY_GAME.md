@@ -354,7 +354,7 @@ poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un
    stalliere (cavalli, «Comprare o vendere un cavallo» nella stalla). Riquadro a tabella nella Carta del cronista:
    «In vendita» e «Puoi vendere», con prezzo e pulsante; comprare ciò che va indossato **permuta** quello che c'era
    (rivendita al 50 %), le provviste vanno nello zaino; ogni affare costa 15 minuti. **Zaino** (`I`): ciò che si porta
-   addosso e fino a 8 provviste (pane e formaggio 1 oro, carne secca e mele 2 oro e Forza +8, bende di lino 2 oro e
+   addosso e fino a 8 provviste [ritarato il 28/11: 12 posti più 6 nelle bisacce del cavallo, torcia e acciarino; `docs/ESPLORAZIONE_3D.md` «Viaggio di notte»] (pane e formaggio 1 oro, carne secca e mele 2 oro e Forza +8, bende di lino 2 oro e
    Salute +15); «Mangia» e «Usa». **Pasti**: il giorno comincia a Prima; per ogni giorno finito senza pasto il cavaliere
    mangia da sé dallo zaino, altrimenti Salute −3 e il sonno di quella notte non ridà Forza (solo in Storia). In
    taverna «Mangiare un pasto caldo» (1 oro, mezz'ora, Forza +5). Il garzone parte con un pane; in Libera con 4

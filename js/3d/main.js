@@ -300,7 +300,8 @@ function nuovaPartitaDati(m, nome) {
     Knight.promuovi('errante');
     Object.assign(Knight.equip, { arma: 'Spada da arme', armatura: 'Cotta di maglia', scudo: 'Scudo di legno' });
     Knight.oro = 60;
-    Knight.zaino = ['Pane e formaggio', 'Pane e formaggio', 'Carne secca e mele', 'Bende di lino'];
+    Knight.zaino = ['Pane e formaggio', 'Pane e formaggio', 'Carne secca e mele', 'Bende di lino', 'Torcia', 'Torcia'];
+    Knight.equip.cintura = 'Acciarino e pietra focaia';
     Knight.addestramento = 3;
     Calendar.fineVeglia();
     Knight.cavallo = Items.makeMount('ronzino');   // isMounted conta solo in sella (Knight.inSella)
@@ -366,6 +367,8 @@ function riposa() {
     Knight.riposaPassi(passi);
     const p = controllaGiornata();
     if (p.digiuno) Knight.forza.cur = prima;               // a stomaco vuoto il sonno non ristora
+    const finita = Knight.controllaTorcia(adessoPassi());   // a Prima la torcia è consumata
+    if (finita) p.testi.push(finita);
     messaggio(`Dormi all'addiaccio fino a Prima (${_ore(passi)})${_guadagno(prima)}${p.testi.length ? ' ' + p.testi.join(' ') : ''}`);
     titolo = 'La notte all\'addiaccio';
     frasi = ['Ti avvolgi nel mantello e cerchi un riparo dal vento.', 'La notte passa lenta, fra versi lontani e il freddo che sale dalla terra.',
@@ -384,6 +387,35 @@ function riposa() {
   salvaOra();
   // Racconto della sosta (la meridiana segue le ore); poi la pergamena si chiude.
   raccontaAzione({ titolo, frasi, prima: stato, dopo: istantanea() }).then((fatto) => { if (fatto) cartaCronista.chiudi(); });
+}
+
+// ─── Torcia (L): viaggio di notte (docs/GDD.md §2 «Pasti e zaino») ───────────────────────────────────────────
+// Si accende da Vespri a Lodi e fa luce fino a Prima, poi è consumata (Knight.luceTorcia). Accesa: in mano al
+// cavaliere (anche in sella), una delle luci vicine (luciVicine), più strada scoperta nella nebbia della conoscenza,
+// e gli animali timidi non si fanno incontrare (Combat.pescaIncontro).
+const TORCIA = { colore: '#ffa04a', intensita: 20, distanza: 18, percorsoNotte: 180, intravistoNotte: 320 };
+const adessoPassi = () => Calendar.passiTotali + Calendar.frazione;
+/** Passi assoluti della prossima Prima (il giorno di gioco comincia a Prima). */
+const primaSeguente = () => Calendar.passiTotali + (CALENDAR.PASSI_PER_GIORNO - Calendar.indiceNelGiorno());
+const seraONotte = () => Calendar.eNotte() || Calendar.indiceNelGiorno() === CALENDAR.INDICE_NOTTE - 1;
+const torciaAccesa = () => Knight.torciaAccesa(adessoPassi());
+function luceTorcia(dalDiario = false) {
+  if (!knight || inPausa || (cronista && !dalDiario)) return;
+  const nuova = !Knight.torcia;
+  const r = Knight.luceTorcia(adessoPassi(), primaSeguente(), seraONotte());
+  messaggio(r.testo);
+  if (r.ok) {
+    if (nuova) annotaCronaca(r.testo);
+    salvaOra();
+  }
+  aggiornaTorcia();
+}
+/** Ogni fotogramma: a Prima la torcia si consuma; la torcia in mano segue lo stato. */
+function aggiornaTorcia() {
+  if (!knight) return;
+  const fine = Knight.controllaTorcia(adessoPassi());
+  if (fine) { messaggio(fine); annotaCronaca(fine); }
+  knight.torcia(torciaAccesa());
 }
 
 // Pausa (P): nulla scorre, né il tempo di gioco né il cavaliere. La scheda nascosta ferma comunque
@@ -507,6 +539,8 @@ function dormiNelBorgo({ dove, forza = 0, salute = 0 }) {
   if (typeof Events !== 'undefined') Events.tickDeadlines();
   const p = controllaGiornata();
   if (p.digiuno) Knight.forza.cur = prima;                 // a stomaco vuoto il sonno non ristora
+  const finita = Knight.controllaTorcia(adessoPassi());
+  if (finita) p.testi.push(finita);
   return `Dormi ${dove} fino a Prima (${_ore(passi)})${_guadagno(prima)}${p.testi.length ? ' ' + p.testi.join(' ') : ''}`;
 }
 
@@ -614,9 +648,10 @@ function mostraMercato(tipo, indietro, righe = []) {
   for (const it of Items.inVendita(N.vende)) {
     const zaino = it.slot === 'provviste', vecchio = zaino ? null : Knight.equip[it.slot];
     const permuta = vecchio ? Items.rivendita(vecchio) : 0;
-    const pieno = zaino && Knight.zaino.length >= Items.ZAINO_POSTI, tuo = vecchio === it.nome;
-    const info = zaino ? (it.pasto ? `pasto${it.forza ? `, Forza +${it.forza}` : ''}` : it.salute ? `cura, Salute +${it.salute}` : 'provvista')
-      : `${it.slot}${vecchio && !tuo ? ` · al posto di ${vecchio}` : ''}${tuo ? ' · lo porti già' : ''}`;
+    const pieno = zaino && Knight.zainoPieno(), tuo = vecchio === it.nome;
+    const info = zaino ? (it.pasto ? `pasto${it.forza ? `, Forza +${it.forza}` : ''}` : it.salute ? `cura, Salute +${it.salute}`
+      : it.luce ? 'luce per una notte (L)' : 'provvista')
+      : `${it.fuoco ? 'alla cintura, per il fuoco' : it.slot}${vecchio && !tuo ? ` · al posto di ${vecchio}` : ''}${tuo ? ' · lo porti già' : ''}`;
     compra.push({ nome: it.nome, info, prezzo: `${it.prezzo} oro`, azione: vecchio && !tuo ? 'Permuta' : 'Compra',
       disponibile: !tuo && !pieno && Knight.oro + permuta >= it.prezzo,
       etichetta: tuo ? 'Lo porti già' : pieno ? 'Zaino pieno' : `Servono ${it.prezzo} oro`,
@@ -635,7 +670,7 @@ function mostraMercato(tipo, indietro, righe = []) {
   }
   cartaCronista.mostra({
     titolo: N.nome,
-    nota: `${Calendar.oraCanonica()} · ${Knight.oro} oro · zaino ${Knight.zaino.length}/${Items.ZAINO_POSTI}`,
+    nota: `${Calendar.oraCanonica()} · ${Knight.oro} oro · zaino ${Knight.zaino.length}/${Knight.postiZaino()}`,
     righe,
     tabelle: [{ titolo: 'In vendita', righe: compra }, { titolo: 'Puoi vendere', vuota: 'Niente che qui si compri.', righe: vendi }],
     opzioni: [{ testo: 'Indietro', scegli: indietro }, ESCI],
@@ -690,9 +725,21 @@ function cammino(m) {
 function diarioSezione(id) {
   const oggi = giornoDiGioco();
   if (id === 'zaino') {
-    const addosso = Items.SLOT_ORDER.filter((s) => Knight.equip[s]).map((s) => ({ nome: Knight.equip[s], info: s }));
+    const addosso = Items.SLOT_ORDER.filter((s) => Knight.equip[s])
+      .map((s) => ({ nome: Knight.equip[s], info: Items.catalog[Knight.equip[s]]?.fuoco ? 'alla cintura: accende il fuoco' : s }));
+    if (Knight.torcia) {
+      addosso.push({ nome: Knight.torcia.nome === 'Torcia' ? 'Torcia in mano' : 'Tizzone in mano',
+        info: `${torciaAccesa() ? 'accesa' : 'spenta'}: si consuma a Prima`, azione: torciaAccesa() ? 'Spegni' : 'Riaccendi',
+        scegli: () => { luceTorcia(true); _rigaZaino = null; diario.apri('zaino'); } });
+    }
+    const torciaNuova = !Knight.torcia && seraONotte();
     const porti = Knight.zaino.map((nome, i) => {
       const it = Items.catalog[nome] ?? {};
+      if (it.luce) {
+        return { nome, info: 'luce fino a Prima (L)', azione: 'Accendi', disponibile: torciaNuova,
+          etichetta: Knight.torcia ? 'Hai già una torcia in mano' : 'Di giorno non serve',
+          scegli: () => { luceTorcia(true); _rigaZaino = null; diario.apri('zaino'); } };
+      }
       const azione = it.pasto ? 'Mangia' : it.salute || it.forza ? 'Usa' : null;
       return { nome, info: it.pasto ? `pasto${it.forza ? `, Forza +${it.forza}` : ''}` : it.salute ? `Salute +${it.salute}` : '',
         azione, disponibile: !(it.salute && !it.pasto && Knight.salute.cur >= Knight.salute.max), etichetta: 'Non sei ferito',
@@ -704,11 +751,13 @@ function diarioSezione(id) {
         } };
     });
     return {
-      sottotitolo: `${Knight.ultimoPasto >= oggi ? 'oggi hai mangiato' : 'oggi non hai ancora mangiato'} · ${Knight.zaino.length} provviste su ${Items.ZAINO_POSTI}`,
+      sottotitolo: `${Knight.ultimoPasto >= oggi ? 'oggi hai mangiato' : 'oggi non hai ancora mangiato'} · ${Knight.zaino.length} posti occupati su ${Knight.postiZaino()}`,
       blocchi: [
         ...(_rigaZaino ? [{ testo: _rigaZaino }] : []),
         { titolo: 'Addosso', vuota: 'Niente: solo i panni del garzone.', righe: addosso },
-        { titolo: `Nello zaino · ${Knight.zaino.length}/${Items.ZAINO_POSTI}`, vuota: 'Vuoto.', righe: porti },
+        { titolo: `${Knight.cavallo ? 'Nello zaino e nelle bisacce' : 'Nello zaino'} · ${Knight.zaino.length}/${Knight.postiZaino()}`,
+          testo: Knight.cavallo ? `${Items.ZAINO_POSTI} posti nello zaino e ${Items.BISACCE_POSTI} nelle bisacce del cavallo.`
+            : `${Items.ZAINO_POSTI} posti; con un cavallo, ${Items.BISACCE_POSTI} in più nelle bisacce.`, vuota: 'Vuoto.', righe: porti },
       ],
     };
   }
@@ -1144,7 +1193,7 @@ function vicinoAiLuoghi(x, z) {
 }
 function pescaQui() {
   return Combat.pescaIncontro({ bioma: biomaQui(), momento: Combat.momento(Calendar.indiceNelGiorno()),
-    veglia: inStoria() && Calendar.inVeglia, primaSangue: Knight.primaSangue });
+    veglia: inStoria() && Calendar.inVeglia, primaSangue: Knight.primaSangue, luce: torciaAccesa() });
 }
 /** Da contaPercorso: `d` metri appena fatti. */
 function cercaIncontro(d) {
@@ -1214,6 +1263,7 @@ async function combattiIncontro(e, slancio, raggiunto = false) {
 // restano fiamme e aloni. Con la luce della torre-porta di ogni rocca si resta nelle 4–6 previste.
 const LUCI_VICINE = { quante: 4, raggio: 70 };
 const _luciVicine = [];
+const _vTorcia = new THREE.Vector3(), _sgTorcia = { x: 0, y: 0, z: 0, colore: TORCIA.colore, intensita: TORCIA.intensita, distanza: TORCIA.distanza };
 function luciVicine(t, buio) {
   if (!_luciVicine.length) {
     for (let i = 0; i < LUCI_VICINE.quante; i++) {
@@ -1227,6 +1277,12 @@ function luciVicine(t, buio) {
   const st = knight?.stato;
   const tutte = [];
   if (f > 0 && st) {
+    // La torcia in mano prende sempre una delle luci vicine (la prima): è quella che illumina dove si va.
+    if (torciaAccesa()) {
+      knight.puntoTorcia(_vTorcia);
+      Object.assign(_sgTorcia, { x: _vTorcia.x, y: _vTorcia.y + 0.15, z: _vTorcia.z });
+      tutte.push({ sg: _sgTorcia, d: -1 });
+    }
     for (const r of [...rocche, ...villaggi, campagna]) for (const sg of r?.sorgenti ?? []) {
       const d = Math.hypot(sg.x - st.x, sg.z - st.z);
       if (d < LUCI_VICINE.raggio) tutte.push({ sg, d });
@@ -2005,9 +2061,9 @@ function aggiornaConoscenza(dt) {
   const x = scenaAttuale.cx + knight.stato.x, z = scenaAttuale.cz + knight.stato.z;
   if (Math.hypot(x - _ultimaRivelazione.x, z - _ultimaRivelazione.z) < CONOSCENZA.passo) return;
   _ultimaRivelazione.x = x; _ultimaRivelazione.z = z;
-  const notte = Calendar.eNotte();
-  Conoscenza.rivela(x, z, notte ? CONOSCENZA.percorsoNotte : CONOSCENZA.percorso, 2);
-  Conoscenza.rivela(x, z, notte ? CONOSCENZA.intravistoNotte : CONOSCENZA.intravisto, 1);
+  const notte = Calendar.eNotte(), luce = notte && torciaAccesa();   // con la torcia di notte si vede più strada
+  Conoscenza.rivela(x, z, luce ? TORCIA.percorsoNotte : notte ? CONOSCENZA.percorsoNotte : CONOSCENZA.percorso, 2);
+  Conoscenza.rivela(x, z, luce ? TORCIA.intravistoNotte : notte ? CONOSCENZA.intravistoNotte : CONOSCENZA.intravisto, 1);
   annunciaLuoghi(x, z);
 }
 
@@ -2075,7 +2131,7 @@ function aggiornaIndicatoreAndatura() {
 const LEGENDA = () => [
   ['A piedi', [['W A S D', 'muovi'], ['Shift', 'scatto'], ['Ctrl', 'camminata sì/no'], ['Spazio', 'scavalca'], ['R', 'riposa · dormi']]],
   ['In sella', [['E', 'monta · smonta'], ['W', 'trotto'], ['Shift', 'galoppo'], ['Ctrl', 'passo sì/no'], ['F', 'fischia il cavallo'], ['Q', 'lato della camera']]],
-  ['Azioni', [['E', 'parla · entra'], ['I', 'diario'], ['J', 'scrittoio'], ['M', 'Carta'], ['P', 'pausa']]],
+  ['Azioni', [['E', 'parla · entra'], ['L', 'torcia'], ['I', 'diario'], ['J', 'scrittoio'], ['M', 'Carta'], ['P', 'pausa']]],
   ['Vista', [['mouse', 'trascina: gira'], ['rotella', 'distanza'], ['C', 'camera libera'], ['N', 'minimappa'], ['+ −', 'zoom minimappa']]],
   ['Sistema', [['U', 'musica'], ['F2', 'qualità'], ['F3', 'info'], ['F8', 'menu'],
     ...(inStoria() ? [] : [['T', 'avanza'], ['K', 'combattimento']])]],
@@ -2280,6 +2336,7 @@ window.addEventListener('keydown', (e) => {
   if ((e.key === '-' || e.code === 'NumpadSubtract') && !e.repeat) minimappa.zoom(1);
   if (TASTI_CAMMINATA.includes(e.code) && !e.repeat) camminata = !camminata;
   if (e.code === 'KeyR' && !e.repeat) riposa();
+  if (e.code === 'KeyL' && !e.repeat) luceTorcia();
   if (e.code === 'KeyT' && !e.repeat) avanza();
   if (e.code === 'KeyP' && !e.repeat) cambiaPausa();
   if (e.code === 'KeyV' && !e.repeat && vegetazione) {
@@ -2815,6 +2872,7 @@ function frame(now) {
       for (const r of rocche) r.aggiornaLuci(now / 1000, 1 - _luceGiorno, quota);
       campagna?.aggiornaLuci(now / 1000, 1 - _luceGiorno, quota);
       for (const r of villaggi) r.aggiornaLuci(now / 1000, 1 - _luceGiorno, quota);
+      aggiornaTorcia();
       luciVicine(now / 1000, 1 - _luceGiorno);
     }
     orizzonte?.luciLontane?.(1 - _luceGiorno);   // M7, passo 8: luci dei borghi lontani (orizzonte.js)

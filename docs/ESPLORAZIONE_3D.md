@@ -3738,6 +3738,50 @@ sulle carrarecce 0,3 per blocco.
 **Non fatto in questa PR.** Carro a buoi (seconda PR). Persone dentro la carrozza, frusta, lanterne di notte. Le ruote
 anteriori non sterzano (la cassa segue la corda tra gli assi). I veicoli non entrano nei borghi né nei cortili.
 
+## Viaggio di notte: torcia, fuoco del campo, zaino (28/11/2026) — prima PR fatta, da provare
+
+Decisioni dell'utente (28/11, sessione «Piano di lavoro»): torcia comprata (una notte, `L`, in mano anche in sella),
+tizzone dal fuoco, acciarino alla cintura, accampamento con `R` di notte se c'è legna, zaino ritarato con le bisacce,
+legna nei biomi poveri da misurare prima dei rimedi. Regole di gioco in `docs/GDD.md` §2 «Pasti e zaino».
+
+**Divisione in tre PR** (proposta): **(a)** zaino a 12 posti, bisacce +6, torcia e acciarino — *fatta*; **(b)** fuoco
+del campo e tizzone; **(c)** fascina e ripari, dopo la misura qui sotto e la scelta dell'utente.
+
+### (a) Zaino, bisacce, torcia, acciarino — fatta, da provare
+- Logica in `js/knight.js` (`postiZaino`, `zainoPieno`, `haAcciarino`, `luceTorcia`, `torciaAccesa`, `controllaTorcia`;
+  `torcia` nel salvataggio), dati in `js/data/items.js` (`ZAINO_POSTI` 12, `BISACCE_POSTI` 6, slot `cintura`,
+  «Torcia» 1 oro, «Acciarino e pietra focaia» 3 oro alla loggia), incontri in `js/combat.js` (`pescaIncontro`, `luce`).
+- In scena (`js/3d/knight3d.js`, `torciaInMano`): manico, stoppa e fiamma (cono additivo che tremola) nella mano
+  destra; braccio alzato in avanti a piedi e in sella. **Nessuna luce in più**: la fiamma è la prima delle 4 luci
+  vicine (`main.js`, `luciVicine`, `TORCIA`: 18 m, intensità 20), le altre restano a borghi e rocche.
+- Libera: si parte con due torce e l'acciarino, per provare.
+- **Misure** [Certo, Chromium headless, `?libera&seme=570549`, notte davanti alla porta del borgo]: chiamate
+  203 → 206 con la torcia accesa, triangoli 658.711 → 658.770 (la fiamma in un solo passaggio: prima 207); nessun errore. Logica provata in Node (16 controlli:
+  posti, bisacce, cavallo non vendibile con le bisacce piene, acciarino fuori dallo zaino, torcia di giorno rifiutata,
+  spenta e riaccesa, consumata a Prima, niente animali timidi con la luce).
+
+### Legna lungo le strade, per bioma (misura per la PR (c))
+[Certo, Node, 4 semi (570549, 48213, 1234, 99001), 8 blocchi di 2×2 km per bioma centrati su strade, pipeline del
+Worker e `posizionaVegetazione` vera]: per ogni punto delle strade (ogni 40 m) alberi (anche secchi) e arbusti
+(cespugli, arbusti alti, sterpi, siepi) entro **50 m**. «Legna» = almeno 3 alberi o 6 arbusti.
+
+| bioma (della cella) | punti | maestre e carrarecce con legna | mulattiere e sentieri con legna |
+|---|---|---|---|
+| foresta | 3.884 | 98 % | 100 % (pochi punti) |
+| montagna (sotto la roccia) | 369 | 95 % | 98 % |
+| sabbia (sterpi) | 1.918 | 100 % | 100 % |
+| pianura meridionale | 488 | 96 % | — |
+| pianura | 1.675 | 72 % | 58 % |
+| collina | 4.321 | 71 % | 79 % |
+| roccia | 2.296 | 68 % | **35 %** |
+| pianura settentrionale | 2.322 | 66 % | — |
+| neve | 1.050 | **0 %** | **0 %** |
+
+Lettura: la legna manca davvero solo sulla neve (sempre) e in alta montagna sui sentieri (due volte su tre); nella
+pianura settentrionale e in collina un terzo delle strade, cioè per lo più a tratti (campi attorno ai borghi, prati
+aperti), dove basta camminare un poco. Le zone fredde sono dunque le uniche senza rimedio sul posto: lì servono la
+**fascina** (portata da valle) o un **riparo**. Rimedi da scegliere con l'utente prima della PR (c).
+
 ## Fuori dal prototipo (non farlo ora)
 
 Multiplayer, server/VPS, NPC con IA, mobile/touch, modelli esterni, combattimento in 3D, ombre di

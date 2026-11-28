@@ -61,6 +61,7 @@ const Knight = {
     arma:     null,
     armatura: null,
     scudo:    null,
+    cintura:  null,   // acciarino (non occupa posti nello zaino)
     speciale: null,
     viaggio:  null,
   },
@@ -69,7 +70,8 @@ const Knight = {
   oro: 0,
   cavallo: null,   // null = a piedi; altrimenti { id, nome, vigore, vigoreMax }
   inSella: false,  // in sella (milestone Cavallo, passo 3): finché non si monta, avere un cavallo non dà lo sconto
-  zaino: [],       // nomi degli oggetti nello zaino (Items, slot 'provviste'), al più Items.ZAINO_POSTI
+  zaino: [],       // nomi degli oggetti nello zaino (Items, slot 'provviste'), al più postiZaino()
+  torcia: null,    // torcia in mano: { nome, finoA (Passi assoluti: la Prima che la consuma), accesa }
   ultimoPasto: -1, // giorno di gioco (Calendar) dell'ultimo pasto
   giornoControllato: 0, // ultimo giorno di cui si è controllato il pasto (G1 passo 3)
   addestramento: 0, // sessioni col maestro d'armi (Veglia → promozione a scudiero)
@@ -96,6 +98,7 @@ const Knight = {
       arma:     null,
       armatura: null,
       scudo:    null,
+      cintura:  null,
       speciale: null,
       viaggio:  null,
     };
@@ -111,6 +114,7 @@ const Knight = {
     this.cavallo      = null;   // il garzone parte a piedi: compra un ronzino al mercato
     this.inSella      = false;
     this.zaino        = ['Pane e formaggio'];   // un pasto per il primo giorno
+    this.torcia       = null;
     this.ultimoPasto  = -1;
     this.giornoControllato = 0;
     this.addestramento = 0;
@@ -151,11 +155,17 @@ const Knight = {
   // Ritornano { ok, testo } con una riga per la cronaca. Niente DOM.
 
   /** Compra un oggetto: si indossa (permutando quello che c'era, al prezzo di rivendita) o va nello zaino. */
+  /** Posti dello zaino: quelli a piedi, più le bisacce quando il cavallo è con te. */
+  postiZaino() { return Items.ZAINO_POSTI + (this.cavallo ? Items.BISACCE_POSTI : 0); },
+  zainoPieno() { return this.zaino.length >= this.postiZaino(); },
+  /** Ha di che accendere un fuoco (acciarino alla cintura). */
+  haAcciarino() { return !!(this.equip.cintura && Items.catalog[this.equip.cintura]?.fuoco); },
+
   compra(nome) {
     const it = Items.catalog[nome];
     if (!it) return { ok: false, testo: 'Questo non è in vendita.' };
     if (it.slot === 'provviste') {
-      if (this.zaino.length >= Items.ZAINO_POSTI) return { ok: false, testo: 'Lo zaino è pieno.' };
+      if (this.zainoPieno()) return { ok: false, testo: this.cavallo ? 'Zaino e bisacce sono pieni.' : 'Lo zaino è pieno.' };
       if (this.oro < it.prezzo) return { ok: false, testo: `Servono ${it.prezzo} oro.` };
       this.oro -= it.prezzo;
       this.zaino.push(nome);
@@ -196,6 +206,8 @@ const Knight = {
   /** Vende il cavallo. */
   vendiCavallo() {
     if (!this.cavallo) return { ok: false, testo: 'Non hai un cavallo.' };
+    const troppe = this.zaino.length - Items.ZAINO_POSTI;
+    if (troppe > 0) return { ok: false, testo: `Le bisacce non sono vuote: nello zaino non ci stanno ${troppe === 1 ? 'una cosa' : troppe + ' cose'}. Usa o vendi prima qualcosa.` };
     const v = Items.mountResale(this.cavallo.id), nome = this.cavallo.nome;
     this.cavallo = null; this.inSella = false;
     this.oro += v;
@@ -213,6 +225,40 @@ const Knight = {
     if (it.forza) this.forza.cur = Math.min(this.forza.max, this.forza.cur + it.forza);
     if (it.salute) this.salute.cur = Math.min(this.salute.max, this.salute.cur + it.salute);
     return { ok: true, testo: it.pasto ? `Mangi: ${nome}.` : `Usi: ${nome}.` };
+  },
+
+  // ─── Torcia (viaggio di notte, docs/GDD.md §2 «Pasti e zaino») ──────────────
+  // Una torcia accesa illumina fino a Prima, poi è consumata; spegnerla prima non la salva (si può riaccendere la
+  // stessa fino a Prima). Tempi in Passi assoluti (Calendar.passiTotali + frazione), passati da main.js.
+
+  /** Vero se in mano c'è una torcia accesa che non si è ancora consumata. */
+  torciaAccesa(adesso) { return !!(this.torcia && this.torcia.accesa && adesso < this.torcia.finoA); },
+
+  /**
+   * L: accende o spegne. `adesso`: Passi assoluti; `finoA`: Passi assoluti della prossima Prima; `notte`: da Vespri a
+   * Lodi (di giorno una torcia nuova non si accende: si consumerebbe senza servire).
+   */
+  luceTorcia(adesso, finoA, notte) {
+    this.controllaTorcia(adesso);
+    if (this.torcia) {
+      this.torcia.accesa = !this.torcia.accesa;
+      return { ok: true, testo: this.torcia.accesa ? `Riaccendi ${this.torcia.nome === 'Torcia' ? 'la torcia' : 'il tizzone'}.`
+        : `Spegni ${this.torcia.nome === 'Torcia' ? 'la torcia' : 'il tizzone'}: si consuma comunque a Prima.` };
+    }
+    if (!notte) return { ok: false, testo: 'È giorno: la torcia non serve.' };
+    const i = this.zaino.findIndex((n) => Items.catalog[n] && Items.catalog[n].luce);
+    if (i < 0) return { ok: false, testo: 'Non hai torce nello zaino.' };
+    const nome = this.zaino.splice(i, 1)[0];
+    this.torcia = { nome, finoA, accesa: true };
+    return { ok: true, testo: 'Accendi una torcia: farà luce fino a Prima.' };
+  },
+
+  /** A Prima la torcia è consumata. Ritorna la riga da dire, o null. */
+  controllaTorcia(adesso) {
+    if (!this.torcia || adesso < this.torcia.finoA) return null;
+    const nome = this.torcia.nome;
+    this.torcia = null;
+    return nome === 'Torcia' ? 'La torcia si è consumata.' : 'Il tizzone si è spento.';
   },
 
   /**
