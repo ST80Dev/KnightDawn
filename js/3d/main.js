@@ -301,8 +301,7 @@ function nuovaPartitaDati(m, nome) {
     Knight.zaino = ['Pane e formaggio', 'Pane e formaggio', 'Carne secca e mele', 'Bende di lino'];
     Knight.addestramento = 3;
     Calendar.fineVeglia();
-    // Knight.cavallo resta null finché la milestone Cavallo non corregge isMounted (oggi conterebbe anche a piedi):
-    // il cavallo 3D c'è comunque in Libera (posizionaCavaliere).
+    Knight.cavallo = Items.makeMount('ronzino');   // isMounted conta solo in sella (Knight.inSella)
   }
 }
 
@@ -438,6 +437,7 @@ const AZIONI_TASTO = [
   { nome: 'parla', pronta: () => personaVicina,
     esegui: () => apriCronista({ nome: personaVicina.nome, riga: abitanti.riga(personaVicina) }) },
   { nome: 'porta', pronta: () => portaVicina, esegui: () => apriCronista(portaVicina, portaLuogo) },
+  { nome: 'sella', pronta: () => cavallo && !sella.passaggio && (Knight.inSella || cavalloVicino()), esegui: () => montaOSmonta() },
 ];
 let portaVicina = null;                    // { nome, tipo, porta } dell'edificio vicino, o null
 let portaLuogo = null;                     // il luogo (carta.luoghi) dell'edificio vicino: la Veglia vale nel borgo di partenza
@@ -445,11 +445,12 @@ let _invitoPorta = null;
 function cercaPortaVicina() {
   portaVicina = null;
   personaVicina = null;
-  if (!knight || cronista || percorso) { if (_invitoPorta) _invitoPorta.hidden = true; return; }
+  if (!knight || cronista || percorso || sella.passaggio) { if (_invitoPorta) _invitoPorta.hidden = true; return; }
   const st = knight.stato, dx0 = Math.sin(st.direzione), dz0 = Math.cos(st.direzione);
   personaVicina = abitanti?.personaVicina(st.x, st.z, st.direzione) ?? null;
   let migliore = PORTA.distanza;
-  for (const r of [...rocche, ...villaggi]) {
+  // In sella le porte non si aprono (negli interni non si entra a cavallo: si smonta); la persona vicina sì
+  for (const r of Knight.inSella ? [] : [...rocche, ...villaggi]) {
     for (const e of r.edifici ?? []) {
       const p = e.porta;
       if (p.x === undefined) continue;
@@ -463,9 +464,11 @@ function cercaPortaVicina() {
     }
   }
   if (!_invitoPorta) _invitoPorta = avvisoHud('', 'messaggio');
-  _invitoPorta.hidden = !portaVicina && !personaVicina;
+  const monta = !Knight.inSella && cavallo && cavalloVicino();
+  _invitoPorta.hidden = !portaVicina && !personaVicina && !monta;
   if (personaVicina) _invitoPorta.textContent = `${PORTA.nomeTasto}: parla — ${personaVicina.nome}`;
   else if (portaVicina) _invitoPorta.textContent = `${PORTA.nomeTasto}: entra — ${portaVicina.nome}`;
+  else if (monta) _invitoPorta.textContent = `${PORTA.nomeTasto}: monta in sella`;
 }
 
 // Scavalcamento (Spazio, contestuale; niente salto libero): l'invito compare quando davanti, entro un metro, c'è
@@ -474,7 +477,8 @@ let scavalcaRichiesto = false, _invitoScavalco = null, _tScavalco = 0;
 function cercaScavalcoVicino(dt) {
   if ((_tScavalco += dt) < 0.2) return;
   _tScavalco = 0;
-  const p = knight && !cronista && !percorso && !inPausa && !knight.stato.scavalco ? knight.cercaScavalco() : null;
+  const p = knight && !cronista && !percorso && !inPausa && !knight.stato.scavalco && !Knight.inSella && !sella.passaggio
+    ? knight.cercaScavalco() : null;
   if (!_invitoScavalco) { _invitoScavalco = avvisoHud('', 'messaggio'); _invitoScavalco.style.top = '80px'; }
   _invitoScavalco.hidden = !p || portaVicina || personaVicina;
   if (p) _invitoScavalco.textContent = `Spazio: ${p.tipo === 'sali' ? 'sali' : 'scavalca'}`;
@@ -1125,8 +1129,10 @@ function contaPercorso() {
   const salita = Math.max(0, k.y - _prec.y);
   _prec.x = k.x; _prec.y = k.y; _prec.z = k.z;
   if (d < 1e-6) return;
-  const andatura = k.velocita < 0 ? 'camminata' : k.andatura;   // all'indietro si va al passo
+  // In sella: Forza della camminata (×0,7 con isMounted), la fatica dell'andatura la paga il cavallo (vigore)
+  const andatura = k.velocita < 0 || Knight.inSella ? 'camminata' : k.andatura;   // all'indietro si va al passo
   Knight.consumaForzaMetri(d, salita, andatura);
+  if (Knight.inSella && cavallo) Knight.consumaVigoreMetri(d, cavallo.stato.andatura);
 }
 
 // ─── Scene: Tavullia o un blocco del mondo generato ────────────────────
@@ -1474,8 +1480,14 @@ function posizionaCavaliere(x, z, direzione) {
     cavallo = createCavallo(suolo, ostacoli);
     scene.add(cavallo.object);
   }
+  if (!cavallo) Knight.inSella = false;
+  if (cavallo && !inStoria() && !Knight.cavallo) Knight.cavallo = Items.makeMount('ronzino');   // Libera di prima
+  sella.passaggio = null;
   if (cavallo) {
-    cavallo.posizionaAccanto(knight.stato);
+    if (Knight.inSella) {                  // in sella si arriva in sella: il cavallo dove sta il cavaliere
+      cavallo.posiziona(knight.stato.x, knight.stato.z, knight.stato.direzione);
+      knight.aggiornaSella(0, cavallo.sella());
+    } else cavallo.posizionaAccanto(knight.stato);
     if (!ostacoli.includes(cavallo)) ostacoli.push(cavallo);
   }
   if (cam) {
@@ -1701,7 +1713,7 @@ async function init() {
     get cambiBlocco() { return { quanti: cambiBlocco, ms: msCambioBlocco, totale: msTotaleBlocco, inCorso: !!preparazione, ultimo: ultimoCambio }; },
   };
 
-  avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no · Spazio: scavalca · F: fischia il cavallo'
+  avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no · Spazio: scavalca · E: monta/smonta · F: fischia il cavallo'
     + ` · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: ${inStoria() ? 'Carta' : 'Carta (clic: vai lì) · T: avanza · K: prova di combattimento'}`
     + ' · N: minimappa (icona, piccola, grande) · +/−: zoom minimappa · J: scrittoio e avvisi · I: diario · U: musica'
     + ` · F2: qualità · F3: info · F8: menu · modalità ${inStoria() ? 'Storia' : 'Libera'}`,
@@ -1931,8 +1943,86 @@ const FISCHIO = {
 };
 function fischia() {
   if (!cavallo) { messaggio('Non hai un cavallo.', 2500); return; }
-  if (cronista || inPausa || percorso) return;
+  if (cronista || inPausa || percorso || Knight.inSella || sella.passaggio) return;
   messaggio(FISCHIO[cavallo.fischia(knight.stato, inVista)], 3000);
+}
+// In sella (milestone Cavallo, passo 3): E monta (entro ~3 m dal cavallo) e smonta (quasi fermi, con un punto libero
+// accanto); ~0,6 s di passaggio dalla staffa alla sella. Camera più alta e più lontana, con una transizione morbida.
+// Andature: Ctrl passo, normale trotto, Shift galoppo; il galoppo consuma il vigore del cavallo (Knight.consumaVigoreMetri).
+const SELLA = { distanza: 3, durata: 0.6, perno: 2.6, lontano: 6.5 / 4.2 };
+const sella = { passaggio: null, scalaCam: 1, base: null, tAvviso: 0 };   // passaggio: { t, verso: 1 monta | -1 smonta, terra }
+const SELLA_FERMO = { avanti: 0, gira: 0, giroMouse: 0, corsa: false, camminata: false };
+function cavalloVicino() {
+  const k = knight.stato, c = cavallo.stato;
+  return Math.hypot(k.x - c.x, k.z - c.z) < SELLA.distanza;
+}
+function montaOSmonta() {
+  if (Knight.inSella) smonta();
+  else {
+    sella.passaggio = { t: 0, verso: 1, terra: { x: knight.stato.x, z: knight.stato.z } };
+    Object.assign(cavallo.stato, { velocita: 0, modo: 'segue', richiamato: false });
+    Knight.inSella = true;
+  }
+}
+function smonta() {
+  if (Math.abs(cavallo.stato.velocita) > 0.6) { messaggio('Fermati per smontare.', 2500); return; }
+  const terra = postoPerSmontare();
+  if (!terra) { messaggio('Qui non c\'è posto per smontare: spostati un poco.', 3000); return; }
+  sella.passaggio = { t: 1, verso: -1, terra };
+}
+/** Punto libero accanto al cavallo per mettere piede a terra (a sinistra, a destra, un poco indietro…), o null. */
+function postoPerSmontare() {
+  const c = cavallo.stato, sd = Math.sin(c.direzione), cd = Math.cos(c.direzione);
+  for (const [lx, lz] of [[1.05, 0], [-1.05, 0], [1.05, -0.6], [-1.05, -0.6], [1.5, 0], [-1.5, 0], [0, -1.9]]) {
+    const x = c.x + lx * cd + lz * sd, z = c.z - lx * sd + lz * cd, y = suolo.getHeight(x, z);
+    if (Math.max(Math.abs(x), Math.abs(z)) > suolo.half - 3 || !suolo.percorribile(x, z) || suolo.getSlope(x, z) > 35) continue;
+    if (Math.abs(y - suolo.getHeight(c.x, c.z)) > 0.8) continue;
+    if (ostacoli.some((o) => { const q = o.spingiFuori(x, z, 0.4, y, 0.4); return q && Math.hypot(q.x - x, q.z - z) > 1e-3; })) continue;
+    return { x, z };
+  }
+  return null;
+}
+/** Un fotogramma in sella (o nel passaggio): il cavallo guidato porta il cavaliere. */
+function guidaInSella(dt) {
+  const P = sella.passaggio;
+  const input = leggiInput();
+  if (P) {                                   // durante il passaggio i comandi aspettano
+    P.t = THREE.MathUtils.clamp(P.t + P.verso * dt / SELLA.durata, 0, 1);
+    cavallo.update(dt, null, SELLA_FERMO);
+    knight.aggiornaSella(dt, cavallo.sella(), P.t, P.terra);
+    if (P.verso > 0 && P.t >= 1) sella.passaggio = null;
+    if (P.verso < 0 && P.t <= 0) {
+      sella.passaggio = null;
+      Knight.inSella = false;
+      knight.update(0, SELLA_FERMO);
+      _prec.x = knight.stato.x; _prec.y = knight.stato.y; _prec.z = knight.stato.z;
+    }
+    return;
+  }
+  // In sella a Forza 0 si va ancora al trotto (la fatica la fa il cavallo), ma niente galoppo
+  input.camminata = camminata;
+  input.corsa = premuto('corsa');
+  input.senzaGaloppo = Knight.isHorseTired() || sfinito();
+  if (input.corsa && input.senzaGaloppo && input.avanti > 0 && performance.now() > sella.tAvviso) {
+    messaggio(Knight.isHorseTired() ? 'Il cavallo è sfiancato: niente galoppo finché non riposa.' : 'Sei sfinito: niente galoppo.', 3000);
+    sella.tAvviso = performance.now() + 8000;
+  }
+  cavallo.update(dt, null, input);
+  knight.aggiornaSella(dt, cavallo.sella());
+}
+/** Camera: perno più alto e distanza più lunga in sella; la rotella resta libera (si scala la sua distanza). */
+function aggiornaCameraSella(dt) {
+  if (!cam) return;
+  if (!sella.base) sella.base = { perno: cam.cfg.altezzaPerno, max: cam.cfg.distanzaMax };
+  const su = Knight.inSella && !(sella.passaggio && sella.passaggio.verso < 0);
+  const obiettivo = su ? SELLA.lontano : 1;
+  if (Math.abs(obiettivo - sella.scalaCam) < 1e-4) return;
+  const nuova = sella.scalaCam + (obiettivo - sella.scalaCam) * (1 - Math.exp(-3.5 * dt));
+  const w = (nuova - 1) / (SELLA.lontano - 1);
+  cam.cfg.distanzaMax = sella.base.max * nuova;
+  cam.cfg.distanza = Math.min(cam.cfg.distanza * nuova / sella.scalaCam, cam.cfg.distanzaMax);
+  cam.cfg.altezzaPerno = sella.base.perno + (SELLA.perno - sella.base.perno) * w;
+  sella.scalaCam = Math.abs(obiettivo - nuova) < 1e-3 ? obiettivo : nuova;
 }
 let _avvisoCavallo = null;
 function avvisoCavallo() {
@@ -2184,9 +2274,15 @@ function avviaPercorso() {
   if (!knight || percorso) return;
   qualita.azzeraAdattiva();               // misure confrontabili: risoluzione piena del preset, ferma durante il giro
   if (modoCamera === 'libera') cambiaModoCamera();
+  const vuoleSella = PARAMETRI.has('sella') && cavallo;
+  if (vuoleSella && !Knight.inSella) {       // &sella: in sella subito, sul posto del cavallo
+    Knight.inSella = true;
+    sella.passaggio = null;
+    knight.aggiornaSella(0, cavallo.sella());
+  }
   const k = knight.stato;
   percorso = creaPercorso({ x: k.x, y: k.y, z: k.z, direzione: k.direzione },
-    { maxFotogramma: PARAMETRI.has('lento') ? Infinity : undefined });
+    { maxFotogramma: PARAMETRI.has('lento') ? Infinity : undefined, sella: Knight.inSella });
   percorsoNormale = null;
   profilatore.azzera();
   fpsEl.hidden = false;
@@ -2211,6 +2307,7 @@ function fineDelPercorso() {
       + ` · ${buf.x}×${buf.y} pixel`,
     `qualità: ${qualita.nome} · risoluzione ×${fmt(qualita.scala, 2)}`,
     `scena: ${scenaAttuale?.tipo === 'mondo' ? `seme ${carta?.seme}, centro ${scenaAttuale.cx}, ${scenaAttuale.cz}` : scenaAttuale?.tipo}`
+      + ` · cavallo: ${!cavallo ? 'nessuno' : Knight.inSella ? 'in sella' : 'a piedi'}`
       + ` · vegetazione ${vegetazioneVisibile ? 'accesa' : 'spenta'}`,
     st ? `FPS medio ${fmt(st.fps, 1)} (${fmt(st.msMedio, 1)} ms) · 1% peggiori ${fmt(st.fps1, 1)} FPS`
       + ` · fotogramma peggiore ${fmt(st.msPeggiore, 1)} ms · ${st.fotogrammi} fotogrammi` : 'FPS: n/d',
@@ -2354,8 +2451,12 @@ function aggiornaPannello(now) {
       + ` · velocità ×${fmt(k.fattorePendenza, 2)} · andatura: ${k.andatura}`;
     if (cavallo) {
       const h = cavallo.stato;
-      testo += `\ncavallo: a piedi · ${h.modo === 'aspetta' ? 'aspetta' : 'segue'} a ${fmt(h.distanza, 1)} m`
-        + ` · ${h.andatura} ${fmt(h.velEffettiva, 1)} m/s${h.bruca > 0.5 ? ' · bruca' : ''}`;
+      const vig = Knight.cavallo ? ` · vigore ${fmt(Knight.cavallo.vigore, 1)}/${Knight.cavallo.vigoreMax}` : '';
+      testo += Knight.inSella
+        ? `\ncavallo: in sella · ${h.andatura} ${fmt(h.velEffettiva, 1)} m/s${vig}`
+          + (h.limitePendenza ? ` · pendenza: ${h.limitePendenza === 'rifiuta' ? 'non va' : 'al più ' + h.limitePendenza}` : '')
+        : `\ncavallo: a piedi · ${h.modo === 'aspetta' ? 'aspetta' : 'segue'} a ${fmt(h.distanza, 1)} m`
+          + ` · ${h.andatura} ${fmt(h.velEffettiva, 1)} m/s${h.bruca > 0.5 ? ' · bruca' : ''}${vig}`;
     }
     const ora = Calendar.oraDelGiorno();
     testo += `\ntempo: Passi ${Calendar.passiTotali} + ${fmt(Calendar.frazione, 3)}`
@@ -2463,7 +2564,8 @@ function frame(now) {
     if (percorso) {
       // Percorso di prova: tempo di gioco fermo, la camera segue il giro fisso.
     } else if (!inPausa && !cronista) {
-      knight.update(dt, leggiInput());
+      if (cavallo && (Knight.inSella || sella.passaggio)) guidaInSella(dt);
+      else knight.update(dt, leggiInput());
       if (SEGUI_BLOCCO && scenaAttuale?.tipo === 'mondo' && vicinoAlBordo(knight.stato.x, knight.stato.z, terrain.size / 2)) cambiaBlocco();
       avanzaBlocco();
       contaPercorso();
@@ -2471,11 +2573,12 @@ function frame(now) {
       // Da fermi si recupera; al passo (o all'indietro) un terzo del riposo, mentre la salita costa (contaPercorso).
       const k = knight.stato;
       if (k.velEffettiva < FERMO) Knight.riposaPassi(passi);
+      if (cavallo) Knight.riposaCavallo(passi, cavallo.stato.velEffettiva < FERMO, cavallo.stato.andatura);
       else if (!Knight.isMounted() && (k.velocita < 0 || k.andatura === 'camminata')) Knight.riposaPassi(passi * VIAGGIO.RECUPERO_CAMMINATA);
     } else {
       cam.prendiGiroMouse();               // in pausa il mouse non gira il cavaliere
     }
-    if (cavallo && !inPausa && !cronista) cavallo.update(dt, percorso ? null : knight.stato);
+    if (cavallo && !inPausa && !cronista && !Knight.inSella && !sella.passaggio) cavallo.update(dt, percorso ? null : knight.stato);
     avvisoCavallo();
     if (abitanti && !inPausa && !cronista && !percorso) abitanti.update(dt, knight.stato, 1 - _luceGiorno);
     cercaPortaVicina();
@@ -2519,6 +2622,7 @@ function frame(now) {
       if (r.mira) aggiornaNebbia(r.mira);
       if (percorso.finito) fineDelPercorso();
     } else if (modoCamera === 'segui') {
+      aggiornaCameraSella(dt);
       cam.update(dt);
       aggiornaNebbia(cam.mira);
     } else {

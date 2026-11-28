@@ -93,6 +93,12 @@ const VIAGGIO = {
   RECUPERO_CAMMINATA: 1 / 3,      // camminando si recupera un terzo del riposo da fermi (~+3 Forza ogni 18 min reali)
   PASSI_SOSTA:            1,      // riposo di giorno con R: ~3 ore
   FORZA_RIPOSO_PER_PASSO: 10,     // Forza recuperata da fermi ogni Passo (3 ore) di gioco: ~3,3 l'ora
+  // Vigore del cavallo nelle Scene (milestone Cavallo, passo 3; deciso con l'utente il 28/11/2026: il galoppo stanca il
+  // cavallo). Solo il galoppo lo consuma: il ronzino (vigore 20) galoppa ~5 km, ~4,6 minuti reali a 18 m/s. Da fermo
+  // torna pieno in un Passo (18 minuti reali), al passo in due; il trotto non stanca e non ristora.
+  METRI_GALOPPO_PER_VIGORE: 250,
+  VIGORE_RIPOSO_PER_PASSO:  20,
+  RECUPERO_VIGORE_PASSO:    0.5,  // al passo, frazione del recupero da fermo
 };
 
 // Tempo nelle Scene 3D: scorre col tempo reale, compresso, anche da fermi (si ferma con la pausa).

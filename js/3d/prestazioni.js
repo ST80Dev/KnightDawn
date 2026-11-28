@@ -143,7 +143,10 @@ const ATTESA_INIZIALE = 1.5;               // s di assestamento (compilazione, p
  * @param {{maxFotogramma?: number}} opz  s oltre cui un fotogramma invalida la misura (Infinity: mai, per la prova in
  *   headless con ?lento, dove ogni fotogramma dura secondi; lì contano solo errori e conteggi, non i tempi)
  */
-export function creaPercorso(centro, { maxFotogramma = MAX_FOTOGRAMMA } = {}) {
+export function creaPercorso(centro, { maxFotogramma = MAX_FOTOGRAMMA, sella = false } = {}) {
+  // &sella (milestone Cavallo, passo 3): il cavaliere in sella, la vista di gioco con perno e distanza della camera in
+  // sella (2,6 m invece di 1,6; ×6,5/4,2). Senza &sella il percorso resta identico.
+  const fasi = sella ? [{ ...FASI[0], distanza: FASI[0].distanza * 6.5 / 4.2, altezza: FASI[0].altezza + 1.0 }, FASI[1]] : FASI;
   const tempi = [];                        // durata dei fotogrammi (ms) nel giro normale
   const cpu = [];                          // ms di processore per fotogramma (logica + invio) nel giro normale
   const parti = {};                        // nome → ms per fotogramma, nel giro normale
@@ -183,8 +186,8 @@ export function creaPercorso(centro, { maxFotogramma = MAX_FOTOGRAMMA } = {}) {
       const azzera = (prima < 0 && t >= 0) || (prima < DURATA_GIRO && t >= DURATA_GIRO);
       if (t >= 0 && t < DURATA_GIRO) tempi.push(dt * 1000);
       if (t >= 2 * DURATA_GIRO) { finito = true; osservatore?.disconnect(); return { mira: null, azzera: false }; }
-      let tt = Math.max(0, t) % DURATA_GIRO, f = FASI[0];
-      for (const fase of FASI) { f = fase; if (tt < fase.durata) break; tt -= fase.durata; }
+      let tt = Math.max(0, t) % DURATA_GIRO, f = fasi[0];
+      for (const fase of fasi) { f = fase; if (tt < fase.durata) break; tt -= fase.durata; }
       const ang = centro.direzione + (tt / f.durata) * Math.PI * 2;
       const sx = Math.sin(ang), sz = Math.cos(ang);
       const cx = centro.x - sx * f.distanza, cz = centro.z - sz * f.distanza;

@@ -542,6 +542,7 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
   const ombra = buildOmbra();
   const object = new THREE.Group();
   object.add(mod.root, ombra);
+  mod.root.rotation.order = 'YXZ';           // in sella il beccheggio del cavallo va dopo la direzione
 
   const stato = {
     x: start.x, z: start.z, y: 0,
@@ -923,6 +924,70 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     ombra.position.set(stato.x, stato.y, stato.z).addScaledVector(_n, 0.04);
   }
 
+  // ─── In sella (milestone Cavallo, passo 3) ───
+  // Il cavaliere non si muove da sé: il cavallo lo porta. Posa seduta con gli stessi snodi (gambe divaricate e
+  // piegate, piedi nelle staffe, mani alle redini), mantello accorciato e alzato sulla groppa, ombra spenta.
+  /** Angoli della posa in sella (peso 1) mescolati con quelli da fermo (peso 0). */
+  function posaSella(peso, s, dt) {
+    const e = peso * peso * (3 - 2 * peso);
+    mod.corpo.position.y = 0;
+    for (const g of gambe) {
+      const esterno = Math.sign(g.lato);
+      g.mod.anca.rotation.x = -1.0 * e;
+      g.mod.anca.rotation.z = 0.6 * esterno * e;
+      g.mod.ginocchio.rotation.x = 1.35 * e;
+      g.mod.caviglia.rotation.x = -0.45 * e;
+      g.mod.caviglia.rotation.z = -0.25 * esterno * e;
+    }
+    const corsa = s.galoppo * s.moto, t = stato.tempo;
+    const molla = Math.sin(s.fase * Math.PI * 4) * s.moto;            // il busto ammortizza il sobbalzo
+    mod.busto.rotation.x = 0.03 + e * (0.05 + 0.22 * corsa + 0.02 * molla);
+    mod.busto.rotation.y = 0;
+    mod.busto.position.y = 0.98;
+    mod.testa.rotation.x = -e * 0.12 * corsa;
+    mod.braccioD.spalla.rotation.x = -0.5 * e;                        // mani avanti, alle redini
+    mod.braccioD.spalla.rotation.z = -0.07 + 0.12 * e;
+    mod.braccioD.gomito.rotation.x = -(0.15 + 0.95 * e);
+    mod.braccioS.spalla.rotation.x = -0.3 * e;
+    mod.braccioS.spalla.rotation.z = 0.13;
+    mod.braccioS.gomito.rotation.x = -(0.75 + 0.35 * e);
+    mod.mantello.rotation.x = 0.05 + e * (0.75 + 0.3 * corsa + 0.04 * Math.sin(t * 7) * s.moto);
+    mod.mantello.scale.y = 1 - 0.3 * e;
+    ombra.visible = peso < 0.5;
+  }
+
+  /**
+   * Un fotogramma in sella. s = cavallo.sella(): { x, y, z (radice del cavaliere seduto), direzione, beccheggio,
+   * cx, cz (centro del cavallo a terra), velocita, velEffettiva, andatura, fase, galoppo, moto }.
+   * peso: 1 seduto, 0 a terra in `terra` { x, z } (montando o smontando, ~0,6 s di passaggio dalla staffa alla sella).
+   */
+  function aggiornaSella(dt, s, peso = 1, terra = null) {
+    stato.tempo += dt;
+    const e = peso * peso * (3 - 2 * peso);
+    const tx = terra ? terra.x : s.cx, tz = terra ? terra.z : s.cz;
+    // Stato (camera, fatica, blocco, F3): il centro del cavallo, o la via di mezzo durante il passaggio
+    stato.x = lerp(tx, s.cx, e);
+    stato.z = lerp(tz, s.cz, e);
+    stato.y = terrain.getHeight(stato.x, stato.z);
+    stato.yVis = stato.y;
+    if (peso >= 1) stato.direzione = s.direzione;
+    else stato.direzione += angoloTra(stato.direzione, s.direzione) * avvicina(10, dt);
+    stato.velocita = s.velocita * e;
+    stato.velEffettiva = s.velEffettiva * e;
+    stato.velAngolare = 0;
+    stato.andatura = s.andatura;
+    stato.bloccato = false;
+    stato.scavalco = null;
+    // Radice: da terra alla sella con un piccolo arco
+    const yTerra = terrain.getHeight(tx, tz);
+    mod.root.position.set(lerp(tx, s.x, e), lerp(yTerra, s.y, e) + 0.15 * Math.sin(Math.PI * peso), lerp(tz, s.z, e));
+    mod.root.rotation.y = stato.direzione;
+    mod.root.rotation.x = -s.beccheggio * e;
+    posaSella(peso, s, dt);
+    if (peso <= 0) { mod.root.rotation.x = 0; aggiornaOmbra(); }
+  }
+  const angoloTra = (a, b) => Math.atan2(Math.sin(b - a), Math.cos(b - a));
+
   update(0, { avanti: 0, gira: 0, giroMouse: 0, corsa: false });
 
   return {
@@ -930,6 +995,7 @@ export function createKnight(terrain, start = { x: 0, z: 0, direzione: Math.PI }
     cfg,
     stato,
     update,
+    aggiornaSella,
     /** Scavalcamento possibile davanti (per l'invito «Spazio» nel HUD), o null. */
     cercaScavalco,
     /** Punto da inquadrare (petto del cavaliere), in coordinate del mondo. */

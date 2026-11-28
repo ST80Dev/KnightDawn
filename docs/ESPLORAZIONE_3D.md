@@ -2968,6 +2968,37 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
 3. **In sella.** E per montare e smontare, posa del cavaliere seduto, camera, andature con Ctrl e Shift, pendenze,
    collisioni, Forza ×0,7, `Knight.inSella` e `isMounted` corretto. *Prova:* galoppo in pianura e nel bosco (scatti?),
    discesa ripida, cortile della rocca, smontare in un punto stretto; percorso di prova con il cavaliere in sella.
+   **Stato: fatto, da provare dall'utente.** `cavallo3d.js`: `guida` (andature **passo 1,8 m/s con Ctrl, trotto 8,
+   galoppo 18 con Shift**, indietro 1; rotazione con accelerazione come il cavaliere, 1,6 / 1,3 / 0,8 rad/s: al
+   galoppo un giro di ~22 m di raggio; il mouse gira subito), pendenze con `pendenzaCavallo` nel verso di marcia
+   (in discesa l'andatura scende da sola; F3 «pendenza: al più trotto / passo / non va»), stessi due cerchi contro gli
+   ostacoli (contro un muro il cavallo si ferma invece di scivolarci lungo a 18 m/s; girando, se la groppa tocca, il
+   corpo viene spinto fuori di poco), `sella()` = radice del cavaliere seduto nel sistema del corpo del cavallo (segue
+   sobbalzo e beccheggio). `knight3d.js`: `aggiornaSella` con gli stessi snodi (anche divaricate e piegate, piedi
+   verso le staffe, mani avanti alle redini, busto in avanti al galoppo, mantello accorciato del 30 % e alzato sulla
+   groppa, ombra spenta), passaggio di 0,6 s dalla staffa alla sella con un piccolo arco; nessun oggetto, materiale o
+   triangolo in più. `main.js`: E monta entro 3 m («E: monta in sella»), E smonta se il cavallo è quasi fermo e accanto
+   c'è un punto libero (sinistra, destra, un poco indietro: percorribile, ≤ 35°, senza ostacoli, dislivello ≤ 0,8 m),
+   altrimenti avviso; in sella le porte non si aprono, la persona vicina vince su «smonta»; F e Spazio spenti. Camera:
+   perno 1,6 → 2,6 m e distanza ×6,5/4,2 con transizione morbida, la rotella resta libera. Forza in sella: quella
+   della camminata ×0,7 (`isMounted` = in sella e con vigore), in piano zero, la salita costa. **Vigore** (rivisto con
+   l'utente il 28/11): solo il galoppo lo consuma, 1 ogni 250 m (il ronzino, 20, galoppa ~5 km); da fermo torna pieno
+   in un Passo, al passo in due; a vigore 0 niente galoppo e niente sconto. A Forza 0 in sella si trotta ancora, ma non
+   si galoppa. In Libera il ronzino è ora in `Knight.cavallo` (anche nei salvataggi di prima). Cambio di Scena in sella:
+   il cavallo sotto il cavaliere (il salvataggio della posizione è il passo 4). `&sella` nel percorso di prova (accordo
+   con M1): sale in sella e usa perno e distanza della camera in sella; il riquadro dice «cavallo: a piedi/in sella».
+   Misure in headless: cavaliere 87 chiamate e 15.084 triangoli a piedi, **86 e 15.082 in sella** (l'ombra spenta),
+   cavallo 15 e 5.536 come prima. Provato in Node (velocità, curve, discesa a 25°, salita a 32° rifiutata, Forza e
+   vigore) e in headless (monta con E, seduto sulla sella, camera 2,6 / 6,5 m, galoppo, cambio di blocco, smonta).
+   **Cambio di blocco al galoppo.** Il blocco si rifà quando il cavaliere è a 650 m dal centro: al galoppo ogni ~36 s
+   (non ogni 2 minuti: dal nuovo centro mancano di nuovo 650 m), a piedi di corsa ogni ~2,4 minuti. La preparazione
+   ha 350 m di margine prima del bordo, cioè ~19 s al galoppo. Misura in headless (seme 570549, in sella, CPU
+   lenta, ~1,3 FPS): 1.250 pezzi in 364 fotogrammi, **pezzo più lungo 188 ms** («dopo acque», atomico; poi
+   cottura dell'orizzonte 44–72, acque 56), scambio 16 ms, primo fotogramma dopo lo scambio 856 ms contro una mediana
+   di 760 (in headless i fotogrammi non dicono nulla della scheda). [Probabile] sul PC dell'utente quella preparazione
+   sta sotto i 10 s, quindi a 18 m/s si chiude ben prima del bordo; lo scatto è quello di sempre, ma al galoppo capita
+   ~4 volte più spesso. [Ipotesi] il pezzo «dopo acque» sul PC vale 50–60 ms. Da misurare su Pages con F3 (ms del
+   cambio); se si sente, la strada più semplice è spezzare quel pezzo (PR separata), non limitare il galoppo.
 4. **Partita e viaggio.** Ronzino alla partita nuova, salvataggio (posizione, in sella), cambio di Scena con il cavallo
    accanto, Carta con `METRI_PER_PASSO_CAVALLO` se si parte in sella; note in `EARLY_GAME.md` e `GDD.md`. *Prova:*
    ricaricare la pagina in sella e a piedi; viaggio sulla Carta e ritorno in Scena.
