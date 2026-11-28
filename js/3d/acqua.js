@@ -18,7 +18,14 @@ const SEZIONE_FIUME = [-1, 1];          // vertici attraverso il nastro (× semi
 // Tra i vertici del nastro il terreno (triangoli da 7,8 m) poteva ancora spuntare a bande che attraversano il fiume
 // (segnalato dall'utente): sollevaSuTerreno (come per le strade) controlla dentro ogni quadrilatero e alza i vertici.
 const FIUME_SCENA = { sezione: [-1, -0.6, -0.3, 0, 0.3, 0.6, 1], alfa: [0, 1, 1, 1, 1, 1, 0], largo: 1.4, passo: 2.5,
-  sopraTerreno: 0.1, margine: 0.08 };
+  sopraTerreno: 0.1, margine: 0.08,
+  // Torrenti [segnalato dalle sessioni M8 e cardine, chiesto dall'utente: l'acqua dei torrenti quasi non si vede].
+  // Misurato su 5 torrenti del seme 570549: le sponde la coprono poco (da 20 m se ne vede il 50–100 %); il guaio è il
+  // colore, un azzurro-grigio scuro all'86 % su terra bagnata e ghiaia scure. Nei corsi stretti (semilarghezza fino a
+  // `largo[0]` m, sfumando fino a `largo[1]`) il nastro schiarisce fino a `colore`, più vicino al cielo, e al centro ha
+  // strisce di corrente più chiare (`corrente`, fattore in luce lineare, a chiazze di ~15 m). Solo colori per vertice:
+  // nessun costo per fotogramma, larghezza e bordi sfumati invariati (niente «canale»).
+  torrente: { largo: [4, 8], colore: '#7aa3b3', corrente: 1.6, ogni: 9 } };
 
 /**
  * Nastro d'acqua lungo un pezzo di tracciato [x, z, pelo, semilarghezza, …] (coordinate locali): due vertici
@@ -26,7 +33,7 @@ const FIUME_SCENA = { sezione: [-1, -0.6, -0.3, 0, 0.3, 0.6, 1], alfa: [0, 1, 1,
  * dividono in parti non più lunghe di passo; `quota(x, z, pelo)` dà l'altezza di ciascun vertice (senza: appena
  * sopra il pelo dell'acqua).
  */
-export function creaNastro(t, mat, passo = Infinity, quota = null, sezione = SEZIONE_FIUME, { largo = 1.15, alfa = null, terreno = null, margine = 0.05 } = {}) {
+export function creaNastro(t, mat, passo = Infinity, quota = null, sezione = SEZIONE_FIUME, { largo = 1.15, alfa = null, terreno = null, margine = 0.05, torrente = null, origine = null } = {}) {
   const pt = [];                                          // punti suddivisi: x, z, pelo, w
   const m = t.length / 4;
   for (let i = 0; i < m; i++) {
@@ -67,6 +74,24 @@ export function creaNastro(t, mat, passo = Infinity, quota = null, sezione = SEZ
   if (alfa) {                                             // colore bianco (vale quello del materiale), alfa per sezione
     const col = new Float32Array(q * k * 4).fill(1);
     for (let i = 0; i < q; i++) for (let j = 0; j < k; j++) col[(i * k + j) * 4 + 3] = alfa[j];
+    if (torrente) {                                       // torrenti più chiari, con le strisce della corrente al centro
+      const T = torrente, ox = origine?.x ?? 0, oz = origine?.z ?? 0;
+      // Fattori per canale dal colore del materiale a quello del torrente (in luce lineare, come i colori per vertice).
+      const da = mat.color, a2 = new THREE.Color(T.colore), chiaro = [a2.r / da.r, a2.g / da.g, a2.b / da.b];
+      for (let i = 0; i < q; i++) {
+        const w = pt[i * 4 + 3], f = 1 - Math.min(1, Math.max(0, (w - T.largo[0]) / (T.largo[1] - T.largo[0])));
+        if (f <= 0) continue;
+        // Strisce: un rumore lungo il corso (coordinate del mondo, uguale fra un blocco e l'altro), solo al centro.
+        const x = pt[i * 4] + ox, z = pt[i * 4 + 1] + oz;
+        const r = Math.sin(x * 0.37 / T.ogni * 9 + z * 0.29 / T.ogni * 9) * 0.5 + Math.sin((x - z) * 0.11 / T.ogni * 9) * 0.5;
+        const striscia = Math.max(0, r - 0.35) / 0.65;
+        for (let j = 0; j < k; j++) {
+          const centro = Math.max(0, 1 - Math.abs(sezione[j]) / 0.45);
+          const c = 1 + (T.corrente - 1) * striscia * centro;
+          for (let a = 0; a < 3; a++) col[(i * k + j) * 4 + a] = (1 + (chiaro[a] - 1) * f) * (1 + (c - 1) * f);
+        }
+      }
+    }
     geo.setAttribute('color', new THREE.BufferAttribute(col, 4));
   }
   geo.setIndex(indici);
@@ -97,7 +122,7 @@ export function creaAcqueScena(acqua, meta, colore, centro, coloreStrada = null)
   const matFiume = alt ? mat.clone() : mat;
   if (alt) Object.assign(matFiume, { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8, vertexColors: true });
   const quota = alt ? (x, z, pelo) => Math.max(pelo + SOPRA_PELO, alt(x, z) + F.sopraTerreno) : null;
-  for (const t of acqua.tracciati) gruppo.add(alt ? creaNastro(t, matFiume, F.passo, quota, F.sezione, { ...F, terreno: alt }) : creaNastro(t, mat));
+  for (const t of acqua.tracciati) gruppo.add(alt ? creaNastro(t, matFiume, F.passo, quota, F.sezione, { ...F, terreno: alt, origine: centro }) : creaNastro(t, mat));
 
   // Laghi in quota.
   const { cols, rows, cellSize } = meta, half = (cols - 1) * cellSize / 2;
@@ -414,6 +439,11 @@ export function creaNastroStrada(t, mat, altezza, quote = null, coloreClima = nu
 // anche suolo (quotaSuolo, l'impalcato) e ostacolo (spingiFuori, i parapetti), come cortile e mura del castello.
 const PONTE = {
   raccordo: 0.12,             // pendenza massima delle rampe di raccordo alle testate
+  // Spalle alle testate [richiesta dell'utente, misurato su 8 ponti del seme 570549: scalini di 0,13–0,50 m a 1,3 m
+  // dall'asse]. Vicino al fiume il generatore non spiana la strada, che arriva inclinata di traverso (fino a ~23°),
+  // mentre l'impalcato è piano: in mezzo combaciano, ai lati resta lo scalino. La spalla parte dalla quota del ponte e
+  // arriva, punto per punto, a quella del suolo (strada o terreno): lunga quanto serve per restare entro `pendenza`.
+  spalla: { pendenza: 0.15, minima: 1.5, massima: 6, file: 5, passi: 6, gonna: 0.8, terra: '#857055' },
   pietra: { colore: '#9a9182', scuro: '#7d7568', parapetto: 0.85, spessoreParapetto: 0.45, margine: 0.6,
     arco: 14, pila: 1.8, spalla: 1.2, chiave: 0.8, schiena: 0.035, schienaMax: 1.2 },
   legno: { colore: '#7a5a3a', scuro: '#5a4128', parapetto: 1.0, margine: 0.35, cavalletto: 6.5, montante: 2 },
@@ -480,6 +510,54 @@ export function creaPonti(attraversamenti, altezza, quotaStrada = null) {
     const base = letto - 1.5;
     const c1 = new THREE.Color(P.colore), c2 = new THREE.Color(P.scuro);
     const parti = [];
+    // Spalle (PONTE.spalla): in coordinate del ponte (u lungo l'asse, v a sinistra); `fuori` m oltre la testata.
+    const SP = PONTE.spalla, mondo = (u, v) => [at.x0 + ux * u - uz * v, at.z0 + uz * u + ux * v];
+    const suoloA = (u, v) => { const [x, z] = mondo(u, v); return suoloTestata(x, z); };
+    // Lunghezza: la più corta (da `minima`, a passi di mezzo metro) che resta entro `pendenza` su tutta la larghezza.
+    const lunghezzaSpalla = (u0, verso) => {
+      for (let S = SP.minima; ; S += 0.5) {
+        let d = 0;
+        for (let k = -2; k <= 2; k++) { const v = k / 2 * W / 2; d = Math.max(d, Math.abs(cima(u0) - suoloA(u0 + verso * S, v))); }
+        if (d / S <= SP.pendenza || S >= SP.massima) return S;
+      }
+    };
+    const spalle = [{ u0: 0, verso: -1 }, { u0: L, verso: 1 }].map((e) => ({ ...e, S: lunghezzaSpalla(e.u0, e.verso) }));
+    for (const e of spalle) e.capo = (v) => suoloA(e.u0 + e.verso * e.S, v);
+    // Quota della spalla a `fuori` m oltre la testata: dal ponte al suolo del suo capo esterno, con un raccordo dolce. Il
+    // suolo si legge solo al capo: in mezzo può avere scalini suoi (il nastro della strada che finisce prima del ponte,
+    // misurato 0,25 m), e copiarli li riportava sulla spalla.
+    const quotaSpalla = (e, fuori, v) => {
+      const t = dolce(fuori / e.S);
+      return cima(e.u0) * (1 - t) + e.capo(v) * t;
+    };
+    const colSpalla = pietra ? c2 : new THREE.Color(SP.terra);
+    for (const e of spalle) {
+      const pos = [], idx = [], nu = SP.passi, nv = SP.file;
+      for (let i = 0; i <= nu; i++) for (let j = 0; j <= nv; j++) {
+        const fuori = e.S * i / nu, v = (j / nv - 0.5) * W;
+        pos.push(e.u0 + e.verso * fuori, quotaSpalla(e, fuori, v) + 0.02, v);
+      }
+      const id = (i, j) => i * (nv + 1) + j;
+      for (let i = 0; i < nu; i++) for (let j = 0; j < nv; j++) {
+        const a = id(i, j), b = id(i + 1, j), c = id(i, j + 1), d = id(i + 1, j + 1);
+        // verso l'alto: (v+1) prima di (u+1) quando l'asse u va avanti, il contrario quando va indietro
+        if (e.verso > 0) idx.push(a, c, b, b, c, d); else idx.push(a, b, c, b, d, c);
+      }
+      // Gonna ai due fianchi: scende sotto il terreno, così la spalla non sembra una lastra sospesa.
+      const base = pos.length / 3;
+      for (const j of [0, nv]) for (let i = 0; i <= nu; i++) {
+        const k = id(i, j) * 3;
+        pos.push(pos[k], pos[k + 1], pos[k + 2], pos[k], pos[k + 1] - SP.gonna, pos[k + 2]);
+      }
+      for (let f = 0; f < 2; f++) for (let i = 0; i < nu; i++) {
+        const a = base + (f * (nu + 1) + i) * 2, b = a + 2;
+        idx.push(a, a + 1, b, b, a + 1, b + 1, a, b, a + 1, b, b + 1, a + 1);     // le due facce
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      g.setIndex(idx);
+      parti.push({ geo: g, colore: colSpalla });
+    }
     if (pietra) {
       // Fianco con gli archi (piano u–y), estruso per tutta la larghezza.
       const forma = new THREE.Shape();
@@ -560,7 +638,10 @@ export function creaPonti(attraversamenti, altezza, quotaStrada = null) {
       asse: { x0: at.x0, z0: at.z0, x1: at.x1, z1: at.z1 },   // testate (per le prove dalla console)
       quotaSuolo(x, z) {
         const [u, v] = locale(x, z);
-        return u >= 0 && u <= L && Math.abs(v) <= W / 2 ? cima(u) : null;
+        if (Math.abs(v) > W / 2) return null;
+        if (u >= 0 && u <= L) return cima(u);
+        const e = u < 0 ? spalle[0] : spalle[1], fuori = u < 0 ? -u : u - L;
+        return fuori <= e.S ? quotaSpalla(e, fuori, v) : null;
       },
       spingiFuori(x, z, r) {
         const [u, v] = locale(x, z);
