@@ -27,6 +27,7 @@ import { NOMI_BIOMI } from '../mondo/carta.js';
 import { createCartaVista, CLASSI_ROCCA } from './cartaVista.js';
 import { mostraMenuAvvio, creaCartaCronista, creaScrittoio, nomeCasuale, creaMeridiana, creaCombattimento, mostraMorte } from './interfaccia.js';
 import { creaAvvisi, SEZIONI, sezioneDi } from './avvisi.js';
+import { creaDiario } from './diario.js';
 import { creaMinimappa } from './minimappa.js';
 import { creaOrizzonteAPezzi } from './orizzonte.js';
 import { creaAcqueScena, creaPonti, suoloStrade } from './acqua.js';
@@ -191,43 +192,11 @@ async function cartaDelMondo(seme) {
   }
 }
 
-// ─── Pannello di stato: data e ora, Forza, Salute, Volontà, Onore ──────
-const pannelloStato = document.createElement('div');
-pannelloStato.className = 'stato';
-pannelloStato.hidden = true;
-const ATTRIBUTI = [['forza', 'Forza'], ['salute', 'Salute'], ['volonta', 'Volontà']];
-pannelloStato.innerHTML = '<div class="data"></div><div class="chi"></div>'
-  + ATTRIBUTI.map(([id, nome]) => `<div class="attr ${id}"><span class="nome">${nome}</span>`
-    + '<span class="barra"><i></i></span><span class="val"></span></div>').join('')
-  + '<div class="onore"></div>';
-hud.appendChild(pannelloStato);
-const elData = pannelloStato.querySelector('.data');
-const elOnore = pannelloStato.querySelector('.onore');
-const elChi = pannelloStato.querySelector('.chi');
-const elAttr = Object.fromEntries(ATTRIBUTI.map(([id]) => {
-  const riga = pannelloStato.querySelector('.attr.' + id);
-  return [id, { riga, barra: riga.querySelector('i'), val: riga.querySelector('.val') }];
-}));
 const _cacheHud = new Map();               // tocca il DOM solo quando un valore cambia
 function imposta(chiave, applica, valore) {
   if (_cacheHud.get(chiave) === valore) return;
   _cacheHud.set(chiave, valore);
   applica(valore);
-}
-
-function aggiornaStato() {
-  const data = Calendar.inVeglia ? Calendar.formatEsteso() : Calendar.formatCompatto();
-  imposta('data', (v) => { elData.textContent = v; }, `${data} · ${Calendar.oraCanonica()}`);
-  for (const [id] of ATTRIBUTI) {
-    const a = Knight[id], el = elAttr[id];
-    const pct = Math.max(0, Math.min(100, (a.cur / a.max) * 100));
-    imposta(id + '.w', (v) => { el.barra.style.width = v + '%'; }, pct.toFixed(1));
-    imposta(id + '.v', (v) => { el.val.textContent = v; }, String(Math.ceil(a.cur)));
-    imposta(id + '.b', (v) => { el.riga.classList.toggle('basso', v); }, pct < 20);
-  }
-  imposta('chi', (v) => { elChi.textContent = v; }, `${Knight.nome} · ${Knight.titolo} · ${Knight.oro} oro`);
-  imposta('onore', (v) => { elOnore.textContent = v; },
-    `Onore ${Knight.onore > 0 ? '+' : ''}${Knight.onore}`);
 }
 
 // ─── Terreno, cavaliere, camera ─────────────────────────────────────────
@@ -571,6 +540,7 @@ const _hh = (o) => `${Math.floor(o)}:${o % 1 >= 0.5 ? '30' : '00'}`;
 async function raccontaAzione({ titolo, frasi, prima, dopo }) {
   const durata = RACCONTO[preferenzaRacconto()] ?? RACCONTO.completo;
   const registro = registroDi(prima, dopo), passi = dopo.t - prima.t;
+  if (registro.length || passi >= 1 / 6 - 1e-6) annotaCronaca(`${titolo}${registro.length ? ': ' + registro.map((r) => r.testo).join(', ') : '.'}`);
   if (!durata || (passi < 1 / 6 - 1e-6 && !registro.length)) return false;
   const ore = passi >= 1 / 6 - 1e-6 ? { da: `${prima.canonica} · ${_hh(prima.ora)}`, a: `${dopo.canonica} · ${_hh(dopo.ora)}` } : null;
   await cartaCronista.racconta({ titolo, frasi, ore, registro, durata, chiudeDaSolo: durata < RACCONTO.completo,
@@ -617,7 +587,7 @@ function aggiornaCavallo3D() {
 function mostraMercato(tipo, indietro, righe = []) {
   const N = Items.NEGOZI[tipo] ?? Items.NEGOZI.loggia;
   const affare = (r) => {
-    if (r.ok) { Calendar.avanzaMinuti(MINUTI_AFFARE); aggiornaCavallo3D(); salvaOra(); }
+    if (r.ok) { Calendar.avanzaMinuti(MINUTI_AFFARE); aggiornaCavallo3D(); annotaCronaca(`${N.nome}: ${r.testo}`); salvaOra(); }
     mostraMercato(tipo, indietro, [r.testo]);
   };
   const compra = [], vendi = [];
@@ -663,31 +633,119 @@ function mostraMercato(tipo, indietro, righe = []) {
   });
 }
 
-/** Zaino (I): ciò che indossi e ciò che porti; i pasti si mangiano, le bende si usano. */
-function mostraZaino(righe = []) {
-  const oggi = giornoDiGioco();
-  const indossi = Items.SLOT_ORDER.filter((s) => Knight.equip[s]).map((s) => ({ nome: Knight.equip[s], info: s }));
-  if (Knight.cavallo) indossi.push({ nome: Knight.cavallo.nome, info: `cavallo · viaggio ${Knight.cavallo.vigoreMax}` });
-  const porti = Knight.zaino.map((nome, i) => {
-    const it = Items.catalog[nome] ?? {};
-    const azione = it.pasto ? 'Mangia' : it.salute || it.forza ? 'Usa' : null;
-    return { nome, info: it.pasto ? `pasto${it.forza ? `, Forza +${it.forza}` : ''}` : it.salute ? `Salute +${it.salute}` : '',
-      azione, disponibile: !(it.salute && !it.pasto && Knight.salute.cur >= Knight.salute.max), etichetta: 'Non sei ferito',
-      scegli: () => {
-        const r = Knight.usa(i, giornoDiGioco());
-        if (r.ok) { Calendar.avanzaMinuti(it.pasto ? 20 : 10); salvaOra(); }
-        mostraZaino([r.testo]);
-      } };
-  });
-  cartaCronista.mostra({
-    titolo: 'Zaino',
-    nota: `${Knight.oro} oro · ${Knight.ultimoPasto >= oggi ? 'oggi hai mangiato' : 'oggi non hai ancora mangiato'}`,
-    righe,
-    tabelle: [{ titolo: 'Addosso', vuota: 'Niente: solo i panni del garzone.', righe: indossi },
-      { titolo: `Nello zaino · ${Knight.zaino.length}/${Items.ZAINO_POSTI}`, vuota: 'Vuoto.', righe: porti }],
-    opzioni: [{ testo: 'Chiudi', scegli: () => cartaCronista.chiudi() }],
-  });
+// ─── Diario del cavaliere (js/3d/diario.js): compatto in alto a destra, libro al centro (I, o clic) ──────
+// Sostituisce il pannello di stato e lo zaino nella Carta del cronista. Le sezioni le prepara diarioSezione().
+const quandoOra = () => `${Calendar.inVeglia ? `G${Calendar.giornoVeglia}` : Calendar.formatCompatto()} · ${Calendar.oraCanonica()}`;
+/** Una riga nella cronaca del diario. */
+const annotaCronaca = (testo) => Knight.annota(testo, quandoOra());
+let _rigaZaino = null;                     // esito dell'ultima azione nello zaino (Mangia, Usa), mostrato in cima
+const diario = creaDiario({
+  stato: () => ({
+    nome: Knight.nome, titolo: Knight.titolo, oro: Knight.oro, onore: Knight.onore,
+    data: `${Calendar.inVeglia ? Calendar.formatEsteso() : Calendar.formatCompatto()} · ${Calendar.oraCanonica()}`,
+    sottotitolo: `${Knight.titolo} · ${inStoria() && Calendar.inVeglia ? `al servizio della ${nomeCasata()}` : 'senza signore'}`,
+    attr: { forza: [Knight.forza.cur, Knight.forza.max], salute: [Knight.salute.cur, Knight.salute.max],
+      volonta: [Knight.volonta.cur, Knight.volonta.max] },
+  }),
+  sezione: (id) => diarioSezione(id),
+  onApri: () => { cronista = true; tasti.clear(); if (_invitoPorta) _invitoPorta.hidden = true; },
+  onChiudi: () => { cronista = null; tasti.clear(); _rigaZaino = null; },
+});
+const DUE = (n, uno, molti) => `${n} ${n === 1 ? uno : molti}`;
+/** Tempo di cammino a piedi (~4,5 km/h), detto come lo direbbe un viandante. */
+function cammino(m) {
+  const min = m / 75;
+  if (min < 20) return 'a due passi';
+  if (min < 45) return "a mezz'ora di cammino";
+  if (min < 80) return "a un'ora di cammino";
+  const ore = Math.round(min / 30) / 2, intere = Math.floor(ore), mezza = ore > intere ? ' e mezza' : '';
+  if (ore <= 9) return intere === 1 ? `a un'ora${mezza} di cammino` : `a ${intere} ore${mezza} di cammino`;
+  return `a ${DUE(Math.round(ore / 9), 'giornata', 'giornate')} di cammino`;
 }
+function diarioSezione(id) {
+  const oggi = giornoDiGioco();
+  if (id === 'zaino') {
+    const addosso = Items.SLOT_ORDER.filter((s) => Knight.equip[s]).map((s) => ({ nome: Knight.equip[s], info: s }));
+    const porti = Knight.zaino.map((nome, i) => {
+      const it = Items.catalog[nome] ?? {};
+      const azione = it.pasto ? 'Mangia' : it.salute || it.forza ? 'Usa' : null;
+      return { nome, info: it.pasto ? `pasto${it.forza ? `, Forza +${it.forza}` : ''}` : it.salute ? `Salute +${it.salute}` : '',
+        azione, disponibile: !(it.salute && !it.pasto && Knight.salute.cur >= Knight.salute.max), etichetta: 'Non sei ferito',
+        scegli: () => {
+          const r = Knight.usa(i, giornoDiGioco());
+          if (r.ok) { Calendar.avanzaMinuti(it.pasto ? 20 : 10); annotaCronaca(r.testo); salvaOra(); }
+          _rigaZaino = r.testo;
+          diario.apri('zaino');
+        } };
+    });
+    return {
+      sottotitolo: `${Knight.ultimoPasto >= oggi ? 'oggi hai mangiato' : 'oggi non hai ancora mangiato'} · ${Knight.zaino.length} provviste su ${Items.ZAINO_POSTI}`,
+      blocchi: [
+        ...(_rigaZaino ? [{ testo: _rigaZaino }] : []),
+        { titolo: 'Addosso', vuota: 'Niente: solo i panni del garzone.', righe: addosso },
+        { titolo: `Nello zaino · ${Knight.zaino.length}/${Items.ZAINO_POSTI}`, vuota: 'Vuoto.', righe: porti },
+      ],
+    };
+  }
+  if (id === 'cavallo') {
+    const c = Knight.cavallo, m = c && Items.MOUNTS?.[c.id];
+    if (!c) {
+      return { sottotitolo: 'a piedi', blocchi: [{ testo: Calendar.inVeglia
+        ? 'Vai a piedi, come ogni garzone. Lo stalliere del borgo vende ronzini a chi ha moneta: un cavallo fa la strada più corta e la Forza dura di più.'
+        : inStoria() ? 'Vai a piedi. Nelle stalle dei borghi si comprano cavalli.'
+          : 'Il cavallo che ti segue nella modalità Libera è di prova: vigore e sella arriveranno con la milestone Cavallo.' }] };
+    }
+    return {
+      sottotitolo: Knight.inSella ? 'in sella' : 'ti segue accanto',
+      blocchi: [{ righe: [
+        { nome: c.nome, info: m ? `${m.possa ? `in battaglia +${m.possa}` : 'cavallo da viaggio, non da battaglia'}` : '' },
+        { nome: 'Vigore', info: 'per il viaggio: cala camminando, torna con il riposo', destra: `${Math.ceil(c.vigore ?? c.vigoreMax)} / ${c.vigoreMax}` },
+      ] }],
+    };
+  }
+  if (id === 'propositi') {
+    if (!(inStoria() && Calendar.inVeglia)) {
+      return { sottotitolo: 'le imprese del cavaliere', blocchi: [{ testo: inStoria()
+        ? 'La Veglia è finita e il mondo è aperto. Le imprese che ti verranno affidate saranno scritte qui, con il tempo che resta e la strada da fare.'
+        : 'Nella modalità Libera non ci sono propositi: il mondo è tuo da percorrere.' }] };
+    }
+    const lez = Knight.addestramento || 0, sogliaL = typeof VEGLIA_SOGLIA_ADDESTRAMENTO !== 'undefined' ? VEGLIA_SOGLIA_ADDESTRAMENTO : 3;
+    const sogliaO = typeof VEGLIA_SOGLIA_INVESTITURA !== 'undefined' ? VEGLIA_SOGLIA_INVESTITURA : 10;
+    const scudiero = Knight.rango !== 'garzone';
+    return {
+      sottotitolo: 'ciò che un garzone deve fare per meritare gli speroni',
+      blocchi: [{ voci: [
+        { segno: scudiero ? 'fatto' : lez ? 'mezzo' : 'da fare', nome: 'Imparare a reggere la lama',
+          info: scudiero ? 'Il maestro d\'armi ti ha riconosciuto scudiero.' : 'Il maestro d\'armi riconosce chi torna da lui con costanza.',
+          destra: scudiero ? 'fatto' : `${lez} lezioni su ${sogliaL}` },
+        { segno: Knight.primaSangue ? 'fatto' : 'da fare', nome: 'Affrontare la prima battaglia',
+          info: 'Fuori porta, dove le bestie non hanno padrone.', destra: Knight.primaSangue ? 'fatto' : 'da fare' },
+        { segno: Knight.oro >= sogliaO ? 'fatto' : Knight.oro > 0 ? 'mezzo' : 'da fare', nome: 'Mettere da parte il prezzo dell\'investitura',
+          info: 'La veglia d\'armi si paga in cera e in monete.', destra: `${Math.min(Knight.oro, sogliaO)} oro su ${sogliaO}` },
+        { segno: 'ignoto', nome: '…', info: 'Il resto lo dirà la cappella, quando sarai pronto.' },
+      ] }],
+    };
+  }
+  if (id === 'cronaca') {
+    return { sottotitolo: 'le ultime pagine, dalla più recente',
+      blocchi: [{ cronaca: Knight.cronaca.slice(-18).reverse(), vuota: 'Ancora nessuna pagina: la cronaca comincia con la prima fatica.' }] };
+  }
+  // Luoghi conosciuti: rocche e siti già visti (in Storia, nebbia della conoscenza), dal più vicino.
+  if (!carta || !knight || scenaAttuale?.tipo !== 'mondo') return { blocchi: [{ testo: 'Qui il mondo non ha nomi da segnare.' }] };
+  const x = scenaAttuale.cx + knight.stato.x, z = scenaAttuale.cz + knight.stato.z;
+  const k = typeof Conoscenza !== 'undefined' && Conoscenza.attiva ? Conoscenza : null;
+  const tutti = [...(carta.luoghi ?? []).map((l) => ({ l, nome: l.partenza && inStoria() ? 'Il borgo della Veglia' : CLASSI_ROCCA[l.classe]?.[0] ?? 'una rocca' })),
+    ...(carta.siti ?? []).filter((s) => NOMI_SITI[s.tipo]).map((s) => ({ l: s, nome: NOMI_SITI[s.tipo] }))]
+    .filter(({ l }) => !k || k.livello(l.x, l.z) >= 1)
+    .map((t) => ({ ...t, d: Math.hypot(t.l.x - x, t.l.z - z) })).sort((a, b) => a.d - b.d).slice(0, 14);
+  const dir = (l) => DIREZIONI[Math.round(((Math.atan2(l.x - x, -(l.z - z)) / (Math.PI * 2)) * 8 + 8)) % 8];
+  return {
+    sottotitolo: k ? 'ciò che hai visto con i tuoi occhi, dal più vicino' : 'i più vicini',
+    blocchi: [{ righe: tutti.map(({ l, nome, d }) => ({ nome: nome[0].toUpperCase() + nome.slice(1),
+      info: d < 300 ? 'qui' : `${dir(l)}, ${cammino(d)}` })), vuota: 'Ancora nessun luogo: cammina, e la Carta si riempirà.' }],
+  };
+}
+
 /** Una notizia diventa un foglio nello scrittoio (J) e compare, col sigillo, nella striscia «dal mondo» degli avvisi. */
 function annotaNotizia(doc) {
   const quando = `${Calendar.oraCanonica()} del ${Calendar.inVeglia ? `giorno ${Calendar.giornoVeglia}` : `Diario ${Calendar.diario}`}`;
@@ -1599,7 +1657,7 @@ async function init() {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') salvaOra();
   });
-  pannelloStato.hidden = false;
+  diario.mostra(true);
   preparaAvvisi();
   if (ripresa) messaggio(`Partita ${inStoria() ? 'Storia' : 'Libera'} ripresa dall'ultimo salvataggio.`);
 
@@ -1629,7 +1687,7 @@ async function init() {
 
   avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no · Spazio: scavalca'
     + ` · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: ${inStoria() ? 'Carta' : 'Carta (clic: vai lì) · T: avanza · K: prova di combattimento'}`
-    + ' · N: minimappa (icona, piccola, grande) · +/−: zoom minimappa · J: scrittoio e avvisi · I: zaino'
+    + ' · N: minimappa (icona, piccola, grande) · +/−: zoom minimappa · J: scrittoio e avvisi · I: diario'
     + ` · F2: qualità · F3: info · F8: menu · modalità ${inStoria() ? 'Storia' : 'Libera'}`,
   'aiuto');
 }
@@ -1853,11 +1911,12 @@ window.addEventListener('keydown', (e) => {
   if (cronista) {                                        // Carta del cronista aperta: scelte con 1–9, Esc o E per uscire
     if (e.repeat) return;
     if (scrittoio.aperto) { scrittoio.tasto(e); return; }
+    if (diario.aperto) { diario.tasto(e); return; }
     if (!cartaCronista.tasto(e) && e.code === PORTA.tasto) chiudiCronista();
     return;
   }
   if (e.code === 'KeyJ' && !e.repeat && knight) { scrittoio.apri(); return; }
-  if (e.code === 'KeyI' && !e.repeat && knight) { mostraZaino(); return; }
+  if (e.code === 'KeyI' && !e.repeat && knight) { diario.apri('zaino'); return; }
   if (e.code === 'KeyK' && !e.repeat && knight) { mostraProvaCombattimento(); return; }   // G1 passo 4: solo Libera
   if (e.code === PORTA.tasto && !e.repeat) {
     const azione = AZIONI_TASTO.find((a) => a.pronta());
@@ -2381,7 +2440,7 @@ function frame(now) {
     }
     orizzonte?.luciLontane?.(1 - _luceGiorno);   // M7, passo 8: luci dei borghi lontani (orizzonte.js)
     tt = segna('cielo e luci', tt);
-    aggiornaStato();
+    diario.aggiorna();
     aggiornaIndicatoreAndatura();
     tt = segna('interfaccia', tt);
     minimappa.nascondi(!!percorso);        // percorso di prova: misure confrontabili con quelle di prima

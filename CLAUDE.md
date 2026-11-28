@@ -23,7 +23,7 @@ Percorso di prova: `?seme=570549&prova`. Generatore: verifiche in Node, senza br
   qualità), `terrain.js`, `orizzonte.js`, `acqua.js`, `blocchi.js` (blocco che segue il cavaliere), `cielo.js` (giorno/notte,
   nebbia, meteo), `camera.js`, `knight3d.js`, `cavallo3d.js`, `abitanti3d.js` (persone di rocche e borghi), `castle3d.js`
   (Tavullia), `rocca3d.js`, `borgo3d.js`, `edifici3d.js` (kit unico degli edifici), `villaggio3d.js` (villaggi, ovili, mulini),
-  `rovine3d.js`, `vegetazione3d.js`, `minimappa.js`, `cartaVista.js`, `interfaccia.js` (menu d'avvio, Carta del cronista, combattimento), `avvisi.js` (riquadro avvisi)
+  `rovine3d.js`, `vegetazione3d.js`, `minimappa.js`, `cartaVista.js`, `interfaccia.js` (menu d'avvio, Carta del cronista, combattimento), `avvisi.js` (riquadro avvisi), `diario.js` (diario del cavaliere)
 - `js/mondo/` — generatore del mondo, moduli ES senza grafica né DOM (`rumore.js`, `carta.js`, `verifica.js`,
   `scena.js`, `fiumi.js`, `luoghi.js`, `strade.js`, `siti.js`, `vegetazione.js`; `lavoratore.js` = Web Worker con cache IndexedDB, `generatore.js` = lato pagina); la vista di
   sviluppo della Carta è `js/3d/cartaVista.js`. Cambiando le Carte generate: aggiornare `VERSIONE_GENERATORE`

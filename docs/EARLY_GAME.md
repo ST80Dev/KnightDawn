@@ -396,6 +396,15 @@ poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un
    solo all'arrivo di un messaggio o allo scatto del ciclo. Sostituisce l'avviso d'arrivo dei fogli; lo scrittoio è diviso
    nelle stesse sezioni; il pannello F3 scende sotto gli avvisi. Zona libera per i riquadri al centro (combattimento):
    ~1270×680, x 300–1570, y 170–850 a 1920×1080. A regime gli avvisi ricorderanno anche le missioni (G4).
+3d. **Diario del cavaliere in alto a destra** [richiesta dell'utente, novembre 2026]. **Stato: fatto, da provare dall'utente.**
+   `js/3d/diario.js` (file nuovo): al posto del pannello di stato un diario compatto (nome, rango, oro, giorno e ora
+   canonica, Forza, Salute, Volontà, linguette). Un clic o `I` lo apre come libro al centro, a gioco fermo: a sinistra
+   stato, Onore e indice, a destra la sezione (nastri per cambiarla, tasti 1–5): **Zaino ed equipaggiamento** (con
+   «Mangia» e «Usa»: sostituisce lo zaino nella Carta del cronista), **Cavallo**, **Propositi** (Veglia: lezioni,
+   prima battaglia, oro dell'investitura, il resto taciuto), **Cronaca** (`Knight.cronaca`, nel salvataggio: ogni azione
+   raccontata e ogni affare, con giorno e ora) e **Luoghi conosciuti** (rocche e siti già visti, dal più vicino, con
+   direzione e tempo di cammino). Voci, bandi e lettere restano nello scrittoio (`J`). Il compatto tocca il DOM solo
+   quando un valore cambia. A regime i Propositi terranno le missioni (scadenza, distanza, strada).
 4. **Combattimento nel riquadro.** Tre colonne (cavaliere, scelte e Slancio, nemico) e cronaca dei Round;
    la scena dietro è ferma. Ogni Round confermato avanza il calendario dei suoi minuti; i rami di esito
    tornano all'evento. In Veglia a Salute 0 si sviene; dopo l'investitura **schermata di morte** con
