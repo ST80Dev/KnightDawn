@@ -3705,7 +3705,7 @@ Fusioni: ~81 tratti per mondo, ~25 km di doppioni tolti. Le coppie che restano s
 strade si separano per più di 150 m e poi si riavvicinano) o paralleli senza un capo in comune. `VERSIONE_GENERATORE`
 `+strade-fuse-1`.
 
-## Veicoli sulle strade (28/11/2026) — prima PR fatta (tipi 1–3), da provare; carro a buoi nella seconda
+## Veicoli sulle strade (28/11/2026) — tipi 1–3 provati e uniti (PR #266); carro a buoi fatto, da provare
 
 > Dalla sessione cardine, deciso dall'utente: il mondo intorno deve sembrare vivo, con veicoli in movimento sulle strade.
 > Codice in `js/3d/carri3d.js` (file nuovo approvato dall'utente). Niente stile Ottocento, niente sospensioni da carrozza.
@@ -3714,10 +3714,10 @@ strade si separano per più di 150 m e poi si riavvicinano) o paralleli senza un
 
 | Tipo | Dove | Animali | Persone | Velocità in piano |
 |---|---|---|---|---|
-| **carrozza** (chariot branlant / whirlicote del Trecento): 4 ruote, cassone dipinto, copertura a botte di tela a bande | maestre (18 %) | 2–4 cavalli in fila con le tirelle | postiglione in sella all'ultimo cavallo, cavaliere di scorta dietro (elmo e lancia, gualdrappa nella livrea) | 1,35 m/s |
-| **carro** da trasporto: 4 ruote, sponde basse, sacchi, botti, una balla sotto un telo | maestre (52 %), carrarecce (15 %) | 1–2 cavalli | carrettiere a piedi alla testa | 1,2 m/s |
-| **carretto**: 2 ruote, stanghe, fascina e sacco | carrarecce (85 %), maestre (30 %) | mulo o asino (proporzioni del cavallo: più piccolo, orecchie lunghe) | conducente a piedi alla testa | 1,05 m/s |
-| carro a buoi (seconda PR) | vicino ai borghi | buoi (animale nuovo) | — | lentissimo |
+| **carrozza** (chariot branlant / whirlicote del Trecento): 4 ruote, cassone dipinto, copertura a botte di tela a bande | maestre (18 %; 15 % vicino ai borghi) | 2–4 cavalli in fila con le tirelle | postiglione in sella all'ultimo cavallo, cavaliere di scorta dietro (elmo e lancia, gualdrappa nella livrea) | 1,35 m/s |
+| **carro** da trasporto: 4 ruote, sponde basse, sacchi, botti, una balla sotto un telo | maestre (52 %; 40 % vicino ai borghi), carrarecce (15 %) | 1–2 cavalli | carrettiere a piedi alla testa | 1,2 m/s |
+| **carretto**: 2 ruote, stanghe, fascina e sacco | carrarecce (85 %), maestre (30 %; 23 % vicino ai borghi) | mulo o asino (proporzioni del cavallo: più piccolo, orecchie lunghe) | conducente a piedi alla testa | 1,05 m/s |
+| **carro a buoi** (plaustro): 2 ruote piene, pianale con gli stanti carico di tronchi, timone lungo fino al giogo | solo maestre che toccano una rocca, un borgo o una città (22 %) | coppia di buoi aggiogati fianco a fianco (animale nuovo) | bovaro a piedi davanti alla coppia | 0,75 m/s |
 
 **Regole.**
 1. **Esistono solo vicino al cavaliere.** Altrove c'è un **orario**: per ogni ramo della rete (`carta.strade.rami`) partenze
@@ -3749,6 +3749,17 @@ chi non le porta, come l'elmo delle guardie). Le persone sedute (postiglione, sc
 posa (`posa: [seduto, gambe aperte]` in `creaPersona`, attributo d'istanza `iPosa`; 0 per gli abitanti: nulla cambia).
 Triangoli per istanza: animale 762, ruota 134, cassa 252 (carrozza) / 432 (carro) / 256 (carretto), persona 1070,
 tirella 12. Per veicolo: carretto ~2,3 mila, carro 2,8–3,6 mila, carrozza 3,5–5 mila (2–4 cavalli) più la scorta ~1,8 mila.
+
+**Carro a buoi** (seconda PR). Il **bue** è un animale nuovo con forme proprie (`geometriaBue`, 646 triangoli): tronco
+lungo e profondo (garrese ~1,45 m, ventre a 0,58), collo corto con la giogaia, testa portata bassa col muso scuro, corna a
+lira, orecchie di traverso, gambe corte e grosse con gli unghioni, coda col fiocco. Mantelli: grigio chiaro delle razze da
+lavoro dell'Appennino, fromentino, rosso bruno. Stessi attributi e stesso shader del cavallo, con perni e passo propri
+(`INNESTI`, un programma per specie distinto da `customProgramCacheKey`); ciclo del passo 1,2 m, ampiezza 0,3. Il
+**plaustro** (436 triangoli) ha l'origine sotto l'asse e il pianale inclinato in modo che la punta del timone stia sul
+giogo (scarto misurato in Node: 3 cm); le ruote piene (120) girano in una `InstancedMesh` a sé. I buoi tirano col giogo:
+niente tirelle. Per veicolo: 2 × 646 + 436 + 2 × 120 + 1070 ≈ **3,0 mila triangoli**; chiamate in più quando un carro a
+buoi è in vista: buoi, plaustro, ruote piene (le persone sono già nella loro). In tutto al più 10 chiamate per tutti i
+veicoli. Sulle maestre dei borghi, a mezzogiorno, 42 carri a buoi nell'orario del seme 570549 (su 695 veicoli).
 CPU in Node: ~0,03 ms per fotogramma con 1–5 veicoli vivi.
 
 Misure headless (seme 570549, ora di partenza 6:00; chiamate e triangoli del fotogramma, i ms li misura l'utente con `F3`):
@@ -3758,16 +3769,16 @@ Misure headless (seme 570549, ora di partenza 6:00; chiamate e triangoli del fot
 | partenza (`?seme=570549&prova`) | 210 · 661 mila | 210 · 661 mila (nessun veicolo entro 1100 m) |
 | bosco fitto (`&centro=99937,43289`) | 151 · 918 mila | 151 · 918 mila (nessun veicolo entro 1100 m) |
 | carrozza con 2 cavalli, postiglione e scorta (`&centro=101914,9857`) | — | **+5 chiamate, +5262 triangoli** |
-| carro con un cavallo e carrettiere (`&centro=95764,9515`) | — | +5 chiamate, +2824 triangoli |
+| carro con un cavallo e carrettiere (`&centro=95764,9515`; dalla seconda PR quella maestra tocca un borgo e il veicolo è un carro a buoi: per il carro `&centro=54305,9475`) | — | +5 chiamate, +2824 triangoli |
 | carretto con il mulo (`&centro=51484,9400`) | — | +4 chiamate, +2356 triangoli |
 
-Con più veicoli in vista le chiamate restano quelle (al più 7), crescono solo i triangoli.
+Con più veicoli in vista le chiamate restano quelle (al più 7, 10 con il carro a buoi), crescono solo i triangoli.
 
 **Numeri dell'orario** (Node, seme 570549, a mezzogiorno): 512 rami da carro (312 km di maestre, 1291 di carrarecce); nei
 blocchi di 2 km attraversati da una maestra **1,5 veicoli** in media sulla maestra (22 % dei blocchi senza nessuno);
 sulle carrarecce 0,3 per blocco.
 
-**Non fatto in questa PR.** Carro a buoi (seconda PR). Persone dentro la carrozza, frusta, lanterne di notte. Le ruote
+**Non fatto.** Persone dentro la carrozza, pungolo del bovaro, frusta, lanterne di notte. Le ruote
 anteriori non sterzano (la cassa segue la corda tra gli assi). I veicoli non entrano nei borghi né nei cortili.
 
 ## Viaggio di notte: torcia, fuoco del campo, zaino (28/11/2026) — prima PR fatta, da provare
