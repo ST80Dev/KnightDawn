@@ -1352,11 +1352,69 @@ export function aggiungiTraghetti(carta) {
     tratte.push(...miglioreTra.values(), ...scorciatoie.slice(0, T.perLago));
   }
   rotteDiMare(carta, tratte);
+  // Approdi sulla riva vera [segnalato dall'utente: «approdi un po' nell'entroterra rispetto alla costa»]: rx, ry è il
+  // centro di una cella di riva di 1 km, quindi per costruzione centinaia di metri dentro terra (misurato su 30 semi: 352
+  // segni su 536 oltre 300 m dall'acqua). Si fa per ultimo perché rx, ry restano la cella con cui tutto il resto
+  // ragiona (rive, terre servite, verificaAccessi); il punto preciso va in px, pz (m), con il verso dell'acqua vx, vz.
+  for (const t of tratte) for (const a of [t.a, t.b]) suRiva(carta, a, t.tipo === 'traghetto');
   carta.traghetti = tratte;
   const perTipo = {};
   for (const t of tratte) perTipo[t.tipo] = (perTipo[t.tipo] ?? 0) + 1;
   carta.statistiche = { ...(carta.statistiche ?? {}), traghetti: { tratte: tratte.length, ...perTipo, ms: Math.round(performance.now() - t0) } };
   return carta;
+}
+
+/** Riva vera di un approdo: raggio di ricerca attorno alla cella (m), passi della bisezione sul bordo dell'acqua. */
+export const RIVA_APPRODO = { raggio: 1500, bisezione: 7, mare: 0.3 };
+
+/**
+ * Scrive in `a` il punto di riva vero (px, pz in m, verso l'acqua vx, vz) vicino alla cella di riva (rx, ry): fra i nodi
+ * asciutti del terreno base che toccano l'acqua ferma (mare, o lago se `lago`), quello più vicino al luogo servito; poi
+ * il bordo dell'acqua si cerca esatto sul segmento verso il nodo bagnato. Senza nodi di riva resta il centro della cella.
+ */
+function suRiva(carta, a, lago) {
+  const C = carta.cella, R = RIVA_APPRODO, B = carta.terrenoBase, es = { quota: 0, livello: NaN };
+  const acquaFerma = (x, z) => {
+    const h = scavaFiumi(carta, x, z, quotaMondo(carta, x, z), es);
+    if (h < R.mare) return true;
+    return lago && livelloLago(carta, x, z) > h;
+  };
+  const cx = a.rx * C, cz = a.ry * C, sx = a.x * C, sz = a.y * C;
+  a.px = cx; a.pz = cz; a.vx = 0; a.vz = 0; a.riva = false;
+  let P, nx, nz, bagnato;
+  if (B) {
+    P = B.passo; nx = B.nx; nz = B.nz;
+    bagnato = (c, r) => B.h[r * nx + c] < R.mare || (lago && (B.flag[r * nx + c] & 1) !== 0);
+  } else {                                           // senza terreno base (script di prova): quota esatta, griglia rada
+    P = 62.5; nx = Math.round(carta.cols * C / P) + 1; nz = Math.round(carta.rows * C / P) + 1;
+    const memo = new Map();
+    bagnato = (c, r) => { const k = r * nx + c; let v = memo.get(k); if (v === undefined) memo.set(k, (v = acquaFerma(c * P, r * P))); return v; };
+  }
+  const c0 = Math.max(1, Math.floor((cx - R.raggio) / P)), c1 = Math.min(nx - 2, Math.ceil((cx + R.raggio) / P));
+  const r0 = Math.max(1, Math.floor((cz - R.raggio) / P)), r1 = Math.min(nz - 2, Math.ceil((cz + R.raggio) / P));
+  let best = null;
+  for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
+    if (bagnato(c, r)) continue;
+    const x = c * P, z = r * P, d = Math.hypot(x - sx, z - sz);
+    if (best && d >= best.d) continue;
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      if (!bagnato(c + dc, r + dr)) continue;
+      best = { d, x, z, wx: (c + dc) * P, wz: (r + dr) * P };
+      break;
+    }
+  }
+  if (!best) return;
+  // Bisezione esatta fra il nodo asciutto e quello bagnato: il bordo dell'acqua delle Scene, non della griglia.
+  let t0 = 0, t1 = 1;
+  if (acquaFerma(best.x, best.z)) t1 = 0;            // la griglia sbagliava: si resta sul nodo
+  else if (acquaFerma(best.wx, best.wz)) {
+    for (let k = 0; k < R.bisezione; k++) {
+      const t = (t0 + t1) / 2;
+      if (acquaFerma(best.x + (best.wx - best.x) * t, best.z + (best.wz - best.z) * t)) t1 = t; else t0 = t;
+    }
+  } else t0 = 0;
+  const vx = best.wx - best.x, vz = best.wz - best.z, l = Math.hypot(vx, vz) || 1;
+  a.px = best.x + vx * t0; a.pz = best.z + vz * t0; a.vx = vx / l; a.vz = vz / l; a.riva = true;
 }
 
 const _scartate = [];
@@ -1646,10 +1704,10 @@ function barcaioli(carta, tratte, terre, riva, cellaDi) {
     // villaggi, l'isola restava scoperta anche quando poco più in là ce n'era una servita e abitata.
     let miglior = null;
     for (let i = 0; i < n; i++) {
-      if (terre.id[i] !== t) continue;
+      if (terre.id[i] !== t || !riva[i]) continue;   // dalla riva, non dal mezzo dell'isola
       const ix = (i % cols) + 0.5, iy = ((i / cols) | 0) + 0.5;
       for (let j = 0; j < n; j++) {
-        if (terre.id[j] < 0 || !servite.has(terre.id[j])) continue;
+        if (terre.id[j] < 0 || !servite.has(terre.id[j]) || !riva[j]) continue;
         const jx = (j % cols) + 0.5, jy = ((j / cols) | 0) + 0.5;
         const km = Math.hypot(ix - jx, iy - jy) * cella / 1000;
         if (km > M.barcaiolo.traversata || (miglior && km >= miglior.km)) continue;

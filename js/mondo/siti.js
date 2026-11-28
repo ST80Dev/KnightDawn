@@ -16,7 +16,7 @@
 // Solo operazioni dal risultato esatto (+ − × ÷, sqrt, floor) e hash su interi: uguale in ogni browser.
 
 import { ACQUA, BIOMA } from './carta.js';
-import { quotaMondo, distanzaAcqua } from './scena.js';
+import { quotaMondo, distanzaAcqua, scavaFiumi, livelloLago } from './scena.js';
 import { derivaSeme, hash2 } from './rumore.js';
 import { distanzaDa } from './verifica.js';
 import { ripianificaLuogo } from './luoghi.js';
@@ -76,6 +76,11 @@ export const SITI = {
   copertura: { entro: 8, pesi: { villaggio: 1.5, rovina: 2.5, abbandonato: 1, grotta: 1.2, eremo: 1, fantastico: 2,
     ovile: 0.6, accampamento: 1, mulino: 0.4 } },
   villaggio: { grande: 0.4 },       // frazione dei villaggi grandi (12–20 case, pieve e locanda)
+  // Sito all'asciutto sul terreno delle Scene (fuoriAcqua): sotto `mare` m è mare; `prove` candidati al più per cella;
+  // cerchi dell'ingombro per tipo come [raggio m, punti, punti bagnati ammessi]. Il villaggio può toccare l'acqua al
+  // margine (le case lì si scartano da sole, villaggio3d.js), non nel nucleo; i raggi sono quelli di RAGGI_SITI.
+  asciutto: { mare: 0.3, prove: 12, cerchi: {
+    villaggio: [[40, 8, 0], [85, 16, 3]], mulino: [], ovile: [[22, 8, 0]], altro: [[30, 8, 0]] } },
 };
 
 const hashU = (a, b, seme) => hash2(a, b, seme) / 4294967296;
@@ -164,25 +169,34 @@ function punteggio(tipo, carta, i, F) {
 }
 
 /**
- * Punto del sito dentro la cella (m): griglia 5×5 di quotaMondo con la pendenza ai vicini (passo 25 m).
- * modo: 'piano' (pendenza minima), 'alto' (quota massima, pendenza moderata), 'ripido' (pendenza massima ammessa),
- * 'villaggio' (dolce e vicino all'acqua dolce), 'acqua' (il più vicino possibile all'acqua dolce: i mulini).
+ * Punto del sito dentro la cella (m): griglia di quotaMondo con la pendenza ai vicini (passo 25 m).
+ * modo: 'piano' (pendenza minima), 'alto' (quota massima, pendenza moderata), 'piede' (le grotte: suolo dolce davanti
+ * all'imbocco e roccia ripida subito a monte), 'villaggio' (dolce e vicino all'acqua dolce), 'acqua' (il più vicino
+ * possibile all'acqua dolce: i mulini).
  *
- * I due modi nuovi usano la mappa fine dell'acqua dolce (125 m, `distanzaAcqua` di scena.js, chiesta a M6): la cella
+ * I due modi dell'acqua usano la mappa fine dell'acqua dolce (125 m, `distanzaAcqua` di scena.js, chiesta a M6): la cella
  * è larga 1 km, quindi sceglierla «vicino all'acqua» non bastava — il punto finiva lo stesso a mezzo chilometro dal
  * fiume. Il mare e i laghi costieri non contano: un mulino sul mare non esiste, e un villaggio sulla scogliera non ha
  * acqua da bere.
+ *
+ * Il punto scelto deve stare **all'asciutto sul terreno delle Scene**, con tutto il suo ingombro (`fuoriAcqua`): i
+ * candidati si provano dal migliore in giù. Se nessuno va, `null` e la cella si scarta. [Segnalato dall'utente, misurato
+ * su 30 semi: 155 villaggi su 8370 avevano almeno un quarto dell'area in acqua, 69 anche il centro, in tutti i semi.
+ * Il controllo guardava solo la cella di 1 km della Carta, ma il lago delle Scene ne esce, e la mappa dell'acqua a
+ * 125 m non conosce né la larghezza del fiume né l'ingombro del villaggio.]
  */
-function affinaPunto(carta, c, r, modo, seed) {
+function affinaPunto(carta, c, r, modo, seed, tipo = '') {
   const C = carta.cella, d = 25;
   // I modi che inseguono l'acqua cercano su una griglia più fitta: con 200 m di passo il punto migliore restava
   // lontano dal fiume anche quando il fiume attraversava la cella.
   // …e cercano anche un poco FUORI dalla cella: se il fiume scorre nella cella accanto, il punto migliore dentro la
   // cella resta comunque lontano dall'acqua, e il villaggio nasce in mezzo ai campi invece che sulla riva.
+  // Il piede di una parete è una fascia stretta: con 200 m di passo non la si trova quasi mai, quindi anche le grotte
+  // cercano sulla griglia fitta.
   const acquoso = modo === 'villaggio' || modo === 'acqua';
-  const n = acquoso ? 9 : 5, oltre = acquoso ? 0.2 : 0;
+  const n = acquoso || modo === 'piede' ? 9 : 5, oltre = acquoso ? 0.2 : 0;
   const p0 = -oltre + 0.5 * (1 + 2 * oltre) / n, pd = (1 + 2 * oltre) / n;
-  let migliore = null;
+  const candidati = [];
   for (let j = 0; j < n; j++) for (let k = 0; k < n; k++) {
     const x = (c + p0 + pd * k) * C, z = (r + p0 + pd * j) * C;
     // Cercando fuori dalla cella si finisce in mare o in un lago: la cella di partenza è terra, quella accanto no.
@@ -194,27 +208,104 @@ function affinaPunto(carta, c, r, modo, seed) {
       if (carta.mare[ci] || (carta.acque && carta.acque[ci] !== ACQUA.TERRA)) continue;
     }
     const h = quotaMondo(carta, x, z, seed);
-    const gx = (quotaMondo(carta, x + d, z, seed) - quotaMondo(carta, x - d, z, seed)) / (2 * d);
-    const gz = (quotaMondo(carta, x, z + d, seed) - quotaMondo(carta, x, z - d, seed)) / (2 * d);
-    const p = Math.sqrt(gx * gx + gz * gz);
-    let v;
-    if (modo === 'piano') v = -p;
-    else if (modo === 'alto') v = h - (p > 0.4 ? 1e4 : 0);
-    else if (modo === 'villaggio') {
-      const dA = distanzaAcqua(carta, x, z, true);
-      v = -3 * p - 1.2 * rampa(dA, 120, 900) - (p > 0.3 || dA < 40 ? 1e4 : 0);   // sulla riva, non nel fiume
+    let v, p;
+    if (modo === 'piede') {
+      // Grotta [segnalato dall'utente: imbocchi sospesi su pendii irraggiungibili]. Prima si prendeva il punto più
+      // ripido della cella fino a 45°, oltre i 40° che il cavaliere sale: su 30 semi il 19 % delle grotte era oltre.
+      // Ora si parte da un punto ripido e si scende lungo la massima pendenza fino al primo suolo dolce (pendenza a 6 m
+      // entro `GROTTE.davanti`): lì sta l'imbocco, al piede del pendio, con la roccia alle spalle se a monte, entro
+      // `GROTTE.distanza` m, il terreno sale almeno di `GROTTE.monte`.
+      const piede = piedeDelPendio(carta, x, z, seed);
+      if (!piede) continue;
+      candidati.push({ ...piede, k: candidati.length });
+      continue;
+    } else {
+      const gx = (quotaMondo(carta, x + d, z, seed) - quotaMondo(carta, x - d, z, seed)) / (2 * d);
+      const gz = (quotaMondo(carta, x, z + d, seed) - quotaMondo(carta, x, z - d, seed)) / (2 * d);
+      p = Math.sqrt(gx * gx + gz * gz);
+      if (modo === 'piano') v = -p;
+      else if (modo === 'alto') v = h - (p > 0.4 ? 1e4 : 0);
+      else if (modo === 'villaggio') {
+        const dA = distanzaAcqua(carta, x, z, true);
+        v = -3 * p - 1.2 * rampa(dA, 120, 900) - (p > 0.3 || dA < 40 ? 1e4 : 0);   // sulla riva, non nel fiume
+      } else if (modo === 'acqua') {
+        const dA = distanzaAcqua(carta, x, z, true);
+        v = -rampa(dA, 0, 300) - 0.5 * p - (p > 0.35 || dA < 12 ? 1e4 : 0);        // sulla riva, non in mezzo
+      } else v = (p > 1 ? -1e4 : p);
     }
-    else if (modo === 'acqua') {
-      const dA = distanzaAcqua(carta, x, z, true);
-      v = -rampa(dA, 0, 300) - 0.5 * p - (p > 0.35 || dA < 12 ? 1e4 : 0);        // sulla riva, non in mezzo
-    }
-    else v = (p > 1 ? -1e4 : p);
-    if (!migliore || v > migliore.v) migliore = { v, x, z, h, p };
+    candidati.push({ v, x, z, h, p, k: candidati.length });
   }
-  return { x: migliore.x, z: migliore.z, quota: migliore.h, pendenza: migliore.p };
+  candidati.sort((a, b) => b.v - a.v || a.k - b.k);
+  // Le grotte senza un vero piede di parete non si mettono: meglio un'altra cella che un imbocco irraggiungibile.
+  const prove = Math.min(candidati.length, SITI.asciutto.prove);
+  for (let q = 0; q < prove; q++) {
+    const m = candidati[q];
+    if (fuoriAcqua(carta, m.x, m.z, tipo, seed)) return { x: m.x, z: m.z, quota: m.h, pendenza: m.p };
+  }
+  return null;
 }
 
-const MODO = { villaggio: 'villaggio', mulino: 'acqua', rovina: 'alto', abbandonato: 'alto', grotta: 'ripido',
+/**
+ * Grotte (modo 'piede' di affinaPunto): pendenze come tangenti, distanze in m. `ripido`: pendenza (a 25 m) da cui si
+ * parte a cercare il piede; `passo` e `passi`: discesa lungo la massima pendenza.
+ */
+export const GROTTE = { davanti: 0.45, monte: 0.55, distanza: 14, ripido: 0.5, passo: 4, passi: 20 };
+
+/** Gradiente locale (differenze a ±e m) di quotaMondo. */
+function gradiente(carta, x, z, seed, e) {
+  return [(quotaMondo(carta, x + e, z, seed) - quotaMondo(carta, x - e, z, seed)) / (2 * e),
+    (quotaMondo(carta, x, z + e, seed) - quotaMondo(carta, x, z - e, seed)) / (2 * e)];
+}
+
+/** Piede del pendio sotto il punto (x, z), se il punto è ripido e il piede ha la roccia a monte: { v, x, z, h, p }. */
+function piedeDelPendio(carta, x, z, seed) {
+  const G = GROTTE;
+  let [gx, gz] = gradiente(carta, x, z, seed, 25);
+  const p0 = Math.sqrt(gx * gx + gz * gz);
+  if (p0 < G.ripido) return null;
+  let ux = gx / p0, uz = gz / p0;                   // verso di monte
+  for (let k = 0; k < G.passi; k++) {
+    [gx, gz] = gradiente(carta, x, z, seed, 6);
+    const p = Math.sqrt(gx * gx + gz * gz);
+    if (p <= G.davanti) {
+      // a monte: nella direzione da cui si è scesi (l'ultimo gradiente ripido), non in quella del suolo dolce
+      const h = quotaMondo(carta, x, z, seed);
+      const monte = (quotaMondo(carta, x + ux * G.distanza, z + uz * G.distanza, seed) - h) / G.distanza;
+      return monte < G.monte ? null : { v: monte - 2 * p, x, z, h, p };
+    }
+    ux = gx / p; uz = gz / p;
+    x -= ux * G.passo; z -= uz * G.passo;
+  }
+  return null;
+}
+
+const _es = { quota: 0, livello: NaN };
+/** Vero se il punto del mondo è sott'acqua nelle Scene: mare (quota sotto lo zero), alveo di un fiume, lago. */
+export function sottAcqua(carta, x, z, seed = derivaSeme(carta.seme, 101)) {
+  const h = scavaFiumi(carta, x, z, quotaMondo(carta, x, z, seed), _es);
+  if (h < SITI.asciutto.mare || !Number.isNaN(_es.livello)) return true;
+  const l = livelloLago(carta, x, z);
+  return l > h;                                      // NaN (nessun lago vicino) → falso
+}
+
+/**
+ * Vero se il sito di tipo `tipo` con centro (x, z) sta all'asciutto: il centro e i cerchi dell'ingombro
+ * (`SITI.asciutto.cerchi`, raggio e quanti punti bagnati sono ammessi). I mulini guardano solo il centro: la ruota sta
+ * nella corrente per costruzione.
+ */
+export function fuoriAcqua(carta, x, z, tipo, seed = derivaSeme(carta.seme, 101)) {
+  if (sottAcqua(carta, x, z, seed)) return false;
+  for (const [r, n, ammessi] of SITI.asciutto.cerchi[tipo] ?? SITI.asciutto.cerchi.altro) {
+    let bagnati = 0;
+    for (let k = 0; k < n; k++) {
+      const a = 2 * Math.PI * k / n;
+      if (sottAcqua(carta, x + r * Math.cos(a), z + r * Math.sin(a), seed) && ++bagnati > ammessi) return false;
+    }
+  }
+  return true;
+}
+
+const MODO = { villaggio: 'villaggio', mulino: 'acqua', rovina: 'alto', abbandonato: 'alto', grotta: 'piede',
   eremo: 'piano', fantastico: 'alto', ovile: 'piano', accampamento: 'piano', sentinella: 'alto', ospizio: 'piano' };
 
 /** Stato della scelta: siti già presi e una griglia di secchi (5 km) per le distanze. */
@@ -285,8 +376,8 @@ function scegliTipo(carta, insieme, F, tipo, numero, seme, extra = null, variant
     scartate[k] = 1;
     const st = celle[k];
     if (!insieme.libero(st.c + 0.5, st.r + 0.5, tipo, T.proprio, T.altri)) continue;
-    const p = affinaPunto(carta, st.c, st.r, MODO[tipo], seed);
-    if (accetta && !accetta(p)) continue;            // il punto non va bene comunque (un mulino lontano dall'acqua)
+    const p = affinaPunto(carta, st.c, st.r, MODO[tipo], seed, tipo);
+    if (!p || (accetta && !accetta(p))) continue;            // il punto non va bene comunque (un mulino lontano dall'acqua)
     if (!insieme.libero(p.x / carta.cella, p.z / carta.cella, tipo, T.proprio, T.altri)) continue;
     const sito = { tipo, ...p };
     const v = varianti ?? T.varianti;
@@ -407,7 +498,8 @@ export function aggiungiSiti(carta) {
       const i = r * carta.cols + c;
       if (!F.terra(i) || punteggio('ovile', carta, i, F) === -Infinity) continue;
       if (!insieme.libero(c + 0.5, r + 0.5, 'ovile', T.ovile.proprio, T.ovile.altri)) continue;
-      const p = affinaPunto(carta, c, r, 'piano', seed);
+      const p = affinaPunto(carta, c, r, 'piano', seed, 'ovile');
+      if (!p) continue;
       insieme.aggiungi({ tipo: 'ovile', ...p, rocca: l.id });
       fatti++;
     }
@@ -435,8 +527,10 @@ export function aggiungiSiti(carta) {
   // Valichi: sentinella dove c'è il presidio, a volte un ospizio sul passo.
   for (const v of carta.valichi ?? []) {
     const c = Math.floor(v.x), r = Math.floor(v.y);
-    if (v.presidio) insieme.aggiungi({ tipo: 'sentinella', ...affinaPunto(carta, c, r, 'alto', seed), valico: v.id });
-    if (hashU(v.id, 17, seme) < SITI.ospizio) insieme.aggiungi({ tipo: 'ospizio', ...affinaPunto(carta, c, r, 'piano', seed), valico: v.id });
+    const pS = v.presidio ? affinaPunto(carta, c, r, 'alto', seed, 'sentinella') : null;
+    if (pS) insieme.aggiungi({ tipo: 'sentinella', ...pS, valico: v.id });
+    const pO = hashU(v.id, 17, seme) < SITI.ospizio ? affinaPunto(carta, c, r, 'piano', seed, 'ospizio') : null;
+    if (pO) insieme.aggiungi({ tipo: 'ospizio', ...pO, valico: v.id });
   }
   for (const tipo of ['rovina', 'grotta', 'eremo', 'fantastico', 'abbandonato']) {
     scegliTipo(carta, insieme, F, tipo, conta(T[tipo].numero, seme, 30 + tipo.length), seme);
@@ -573,6 +667,12 @@ export function verificaSiti(carta, limiti = { vuoto: 9, oltre: 6, frazione: 0.0
     if (vill && lontani / vill > 0.12) errori.push(`villaggi lontani dall'acqua: ${(100 * lontani / vill).toFixed(0)} %`);
     if (mulLontani) errori.push(`mulini lontani dall'acqua: ${mulLontani}`);
   }
+  // Ingombro all'asciutto sul terreno delle Scene (la regola di affinaPunto), e grotte con l'imbocco raggiungibile.
+  const seed = derivaSeme(carta.seme, 101);
+  const bagnati = S.filter((s) => !fuoriAcqua(carta, s.x, s.z, s.tipo, seed));
+  if (bagnati.length) errori.push(`${bagnati.length} siti in acqua sul terreno delle Scene (primo: ${NOMI_SITI[bagnati[0].tipo]} ${bagnati[0].id})`);
+  const ripide = S.filter((s) => s.tipo === 'grotta' && s.pendenza > GROTTE.davanti + 1e-9);
+  if (ripide.length) errori.push(`${ripide.length} grotte con l'imbocco ripido`);
   const L = carta.luoghi ?? [];
   const nT = (t) => L.filter((l) => l.tipo === t).length;
   return {

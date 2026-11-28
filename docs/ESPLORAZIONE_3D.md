@@ -3388,7 +3388,6 @@ di saper sbarcare creerebbe il difetto che oggi non c'è.
 Vincoli: il traghetto non deve diventare la scorciatoia universale (una traversata è lenta e, in futuro, chiusa dal
 maltempo); la generazione resta dentro il budget di ~15 s, rimisurata sui semi 570549, 8899 e 42424.
 
-<<<<<<< HEAD
 ## Rotte per mare e barcaiolo (novembre 2026) — deciso dall'utente, fatto, da provare
 
 > Dopo i traghetti di lago, una misura su **30 semi** ha mostrato che la premessa da cui eravamo partiti era
@@ -3435,7 +3434,7 @@ fuori dall'acqua giusta e nessun approdo che non sia su terra. `VERSIONE_GENERAT
 **Resta da fare, non mio**: il viaggio vero (costi in tempo e denaro, comando «imbarcati») è della sessione di gioco,
 in G2; la regola «niente luoghi dove nessuna rotta arriva» è di M8 in `siti.js`, e va scritta **dopo** queste rotte,
 non prima, o vieterebbe isole che ora sono raggiungibili.
-=======
+
 ## Città: quali rocche lo diventano (novembre 2026) — fatto, misurato, da provare
 
 > Richiesta dell'utente a M7: «le città siano più grandi delle rocche normali». La taglia è lavoro di M7 (classe
@@ -3482,7 +3481,6 @@ branch): se il terreno non regge il borgo più largo, il candidato viene saltato
 classe e il tetto stanno **sopra** quella riga. Da rimisurare quando le due parti si uniscono: i tre filtri si
 moltiplicano (classe × terreno che regge × distanza di 30 km) e il numero di città potrebbe calare — è il caso che il
 ripiego non copre, perché il salto di M7 non dipende dalla quota.
->>>>>>> origin/main
 
 ## Mulino ad acqua (novembre 2026) — fatto, misurato, da provare
 
