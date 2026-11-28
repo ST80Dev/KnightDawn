@@ -1643,7 +1643,7 @@ async function init() {
     get cambiBlocco() { return { quanti: cambiBlocco, ms: msCambioBlocco, totale: msTotaleBlocco, inCorso: !!preparazione, ultimo: ultimoCambio }; },
   };
 
-  avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no · Spazio: scavalca'
+  avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no · Spazio: scavalca · F: fischia il cavallo'
     + ` · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: ${inStoria() ? 'Carta' : 'Carta (clic: vai lì) · T: avanza · K: prova di combattimento'}`
     + ' · N: minimappa (icona, piccola, grande) · +/−: zoom minimappa · J: scrittoio e avvisi · I: zaino · U: musica'
     + ` · F2: qualità · F3: info · F8: menu · modalità ${inStoria() ? 'Storia' : 'Libera'}`,
@@ -1855,6 +1855,34 @@ function aggiornaIndicatoreAndatura() {
     indicatoreAndatura.classList.toggle('sfinito', sfinito());
   }, testo);
 }
+// Cavallo (milestone Cavallo, passo 2): F fischia; se è rimasto indietro (bloccato o oltre ~60 m) un avviso lo dice.
+const _frustum = new THREE.Frustum(), _mVista = new THREE.Matrix4(), _sfera = new THREE.Sphere();
+function inVista(x, y, z) {
+  camera.updateMatrixWorld();
+  _mVista.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  _frustum.setFromProjectionMatrix(_mVista);
+  _sfera.center.set(x, y + 1.1, z);
+  _sfera.radius = 1.6;
+  return _frustum.intersectsSphere(_sfera);
+}
+const FISCHIO = {
+  qui: 'Fischi: il cavallo alza la testa.',
+  arriva: 'Fischi: il cavallo arriva.',
+  ricompare: 'Fischi: poco dopo senti gli zoccoli alle tue spalle.',
+  nessunPosto: 'Fischi, ma il cavallo non può arrivare fin qui.',
+};
+function fischia() {
+  if (!cavallo) { messaggio('Non hai un cavallo.', 2500); return; }
+  if (cronista || inPausa || percorso) return;
+  messaggio(FISCHIO[cavallo.fischia(knight.stato, inVista)], 3000);
+}
+let _avvisoCavallo = null;
+function avvisoCavallo() {
+  const mostra = !!(cavallo && cavallo.indietro && cavallo.stato.distanza > 15 && !percorso && !cronista);
+  if (!mostra && !_avvisoCavallo) return;
+  if (!_avvisoCavallo) { _avvisoCavallo = avvisoHud('Il cavallo è rimasto indietro (F: fischia)', 'messaggio'); _avvisoCavallo.style.top = '116px'; }
+  _avvisoCavallo.hidden = !mostra;
+}
 const premuto = (azione) => TASTI_MOVIMENTO[azione].some((k) => tasti.has(k));
 
 window.addEventListener('keydown', (e) => {
@@ -1876,6 +1904,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyI' && !e.repeat && knight) { mostraZaino(); return; }
   if (e.code === 'KeyK' && !e.repeat && knight) { mostraProvaCombattimento(); return; }   // G1 passo 4: solo Libera
   if (e.code === 'KeyU' && !e.repeat) { messaggio(musica.alterna() ? 'Musica accesa (U per spegnerla).' : 'Musica spenta (U per riaccenderla).'); return; }
+  if (e.code === 'KeyF' && !e.repeat && knight) { fischia(); return; }
   if (e.code === PORTA.tasto && !e.repeat) {
     const azione = AZIONI_TASTO.find((a) => a.pronta());
     if (azione) { azione.esegui(); return; }
@@ -2025,7 +2054,7 @@ function scambiaBlocco(p) {
   applicaMondo(p);
   const c1 = terrain.meta.centroMondo;
   scostamento = { x: 0, z: 0 };
-  trasla(c0.x - c1.x, c0.z - c1.z, [k, cavallo?.stato, _prec], [camera.position]);
+  trasla(c0.x - c1.x, c0.z - c1.z, [k, ...(cavallo?.puntiDaTraslare() ?? []), _prec], [camera.position]);
   if (cavallo && !ostacoli.includes(cavallo)) ostacoli.push(cavallo);
   cam?.riattiva();
   cambiBlocco++;
@@ -2264,6 +2293,11 @@ function aggiornaPannello(now) {
       + (k.bloccato ? ' · bloccato' : '')
       + `\nmarcia: ${k.pendenzaMarcia >= 0 ? 'salita' : 'discesa'} ${fmt(Math.abs(Math.atan(k.pendenzaMarcia)) * 180 / Math.PI)}°`
       + ` · velocità ×${fmt(k.fattorePendenza, 2)} · andatura: ${k.andatura}`;
+    if (cavallo) {
+      const h = cavallo.stato;
+      testo += `\ncavallo: a piedi · ${h.modo === 'aspetta' ? 'aspetta' : 'segue'} a ${fmt(h.distanza, 1)} m`
+        + ` · ${h.andatura} ${fmt(h.velEffettiva, 1)} m/s${h.bruca > 0.5 ? ' · bruca' : ''}`;
+    }
     const ora = Calendar.oraDelGiorno();
     testo += `\ntempo: Passi ${Calendar.passiTotali} + ${fmt(Calendar.frazione, 3)}`
       + ` · ore ${String(Math.floor(ora)).padStart(2, '0')}:${String(Math.floor((ora % 1) * 60)).padStart(2, '0')}`
@@ -2382,7 +2416,8 @@ function frame(now) {
     } else {
       cam.prendiGiroMouse();               // in pausa il mouse non gira il cavaliere
     }
-    if (cavallo && !inPausa && !cronista) cavallo.update(dt);
+    if (cavallo && !inPausa && !cronista) cavallo.update(dt, percorso ? null : knight.stato);
+    avvisoCavallo();
     if (abitanti && !inPausa && !cronista && !percorso) abitanti.update(dt, knight.stato, 1 - _luceGiorno);
     cercaPortaVicina();
     cercaScavalcoVicino(dt);
