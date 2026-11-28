@@ -54,54 +54,49 @@ armatura completa con elmo chiuso è il caso più favorevole: niente volto, mani
 4. **Ombra vera del cavaliere** (facoltativa): ombra proiettata limitata alla zona attorno a lui al posto del
    disco finto. Si decide guardando gli FPS.
 
-### Aspetto del cavaliere per equipaggiamento, rango e Onore — deciso con l'utente, 28/11/2026, da fare
+### Aspetto del cavaliere per livello, ruolo e Onore — deciso con l'utente, 28/11/2026, da fare
 
 Oggi il modello è sempre lo stesso (grande elmo, cotta, scudo con la croce, spada, mantello rosso) anche per il
-garzone con 3 oro: non è coerente. Regola: **il modello si compone da ciò che il cavaliere indossa e da ciò che è**,
-e continua a cambiare per tutta la partita, non solo nella Veglia. Tre strati, ciascuno legato a un sistema che esiste
-o è previsto (livelli, ruoli ed Esperienza in `docs/EARLY_GAME.md` §2, Onore in `docs/GDD.md` §2, casate in `docs/FACTIONS.md`).
+garzone con 3 oro: non è coerente. Regola: **abiti completi standard per livello**, più colori e segni per ruolo e
+Onore; l'equipaggiamento comprato cambia solo i numeri, non l'aspetto (rivisto con l'utente lo stesso giorno: prima era
+un pezzo 3D per ogni oggetto del catalogo). Motivo: la modellazione dei pezzi sarebbe decine di oggetti, lavoro tolto
+al mondo; il cavaliere si vede sempre di spalle a 3–5 m, il mondo intorno è ciò che rende il gioco vario. Livelli,
+ruoli ed Esperienza in `docs/EARLY_GAME.md` §2, Onore in `docs/GDD.md` §2, casate in `docs/FACTIONS.md`.
 
-**1. Equipaggiamento** (`Knight.equip`: arma, armatura, scudo, viaggio; cataloghi in `js/data/items.js`). Ogni pezzo
-del catalogo ha il suo pezzo 3D; comprarlo, trovarlo o perderlo si vede addosso.
+**1. Abito per livello** (cinque abiti completi, uno per gruppo di livelli).
 
-| Parte | Gradini, dal più povero |
-|---|---|
-| Testa | cappuccio di lana → cuffia di maglia → cappello di ferro → elmo → grande elmo (quello di oggi) |
-| Corpo | tunica e cintura → giaco di cuoio → cotta di maglia → usbergo con sopravveste → piastre su braccia e gambe → armatura quasi completa (quella di oggi) |
-| Arma | niente → coltello → lancia da fante → spada da arme → spada bastarda → armi rare |
-| Scudo | niente → scudo di legno → scudo da campo → scudo con stemma (strato 2) |
-| Mantello | niente → mantello da viandante → mantello scuro → mantello ricco (strato 3) |
+| Abito | Livelli | Com'è |
+|---|---|---|
+| Garzone | Garzone | cappuccio di lana, tunica e cintura, niente armi in vista |
+| Scudiero | Scudiero | cuffia di maglia, giaco di cuoio, spada corta nel fodero, scudo di legno |
+| Cavaliere | Cavaliere Errante, Cavaliere Provato | cotta di maglia con sopravveste, elmo, spada, scudo, **speroni dorati** (il segno storico del cavaliere) |
+| Veterano | Veterano, Campione | armatura più completa (quella di oggi), grande elmo, cimiero |
+| Leggenda | Leggenda | la più ricca: finiture, cimiero alto, mantello pregiato |
 
-Il catalogo dopo la Veglia va allungato (pezzi alti costosi, nelle botteghe degli altri borghi: G4).
+**2. Ruolo: colori, non pezzi.**
+- **Via giurata:** sopravveste, scudo e gualdrappa del cavallo nei **colori della casata** (generati in G3).
+  **Via della ventura:** colori e stemma propri.
+- **Capitano della casata:** **stendardo quadrato** sulla lancia o al seguito (come storicamente il banneret); gli altri
+  cavalieri un pennoncello triangolare, quando portano la lancia.
 
-**2. Livello e ruolo** (insegne, non armatura). Si leggono da lontano.
-- **Garzone:** nessuna insegna. **Scudiero:** cuffia di maglia e cintura con il fodero.
-- **Cavaliere Errante** (investitura): **speroni dorati** (il segno storico del cavaliere) e pennoncello triangolare
-  sulla lancia, quando la porta.
-- **Via del vessillo** (giurato): sopravveste, scudo e gualdrappa del cavallo nei **colori della casata** (generati in G3).
-  **Via della ventura** (libero): colori e stemma propri.
-- **Capitano della casata:** il pennoncello diventa **stendardo quadrato** (come storicamente il banneret). **Livelli alti** delle due
-  vie: cimiero sull'elmo, gualdrappa ricca.
-
-**3. Onore** (−5…+5): piccoli segni, non premi.
-- Alto: mantello di qualità, finiture d'oro sullo scudo; per strada la gente si scosta (abitanti).
+**3. Onore (−5…+5): segni piccoli, sempre colori o stemmi.**
+- Alto: finiture d'oro sullo scudo, mantello di qualità; per strada la gente si scosta (abitanti).
 - Basso: stemma coperto o scudo senza insegne, mantello scuro, il «cavaliere senza colori».
 - Lo scudo capovolto come disonore resta un possibile **evento** (punizione pubblica), non una regola di aspetto.
 
 **Vincoli.**
 - Stessi snodi e misure del corpo di oggi (vedi sopra): animazione, collisioni e camera non cambiano.
 - Niente volto scoperto: con le sole primitive verrebbe da manichino; cappuccio, cuffia ed elmo lo evitano.
-- Prestazioni: i pezzi si cambiano **solo quando cambia l'equipaggiamento o il rango**, mai per fotogramma; geometrie
-  condivise e materiali in comune, stesse chiamate di disegno di oggi (~15 000 triangoli al massimo, il cavaliere
-  armato completo).
-- Modalità Libera: parte da Cavaliere Errante armato com'è oggi.
-- Gli stessi pezzi serviranno ai cavalieri non giocanti (G3–G5).
+- L'abito si cambia **solo quando cambia il livello**, colori e stemmi quando cambiano ruolo o Onore: mai per
+  fotogramma; un solo modello alla volta, stesse chiamate di disegno di oggi (~15 000 triangoli al massimo).
+- Modalità Libera: parte con l'abito da Cavaliere.
+- Gli stessi abiti serviranno ai cavalieri non giocanti (G3–G5).
 
-**Tranche** (non tutto insieme: ognuna con il sistema che la giustifica).
-- **A — con l'investitura (G1 passo 6):** strato 1 della Veglia (cappuccio, tunica, giaco, cuffia, coltello, lancia,
-  scudo di legno, mantelli) e, all'investitura, elmo e speroni dorati. Il garzone diventa cavaliere anche a vedersi.
-- **B — con G3 fazioni e nomi:** colori e stemmi delle due vie su scudo, sopravveste e gualdrappa.
-- **C — con G4 e S5 (incarichi, reputazione, promozioni):** pezzi d'armatura alti, stendardo, cimiero, segni dell'Onore.
+**Tranche.**
+- **A — con l'investitura (G1 passo 6):** abiti Garzone, Scudiero e Cavaliere. Il garzone diventa cavaliere anche a
+  vedersi.
+- **B — con G3 fazioni e nomi:** colori e stemmi delle due vie, segni dell'Onore.
+- **C — quando esisteranno quei livelli (G4, S5):** abiti Veterano e Leggenda, stendardo del Capitano.
 
 ## Persone dei borghi (`js/3d/persone3d.js`) — fatto, da provare dall'utente
 
