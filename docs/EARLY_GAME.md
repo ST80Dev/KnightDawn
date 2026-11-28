@@ -455,7 +455,7 @@ poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un
    ×0,6), animale `Combat.pescaIncontro` per bioma e ora; nella Veglia, prima della prima battaglia, niente orso né
    branco. Dopo un incontro 400 m di quiete. **Carta d'incontro**: «Affrontarlo» o sottrarsi
    (`Combat.probSottrarsi`: a piedi 20 % con i veloci, 85 % con i timidi, 50 % gli altri; se non riesce, lo scontro
-   comincia con Slancio −1). **In sella** [proposta da confermare]: al galoppo si scappa sempre, tranne ai veloci
+   comincia con Slancio −1). **In sella** [approvato dall'utente, 28/11]: al galoppo si scappa sempre, tranne ai veloci
    (lupi, aquila) una volta su due; senza galoppo (cavallo sfiancato o Forza 0) 80 %, i veloci 30 %. **Prima
    battaglia**: il primo scontro in cui si è combattuto davvero (almeno un Round o un colpo disperato) e da cui si
    esce in piedi imposta `Knight.primaSangue`; il diario (Propositi) lo segna, la cronaca del diario ha una riga per

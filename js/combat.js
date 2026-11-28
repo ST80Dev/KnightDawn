@@ -455,7 +455,7 @@ const Combat = {
 
   /**
    * Probabilità di sottrarsi a un incontro prima che cominci. A piedi: facile con i timidi, difficile con i veloci.
-   * In sella [proposta da far confermare all'utente]: al galoppo si scappa sempre, tranne ai veloci (lupi, aquila),
+   * In sella [approvato dall'utente, 28/11]: al galoppo si scappa sempre, tranne ai veloci (lupi, aquila),
    * che ci riescono una volta su due; al passo o al trotto il cavallo aiuta, ma i veloci raggiungono.
    */
   probSottrarsi(enemy, { inSella = false, galoppo = false } = {}) {
