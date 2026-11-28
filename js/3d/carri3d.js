@@ -6,6 +6,8 @@
 //    sella all'ultimo, un cavaliere di scorta dietro. Solo sulle strade maestre.
 //  - carro: carro da trasporto a quattro ruote, sponde basse e merci leggere, 1–2 cavalli, il carrettiere a piedi.
 //  - carretto: due ruote e stanghe, un mulo o un asino, il conducente a piedi alla testa. Soprattutto sulle carrarecce.
+//  - buoi (seconda PR): plaustro a due ruote piene carico di tronchi, coppia di buoi aggiogati, il bovaro a piedi davanti.
+//    Lentissimo (0,75 m/s), solo sulle strade maestre che toccano un borgo.
 //
 // Come esistono. Altrove nel mondo c'è solo un ORARIO: per ogni ramo della rete (strade maestre e carrarecce) partenze a
 // intervalli regolari dai due capi, ciascuna con tipo, velocità e un tiro di presenza dal seme. Dove sia un veicolo a un
@@ -42,6 +44,8 @@ export const CARRI = {
   tipi: {
     maestra: [['carrozza', 0.18], ['carro', 0.52], ['carretto', 0.30]],
     carrareccia: [['carretto', 0.85], ['carro', 0.15]],
+    // Maestre che toccano una rocca, un borgo o una città: anche i carri a buoi (carichi pesanti, vicino ai borghi)
+    maestraBorgo: [['buoi', 0.22], ['carrozza', 0.15], ['carro', 0.40], ['carretto', 0.23]],
   },
   notte: 0.06,         // presenza di notte (chi è in viaggio a notte fonda)
   accelerazione: 0.35, // m/s²
@@ -52,6 +56,8 @@ export const CARRI = {
 
 // Per tipo: velocità in piano (m/s), semilarghezza (m), animali, ruote (raggio, interasse, carreggiata), lunghezze.
 const TIPI = {
+  // buoi: plaustro a due ruote piene, coppia aggiogata (`coppia`: m dall'asse della strada a ciascun bue)
+  buoi: { vel: 0.75, mezza: 0.95, animali: [2, 2], ruota: 0.7, interasse: 0, carreggiata: 0.86, passo: 0, stacco: 3.6, coppia: 0.55 },
   carrozza: { vel: 1.35, mezza: 1.0, animali: [2, 4], ruota: 0.62, interasse: 3.0, carreggiata: 0.9, passo: 2.7, stacco: 2.7 },
   carro: { vel: 1.2, mezza: 0.8, animali: [1, 2], ruota: 0.5, interasse: 2.2, carreggiata: 0.74, passo: 2.6, stacco: 2.35 },
   carretto: { vel: 1.05, mezza: 0.75, animali: [1, 1], ruota: 0.6, interasse: 0, carreggiata: 0.7, passo: 0, stacco: 2.45 },
@@ -63,6 +69,8 @@ const MANTELLI = {
     ['#2a1e16', '#120d0a'], ['#8a6a44', '#3a2a1a']],
   mulo: [['#5a4030', '#2e2219'], ['#6b5644', '#3a2c20'], ['#3e3029', '#1d1612']],
   asino: [['#7d7468', '#3f3a34'], ['#5e4a3a', '#2e241c'], ['#8a8072', '#4a443c']],
+  // Buoi: grigio chiaro delle razze da lavoro dell'Appennino, fromentino, rosso bruno; [mantello, muso, coda e unghioni]
+  bue: [['#b3ab9e', '#3a322c'], ['#a89c8a', '#3a322c'], ['#9a7a56', '#2e241c'], ['#7a4a2e', '#2a1e16']],
 };
 const LIVREE = ['#8a1010', '#2a3f6e', '#2f5a34', '#6a2c5a', '#7a5a14'];
 const VESTI = ['#6b5a44', '#7a6a50', '#5a4a3a', '#8a7458', '#5a5040', '#6a6a50'];
@@ -206,13 +214,17 @@ export function puntoRotta(r, s, out = { x: 0, z: 0, h: 0, tx: 0, tz: 1, k: 1 })
   return out;
 }
 
+/** Tabella dei tipi per una rotta: le maestre che toccano un borgo hanno anche i carri a buoi. */
+const tabellaTipi = (rotta) => CARRI.tipi[rotta.classe === 'maestra' && rotta.borgo ? 'maestraBorgo' : rotta.classe];
+
 /** Tipo, velocità e colori di una partenza dell'orario (dal seme): sempre gli stessi per lo stesso id. */
 function datiPartenza(seme, rotta, verso, n) {
   const r = (i) => tiro(seme, rotta.id * 2 + verso, n, 101 + i);
   let tipo = null, acc = 0;
   const u = r(1);
-  for (const [t, p] of CARRI.tipi[rotta.classe]) { acc += p; if (u < acc) { tipo = t; break; } }
-  tipo ??= CARRI.tipi[rotta.classe].at(-1)[0];
+  const tabella = tabellaTipi(rotta);
+  for (const [t, p] of tabella) { acc += p; if (u < acc) { tipo = t; break; } }
+  tipo ??= tabella.at(-1)[0];
   const T = TIPI[tipo];
   return { tipo, vel: T.vel * (0.9 + 0.2 * r(2)), presenza: r(3), esiste: r(0) < CARRI.esiste, seme: Math.floor(r(4) * 1e9) };
 }
@@ -223,7 +235,7 @@ function datiPartenza(seme, rotta, verso, n) {
  */
 export function orarioRotta(seme, rotta, t, ritardi = null, out = []) {
   const H = CARRI.intervallo[rotta.classe] * (rotta.borgo ? CARRI.vicinoBorgo : 1);
-  const vMin = Math.min(...CARRI.tipi[rotta.classe].map(([tp]) => TIPI[tp].vel)) * 0.9;
+  const vMin = Math.min(...tabellaTipi(rotta).map(([tp]) => TIPI[tp].vel)) * 0.9;
   for (const [verso, v] of [[1, 0], [-1, 1]]) {
     const fase = tiro(seme, rotta.id, v, 7) * H;
     const n0 = Math.floor((t - rotta.L / vMin - fase) / H), n1 = Math.floor((t - fase) / H);
@@ -440,7 +452,11 @@ function geometriaAnimale() {
   const sopra = sezione(0.04).c.y + sezione(0.04).hs;
   metti(new THREE.SphereGeometry(1, 6, 3, 0, Math.PI * 2, 0, 1.1).scale(0.19, 0.1, 0.3).translate(0, sopra - 0.05, 0.04), FERMO, A_CUOIO, P_SELLA);
 
-  // Unione: non indicizzata, con gli attributi; le facce in basso un poco più scure (il peso lo dice)
+  return unisciAnimale(pezzi);
+}
+
+/** Unione dei pezzi di un animale: non indicizzata, con aSnodo, aTinta e aParte; le facce in basso un poco più scure. */
+function unisciAnimale(pezzi) {
   const parti = pezzi.map((p) => ({ ...p, geo: p.geo.index ? p.geo.toNonIndexed() : p.geo }));
   let n = 0;
   for (const p of parti) { if (!p.geo.attributes.normal) p.geo.computeVertexNormals(); n += p.geo.attributes.position.count; }
@@ -468,16 +484,127 @@ function geometriaAnimale() {
   return geo;
 }
 
+// ─── Bue (seconda PR dei veicoli): animale nuovo con le forme proprie, stessi attributi e stesso shader del cavallo ──
+
+// Misure (m) di un bue da lavoro: ~1,45 m al garrese, tronco lungo e profondo, gambe corte e grosse, collo corto con la
+// giogaia, testa portata bassa, corna a lira. Stesse convenzioni del cavallo: origine a terra sotto il centro, avanti +Z.
+const BUE = {
+  ant: { x: 0.17, y: 0.86, z: 0.55, L1: 0.38, L2: 0.48 },     // gomito → ginocchio → suolo
+  post: { x: 0.17, y: 0.92, z: -0.68, L1: 0.42, L2: 0.5 },    // grassella → garretto → suolo
+  collo: { y: 1.12, z: 0.55 },                                // perno del collo (annuisce camminando)
+  testa: new THREE.Vector3(0, 1.14, 1.04),                    // nuca
+  dirTesta: new THREE.Vector3(0, -Math.sin(1.1), Math.cos(1.1)),
+  giogo: { y: 1.37, z: 0.8 },                                 // dove il giogo poggia sul collo
+};
+const TRONCO_BUE = [
+  [-1.0, 1.08, 0.05, 0.05, 0.05], [-0.94, 1.12, 0.22, 0.2, 0.32], [-0.75, 1.15, 0.31, 0.25, 0.44],
+  [-0.4, 1.12, 0.33, 0.25, 0.5], [0.0, 1.1, 0.34, 0.27, 0.52], [0.35, 1.13, 0.32, 0.32, 0.5],
+  [0.6, 1.12, 0.27, 0.3, 0.46], [0.8, 1.02, 0.18, 0.18, 0.32], [0.86, 0.98, 0.05, 0.05, 0.05],
+];
+// Collo con la giogaia: la semialtezza in basso (hi) grande è la pelle che pende sotto la gola
+const COLLO_BUE = [[0.55, 1.15, 0.22, 0.22, 0.36], [0.78, 1.12, 0.18, 0.18, 0.34], [0.95, 1.1, 0.14, 0.15, 0.22], [1.05, 1.1, 0.11, 0.12, 0.13]];
+const TESTA_BUE = [[-0.04, 0.06, 0.06, 0.06], [0.04, 0.12, 0.11, 0.12], [0.2, 0.11, 0.09, 0.11], [0.36, 0.095, 0.075, 0.085],
+  [0.46, 0.09, 0.07, 0.075], [0.5, 0.05, 0.04, 0.04]];
+const GAMBA_BUE = {
+  altaAnt: [[0.12, 0, 0.1, 0.11, 0.11], [0, 0, 0.095, 0.1, 0.1], [-0.2, 0, 0.07, 0.07, 0.07], [-0.38, 0, 0.06, 0.06, 0.06]],
+  altaPost: [[0.16, 0, 0.12, 0.13, 0.15], [0, 0, 0.11, 0.11, 0.13], [-0.22, 0, 0.075, 0.07, 0.08], [-0.42, 0, 0.06, 0.055, 0.06]],
+  bassa: [[0.03, 0, 0.06, 0.06, 0.06], [0, 0, 0.062, 0.06, 0.06], [-0.25, 0, 0.045, 0.045, 0.05], [-0.36, 0.01, 0.05, 0.05, 0.05],
+    [-0.41, 0.02, 0.046, 0.046, 0.046]],
+};
+const A_CORNO = [0, 0, 0, 4];
+
+/** Geometria del bue, ~640 triangoli; attributi come geometriaAnimale (aParte sempre 0: niente finimenti da chiudere). */
+function geometriaBue() {
+  const pezzi = [];
+  const metti = (geo, snodo, tinta) => pezzi.push({ geo, snodo, tinta, parte: P_SEMPRE });
+  const FERMO = [0, 0, 0, 0], COLLO = [5, 0, 0, 0];
+  const puntoTesta = (t) => BUE.testa.clone().addScaledVector(BUE.dirTesta, t);
+  metti(F.tubo(F.chiaviZY(TRONCO_BUE), { n: 9, seg: 8 }).geo, FERMO, A_MANTELLO);
+  metti(F.tubo(F.chiaviZY(COLLO_BUE), { n: 4, seg: 7, tappi: false }).geo, COLLO, A_MANTELLO);
+  const testa = TESTA_BUE.map(([t, w, hs, hi]) => { const c = puntoTesta(t); return { x: 0, y: c.y, z: c.z, w, hs, hi }; });
+  metti(F.tubo(testa, { n: 5, seg: 6 }).geo, COLLO, A_MANTELLO);
+  // Muso scuro: l'ultimo tratto della testa, appena più largo
+  metti(F.tubo(testa.slice(-3), { n: 3, seg: 6, gonfia: 0.005 }).geo, COLLO, A_CRINI);
+  for (const sx of [-1, 1]) {
+    // Corna a lira: in fuori, in su e un poco in avanti
+    const c = new THREE.ConeGeometry(0.038, 0.3, 5, 1).translate(0, 0.15, 0).rotateZ(-0.85 * sx).rotateX(0.35);
+    metti(c.translate(0.09 * sx, BUE.testa.y + 0.05, BUE.testa.z - 0.02), COLLO, A_CORNO);
+    // Orecchie di traverso, sotto le corna
+    const o = new THREE.ConeGeometry(0.045, 0.15, 4, 1).translate(0, 0.075, 0).rotateZ(-1.55 * sx);
+    metti(o.translate(0.1 * sx, BUE.testa.y - 0.04, BUE.testa.z - 0.05), COLLO, A_MANTELLO);
+  }
+  // Coda sottile del colore del mantello, con il fiocco scuro
+  metti(F.tubo(F.chiaviZY([[-0.98, 1.14, 0.035, 0.035, 0.035], [-1.04, 1.02, 0.025, 0.025, 0.025], [-1.06, 0.62, 0.02, 0.02, 0.02]]),
+    { n: 3, seg: 4 }).geo, FERMO, A_MANTELLO);
+  metti(F.tubo(F.chiaviZY([[-1.06, 0.64, 0.02, 0.02, 0.02], [-1.06, 0.52, 0.05, 0.05, 0.05], [-1.06, 0.42, 0.012, 0.012, 0.012]]),
+    { n: 3, seg: 4 }).geo, FERMO, A_CRINI);
+  [[BUE.ant, false], [BUE.post, true]].forEach(([G, post], gi) => {
+    for (const lato of [1, -1]) {
+      const codice = gi * 2 + (lato > 0 ? 1 : 2);
+      const yG = G.y - G.L1;
+      metti(F.tubo(F.chiaviGamba(post ? GAMBA_BUE.altaPost : GAMBA_BUE.altaAnt, G, lato), { n: 3, seg: 5, tappi: false }).geo,
+        [codice, 0, G.y, yG], A_MANTELLO);
+      metti(F.tubo(F.chiaviGamba(GAMBA_BUE.bassa, { ...G, y: yG }, lato), { n: 4, seg: 5, tappi: false }).geo,
+        [codice, 1, G.y, yG], A_MANTELLO);
+      const u = F.tornio([[0.05, -0.4], [0.062, -G.L2 + 0.005], [0, -G.L2]], { seg: 5 }).translate(G.x * lato, yG, G.z + 0.02);
+      metti(u, [codice, 1, G.y, yG], A_CRINI);                // unghioni
+    }
+  });
+  return unisciAnimale(pezzi);
+}
+
+/**
+ * Plaustro: carro da buoi a due ruote piene, pianale con gli stanti, timone lungo fino al giogo sul collo della coppia,
+ * carico di tronchi. Origine a terra sotto l'asse, avanti +Z; la punta del timone è a PLAUSTRO.giogo. ~440 triangoli.
+ */
+const PLAUSTRO = { giogo: { y: BUE.giogo.y, z: TIPI.buoi.stacco + BUE.giogo.z } };
+function geometriaPlaustro() {
+  const R = TIPI.buoi.ruota, y0 = R + 0.12, G = PLAUSTRO.giogo;
+  const p = [
+    { geo: box(1.4, 0.1, 2.8, 0, y0, 0), colore: LEGNO },
+    { geo: box(0.12, 0.14, 2.9, 0.45, y0 - 0.11, 0), colore: LEGNO_SCURO },
+    { geo: box(0.12, 0.14, 2.9, -0.45, y0 - 0.11, 0), colore: LEGNO_SCURO },
+    { geo: box(1.9, 0.14, 0.14, 0, R, 0), colore: LEGNO_SCURO },                               // asse
+  ];
+  for (const sx of [-1, 1]) {
+    for (const z of [-1.2, -0.4, 0.4, 1.2]) p.push({ geo: box(0.07, 0.6, 0.07, 0.7 * sx, y0 + 0.3, z), colore: LEGNO_SCURO });
+    p.push({ geo: box(0.05, 0.06, 2.8, 0.7 * sx, y0 + 0.55, 0), colore: LEGNO });
+  }
+  // Timone: dal fronte del pianale alla punta, sotto il giogo
+  const t0 = { y: y0 - 0.05, z: 1.3 }, dy = G.y - 0.08 - t0.y, dz = G.z - t0.z, l = Math.hypot(dy, dz);
+  p.push({ geo: new THREE.BoxGeometry(0.12, 0.12, l).rotateX(-Math.atan2(dy, dz)).translate(0, t0.y + dy / 2, t0.z + dz / 2), colore: LEGNO_SCURO });
+  // Giogo sulle due nuche, con gli archetti attorno ai colli
+  p.push({ geo: box(1.9, 0.13, 0.16, 0, G.y, G.z), colore: LEGNO });
+  for (const bx of [-TIPI.buoi.coppia, TIPI.buoi.coppia]) {
+    for (const k of [-0.17, 0.17]) p.push({ geo: box(0.04, 0.36, 0.04, bx + k, G.y - 0.2, G.z), colore: LEGNO_SCURO });
+  }
+  // Tronchi: quattro sotto, tre sopra
+  const tronco = (x, y) => new THREE.CylinderGeometry(0.17, 0.17, 3.0, 7).rotateX(Math.PI / 2).translate(x, y, -0.05);
+  for (const x of [-0.51, -0.17, 0.17, 0.51]) p.push({ geo: tronco(x, y0 + 0.22), colore: '#6a5038' });
+  for (const x of [-0.34, 0, 0.34]) p.push({ geo: tronco(x, y0 + 0.51), colore: '#5e4630' });
+  return unisciColori(p);
+}
+
+/** Ruota piena di raggio 1 (asse X): disco di tavole con due traverse sulle facce e il mozzo. ~120 triangoli. */
+function geometriaRuotaPiena() {
+  const p = [
+    { geo: new THREE.CylinderGeometry(1, 1, 0.14, 12).rotateZ(Math.PI / 2), colore: LEGNO },
+    { geo: new THREE.CylinderGeometry(0.18, 0.18, 0.3, 6).rotateZ(Math.PI / 2), colore: LEGNO_SCURO },
+  ];
+  for (const sx of [-1, 1]) for (const z of [-0.45, 0.45]) p.push({ geo: box(0.03, 1.6, 0.14, 0.085 * sx, 0, z), colore: LEGNO_SCURO });
+  return unisciColori(p);
+}
+
 const vec = (hex) => { const c = new THREE.Color(hex); return `vec3(${c.r.toFixed(4)}, ${c.g.toFixed(4)}, ${c.b.toFixed(4)})`; };
 
 /**
  * Andatura al passo nel vertex shader (sfasamenti di ANDATURE.passo in cavallo3d.js: laterale a quattro tempi): la gamba
  * alta oscilla attorno al gomito o alla grassella, la bassa si piega quando lo zoccolo è in volo; collo e testa annuiscono.
- * Funzione a livello di modulo: il testo fa da chiave della cache dei programmi (un solo programma per la partita).
+ * Una funzione per specie (INNESTI), creata una volta; customProgramCacheKey del materiale le distingue nella cache dei
+ * programmi (stesso testo, costanti diverse): un programma per specie per tutta la partita.
  */
-function innestaAnimali(shader) {
-  const A = F.ANTERIORE, P = F.POSTERIORE, PC = F.PERNO_COLLO;
-  shader.vertexShader = shader.vertexShader
+function innestoAnimali({ zA, zP, yC, zC, amp }) {
+  return (shader) => { shader.vertexShader = shader.vertexShader
     .replace('#include <common>', `#include <common>
       attribute vec4 aSnodo;    // gamba (0 nessuna · 1–4 · 5 collo e testa), parte bassa, quota del perno, quota del ginocchio
       attribute vec4 aTinta;    // pesi di mantello, crini, stoffa; w: colore fisso (1 zoccolo · 2 cuoio · 3 ferro)
@@ -493,14 +620,15 @@ function innestaAnimali(shader) {
       }`)
     .replace('#include <color_vertex>', `
       vec3 kdT = aTinta.x * iMantello + aTinta.y * iCrini + aTinta.z * iStoffa;
-      if (aTinta.w > 0.5) kdT = aTinta.w < 1.5 ? ${vec('#2b2520')} : aTinta.w < 2.5 ? ${vec('#4e2c14')} : ${vec('#8e949b')};
+      if (aTinta.w > 0.5) kdT = aTinta.w < 1.5 ? ${vec('#2b2520')} : aTinta.w < 2.5 ? ${vec('#4e2c14')}
+        : aTinta.w < 3.5 ? ${vec('#8e949b')} : ${vec('#c2b494')};   // 4: corno
       vColor = vec4(kdT, 1.0);`)
     .replace('#include <beginnormal_vertex>', `#include <beginnormal_vertex>
       float kdA1 = 0.0, kdA2 = 0.0, kdZ = 0.0, kdY = aSnodo.z;
       int kdG = int(aSnodo.x + 0.5);
       if (kdG >= 1 && kdG <= 4) {
         float sf = kdG == 1 ? 0.25 : kdG == 2 ? 0.75 : kdG == 3 ? 0.0 : 0.5;
-        float p = fract(iMoto.x + sf), amp = 0.4 * iMoto.y;
+        float p = fract(iMoto.x + sf), amp = ${amp.toFixed(3)} * iMoto.y;
         const float APP = 0.62;
         if (p < APP) kdA1 = mix(-amp, amp, p / APP);              // a terra: lo zoccolo va indietro
         else {
@@ -508,10 +636,10 @@ function innestaAnimali(shader) {
           kdA1 = mix(amp, -amp, e);                               // in volo: torna avanti
           kdA2 = aSnodo.y * sin(3.14159 * u) * 0.85 * iMoto.y;    // e si piega al ginocchio
         }
-        kdZ = kdG <= 2 ? ${A.z.toFixed(3)} : ${P.z.toFixed(3)};
+        kdZ = kdG <= 2 ? ${zA.toFixed(3)} : ${zP.toFixed(3)};
       } else if (kdG == 5) {                                       // collo e testa: annuiscono a ogni passo
         kdA1 = 0.05 * iMoto.y * sin(12.566 * iMoto.x) + 0.04 * iMoto.y;
-        kdY = ${PC.y.toFixed(3)}; kdZ = ${PC.z.toFixed(3)};
+        kdY = ${yC.toFixed(3)}; kdZ = ${zC.toFixed(3)};
       }
       vec3 kdN = objectNormal;
       kdRuotaX(kdN, 0.0, 0.0, kdA2);
@@ -526,21 +654,31 @@ function innestaAnimali(shader) {
       else if (aParte > 2.5 && aParte < 3.5) kdVedi = 1.0 - iMoto.z;
       else if (aParte > 3.5) kdVedi = iMoto.z;
       transformed = mix(vec3(0.0, 1.0, 0.0), transformed, kdVedi);`);
+  };
 }
+// Una funzione per specie, creata una volta: perni delle gambe e del collo, ampiezza del passo
+const INNESTI = {
+  cavallo: innestoAnimali({ zA: F.ANTERIORE.z, zP: F.POSTERIORE.z, yC: F.PERNO_COLLO.y, zC: F.PERNO_COLLO.z, amp: 0.4 }),
+  bue: innestoAnimali({ zA: BUE.ant.z, zP: BUE.post.z, yC: BUE.collo.y, zC: BUE.collo.z, amp: 0.3 }),
+};
 
 // Materiali: uno per tutta la partita (userData.condivisa: libera() di main.js non li cancella, niente ricompilazioni).
-let _matLegno = null, _matAnimali = null;
+let _matLegno = null;
+const _matAnimali = {};
 function materialeLegno() {
   if (!_matLegno) { _matLegno = new THREE.MeshLambertMaterial({ vertexColors: true }); _matLegno.userData.condivisa = true; }
   return _matLegno;
 }
-function materialeAnimali() {
-  if (!_matAnimali) {
-    _matAnimali = new THREE.MeshLambertMaterial({ vertexColors: true });
-    _matAnimali.onBeforeCompile = innestaAnimali;
-    _matAnimali.userData.condivisa = true;
+function materialeAnimali(specie = 'cavallo') {
+  if (!_matAnimali[specie]) {
+    const m = new THREE.MeshLambertMaterial({ vertexColors: true });
+    m.onBeforeCompile = INNESTI[specie];
+    // Le funzioni hanno lo stesso testo e costanti diverse: la chiave della cache dei programmi deve distinguerle
+    m.customProgramCacheKey = () => `carri-animali-${specie}`;
+    m.userData.condivisa = true;
+    _matAnimali[specie] = m;
   }
-  return _matAnimali;
+  return _matAnimali[specie];
 }
 
 /** InstancedMesh con capacità fissa, `count` rifatto a ogni fotogramma (solo le istanze visibili). */
@@ -568,25 +706,34 @@ export function creaCarri(carta) {
   const M = CARRI.massimo;
 
   // Pool di istanze (capacità fissa per tutta la partita)
-  const mAnimali = istanze(geometriaAnimale(), materialeAnimali(), M * 5, 'carri-animali');
-  const capA = M * 5;
-  const iMant = new THREE.InstancedBufferAttribute(new Float32Array(capA * 3), 3);
-  const iCrin = new THREE.InstancedBufferAttribute(new Float32Array(capA * 3), 3);
-  const iStof = new THREE.InstancedBufferAttribute(new Float32Array(capA * 3), 3);
-  const iMoto = new THREE.InstancedBufferAttribute(new Float32Array(capA * 4), 4);
-  for (const a of [iMant, iCrin, iStof, iMoto]) a.setUsage(THREE.DynamicDrawUsage);
-  mAnimali.geometry.setAttribute('iMantello', iMant);
-  mAnimali.geometry.setAttribute('iCrini', iCrin);
-  mAnimali.geometry.setAttribute('iStoffa', iStof);
-  mAnimali.geometry.setAttribute('iMoto', iMoto);
+  /** Animali di una specie: una InstancedMesh con mantello, crini, stoffa e passo per istanza. */
+  function branco(geo, mat, cap, nome) {
+    const mesh = istanze(geo, mat, cap, nome);
+    const b = { mesh, n: 0,
+      iMant: new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3),
+      iCrin: new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3),
+      iStof: new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3),
+      iMoto: new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4) };
+    for (const [k, a] of [['iMantello', b.iMant], ['iCrini', b.iCrin], ['iStoffa', b.iStof], ['iMoto', b.iMoto]]) {
+      a.setUsage(THREE.DynamicDrawUsage);
+      mesh.geometry.setAttribute(k, a);
+    }
+    return b;
+  }
+  const branchi = {
+    cavallo: branco(geometriaAnimale(), materialeAnimali('cavallo'), M * 5, 'carri-animali'),
+    bue: branco(geometriaBue(), materialeAnimali('bue'), M * 2, 'carri-buoi'),
+  };
   const mRuote = istanze(geometriaRuota(), materialeLegno(), M * 4, 'carri-ruote');
+  const mRuotePiene = istanze(geometriaRuotaPiena(), materialeLegno(), M * 2, 'carri-ruote-piene');
   const mCorde = istanze(geometriaCorda(), materialeLegno(), M * 8, 'carri-corde');
   const mCasse = {
     carrozza: istanze(geometriaCarrozza(), materialeLegno(), M, 'carri-carrozze'),
     carro: istanze(geometriaCarro(), materialeLegno(), M, 'carri-carri'),
     carretto: istanze(geometriaCarretto(), materialeLegno(), M, 'carri-carretti'),
+    buoi: istanze(geometriaPlaustro(), materialeLegno(), M, 'carri-plaustri'),
   };
-  object.add(mAnimali, mRuote, mCorde, ...Object.values(mCasse));
+  object.add(...Object.values(branchi).map((b) => b.mesh), mRuote, mRuotePiene, mCorde, ...Object.values(mCasse));
   for (const m of Object.values(mCasse)) m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(M * 3).fill(1), 3);
 
   // Persone: carrettieri a piedi, postiglioni e scorte in sella (persone3d.js, una InstancedMesh per tutte)
@@ -619,15 +766,18 @@ export function creaCarri(carta) {
     const T = TIPI[d.tipo];
     const r = (i) => tiro(d.seme, i, 5);
     const nAnimali = T.animali[0] + Math.floor(r(1) * (T.animali[1] - T.animali[0] + 1));
-    const specie = d.tipo === 'carretto' ? (r(2) < 0.6 ? 'mulo' : 'asino') : 'cavallo';
+    const specie = d.tipo === 'buoi' ? 'bue' : d.tipo === 'carretto' ? (r(2) < 0.6 ? 'mulo' : 'asino') : 'cavallo';
     const mant = MANTELLI[specie][Math.floor(r(3) * MANTELLI[specie].length)];
     const livrea = LIVREE[Math.floor(r(4) * LIVREE.length)];
     const animali = [];
     for (let i = 0; i < nAnimali; i++) {
       // Cavalli della stessa muta di solito dello stesso mantello; ogni tanto uno diverso
       const m = r(10 + i) < 0.7 ? mant : MANTELLI[specie][Math.floor(r(20 + i) * MANTELLI[specie].length)];
-      const sc = specie === 'cavallo' ? 1.02 + 0.06 * r(30 + i) : specie === 'mulo' ? 0.9 : 0.74;
-      animali.push({ off: 1.25 + i * T.passo, specie, scala: sc, mantello: new THREE.Color(m[0]), crini: new THREE.Color(m[1]),
+      const sc = specie === 'cavallo' ? 1.02 + 0.06 * r(30 + i) : specie === 'mulo' ? 0.9 : specie === 'bue' ? 0.97 + 0.06 * r(30 + i) : 0.74;
+      // I buoi vanno in coppia sotto il giogo, fianco a fianco (lato: m a sinistra della corsia); gli altri in fila
+      const coppia = T.coppia ? (i === 0 ? T.coppia : -T.coppia) : 0;
+      animali.push({ off: (T.coppia ? 1.4 : 1.25) + (T.coppia ? 0 : i * T.passo), lato: coppia, specie, scala: sc,
+        mantello: new THREE.Color(m[0]), crini: new THREE.Color(m[1]),
         finimenti: d.tipo === 'carrozza' && i === nAnimali - 1 ? 2 : 0, fase: r(40 + i) });
     }
     const ultimo = animali[nAnimali - 1].off;
@@ -644,7 +794,9 @@ export function creaCarri(carta) {
       v.persone.push({ p: libere.sella.find((q, i) => i % 2 === 0 && !q.usata), su: animali[nAnimali - 1] });
       v.persone.push({ p: libere.sella.find((q, i) => i % 2 === 1 && !q.usata), su: v.scorta });
     } else {
-      v.persone.push({ p: libere.piedi.find((q) => !q.usata), a: { avanti: 0.85, lato: d.tipo === 'carretto' ? 0.7 : 0.8 } });
+      // A piedi alla testa del primo animale; il bovaro un poco davanti alla coppia, dal lato sinistro
+      const a = d.tipo === 'buoi' ? { avanti: 1.5, lato: 0.6 } : { avanti: 0.85, lato: d.tipo === 'carretto' ? 0.7 : 0.8 };
+      v.persone.push({ p: libere.piedi.find((q) => !q.usata), a });
     }
     for (const q of v.persone) if (q.p) { q.p.usata = true; q.p.object.visible = false; }
     v.persone = v.persone.filter((q) => q.p);
@@ -669,7 +821,7 @@ export function creaCarri(carta) {
    * Punto della strada `dietro` m di tracciato alle spalle del primo animale (negativo: davanti), con lo spostamento
    * sulla corsia: out.x, out.z (mondo), out.h, out.fx, out.fz (verso di marcia).
    */
-  function puntoDi(v, dietro, out) {
+  function puntoDi(v, dietro, out, lato = 0) {
     puntoRotta(v.rotta, v.s, _q);
     let r = v.rotta, s = v.s - v.verso * dietro * _q.k, verso = v.verso;
     // Ancora sulla rotta di prima (il primo animale ha appena passato un incrocio)
@@ -680,7 +832,7 @@ export function creaCarri(carta) {
     }
     puntoRotta(r, s, out);
     out.fx = out.tx * verso; out.fz = out.tz * verso;
-    const corsia = Math.max(0, (r.classe === 'maestra' ? 3.5 : 2.25) - v.T.mezza - 0.35);
+    const corsia = Math.max(0, (r.classe === 'maestra' ? 3.5 : 2.25) - v.T.mezza - 0.35) + lato;
     // A sinistra della carreggiata: sinistra di (fx, fz) è (fz, −fx), come in cavallo3d.js
     out.x += out.fz * corsia; out.z -= out.fx * corsia;
     if (ctx) {
@@ -717,12 +869,17 @@ export function creaCarri(carta) {
   /** Le sagome (cerchi nel piano, m del mondo) di un veicolo, per le collisioni e per chi sbarra la strada. */
   function sagome(v) {
     v.cerchi.length = 0;
-    for (const a of v.animali) v.cerchi.push({ x: a.x, z: a.z, r: 0.5 * a.scala, fx: a.fx, fz: a.fz, lungo: 0.6 * a.scala });
+    for (const a of v.animali) {
+      const bue = a.specie === 'bue';
+      v.cerchi.push({ x: a.x, z: a.z, r: (bue ? 0.42 : 0.5) * a.scala, fx: a.fx, fz: a.fz, lungo: (bue ? 0.75 : 0.6) * a.scala });
+    }
     if (v.scorta) v.cerchi.push({ x: v.scorta.x, z: v.scorta.z, r: 0.5, fx: v.scorta.fx, fz: v.scorta.fz, lungo: 0.6 });
     const c = v.cassa;
     if (c) {
-      const lungo = v.tipo === 'carretto' ? 0.9 : v.tipo === 'carrozza' ? 2.35 : 1.7;
-      v.cerchi.push({ x: c.x, z: c.z, r: v.T.mezza, fx: c.fx, fz: c.fz, lungo });
+      const lungo = v.tipo === 'carretto' ? 0.9 : v.tipo === 'carrozza' ? 2.35 : v.tipo === 'buoi' ? 1.4 : 1.7;
+      v.cerchi.push({ x: c.x, z: c.z, r: v.tipo === 'buoi' ? 0.85 : v.T.mezza, fx: c.fx, fz: c.fz, lungo });
+      // Il timone del plaustro, tra il pianale e la coppia
+      if (v.tipo === 'buoi') v.cerchi.push({ x: c.x + c.fx * 2.4, z: c.z + c.fz * 2.4, r: 0.15, fx: c.fx, fz: c.fz, lungo: 1.0 });
     }
     for (const q of v.persone) if (q.a) v.cerchi.push({ x: q.x, z: q.z, r: 0.3, fx: 1, fz: 0, lungo: 0 });
   }
@@ -784,10 +941,11 @@ export function creaCarri(carta) {
 
   /** Pone un animale nel suo punto: direzione della strada, beccheggio dalla quota davanti e dietro. */
   function poniAnimale(v, a, dietro) {
-    puntoDi(v, dietro, _p);
+    const lato = a.lato ?? 0;
+    puntoDi(v, dietro, _p, lato);
     a.x = _p.x; a.z = _p.z; a.h = _p.h; a.fx = _p.fx; a.fz = _p.fz;
-    const hA = puntoDi(v, dietro - 0.6 * a.scala, _q).h;
-    const hP = puntoDi(v, dietro + 0.6 * a.scala, _q).h;
+    const hA = puntoDi(v, dietro - 0.6 * a.scala, _q, lato).h;
+    const hP = puntoDi(v, dietro + 0.6 * a.scala, _q, lato).h;
     a.beccheggio = Math.atan2(hA - hP, 1.2 * a.scala);
     a.dir = Math.atan2(a.fx, a.fz);
   }
@@ -795,7 +953,7 @@ export function creaCarri(carta) {
   function matriceAnimale(a, c) {
     _e.set(-a.beccheggio, a.dir, 0);
     _qt.setFromEuler(_e);
-    const mulo = a.specie !== 'cavallo';
+    const mulo = a.specie === 'mulo' || a.specie === 'asino';
     _s.set(a.scala * (mulo ? 0.9 : 1), a.scala, a.scala * (mulo ? 0.95 : 1));
     _m.compose(_v.set(a.x - c.x, a.h, a.z - c.z), _qt, _s);
     return _m;
@@ -853,7 +1011,7 @@ export function creaCarri(carta) {
         if (v.prec && Math.abs(v.s - (v.verso > 0 ? 0 : v.rotta.L)) > 40) v.prec = null;   // il treno ha passato l'incrocio
         if (v.s < 0 || v.s > v.rotta.L) { capolinea(v); if (!vivi.includes(v)) continue; }
         v.ruote += ds / v.T.ruota;
-        for (const a of v.animali) a.fase += ds / (1.5 * a.scala);
+        for (const a of v.animali) a.fase += ds / ((a.specie === 'bue' ? 1.2 : 1.5) * a.scala);
         if (v.scorta) v.scorta.fase += ds / 1.5;
         for (const q of v.persone) q.p.update(dt, { modo: q.a && v.v > 0.1 ? 'cammina' : 'fermo', velocita: v.v });
       }
@@ -869,7 +1027,15 @@ export function creaCarri(carta) {
       for (const a of v.animali) poniAnimale(v, a, a.off);
       if (v.scorta) poniAnimale(v, v.scorta, v.scorta.off);
       const anteriore = puntoDi(v, v.asse, { x: 0, z: 0, h: 0 });
-      if (v.tipo === 'carretto') {
+      if (v.tipo === 'buoi') {
+        // Due ruote: il pianale poggia sull'asse, il timone va al giogo sui colli della coppia
+        const [a, b] = v.animali, sc = (a.scala + b.scala) / 2;
+        const gx = (a.x + b.x) / 2 + a.fx * BUE.giogo.z * sc, gz = (a.z + b.z) / 2 + a.fz * BUE.giogo.z * sc;
+        const yAtt = (a.h + b.h) / 2 + BUE.giogo.y * sc;
+        const dx = gx - anteriore.x, dz = gz - anteriore.z, dist = Math.hypot(dx, dz) || 1;
+        v.cassa = { x: anteriore.x, z: anteriore.z, h: anteriore.h, fx: dx / dist, fz: dz / dist,
+          beccheggio: Math.atan2(yAtt - anteriore.h, dist) - Math.atan2(PLAUSTRO.giogo.y, PLAUSTRO.giogo.z), dir: Math.atan2(dx, dz) };
+      } else if (v.tipo === 'carretto') {
         // Due ruote: la cassa poggia sull'asse e le stanghe sul mulo
         const a = v.animali[0];
         const yAtt = a.h + 0.95 * a.scala, yAsse = anteriore.h + v.T.ruota;
@@ -902,8 +1068,9 @@ export function creaCarri(carta) {
     const c = s.centro, cam = s.camera;
     _pm.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
     frustum.setFromProjectionMatrix(_pm);
-    let na = 0, nr = 0, nc = 0;
-    const nCasse = { carrozza: 0, carro: 0, carretto: 0 };
+    let nr = 0, np = 0, nc = 0;
+    for (const k in branchi) branchi[k].n = 0;
+    const nCasse = { carrozza: 0, carro: 0, carretto: 0, buoi: 0 };
     stat.disegnati = 0; stat.persone = 0;
     for (const p of tutte) p.object.visible = false;
     for (const v of vivi) {
@@ -914,16 +1081,17 @@ export function creaCarri(carta) {
       stat.disegnati++;
       // Animali
       for (const a of [...v.animali, ...(v.scorta ? [v.scorta] : [])]) {
-        if (na >= mAnimali.instanceMatrix.count) break;
-        matriceAnimale(a, c).toArray(mAnimali.instanceMatrix.array, na * 16);
-        a.mantello.toArray(iMant.array, na * 3);
-        a.crini.toArray(iCrin.array, na * 3);
-        v.livrea.toArray(iStof.array, na * 3);
-        iMoto.array[na * 4] = a.fase;
-        iMoto.array[na * 4 + 1] = clamp(v.v / 0.5, 0, 1);
-        iMoto.array[na * 4 + 2] = a.specie === 'cavallo' ? 0 : 1;
-        iMoto.array[na * 4 + 3] = a.finimenti;
-        na++;
+        const B = branchi[a.specie === 'bue' ? 'bue' : 'cavallo'], k = B.n;
+        if (k >= B.mesh.instanceMatrix.count) continue;
+        matriceAnimale(a, c).toArray(B.mesh.instanceMatrix.array, k * 16);
+        a.mantello.toArray(B.iMant.array, k * 3);
+        a.crini.toArray(B.iCrin.array, k * 3);
+        v.livrea.toArray(B.iStof.array, k * 3);
+        B.iMoto.array[k * 4] = a.fase;
+        B.iMoto.array[k * 4 + 1] = clamp(v.v / 0.5, 0, 1);
+        B.iMoto.array[k * 4 + 2] = a.specie === 'mulo' || a.specie === 'asino' ? 1 : 0;
+        B.iMoto.array[k * 4 + 3] = a.finimenti;
+        B.n++;
       }
       // Cassa
       const K = v.cassa, mC = mCasse[v.tipo];
@@ -935,19 +1103,19 @@ export function creaCarri(carta) {
       nCasse[v.tipo]++;
       // Ruote nel sistema della cassa
       const T = v.T, R = T.ruota;
-      const assi = v.tipo === 'carretto' ? [0] : [T.interasse / 2, -T.interasse / 2];
+      const assi = v.tipo === 'carretto' || v.tipo === 'buoi' ? [0] : [T.interasse / 2, -T.interasse / 2];
+      const piene = v.tipo === 'buoi', mR = piene ? mRuotePiene : mRuote;
       for (const zA of assi) {
         for (const sx of [-1, 1]) {
           _m.multiplyMatrices(_m2, _m3.makeTranslation(T.carreggiata * sx, R, zA));
           _m.multiply(_m3.makeRotationX(v.ruote));
           _m.scale(_s.set(R, R, R));
-          _m.toArray(mRuote.instanceMatrix.array, nr * 16);
-          nr++;
+          _m.toArray(mR.instanceMatrix.array, (piene ? np++ : nr++) * 16);
         }
       }
       // Tirelle: dal collare di ogni animale a quello dell'animale dietro, dall'ultimo al bilancino in punta al timone
       // (il carretto ha le stanghe, nella sua geometria)
-      const A = v.animali;
+      const A = v.tipo === 'buoi' ? [] : v.animali;   // i buoi tirano col giogo, nella geometria del plaustro
       for (let i = 0; i < A.length; i++) {
         if (i + 1 === A.length && v.tipo === 'carretto') break;
         for (const sx of [-1, 1]) {
@@ -977,11 +1145,17 @@ export function creaCarri(carta) {
         }
       }
     }
-    mAnimali.count = na; mRuote.count = nr; mCorde.count = nc;
+    mRuote.count = nr; mRuotePiene.count = np; mCorde.count = nc;
     for (const t in mCasse) { mCasse[t].count = nCasse[t]; mCasse[t].instanceMatrix.needsUpdate = true; mCasse[t].instanceColor.needsUpdate = true; }
-    for (const m of [mAnimali, mRuote, mCorde]) m.instanceMatrix.needsUpdate = true;
-    for (const a of [iMant, iCrin, iStof, iMoto]) a.needsUpdate = true;
-    stat.animali = na;
+    for (const m of [mRuote, mRuotePiene, mCorde]) m.instanceMatrix.needsUpdate = true;
+    stat.animali = 0;
+    for (const k in branchi) {
+      const B = branchi[k];
+      B.mesh.count = B.n;
+      B.mesh.instanceMatrix.needsUpdate = true;
+      for (const a of [B.iMant, B.iCrin, B.iStof, B.iMoto]) a.needsUpdate = true;
+      stat.animali += B.n;
+    }
   }
 
   /** Attacco della tirella al collare di un animale, lato sx (in coordinate locali del blocco). */
