@@ -39,6 +39,7 @@ import { distanzaStrada, percorsiStrade } from '../mondo/strade.js';
 import { posizionaVegetazione, posizionaVegetazioneAPezzi, coperturaMondo, coperturaTavullia } from '../mondo/vegetazione.js';
 import { creaVegetazione, creaVegetazioneAPezzi } from './vegetazione3d.js';
 import { creaAbitanti } from './abitanti3d.js';
+import { creaCarri } from './carri3d.js';
 import { creaPersone } from './persone3d.js';
 import { semeDaTesto, completa } from '../mondo/rumore.js';
 import { creaCielo, posizioneSole, visibilitaDelGiorno } from './cielo.js';
@@ -219,6 +220,7 @@ let vegetazione = null;                   // alberi, arbusti, rocce della Scena 
 let villaggi = [];                        // M8: villaggi, ovili, monasteri ed eremi del blocco (villaggio3d.js)
 let campagna = null;                      // M7, passo 5: case di campagna del blocco (edifici3d.js)
 let abitanti = null;                      // M7, passo 7: persone di rocche e borghi (abitanti3d.js)
+let carri = null;                         // veicoli sulle strade (carri3d.js): uno per Carta, resta ai cambi di blocco
 let vegetazioneVisibile = true;           // tasto V
 // Il blocco del mondo si centra sulla griglia fissa del mondo (centroBlocco): le coordinate locali chieste per la
 // Scena (rispetto al centro richiesto) si spostano di tanto in posizionaCavaliere.
@@ -1345,7 +1347,7 @@ function* preparaScheda(oggetti) {
 }
 
 /** Mette in scena una Scena del mondo preparata da preparaMondo (la scena attuale è già stata tolta). */
-function applicaMondo(p) {
+function applicaMondo(p, scambio = false) {
   scostamento = p.scostamento;
   terrain = p.ter;
   acqueScena = p.acque;
@@ -1408,6 +1410,28 @@ function applicaMondo(p) {
     scene.add(abitanti.object);
     ostacoli.push(abitanti);
   }
+  // Veicoli sulle strade (carri3d.js): si crea una volta per Carta; la posizione dei veicoli è sulla rete del mondo,
+  // quindi al cambio di blocco non c'è niente da spostare, solo il suolo nuovo. Fuori dal blocco: quota della strada.
+  if (!carri || carri.carta !== carta) {
+    if (carri) { scene.remove(carri.object); libera(carri.object); }
+    carri = creaCarri(carta);
+    scene.add(carri.object);
+  }
+  carri.object.visible = true;
+  const paesiCarri = villaggi.filter((v) => v.coperto);
+  carri.blocco({
+    altezza: (x, z) => {
+      const m = terrain.meta.centroMondo, lx = x - m.x, lz = z - m.z;
+      return suolo.contains(lx, lz) ? suolo.getHeight(lx, lz) : NaN;
+    },
+    coperto: paesiCarri.length ? (x, z) => {
+      let c = 0;
+      for (const v of paesiCarri) { c = Math.max(c, v.coperto(x, z)); if (c >= 1) break; }
+      return c;
+    } : null,
+    iniziale: !scambio,                    // al caricamento la Scena non si vede ancora: possono nascere anche vicino
+  });
+  ostacoli.push(carri);
   scenaAttuale = p.desc;
   statPendenze = misuraPendenze(terrain);
   cieloScena.invalida();                   // ricalcola le luci
@@ -1427,6 +1451,7 @@ async function caricaScena(desc) {
     return;
   }
   if (desc.tipo === 'tavullia') {
+    if (carri) carri.object.visible = false;
     terrain = await loadTerrain('tavullia');
     if (terrain.isFallback) avvisoHud('Dati del terreno reale non trovati: terreno procedurale di prova.');
     castle = createCastle(terrain);
@@ -1706,6 +1731,7 @@ async function init() {
     get terrain() { return terrain; }, get knight() { return knight; }, get castle() { return castle; },
     get carta() { return carta; }, get scena() { return scenaAttuale; }, get orizzonte() { return orizzonte; },
     get rocche() { return rocche; }, get villaggi() { return villaggi; }, get campagna() { return campagna; }, get abitanti() { return abitanti; },
+    get carri() { return carri; },
     get vegetazione() { return vegetazione; }, get cavallo() { return cavallo; }, get ponti() { return ponti; },
     caricaScena, posizionaCavaliere, minimappa,
     /** M7, passo 9: ricentra il blocco (su { x, z } del mondo, o sul cavaliere) — per il percorso di prova. */
@@ -2178,7 +2204,8 @@ function gruppoDi(o) {
   if (orizzonte && top === orizzonte.oggetto) return 'ter. orizzonte';
   if (vegetazione && top === vegetazione.oggetto) return 'veg. resto';
   if ((castle && top === castle.object) || rocche.some((r) => r.object === top) || villaggi.some((r) => r.object === top) || (campagna && top === campagna.object)) return 'edifici';
-  if ((knight && top === knight.object) || (cavallo && top === cavallo.object) || (abitanti && top === abitanti.object)) return 'personaggi';
+  if ((knight && top === knight.object) || (cavallo && top === cavallo.object) || (abitanti && top === abitanti.object)
+    || (carri && top === carri.object)) return 'personaggi';
   return null;
 }
 
@@ -2200,7 +2227,7 @@ const MS_PEZZO = 2;                       // ms per pezzo chiesti ai generatori 
 function scambiaBlocco(p) {
   const c0 = terrain.meta.centroMondo, k = knight.stato;
   togliScenaAttuale(false);               // il blocco vecchio si libera a pezzi nei fotogrammi seguenti
-  applicaMondo(p);
+  applicaMondo(p, true);
   const c1 = terrain.meta.centroMondo;
   scostamento = { x: 0, z: 0 };
   trasla(c0.x - c1.x, c0.z - c1.z, [k, ...(cavallo?.puntiDaTraslare() ?? []), _prec], [camera.position]);
@@ -2468,6 +2495,11 @@ function aggiornaPannello(now) {
     const pelo = livelloAcquaIn(k.x, k.z);
     if (!Number.isNaN(pelo)) testo += `\nacqua: pelo a ${fmt(pelo, 1)} m · profondità ${fmt(Math.max(0, pelo - k.y), 1)} m`;
     testo += `\ncamera: ${modoCamera === 'segui' ? 'alle spalle' : 'libera (C per tornare)'}`;
+    if (carri && scenaAttuale?.tipo === 'mondo') {
+      const c = carri.info();
+      testo += `\nveicoli: ${c.vivi} sulle strade vicine, ${c.disegnati} disegnati (${c.animali} animali, ${c.persone} persone)`
+        + `${c.fermi ? `, ${c.fermi} fermi` : ''}${c.tipi.length ? ' · ' + c.tipi.join(', ') : ''}`;
+    }
     if (scenaAttuale?.tipo === 'mondo' && carta?.luoghi) {
       // M7, passo 2: terrapieno della rocca più vicina (entro 1,5 km).
       const X = scenaAttuale.cx + k.x, Z = scenaAttuale.cz + k.z;
@@ -2581,6 +2613,12 @@ function frame(now) {
     if (cavallo && !inPausa && !cronista && !Knight.inSella && !sella.passaggio) cavallo.update(dt, percorso ? null : knight.stato);
     avvisoCavallo();
     if (abitanti && !inPausa && !cronista && !percorso) abitanti.update(dt, knight.stato, 1 - _luceGiorno);
+    if (carri && scenaAttuale?.tipo === 'mondo') {
+      // Fermi in pausa e nel percorso di prova (misure confrontabili); tempo in s di Scena (1 s reale = 1 s di Scena)
+      carri.update(inPausa || cronista || percorso ? 0 : dt, { camera, centro: terrain.meta.centroMondo,
+        tempo: (Calendar.passiTotali + Calendar.frazione) * CALENDAR.SECONDI_PER_PASSO / TEMPO_SCENA.RAPPORTO_GIORNO,
+        ora: Calendar.oraDelGiorno(), cavaliere: knight.stato, cavallo: cavallo?.stato ?? null });
+    }
     cercaPortaVicina();
     cercaScavalcoVicino(dt);
     tt = segna('cavaliere e tempo', tt);
