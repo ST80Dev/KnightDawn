@@ -973,6 +973,124 @@ function innestaAllaPorta(carta, tratti, tr) {
   }
 }
 
+/**
+ * Strade che convergono sulla stessa meta si fondono [segnalato dall'utente, seme 259699: due strade per la stessa rocca
+ * correvano affiancate per centinaia di metri fino al borgo, «a tratti doppie e a tratti fuse»: là si intrecciavano a
+ * 5–90 m l'una dall'altra per ~1 km]. Regola: due tratti fini con un estremo in comune (porta, incrocio, villaggio), o
+ * con l'estremo dell'uno sul fianco dell'altro, che da lì corrono entro `distanza` m (buchi fino a `buco` m) per almeno
+ * `minimo` m sono una strada sola. Il meno importante (classe; a parità il più corto) si taglia dove i due si separano e
+ * finisce sull'altro con un raccordo (un passo, o un tratto cercato come le strade se il tronco è a più di `raccordo` m);
+ * l'altro porta il tronco comune fino alla meta. I primi `distanza` m dal capo non contano: tratti consecutivi dello
+ * stesso ramo e strade che arrivano di traverso non si toccano. Sulla Carta i due rami passavano per celle diverse (1 km), quindi non
+ * diventavano un tronco comune; nel tracciato fine scendevano nello stesso fondovalle. `innestaAllaPorta` faceva già
+ * questo, ma solo alle porte, entro 400 m e sotto ~8 m di distanza. Misurato su 30 semi (docs/ESPLORAZIONE_3D.md).
+ */
+export const FUSIONE = { distanza: 60, buco: 150, minimo: 120, estremo: 3, innesto: 12, raccordo: 15 };
+function fondiConvergenti(carta) {
+  const s = stradeScena(carta), T = s.tratti, F = FUSIONE, passo = STRADE.scena.passo;
+  const rango = (t) => RANGO[t.classe] ?? 0;
+  // Capi d'incontro: un capo di un tratto sta su un altro tratto (entro `innesto` m da un suo punto). Se anche l'altro
+  // ha lì un capo, la meta è comune (porta, incrocio, villaggio) e si può tagliare l'uno o l'altro; altrimenti il primo
+  // finisce già sul fianco del secondo (innesto a T, per esempio dopo innestaAllaPorta) e si accorcia solo il primo.
+  const capi = [];
+  T.forEach((t, id) => { if (t.fine && t.fine.x.length > 3) for (const fine of [false, true]) {
+    const k = fine ? t.fine.x.length - 1 : 0;
+    capi.push({ id, fine, x: t.fine.x[k], z: t.fine.z[k] });
+  } });
+  const CEL = 50, punti = new Map();
+  T.forEach((t, id) => { if (t.fine) for (let j = 0; j < t.fine.x.length; j++) {
+    const k = Math.floor(t.fine.x[j] / CEL) * 1000003 + Math.floor(t.fine.z[j] / CEL);
+    (punti.get(k) || punti.set(k, []).get(k)).push(id, j);
+  } });
+  const coppie = [];
+  for (const A of capi) {
+    const cx = Math.floor(A.x / CEL), cz = Math.floor(A.z / CEL), visti = new Set();
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+      const l = punti.get((cx + a) * 1000003 + cz + b);
+      if (!l) continue;
+      for (let q = 0; q < l.length; q += 2) {
+        const o = l[q], j = l[q + 1];
+        if (o === A.id || visti.has(o)) continue;
+        const g = T[o].fine;
+        if (Math.hypot(g.x[j] - A.x, g.z[j] - A.z) > F.innesto) continue;
+        visti.add(o);
+        const capoB = capi.find((B) => B.id === o && Math.hypot(B.x - A.x, B.z - A.z) <= F.estremo);
+        if (capoB) { if (A.id < o) coppie.push([A, capoB]); }     // meta comune: una volta per coppia
+        else coppie.push([A, null, o]);                            // A finisce sul fianco di o
+      }
+    }
+  }
+  // Tratto affiancato: dal capo comune verso l'interno, fin dove `f` resta entro `distanza` m da `g` (buchi fino a
+  // `buco` m ammessi). Restituisce quanti punti di `f` (dal capo) stanno nel tronco comune.
+  const affiancati = (f, daFine, g) => {
+    const m = f.x.length, D2 = F.distanza * F.distanza, maxBuco = Math.round(F.buco / passo);
+    const k0 = daFine ? m - 1 : 0;
+    let ultimo = 0, buco = 0, oltre = false;
+    for (let i = 1; i < m - 2; i++) {
+      const k = daFine ? m - 1 - i : i, x = f.x[k], z = f.z[k];
+      // Vicino al capo comune tutto è «vicino»: contano solo i punti oltre `distanza` m da lì. Così una strada che
+      // prosegue oltre il capo (tratti consecutivi dello stesso ramo) o che arriva di traverso non si tocca.
+      if (!oltre) { if (Math.hypot(x - f.x[k0], z - f.z[k0]) <= F.distanza) continue; oltre = true; }
+      let vicino = false;
+      for (let j = 0; j < g.x.length; j++) {
+        const dx = g.x[j] - x;
+        if (dx * dx < D2) { const dz = g.z[j] - z; if (dx * dx + dz * dz < D2) { vicino = true; break; } }
+      }
+      if (vicino) { ultimo = i; buco = 0; } else if (++buco > maxBuco) break;
+    }
+    return ultimo;
+  };
+  let fusi = 0, metri = 0;
+  const tagliati = new Set();
+  for (const coppia of coppie) {
+    const [A, B] = coppia;
+    const ta = T[A.id], tb = T[B ? B.id : coppia[2]];
+    if (tagliati.has(A.id + (A.fine ? 'f' : 'i')) || (B && tagliati.has(B.id + (B.fine ? 'f' : 'i')))) continue;
+    // Meta comune: si taglia il meno importante; a parità il più corto (il lungo porta il tronco). Innesto a T: il primo.
+    const tagliaA = !B || rango(ta) < rango(tb) || (rango(ta) === rango(tb) && ta.fine.x.length <= tb.fine.x.length);
+    const [C, tc, tt] = tagliaA ? [A, ta, tb] : [B, tb, ta];
+    const f = tc.fine, n = affiancati(f, C.fine, tt.fine);
+    if (n * passo < F.minimo || f.x.length - n < 4) continue;
+    // Punto d'innesto: il punto del tronco più vicino all'ultimo punto affiancato.
+    const kc = C.fine ? f.x.length - 1 - n : n, g = tt.fine;
+    let jg = 0, md = Infinity;
+    for (let j = 0; j < g.x.length; j++) { const d = Math.hypot(g.x[j] - f.x[kc], g.z[j] - f.z[kc]); if (d < md) { md = d; jg = j; } }
+    const tieni = C.fine ? [0, kc + 1] : [kc, f.x.length];
+    // Raccordo fra il punto di taglio e il tronco: se sono vicini basta un passo; altrimenti un tratto vero, cercato
+    // come le altre strade (una retta di decine di metri taglierebbe pendii e fossi).
+    let rac = { x: [g.x[jg]], z: [g.z[jg]], h: [g.h[jg]], tipo: [0], at: [] };
+    if (md > F.raccordo) {
+      const da = C.fine ? [f.x[kc], f.z[kc]] : [g.x[jg], g.z[jg]], a = C.fine ? [g.x[jg], g.z[jg]] : [f.x[kc], f.z[kc]];
+      const r = tracciaTratto(carta, { classe: tc.classe, px: Float64Array.from([da[0], a[0]]), pz: Float64Array.from([da[1], a[1]]) });
+      if (r.ok && r.x.length > 2) {
+        // Senza il punto che coincide con quello di taglio (l'ultimo se il raccordo va verso il tronco, il primo se no).
+        const pezzo = C.fine ? [1, r.x.length] : [0, r.x.length - 1];
+        const t = (arr) => Array.from(arr.slice(pezzo[0], pezzo[1]));
+        rac = { x: t(r.x), z: t(r.z), h: t(r.h), tipo: t(r.tipo), at: (r.attraversamenti ?? []).map((q) => ({ ...q, a: q.a - pezzo[0], b: q.b - pezzo[0] }))
+          .filter((q) => q.a >= 0 && q.b < pezzo[1] - pezzo[0]) };
+      }
+    }
+    const sl = (arr) => Array.from(arr.slice(tieni[0], tieni[1]));
+    const x = sl(f.x), z = sl(f.z), h = sl(f.h), tipo = sl(f.tipo), nr = rac.x.length;
+    const vecchi = (f.attraversamenti ?? []).filter((q) => q.a >= tieni[0] && q.b < tieni[1]);
+    let at;
+    if (C.fine) {
+      x.push(...rac.x); z.push(...rac.z); h.push(...rac.h); tipo.push(...rac.tipo);
+      at = [...vecchi, ...rac.at.map((q) => ({ ...q, a: q.a + tieni[1], b: q.b + tieni[1] }))];
+    } else {
+      x.unshift(...rac.x); z.unshift(...rac.z); h.unshift(...rac.h); tipo.unshift(...rac.tipo);
+      at = [...rac.at, ...vecchi.map((q) => ({ ...q, a: q.a - tieni[0] + nr, b: q.b - tieni[0] + nr }))];
+    }
+    tc.fine = { ...f, x: Float64Array.from(x), z: Float64Array.from(z), h: Float64Array.from(h), tipo: Uint8Array.from(tipo), attraversamenti: at };
+    tagliati.add(C.id + (C.fine ? 'f' : 'i'));
+    fusi++; metri += n * passo;
+  }
+  // L'indice dei segmenti (distanzaStrada) si rifà da capo: i tratti tagliati hanno meno punti.
+  s.indice = new Map();
+  T.forEach((t, id) => { if (t.fine) indicizza(s, id); });
+  carta.strade.info.fusioni = { tratti: fusi, metri: Math.round(metri) };
+}
+
 /** Indice per celle (cellaIndice) dei segmenti del tracciato fine del tratto `id` (distanzaStrada, spianaStrade). */
 function indicizza(s, id) {
   const Ci = STRADE.scena.cellaIndice, R = s.raggio, f = s.tratti[id].fine;
@@ -997,6 +1115,7 @@ export function precalcolaStrade(carta) {
   if (!carta.strade) return carta;
   const t0 = performance.now(), C = carta.cella;
   raffinaStrade(carta, carta.cols * C / 2, carta.rows * C / 2, Math.max(carta.cols, carta.rows) * C);
+  fondiConvergenti(carta);
   carta.stradeFini = stradeScena(carta).tratti.map((t) => t.fine && {
     x: Float64Array.from(t.fine.x), z: Float64Array.from(t.fine.z), h: Float64Array.from(t.fine.h), tipo: Uint8Array.from(t.fine.tipo),
     attraversamenti: t.fine.attraversamenti, semi: t.fine.semi, ok: t.fine.ok,
