@@ -32,17 +32,17 @@ const Items = {
   },
 
   catalog: {
-    // ── Armi ──
-    'Coltello da contadino': { slot: 'arma', prezzo: 4,  glyph: '⚔' },
-    'Lancia da fante':       { slot: 'arma', prezzo: 9,  glyph: '⚔' },
-    'Spada da arme':         { slot: 'arma', prezzo: 18, glyph: '⚔' },
-    'Spada bastarda':        { slot: 'arma', prezzo: 32, glyph: '⚔' },
+    // ── Armi ── (colpo: quanto vale in combattimento, js/combat.js; difesa per armature e scudi. G1 passo 5)
+    'Coltello da contadino': { slot: 'arma', prezzo: 4,  glyph: '⚔', colpo: 1 },
+    'Lancia da fante':       { slot: 'arma', prezzo: 9,  glyph: '⚔', colpo: 2 },
+    'Spada da arme':         { slot: 'arma', prezzo: 18, glyph: '⚔', colpo: 3 },
+    'Spada bastarda':        { slot: 'arma', prezzo: 32, glyph: '⚔', colpo: 4 },
     // ── Armature ──
-    'Giaco di cuoio':        { slot: 'armatura', prezzo: 10, glyph: '◇' },
-    'Cotta di maglia':       { slot: 'armatura', prezzo: 28, glyph: '◇' },
+    'Giaco di cuoio':        { slot: 'armatura', prezzo: 10, glyph: '◇', difesa: 1 },
+    'Cotta di maglia':       { slot: 'armatura', prezzo: 28, glyph: '◇', difesa: 2 },
     // ── Scudi ──
-    'Scudo di legno':        { slot: 'scudo', prezzo: 6,  glyph: '◈' },
-    'Scudo da campo':        { slot: 'scudo', prezzo: 16, glyph: '◈' },
+    'Scudo di legno':        { slot: 'scudo', prezzo: 6,  glyph: '◈', difesa: 1 },
+    'Scudo da campo':        { slot: 'scudo', prezzo: 16, glyph: '◈', difesa: 2 },
     // ── Da viaggio ──
     'Mantello da viandante': { slot: 'viaggio', prezzo: 5,  glyph: '◊' },
     'Mantello scuro':        { slot: 'viaggio', prezzo: 9,  glyph: '◊' },
