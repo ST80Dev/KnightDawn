@@ -30,7 +30,12 @@ const VISIBILITA = [                       // [probabilità, far minimo, far mas
 // Di notte la "quota" del sole scende sotto l'orizzonte fino a −35°.
 export const CICLO = {
   alba: 5.75, tramonto: 18.75, altezzaMax: 55, profonditaNotte: 35,
-  soleMax: 3.4, lunaMax: 0.45,
+  // Luna: perenne e fissa, è l'83 % della luce che arriva su una faccia rivolta in su di notte (irradianza 0,12
+  // contro 0,025 dell'emisfera), ed essendo direzionale dà rilievo dove l'emisfera appiattisce. Riportata da 0,45 a
+  // 1,0 (prima del 18/11 era 1,1): lì era stata tagliata insieme all'emisfera e alla nebbia, ma «di notte si vede
+  // bene solo vicino» lo fa la nebbia, che resta com'è. Misurato nel bosco fitto: suolo da 6 a 12 su 255, tronchi da
+  // 14 a 23, cespugli da 19 a 30 (deciso con l'utente, 28/11/2026).
+  soleMax: 3.4, lunaMax: 1.0,
   emisferaGiorno: 0.45, emisferaNotte: 0.16,
   // Di notte si vede bene solo vicino: la nebbia (color notte) si stringe attorno a ciò che si guarda.
   // Metri oltre la distanza camera–bersaglio: nitido fino a vicinoNotte, buio pieno a lontanoNotte.
@@ -288,7 +293,8 @@ export function creaCielo(scene, renderer = null) {
   // Di giorno sole forte e luce ambiente contenuta: il rilievo collinare si legge dal chiaroscuro.
   // Il colore "da terra" è la luce riflessa dal suolo: schiarisce le pareti verticali in ombra (mura,
   // cavaliere) e quasi non tocca il terreno, le cui facce guardano in alto.
-  // Di notte una luna fredda e fissa (alta a sud-est) lascia il paesaggio scuro ma leggibile.
+  // Di notte una luna fredda e fissa (alta a sud-est) lascia il paesaggio scuro ma leggibile: niente shadow map in
+  // tutto il motore, quindi la sua luce arriva al suolo anche sotto la chioma del bosco.
   const emisfera = new THREE.HemisphereLight('#dce8ec', '#8a7550', 0.45);
   scene.add(emisfera);
   const sole = new THREE.DirectionalLight('#fff0d4', 3.4);
