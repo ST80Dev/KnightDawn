@@ -628,7 +628,7 @@ html, body {
 .combattimento .nota { font: 400 13px var(--kd-titolo); letter-spacing: .08em; color: #4a2f14; text-align: center; margin: 2px 0 8px; }
 .combattimento .colonne { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 290px 1fr 290px; gap: 26px; }
 .combattimento .lato { display: flex; flex-direction: column; align-items: stretch; min-height: 0; }
-.combattimento .lato .sagoma { width: 100%; height: 172px; }
+.combattimento .lato .sagoma { width: 100%; height: 228px; margin-top: -10px; }
 .combattimento .lato .nome { font: 600 18px var(--kd-titolo); letter-spacing: .06em; color: var(--kd-rubrica); text-align: center; }
 .combattimento .lato .sotto { font: italic 15px var(--kd-testo); color: #5a3c1c; text-align: center; margin-bottom: 8px; }
 .combattimento .lato .descr { font: italic 16px/1.4 var(--kd-testo); color: #3e2810; text-align: justify; hyphens: auto;

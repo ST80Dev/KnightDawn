@@ -792,11 +792,13 @@ export function avvisoFoglio(d, testo, sotto = 'J: scrittoio') {
 // Le figure sono sagome statiche disegnate in SVG (niente modelli, CLAUDE.md regola 6).
 
 // ─── Sagome del riquadro di combattimento ─────────────────────────────────────────────────────────────────────
-// Figure piene a inchiostro sulla pergamena, di profilo (il cavaliere guarda a destra, il nemico a sinistra), disegnate
-// con curve in un riquadro 240×180 con il suolo a y 166. Gli arti lontani sono in un tono più chiaro: danno profondità
-// senza contorni. Un'ombra ovale le appoggia a terra.
-const INK = '#2b1d10', LONTANO = '#6b5234', CARTA = '#e6d6ae';
-const ombra = (cx, rx) => `<ellipse cx="${cx}" cy="168" rx="${rx}" ry="4.5" fill="rgba(70,45,20,.28)"/>`;
+// Figure di profilo (il cavaliere guarda a destra, il nemico a sinistra) in un riquadro 240×180 con il suolo a y 166,
+// colorate con tinte smorzate da miniatura e un contorno a inchiostro: si leggono sulla pergamena. Gli animali hanno il
+// mantello dal dorso scuro al ventre chiaro e le zampe lontane più scure; le persone sono uno scheletro di articolazioni
+// (anca, ginocchio, caviglia, spalla, gomito, mano) con arti arrotondati, vesti sopra e una posa d'attacco.
+const INK = '#2b1d10', CARTA = '#e6d6ae';
+const ombraTerra = (cx, rx) => `<ellipse cx="${cx}" cy="168" rx="${rx}" ry="4.5" fill="rgba(70,45,20,.28)"/>`;
+let _gradiente = 0;
 
 const FIGURE = {
   lupo: {
@@ -820,7 +822,7 @@ const FIGURE = {
       + 'C186 108 190 118 188 128C194 124 199 119 203 114C204 121 197 130 189 134C186 140 184 146 182 151L182 161'
       + 'C182 166 178 167 172 166L172 152C168 146 162 143 156 143C140 145 120 145 106 143L104 161C104 166 98 167 94 166'
       + 'L94 152C88 148 82 144 74 141C62 139 50 137 42 135C36 134 32 133 29 130Z',
-    dettagli: '<path d="M70 92l4-9 4 7 4-10 5 8 5-11 5 9 5-11 5 9 5-10 5 9 6-9 5 8 6-7" fill="' + INK + '"/>'
+    dettagli: '<path d="M70 92l4-9 4 7 4-10 5 8 5-11 5 9 5-11 5 9 5-10 5 9 6-9 5 8 6-7" fill="#1e140c"/>'
       + '<path d="M42 131C36 127 35 120 41 115" stroke="' + CARTA + '" stroke-width="3" stroke-linecap="round" fill="none"/>'
       + '<circle cx="58" cy="111" r="2" fill="#d8b040"/>',
   },
@@ -835,18 +837,6 @@ const FIGURE = {
       + '<path d="M97 165l-3 3M103 165l-2 3M109 165l-1 3M175 165l-3 3M181 165l-2 3M187 165l-1 3" stroke="' + INK + '" stroke-width="1.6"/>'
       + '<path d="M96 84C110 92 118 106 118 124M160 84C176 96 184 110 184 130" stroke="#4a3520" stroke-width="1.4" fill="none"/>',
   },
-  umano: {   // fuorilegge incappucciato con l'ascia alzata
-    ombra: [108, 44],
-    lontano: 'M108 136L112 160L124 162C128 163 128 167 124 167L106 167L100 138Z'
-      + 'M120 74C128 82 132 92 130 104L124 104C124 94 120 86 114 80Z',
-    vicino: 'M104 28C92 28 85 40 85 52C85 60 89 66 95 68L92 70C84 92 80 116 78 140L94 140L90 162L78 164'
-      + 'C74 165 74 167 78 167L98 167L104 140L132 140C130 116 128 92 124 70C126 54 120 30 104 28Z'
-      + 'M94 78C84 76 74 68 68 58L74 54C80 62 88 68 98 70Z',
-    dettagli: '<path d="M71 58L52 20" stroke="#4a2e12" stroke-width="5" stroke-linecap="round"/>'
-      + '<path d="M47 11C38 18 37 32 45 39L55 27C53 21 51 15 47 11Z" fill="#5d5a55" stroke="' + INK + '" stroke-width="1.5"/>'
-      + '<path d="M88 50C88 46 92 44 96 46" stroke="#4a3520" stroke-width="1.5" fill="none"/>'
-      + '<path d="M84 96L130 96" stroke="#5a3e20" stroke-width="3"/>',
-  },
   mitico: {   // spettro: veste lacera, mano adunca, occhi accesi
     ombra: [112, 46],
     lontano: 'M134 70C144 84 150 98 150 112L142 112C140 98 136 86 128 76Z',
@@ -855,61 +845,161 @@ const FIGURE = {
       + 'M92 76C80 80 66 84 54 82L46 76L50 83L42 85L50 88L44 92L54 91C68 93 84 91 96 88Z',
     dettagli: '<g filter="drop-shadow(0 0 3px #ff5a1c)"><path d="M104 52l7 2-7 2z M118 52l7 2-7 2z" fill="#ff6a2a"/></g>',
   },
-  cavaliere: {
-    ombra: [114, 48],
-  },
 };
 
-function figura(f) {
-  return `<path d="${f.lontano}" fill="${LONTANO}"/><path d="${f.vicino}" fill="${INK}"/>${f.dettagli ?? ''}`;
+// Mantelli degli animali: dorso, ventre, zampe lontane.
+const MANTELLI = {
+  lupo: ['#4f4b45', '#a29a8c', '#3b3833'],
+  cinghiale: ['#3a2a1e', '#6e5640', '#2a1e15'],
+  orso: ['#4a2f1c', '#7e5636', '#352113'],
+  mitico: ['#1c1a1e', '#3a3540', '#121014'],
+};
+
+function figura(f, forma) {
+  const [dorso, ventre, lontano] = MANTELLI[forma] ?? MANTELLI.lupo;
+  const id = `kd-mantello-${++_gradiente}`;
+  return `<defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset=".35" stop-color="${dorso}"/>`
+    + `<stop offset="1" stop-color="${ventre}"/></linearGradient></defs>`
+    + `<path d="${f.lontano}" fill="${lontano}" stroke="${INK}" stroke-width="1.2"/>`
+    + `<path d="${f.vicino}" fill="url(#${id})" stroke="${INK}" stroke-width="1.6" stroke-linejoin="round"/>${f.dettagli ?? ''}`;
 }
 
-/** Sagoma del cavaliere, rivolto a destra: elmo, cotta e sopravveste se ha l'armatura, scudo e spada se li porta. */
+// ─── Persone ───
+// Pose: articolazioni [x, y] per il personaggio rivolto a destra. «attacco»: affondo con la gamba davanti piegata, la
+// gamba dietro tesa sul tallone sollevato, il braccio dell'arma alzato dietro la testa per il colpo, l'altro avanti.
+// «pugni»: stesse gambe, i pugni alzati in guardia (chi non ha un'arma).
+const POSE = {
+  attacco: { testa: [119, 38], collo: [116, 54], spalle: [[108, 60], [121, 60]], anche: [[103, 100], [113, 100]],
+    gambaDietro: [[103, 100], [90, 128], [78, 156]], piedeDietro: [[76, 158], [91, 165]],
+    gambaAvanti: [[113, 100], [133, 122], [131, 158]], piedeAvanti: [[128, 163], [146, 164]],
+    braccioDietro: [[108, 60], [95, 46], [99, 28]], braccioAvanti: [[121, 60], [134, 74], [147, 77]] },
+  pugni: { testa: [119, 38], collo: [116, 54], spalle: [[108, 60], [121, 60]], anche: [[103, 100], [113, 100]],
+    gambaDietro: [[103, 100], [92, 128], [82, 157]], piedeDietro: [[80, 160], [94, 165]],
+    gambaAvanti: [[113, 100], [130, 124], [128, 158]], piedeAvanti: [[125, 163], [143, 164]],
+    braccioDietro: [[108, 60], [118, 82], [128, 68]], braccioAvanti: [[121, 60], [135, 74], [141, 58]] },
+};
+const _pt = (p) => `${p[0]} ${p[1]}`;
+/** Un arto: linea spezzata dalle estremità tonde, contornata (prima l'inchiostro più largo, poi il colore). */
+function arto(punti, colore, largo) {
+  const d = `M${punti.map(_pt).join('L')}`;
+  return `<path d="${d}" fill="none" stroke="${INK}" stroke-width="${largo + 3}" stroke-linecap="round" stroke-linejoin="round"/>`
+    + `<path d="${d}" fill="none" stroke="${colore}" stroke-width="${largo}" stroke-linecap="round" stroke-linejoin="round"/>`;
+}
+/** Arto in due parti di spessore diverso (coscia e stinco, braccio e avambraccio). */
+const arto2 = ([a, b, c], colore, l1, l2, colore2 = colore) => arto([a, b], colore, l1) + arto([b, c], colore2, l2);
+const scuro = (hex, f = 0.72) => '#' + [1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * f).toString(16).padStart(2, '0')).join('');
+
+function arma(tipo, mano) {
+  const [x, y] = mano;
+  if (tipo === 'spada') return `<g stroke-linecap="round"><path d="M${x} ${y}L${x - 36} ${y - 22}" stroke="${INK}" stroke-width="6.5"/>`
+    + `<path d="M${x - 3} ${y - 2}L${x - 36} ${y - 22}" stroke="#cfd3d8" stroke-width="3.6"/>`
+    + `<path d="M${x - 7} ${y + 6}L${x + 2} ${y - 9}" stroke="${INK}" stroke-width="5"/><path d="M${x - 7} ${y + 6}L${x + 2} ${y - 9}" stroke="#b8892e" stroke-width="2.6"/>`
+    + `<path d="M${x + 3} ${y + 2}L${x + 7} ${y + 4}" stroke="#5a3a1a" stroke-width="4"/></g>`;
+  if (tipo === 'ascia') {   // manico all'indietro sopra la spalla, lama in cima
+    const ex = x - 26, ey = y - 16;
+    return `<g stroke-linecap="round"><path d="M${x + 4} ${y + 6}L${ex} ${ey}" stroke="${INK}" stroke-width="6"/>`
+      + `<path d="M${x + 4} ${y + 6}L${ex} ${ey}" stroke="#7a5228" stroke-width="3.4"/></g>`
+      + `<path d="M${ex + 1} ${ey - 9}C${ex - 10} ${ey - 6} ${ex - 14} ${ey + 6} ${ex - 9} ${ey + 15}L${ex + 3} ${ey + 4}Z" fill="#8e9196" stroke="${INK}" stroke-width="1.6"/>`;
+  }
+  if (tipo === 'coltello') return `<g stroke-linecap="round"><path d="M${x} ${y}L${x - 14} ${y - 12}" stroke="${INK}" stroke-width="5"/>`
+    + `<path d="M${x - 2} ${y - 2}L${x - 14} ${y - 12}" stroke="#cfd3d8" stroke-width="2.6"/></g>`;
+  return '';
+}
+
+/**
+ * Una persona in posa d'attacco, rivolta a destra.
+ * o: { pelle, capelli, capo: 'elmo'|'cappuccio'|'capelli', elmo, cappuccio, veste, vesteLunga, maglia (cotta sugli arti),
+ *   calze, stivali, cintura, arma: 'spada'|'ascia'|'coltello'|null, scudo: { campo, pezza } | null, araldo (croce sulla veste) }
+ */
+function persona(o) {
+  const P = o.arma ? POSE.attacco : POSE.pugni;
+  const gambe = o.maglia ?? o.calze, braccia = o.maglia ?? o.veste;
+  const mani = o.maglia ? '#7d8086' : o.pelle;
+  let g = ombraTerra(112, 40);
+  // braccio dietro (con l'arma), gamba dietro
+  g += arto2(P.braccioDietro, scuro(braccia, 0.8), 9, 8) + `<circle cx="${P.braccioDietro[2][0]}" cy="${P.braccioDietro[2][1]}" r="4.6" fill="${mani}" stroke="${INK}" stroke-width="1.4"/>`;
+  g += arma(o.arma, P.braccioDietro[2]);
+  g += arto2(P.gambaDietro, scuro(gambe, 0.8), 13, 10) + arto(P.piedeDietro, scuro(o.stivali, 0.8), 6);
+  g += arto2(P.gambaAvanti, gambe, 13, 10) + arto(P.piedeAvanti, o.stivali, 6);
+  // busto
+  const [s1, s2] = P.spalle, [h1, h2] = P.anche;
+  g += `<path d="M${s1[0] - 6} ${s1[1] - 3}C${s1[0]} ${s1[1] - 8} ${s2[0] + 2} ${s2[1] - 8} ${s2[0] + 6} ${s2[1] - 2}L${h2[0] + 6} ${h2[1] + 2}L${h1[0] - 5} ${h1[1] + 2}Z" fill="${o.maglia ?? o.veste}" stroke="${INK}" stroke-width="1.6"/>`;
+  // veste: lunga (sopravveste fino alle ginocchia, aperta sul davanti) o corta (tunica)
+  const [ga, gd] = [P.gambaAvanti[1], P.gambaDietro[1]];
+  const fondo = o.vesteLunga ? 1 : 0.62;
+  const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  const va = lerp(P.gambaAvanti[0], ga, fondo), vd = lerp(P.gambaDietro[0], gd, fondo);
+  g += `<path d="M${s1[0] - 5} ${s1[1] - 2}C${s1[0]} ${s1[1] - 6} ${s2[0] + 2} ${s2[1] - 6} ${s2[0] + 5} ${s2[1] - 1}`
+    + `L${h2[0] + 6} ${h2[1] - 4}L${va[0] + 7} ${va[1] + 1}L${va[0] - 5} ${va[1] + 6}L${(h1[0] + h2[0]) / 2} ${h1[1] + 8}`
+    + `L${vd[0] + 4} ${vd[1] + 6}L${vd[0] - 7} ${vd[1]}L${h1[0] - 6} ${h1[1] - 4}Z" fill="${o.veste}" stroke="${INK}" stroke-width="1.6" stroke-linejoin="round"/>`;
+  if (o.araldo) g += `<path d="M${(s1[0] + s2[0]) / 2 + 2} ${s1[1] + 2}L${(h1[0] + h2[0]) / 2 + 1} ${h1[1] - 6}M${s1[0] - 1} ${s1[1] + 16}L${s2[0] + 4} ${s2[1] + 16}" stroke="${o.araldo}" stroke-width="3.4"/>`;
+  g += `<path d="M${h1[0] - 6} ${h1[1] - 4}L${h2[0] + 6} ${h2[1] - 4}" stroke="${INK}" stroke-width="4.5"/><path d="M${h1[0] - 5} ${h1[1] - 4}L${h2[0] + 5} ${h2[1] - 4}" stroke="${o.cintura ?? '#6e4c18'}" stroke-width="2.6"/>`;
+  // collo e testa (profilo rivolto a destra: naso, mento)
+  const [tx, ty] = P.testa;
+  g += `<path d="M${tx - 5} ${ty + 8}L${tx - 4} ${ty + 17}L${tx + 3} ${ty + 17}L${tx + 2} ${ty + 8}Z" fill="${o.pelle}" stroke="${INK}" stroke-width="1.4"/>`;
+  const viso = `M${tx - 9} ${ty - 1}C${tx - 9} ${ty - 10} ${tx - 3} ${ty - 13} ${tx + 2} ${ty - 12}C${tx + 8} ${ty - 11} ${tx + 9} ${ty - 5} ${tx + 9} ${ty - 2}`
+    + `L${tx + 12} ${ty + 3}L${tx + 9} ${ty + 4}C${tx + 10} ${ty + 6} ${tx + 9} ${ty + 8} ${tx + 8} ${ty + 9}C${tx + 6} ${ty + 12} ${tx + 1} ${ty + 13} ${tx - 3} ${ty + 12}`
+    + `C${tx - 8} ${ty + 10} ${tx - 9} ${ty + 5} ${tx - 9} ${ty - 1}Z`;
+  if (o.capo === 'elmo') {
+    g += `<path d="M${tx - 11} ${ty - 6}C${tx - 11} ${ty - 15} ${tx - 4} ${ty - 18} ${tx + 2} ${ty - 18}C${tx + 9} ${ty - 18} ${tx + 12} ${ty - 13} ${tx + 12} ${ty - 6}`
+      + `L${tx + 13} ${ty + 14}L${tx - 11} ${ty + 14}Z" fill="${o.elmo}" stroke="${INK}" stroke-width="1.8"/>`
+      + `<path d="M${tx - 1} ${ty - 3}L${tx + 13} ${ty - 3}" stroke="${INK}" stroke-width="2.6"/>`
+      + `<path d="M${tx + 5} ${ty - 16}L${tx + 5} ${ty + 13}" stroke="${scuro(o.elmo, 0.7)}" stroke-width="1.6"/>`
+      + `<path d="M${tx + 8} ${ty + 4}h2M${tx + 8} ${ty + 8}h2" stroke="${INK}" stroke-width="1.6"/>`;
+  } else {
+    g += `<path d="${viso}" fill="${o.pelle}" stroke="${INK}" stroke-width="1.5"/><circle cx="${tx + 4}" cy="${ty - 3}" r="1.3" fill="${INK}"/>`;
+    if (o.capo === 'cappuccio') g += `<path d="M${tx - 7} ${ty + 17}C${tx - 16} ${ty + 6} ${tx - 14} ${ty - 16} ${tx + 1} ${ty - 17}C${tx + 10} ${ty - 17} ${tx + 14} ${ty - 10} ${tx + 12} ${ty - 4}`
+      + `C${tx + 6} ${ty - 10} ${tx - 2} ${ty - 9} ${tx - 3} ${ty - 1}C${tx - 4} ${ty + 6} ${tx} ${ty + 12} ${tx + 4} ${ty + 17}Z" fill="${o.cappuccio}" stroke="${INK}" stroke-width="1.6"/>`;
+    else g += `<path d="M${tx - 10} ${ty + 2}C${tx - 12} ${ty - 10} ${tx - 4} ${ty - 15} ${tx + 3} ${ty - 14}C${tx + 9} ${ty - 13} ${tx + 11} ${ty - 8} ${tx + 10} ${ty - 5}`
+      + `C${tx + 4} ${ty - 8} ${tx - 2} ${ty - 7} ${tx - 4} ${ty - 1}L${tx - 6} ${ty + 4}Z" fill="${o.capelli}" stroke="${INK}" stroke-width="1.3"/>`;
+  }
+  // braccio davanti, con lo scudo
+  g += arto2(P.braccioAvanti, braccia, 9, 8) + `<circle cx="${P.braccioAvanti[2][0]}" cy="${P.braccioAvanti[2][1]}" r="4.6" fill="${mani}" stroke="${INK}" stroke-width="1.4"/>`;
+  if (o.scudo) {
+    const [x, y] = P.braccioAvanti[2];
+    g += `<path d="M${x - 14} ${y - 10}L${x + 16} ${y - 10}C${x + 18} ${y + 16} ${x + 12} ${y + 34} ${x + 1} ${y + 46}C${x - 10} ${y + 34} ${x - 16} ${y + 16} ${x - 14} ${y - 10}Z"`
+      + ` fill="${o.scudo.campo}" stroke="${INK}" stroke-width="2"/>`
+      + `<path d="M${x - 11} ${y - 7}L${x + 13} ${y - 7}C${x + 14} ${y + 14} ${x + 9} ${y + 30} ${x + 1} ${y + 41}C${x - 7} ${y + 30} ${x - 12} ${y + 14} ${x - 11} ${y - 7}Z" fill="none" stroke="#b8892e" stroke-width="1.6"/>`
+      + `<path d="M${x + 1} ${y - 6}L${x + 1} ${y + 38}M${x - 11} ${y + 8}L${x + 13} ${y + 8}" stroke="${o.scudo.pezza}" stroke-width="4"/>`;
+  }
+  return g;
+}
+
+// Corredi: il cavaliere (colori del giocatore), il garzone, il fuorilegge, il soldato o cavaliere di casata.
+const PELLE = '#d6a27a';
+const CORREDI = {
+  fuorilegge: { pelle: '#c99470', capelli: '#3a2a1a', capo: 'cappuccio', cappuccio: '#4d5a2e', veste: '#6b5236', calze: '#4a3c2c',
+    stivali: '#3a2a1a', cintura: '#2e2014', arma: 'ascia' },
+  soldato: { pelle: PELLE, capo: 'elmo', elmo: '#8d9096', veste: '#2b2b2b', vesteLunga: true, maglia: '#7d8086', calze: '#555',
+    stivali: '#2e2418', araldo: '#c9a23a', arma: 'spada', scudo: { campo: '#2b2b2b', pezza: '#c9a23a' } },
+};
+
+/** Sagoma del cavaliere, rivolto a destra: elmo, cotta e sopravveste se ha l'armatura; scudo e spada se li porta. */
 function sagomaCavaliere(eq = {}) {
   const armato = !!eq.armatura;
-  // Gamba lontana, braccio della spada (dietro), corpo, gamba vicina, testa, scudo davanti.
-  const gambaLontana = `<path d="M104 124L100 160L88 163C84 164 84 167 88 167L106 167L112 126Z" fill="${LONTANO}"/>`;
-  const gambaVicina = `<path d="M114 126L122 160L134 163C138 164 138 167 134 167L116 167L106 128Z" fill="${INK}"/>`;
-  const corpo = armato
-    // sopravveste svasata fino alle ginocchia, cintura, spalle larghe
-    ? `<path d="M96 66C92 70 90 78 90 86L86 136L134 136L130 86C130 78 128 70 124 66C118 63 102 63 96 66Z" fill="${INK}"/>`
-      + `<path d="M88 112L132 112" stroke="#6e4c18" stroke-width="3"/><path d="M110 70L110 134" stroke="#4a3520" stroke-width="1.3"/>`
-    // garzone: tunica corta, maniche
-    : `<path d="M98 68C94 72 92 80 92 88L90 126L130 126L128 88C128 80 126 72 122 68C116 65 104 65 98 68Z" fill="${INK}"/>`
-      + `<path d="M91 104L129 104" stroke="#5a3e20" stroke-width="2.5"/>`;
-  const testa = armato
-    // elmo a secchio con fessura e croce di respiro
-    ? `<path d="M97 38C97 28 103 22 110 22C117 22 123 28 123 38L124 62L96 62Z" fill="${INK}"/>`
-      + `<path d="M104 40L124 40" stroke="${CARTA}" stroke-width="2.4"/><path d="M116 46L116 56M112 51L120 51" stroke="${CARTA}" stroke-width="1.4"/>`
-    // capo scoperto, capelli
-    : `<path d="M104 62L116 62L116 56L104 56Z" fill="${INK}"/><circle cx="111" cy="44" r="12" fill="${INK}"/>`
-      + `<path d="M99 42C99 32 106 29 113 30C120 31 124 36 122 42C116 38 106 38 99 42Z" fill="#4a3520"/>`;
-  // braccio della spada: dalla spalla, alzato all'indietro
-  const braccio = eq.arma
-    ? `<path d="M98 70C92 64 86 56 82 48L88 44C92 52 98 60 104 66Z" fill="${INK}"/>`
-      + `<path d="M84 46L58 8" stroke="#8d8a82" stroke-width="4.5" stroke-linecap="round"/>`
-      + `<path d="M76 54L92 42" stroke="${INK}" stroke-width="4" stroke-linecap="round"/><path d="M88 50L84 45" stroke="#6e4c18" stroke-width="5" stroke-linecap="round"/>`
-    : `<path d="M98 70C92 80 90 92 92 104L98 104C96 94 98 82 104 74Z" fill="${INK}"/>`;
-  const scudo = eq.scudo
-    ? `<path d="M118 74L152 74C154 104 148 124 135 138C122 124 116 104 118 74Z" fill="#7a1f12" stroke="#8a6424" stroke-width="2.5"/>`
-      + `<path d="M135 78L135 132M121 94L150 94" stroke="#d9b25a" stroke-width="3"/>`
-    : `<path d="M120 70C128 78 132 90 130 102L124 102C124 92 120 84 114 78Z" fill="${INK}"/>`;
-  return `<svg viewBox="0 0 240 180" class="sagoma">${ombra(112, 40)}${braccio}${gambaLontana}${corpo}${gambaVicina}${testa}${scudo}</svg>`;
+  const o = armato
+    ? { pelle: PELLE, capo: 'elmo', elmo: '#a3a7ad', veste: '#2f4a7a', vesteLunga: true, maglia: '#8a8e95', calze: '#6a6e75',
+      stivali: '#3a2a1a', araldo: '#e2c46a' }
+    : { pelle: PELLE, capelli: '#7a4a22', capo: 'capelli', veste: '#9a7a4a', calze: '#5e4a36', stivali: '#4a3220' };
+  o.arma = eq.arma ? (/coltel|pugnal/i.test(eq.arma) ? 'coltello' : 'spada') : null;
+  o.scudo = eq.scudo ? { campo: '#7a1f12', pezza: '#e2c46a' } : null;
+  return `<svg viewBox="0 0 240 180" class="sagoma">${persona(o)}</svg>`;
 }
 
 /** Sagoma del nemico, rivolto a sinistra; un gruppo o un'orda sono più figure, le lontane più piccole e più chiare. */
 function sagomaNemico(n = {}) {
-  const forma = n.tipo === 'mitico' ? 'mitico' : n.tipo === 'umano' ? 'umano'
-    : FIGURE[n.categoria] && n.categoria !== 'cavaliere' ? n.categoria : 'lupo';
-  const f = FIGURE[forma];
+  const umano = n.tipo === 'umano';
+  const forma = n.tipo === 'mitico' ? 'mitico' : umano ? null : FIGURE[n.categoria] ? n.categoria : 'lupo';
+  const disegna = () => (umano
+    ? `<g transform="matrix(-1 0 0 1 240 0)">${persona(/soldato|cavaliere|battaglia/.test(n.categoria) ? CORREDI.soldato : CORREDI.fuorilegge)}</g>`
+    : ombraTerra(FIGURE[forma].ombra[0], FIGURE[forma].ombra[1]) + figura(FIGURE[forma], forma));
   const molti = n.numerosita === 'orda' ? 3 : n.numerosita === 'gruppo' ? 2 : 1;
-  let g = '';
   // In gruppo tutto rimpicciolisce perché le figure di dietro (a destra, più in alto) restino nel riquadro.
   const base = molti === 1 ? 1 : molti === 2 ? 0.82 : 0.7;
+  let g = '';
   for (let i = molti - 1; i >= 0; i--) {
-    const s = base * (1 - i * 0.14), tx = i * (forma === 'umano' || forma === 'mitico' ? 40 : 50) + 6, ty = 166 * (1 - s) - i * 12;
-    g += `<g transform="translate(${tx.toFixed(1)} ${ty.toFixed(1)}) scale(${s})"${i ? ` opacity="${1 - i * 0.3}"` : ''}>`
-      + `${ombra(f.ombra[0], f.ombra[1])}${figura(f)}</g>`;
+    const s = base * (1 - i * 0.14), tx = i * (umano || forma === 'mitico' ? 40 : 50) + 6 + (umano ? 30 * (1 - s) : 0), ty = 166 * (1 - s) - i * 12;
+    g += `<g transform="translate(${tx.toFixed(1)} ${ty.toFixed(1)}) scale(${s})"${i ? ` opacity="${1 - i * 0.25}"` : ''}>${disegna()}</g>`;
   }
   return `<svg viewBox="0 0 240 180" class="sagoma">${g}</svg>`;
 }
