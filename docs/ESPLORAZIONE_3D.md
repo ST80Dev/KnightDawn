@@ -285,14 +285,17 @@ Nel 2D 1 Passo era 1 tile; ora il **Passo è solo un'unità di tempo** (~3 ore, 
 - **`Calendar` accumula frazioni di Passo** (`avanzaTempoReale`, `avanzaMinuti`, `avanzaFinoA`).
   Veglia: il giorno si ricava dai Passi (8 Passi = 1 giorno), non più un giorno per Passo.
 - **Forza per distanza:** nuova funzione in `Knight` che riceve metri, dislivello e andatura (solo
-  numeri: niente Three.js, regola 9). Scala provvisoria: 100 di Forza ≈ 30 km in piano camminando;
-  corsetta ×1,5, scatto ×3 al metro; un metro di salita vale ~6,7 m in piano. `TRAVEL_COST` per
+  numeri: niente Three.js, regola 9). Scala: 1 di Forza ≈ 300 m in piano per il moltiplicatore dell'andatura
+  (deciso con l'utente, 28/11/2026; prima camminata ×1 e corsetta ×1,5): **camminata ×0** in piano, **corsetta ×0,5**
+  (80 di Forza ≈ 48 km, ~3 h reali), **scatto ×3** (80 ≈ 8 km, ~17 min reali); un metro di salita vale ~6,7 m in piano
+  e pesa almeno ×1 a qualunque andatura (600 m di salita ≈ 13 di Forza anche camminando). `TRAVEL_COST` per
   bioma resta per la Carta.
 - **Forza a 0:** niente corsa né scatto, solo camminata.
 - **Recupero da fermi** (deciso con l'utente): ~10 Forza per Passo di gioco trascorso da fermi
   (`VIAGGIO.FORZA_RIPOSO_PER_PASSO`, ~3,3 l'ora), con lo **stesso ritmo** in tutti i modi in cui passa
-  il tempo: aspettando davvero, con `T` o con `R`. Nessuno conviene più degli altri. In movimento non
-  si recupera. Effetto noto: nelle Scene la Forza pesa poco (10 minuti di corsetta ≈ −10, 12 minuti
+  il tempo: aspettando davvero, con `T` o con `R`. Nessuno conviene più degli altri. **Camminando** (o all'indietro, a
+  piedi) si recupera un terzo del riposo (`VIAGGIO.RECUPERO_CAMMINATA`, ~+3 ogni 18 minuti reali): un cavaliere allenato
+  riposa camminando (deciso con l'utente, 28/11/2026). In corsetta e di scatto non si recupera. Effetto noto: nelle Scene la Forza pesa poco (10 minuti di corsetta ≈ −10, 12 minuti
   fermi ≈ +10); conterà soprattutto sulla Carta, nei giorni di viaggio.
 - **Avanza** con `T` (solo da fermi): salto atomico all'inizio della prossima ora canonica, di giorno
   o di notte. Serve a non dover aspettare davvero (il tramonto, un incontro…): i 12 minuti reali per
@@ -2829,7 +2832,7 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
 5. **Il cavaliere seduto** richiede una posa in sella in `knight3d.js` (gambe piegate, piedi nelle staffe, niente IK a
    terra): piccola modifica a un file non mio, da concordare con la sessione «M1 - Grafica».
 
-### Decisioni (approvate dall'utente, novembre 2026: tasti E e F, ricomparsa fuori vista, passo 1,8 / trotto 5 / galoppo 13, ronzino provvisorio)
+### Decisioni (approvate dall'utente, novembre 2026: tasti E e F, ricomparsa fuori vista, passo 1,8 / trotto 8 / galoppo 18 (rivisti il 28/11), ronzino provvisorio)
 
 - **Tasti.** Occupati: W A S D, frecce, Shift, Ctrl, C, M, P, R, T, V, F2, F3, F4, F8, F9. Proposta:
   - **E** = monta in sella (entro ~3 m dal cavallo; scritta «E: monta in sella») e smonta. È lo stesso tasto previsto
@@ -2854,7 +2857,10 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
     trucco, accettabile perché non si vede). **Al cambio di Scena** (viaggio sulla Carta) viaggia con il cavaliere e
     ricompare accanto. Il cavaliere non lo attraversa: a piedi il cavallo è un ostacolo come un tronco (due cerchi).
 - **In sella:**
-  - andature **passo 1,8 m/s** (interruttore Ctrl, come la camminata), **trotto 5** (normale), **galoppo 13** (Shift);
+  - andature **passo 1,8 m/s** (interruttore Ctrl, come la camminata), **trotto 8** (normale), **galoppo 18** (Shift)
+    [rivisto con l'utente il 28/11/2026, prima trotto 5 e galoppo 13: a cavallo le distanze devono sembrare più corte, non
+    realismo]. Attenzione: a 18 m/s il blocco da 2 km cambia ogni ~2 minuti; serve il cambio di blocco senza scatto
+    (M7 passo 9, orizzonte dalla griglia G7) prima del galoppo veloce. Valori da tarare provando;
     indietro 1 m/s; curve più larghe al galoppo (velocità di rotazione ridotta), niente giro sul posto al galoppo;
   - **pendenze**: stessa curva tipo Tobler del cavaliere con parametri propri: sale bene i pendii moderati (fino a ~15°
     quasi senza perdere velocità), rifiuta oltre ~28° in salita; in discesa **molta cautela**: oltre ~12° il galoppo

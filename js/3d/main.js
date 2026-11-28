@@ -2358,7 +2358,10 @@ function frame(now) {
       avanzaBlocco();
       contaPercorso();
       const passi = Calendar.avanzaTempoReale(dt);
-      if (knight.stato.velEffettiva < FERMO) Knight.riposaPassi(passi);
+      // Da fermi si recupera; al passo (o all'indietro) un terzo del riposo, mentre la salita costa (contaPercorso).
+      const k = knight.stato;
+      if (k.velEffettiva < FERMO) Knight.riposaPassi(passi);
+      else if (!Knight.isMounted() && (k.velocita < 0 || k.andatura === 'camminata')) Knight.riposaPassi(passi * VIAGGIO.RECUPERO_CAMMINATA);
     } else {
       cam.prendiGiroMouse();               // in pausa il mouse non gira il cavaliere
     }
