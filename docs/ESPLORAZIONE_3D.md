@@ -1379,6 +1379,12 @@ Carta. Tavullia resta la scena di prova con il castello di M4.
    resta dietro `?persone=capsule`). *Posti:* accanto alla porta (non davanti) di taverna
    (oste), fabbro, stalla (stalliere), guaritore, cappella e chiesa (chierico), sala d'armi (maestro d'armi), armeria
    (armaiolo), loggia (mercante); due guardie fuori dalla porta del borgo, una fuori da quella della rocca.
+   *Il posto delle guardie non è fisso:* fuori dalla porta ci sono rampa, pianerottolo e parapetti, e uno scarto
+   fisso le faceva finire sul terreno accanto, sprofondate nel muretto (segnalato dall'utente). Si provano quattro
+   distanze dalla porta e cinque scarti laterali (da 2,8 a 1,7 m) e si tiene il primo posto libero da mura e torri
+   (`spingiFuori` di tutte le rocche) che sta sul **piano della soglia** (entro 0,45 m) e senza gradini a ridosso.
+   Prova su 12 semi (36 guardie): prima 1 guardia su 3 era dentro una struttura in **8 semi su 8**; ora 0 su 36,
+   con almeno 1,7 m di scostamento dall'asse della porta, quindi il varco resta libero.
    *Popolani* (3 / 6 / 10 per borgo minore / casata / maggiore; popolani, popolane, bambini) camminano a tratti lungo
    le strade del borgo, un po' fuori mezzeria, con soste; si fermano se davanti c'è qualcuno o il cavaliere. Chi sta
    fermo si volta verso il cavaliere che arriva. Di notte restano fuori solo guardie e oste. Oltre 110 m non si

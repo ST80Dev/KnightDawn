@@ -14,7 +14,9 @@ export const ABITANTI = {
   tratto: [6, 22],                         // punti della strada percorsi prima di fermarsi
   notte: 0.55,                             // buio oltre il quale restano fuori solo guardie e oste
   popolani: { minore: 3, casata: 6, maggiore: 10, citta: 14 },
-  porta: { fuori: 1.2, lato: [1.8, 2.4] }, // m: chi lavora in un edificio sta accanto alla porta, non davanti
+  // m: chi lavora in un edificio sta accanto alla porta, non davanti. `dislivello` = scarto di quota che una
+  // guardia tollera rispetto alla soglia e a ciò che le sta intorno: oltre, è sopra o sotto un parapetto.
+  porta: { fuori: 1.2, lato: [1.8, 2.4], dislivello: 0.45 },
 };
 
 /** Chi sta davanti a quale edificio. */
@@ -141,12 +143,44 @@ export function creaAbitanti({ rocche, quota, seme = 1, creaPersona = creaPerson
     }
     if (!blocco || !r.porta) continue;
     // Guardie: due fuori dalla porta del borgo, una fuori da quella della rocca.
-    const g = r.porta, fuori = (g.sporgenza ?? 1) + 2.2;
+    // Il posto non è più fisso: fuori dalla porta c'è spesso una rampa o un pianerottolo con i parapetti, e uno
+    // scarto fisso faceva finire la guardia sul terreno accanto, sprofondata nel muretto (segnalato dall'utente).
+    // Si provano più distanze e più scarti laterali e si tiene il primo posto che è libero da mura e torri e sta
+    // sul piano della soglia, senza gradini a ridosso.
+    const g = r.porta, sporg = g.sporgenza ?? 1;
     const lati = r.tipo === 'borgo' ? [-1, 1] : [1];
     const tono = r.tono ?? null;
+    // Quota della soglia: il piano da cui si entra (pianerottolo della rocca, rampa del borgo).
+    const [sx, sz] = blocco(g.u + g.nu * (sporg + 1), g.v + g.nv * (sporg + 1));
+    const qSoglia = quota(sx, sz);
+    const dentroQualcosa = (x, z) => rocche.some((q) => {
+      const s = q.spingiFuori?.(x, z, ABITANTI.raggio);
+      return !!s && Math.hypot(s.x - x, s.z - z) > 0.02;
+    });
+    const sulPiano = (x, z) => Math.abs(quota(x, z) - qSoglia) <= ABITANTI.porta.dislivello;
+    const senzaGradini = (x, z) => {
+      const h = quota(x, z);
+      return [[0.8, 0], [-0.8, 0], [0, 0.8], [0, -0.8]]
+        .every(([dx, dz]) => Math.abs(quota(x + dx, z + dz) - h) <= ABITANTI.porta.dislivello);
+    };
     for (const l of lati) {
-      const [x, z] = blocco(g.u + g.nu * fuori - g.nv * l * 2.8, g.v + g.nv * fuori + g.nu * l * 2.8);
-      const [x1, z1] = blocco(g.u + g.nu * (fuori + 1), g.v + g.nv * (fuori + 1));
+      let scelto = null, ripiego = null;
+      for (const d of [sporg + 2.2, sporg + 3.4, sporg + 1.4, sporg + 4.6]) {
+        // Scarti laterali dal largo allo stretto: 1,7 m è il minimo, e basta — la guardia sta fuori dal varco,
+        // quindi al passaggio restano oltre 1,3 m liberi da quel lato più tutto l'altro.
+        for (const lat of [2.8, 2.4, 2.0, 1.7, 3.4]) {
+          const [x, z] = blocco(g.u + g.nu * d - g.nv * l * lat, g.v + g.nv * d + g.nu * l * lat);
+          if (dentroQualcosa(x, z) || !sulPiano(x, z)) continue;
+          if (!ripiego) ripiego = [x, z, d];
+          if (senzaGradini(x, z)) { scelto = [x, z, d]; break; }
+        }
+        if (scelto) break;
+      }
+      // Ultimo ripiego: il posto di sempre, che almeno è davanti alla porta.
+      const [x, z, d] = scelto ?? ripiego
+        ?? [...blocco(g.u + g.nu * (sporg + 2.2) - g.nv * l * 2.8, g.v + g.nv * (sporg + 2.2) + g.nu * l * 2.8),
+          sporg + 2.2];
+      const [x1, z1] = blocco(g.u + g.nu * (d + 1), g.v + g.nv * (d + 1));
       aggiungi('guardia', x, z, Math.atan2(x1 - x, z1 - z), { notturno: true, veste: tono ?? '#5a3a2a' });
     }
     // Popolani lungo le strade del borgo.
