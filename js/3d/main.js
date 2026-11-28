@@ -971,7 +971,8 @@ function combatti({ enemy, terrain = null, veglia = Calendar.inVeglia, slancio =
       let prima = false;
       if (!Knight.primaSangue && Combat.valeBattaglia(st, fine)) {
         Knight.primaSangue = prima = true;
-        righe.push('È la tua prima battaglia: ne porterai il segno, e la cappella potrà accoglierti.');
+        righe.push(inStoria() && Calendar.inVeglia ? 'È la tua prima battaglia: ne porterai il segno, e la cappella potrà accoglierti.'
+          : 'È la tua prima battaglia.');
       }
       if (fine !== 'morte') annotaCronaca(`${prima ? 'Prima battaglia: ' : ''}${e.nome}, ${(ESITI_COMBATTIMENTO[fine]?.titolo ?? fine).toLowerCase()}.`);
       return { esito: fine, round: st.round, minuti: st.round * st.minutiRound, righe, messoInFuga: !!st.messoInFuga };
