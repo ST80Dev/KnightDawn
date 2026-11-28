@@ -3771,6 +3771,7 @@ Misure headless (seme 570549, ora di partenza 6:00; chiamate e triangoli del fot
 | carrozza con 2 cavalli, postiglione e scorta (`&centro=101914,9857`) | — | **+5 chiamate, +5262 triangoli** |
 | carro con un cavallo e carrettiere (`&centro=95764,9515`; dalla seconda PR quella maestra tocca un borgo e il veicolo è un carro a buoi: per il carro `&centro=54305,9475`) | — | +5 chiamate, +2824 triangoli |
 | carretto con il mulo (`&centro=51484,9400`) | — | +4 chiamate, +2356 triangoli |
+| carro a buoi con il bovaro (`&centro=31686,11998`; seconda PR, partenza 208 · 661 mila e bosco 149 · 918 mila come `main`) | — | +4 chiamate, +3038 triangoli |
 
 Con più veicoli in vista le chiamate restano quelle (al più 7, 10 con il carro a buoi), crescono solo i triangoli.
 
