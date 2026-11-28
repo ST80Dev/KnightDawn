@@ -3748,7 +3748,7 @@ del campo e tizzone; **(c)** fascina e ripari, dopo la misura qui sotto e la sce
   vicine (`main.js`, `luciVicine`, `TORCIA`: 18 m, intensità 20), le altre restano a borghi e rocche.
 - Libera: si parte con due torce e l'acciarino, per provare.
 - **Misure** [Certo, Chromium headless, `?libera&seme=570549`, notte davanti alla porta del borgo]: chiamate
-  203 → 206 con la torcia accesa, triangoli 658.711 → 658.777; nessun errore. Logica provata in Node (16 controlli:
+  203 → 206 con la torcia accesa, triangoli 658.711 → 658.770 (la fiamma in un solo passaggio: prima 207); nessun errore. Logica provata in Node (16 controlli:
   posti, bisacce, cavallo non vendibile con le bisacce piene, acciarino fuori dallo zaino, torcia di giorno rifiutata,
   spenta e riaccesa, consumata a Prima, niente animali timidi con la luce).
 
