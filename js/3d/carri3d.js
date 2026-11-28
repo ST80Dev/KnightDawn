@@ -159,6 +159,28 @@ export function reteCarri(carta, tratti = trattiStrade(carta)) {
       }
     }
   }
+  // Innesti a T [strade convergenti, js/mondo/strade.js `fondiConvergenti`]: una strada che si fonde con un'altra finisce
+  // sul suo fianco, non su un capo. Senza questo il carro arrivava all'innesto e spariva in mezzo alla strada: si
+  // prosegue invece sulla rotta toccata, dal punto più vicino, in una delle due direzioni.
+  for (const a of lista) {
+    for (let e = 0; e < 2; e++) {
+      if (a.vicini[e].length || a.meta[e]) continue;
+      const cx = a.capi[e].x, cz = a.capi[e].z;
+      let migliore = null;
+      for (const b of lista) {
+        if (b === a) continue;
+        const [x0, z0, x1, z1] = b.riquadro;
+        if (cx < x0 - 25 || cx > x1 + 25 || cz < z0 - 25 || cz > z1 + 25) continue;
+        b.pezzi.forEach((p, i) => {
+          for (let j = 0; j < p.x.length; j++) {
+            const d = Math.hypot(p.x[j] - cx, p.z[j] - cz);
+            if (d < 25 && (!migliore || d < migliore.d)) migliore = { d, rotta: b, s: b.inizio[i] + p.cum[j] * p.k };
+          }
+        });
+      }
+      if (migliore) a.vicini[e].push({ rotta: migliore.rotta, fianco: true, s: migliore.s });
+    }
+  }
   return { rotte, lista };
 }
 
@@ -676,6 +698,14 @@ export function creaCarri(carta) {
     const scelte = v.rotta.vicini[capo].filter((c) => c.rotta.classe === v.rotta.classe || v.tipo !== 'carrozza');
     if (!scelte.length) { muore(v, true); return; }
     const c = scelte[Math.floor(tiro(v.n, seme, 9) * scelte.length) % scelte.length];
+    if (c.fianco) {                        // innesto a T: si prende la rotta toccata, verso a caso
+      v.prec = { rotta: v.rotta, s: v.verso > 0 ? v.rotta.L : 0, verso: v.verso };
+      v.rotta = c.rotta;
+      v.verso = tiro(v.n, seme, 13) < 0.5 ? 1 : -1;
+      v.s = c.s;
+      v.libero = true;
+      return;
+    }
     const oltre = v.verso > 0 ? v.s - v.rotta.L : -v.s;
     v.prec = { rotta: v.rotta, s: v.verso > 0 ? v.rotta.L : 0, verso: v.verso };
     v.rotta = c.rotta;
