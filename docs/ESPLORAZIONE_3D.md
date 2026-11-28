@@ -2970,6 +2970,11 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
    cavaliere, su un punto libero e fuori dall'inquadratura (prima uno da cui la linea fino a lui è libera). Fermo oltre
    120 m: animato a metà frequenza. Provato in Node (piano, varco tra i tronchi, fiume, pendio a 35°, fischio) e in
    headless (pagina senza errori, segue a 5,1 m al trotto dietro un cavaliere a 4,5 m/s).
+   *Correzione dopo la prova dell'utente (28/11)*: il cavallo si girava e si spostava appena il cavaliere si muoveva
+   (il posto vicino lo inseguiva, e se il cavaliere gli andava incontro si scansava), così non lo si avvicinava per
+   montare. Ora, arrivato, **resta fermo** (bruca, si guarda attorno) finché il cavaliere non è **oltre 10 m**; riparte
+   solo allora e si riferma a ~4,5 m: la zona morta tra 4,5 e 10 m è l'isteresi. Se il cavaliere gli viene incontro
+   entro 8 m si ferma e lo aspetta; niente più «si scansa». Il fischio e il «rimasto indietro» non cambiano.
    [Ipotesi] da guardare su Pages: il brucare arriva con il muso a ~0,3 m da terra (pezzi rigidi: oltre il collo si
    stacca dal petto); al galoppo gli zoccoli scivolano un poco (falcata limitata a 0,95 m).
 3. **In sella.** E per montare e smontare, posa del cavaliere seduto, camera, andature con Ctrl e Shift, pendenze,
