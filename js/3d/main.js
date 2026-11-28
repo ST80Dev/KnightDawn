@@ -1846,7 +1846,7 @@ async function init() {
     get cambiBlocco() { return { quanti: cambiBlocco, ms: msCambioBlocco, totale: msTotaleBlocco, inCorso: !!preparazione, ultimo: ultimoCambio }; },
   };
 
-  avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no · Spazio: scavalca · E: monta/smonta · F: fischia il cavallo'
+  avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no · Spazio: scavalca · E: monta/smonta · F: fischia il cavallo · Q: lato della camera in sella'
     + ` · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: ${inStoria() ? 'Carta' : 'Carta (clic: vai lì) · T: avanza · K: prova di combattimento'}`
     + ' · N: minimappa (icona, piccola, grande) · +/−: zoom minimappa · J: scrittoio e avvisi · I: diario · U: musica'
     + ` · F2: qualità · F3: info · F8: menu · modalità ${inStoria() ? 'Storia' : 'Libera'}`,
@@ -2144,10 +2144,38 @@ function guidaInSella(dt) {
   knight.aggiornaSella(dt, cavallo.sella());
 }
 /** Camera: perno più alto e distanza più lunga in sella; la rotella resta libera (si scala la sua distanza). */
+// Camera che segue l'andatura (approvato dall'utente il 28/11): in sella gira attorno al perno verso un lato (Q lo
+// cambia), più al trotto e al galoppo, e al galoppo si allontana e allarga un poco il campo visivo. Valori per
+// [fermo e passo, trotto, galoppo]; si passa dall'uno all'altro con la velocità del cavallo, smorzata.
+const CAMERA_ANDATURA = { angolo: [10, 15, 19], aggiunta: [0, 1, 2], fov: [0, 3, 6] };   // gradi, m, gradi
+const latoSalvato = () => { try { return localStorage.getItem('kd.latoCamera') === 'sinistra' ? -1 : 1; } catch { return 1; } };
+const camAnda = { lato: latoSalvato(), sella: 0, k: 0, fov: null, spalla: null };
+function cambiaLatoCamera() {
+  camAnda.lato = -camAnda.lato;
+  try { localStorage.setItem('kd.latoCamera', camAnda.lato > 0 ? 'destra' : 'sinistra'); } catch { /* resta per questa partita */ }
+  messaggio(`Camera in sella: lato ${camAnda.lato > 0 ? 'destro' : 'sinistro'} (Q per cambiarlo).`, 2500);
+}
+function cameraAndatura(dt, su) {
+  if (camAnda.fov === null) { camAnda.fov = camera.fov; camAnda.spalla = cam.cfg.spalla; }
+  const v = su && cavallo ? cavallo.stato.velEffettiva : 0;
+  const S = cavallo?.cfg.sella.vel ?? { passo: 1.8, trotto: 8, galoppo: 18 };
+  const obiettivo = THREE.MathUtils.clamp((v - S.passo) / (S.trotto - S.passo), 0, 1)
+    + THREE.MathUtils.clamp((v - S.trotto) / (S.galoppo - S.trotto), 0, 1);
+  camAnda.sella += ((su ? 1 : 0) - camAnda.sella) * (1 - Math.exp(-3.5 * dt));
+  camAnda.k += (obiettivo - camAnda.k) * (1 - Math.exp(-1.2 * dt));   // ~2 s per cambiare inquadratura
+  const val = (a) => (camAnda.k < 1 ? a[0] + (a[1] - a[0]) * camAnda.k : a[1] + (a[2] - a[1]) * (camAnda.k - 1));
+  const s = camAnda.sella;
+  cam.cfg.angolo = s * camAnda.lato * val(CAMERA_ANDATURA.angolo) * Math.PI / 180;
+  cam.cfg.spalla = camAnda.spalla * (1 - s);           // in sella il lato lo dà l'angolo, non la spalla
+  cam.cfg.aggiunta = s * val(CAMERA_ANDATURA.aggiunta);
+  const fov = camAnda.fov + s * val(CAMERA_ANDATURA.fov);
+  if (Math.abs(fov - camera.fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+}
 function aggiornaCameraSella(dt) {
   if (!cam) return;
   if (!sella.base) sella.base = { perno: cam.cfg.altezzaPerno, max: cam.cfg.distanzaMax };
   const su = Knight.inSella && !(sella.passaggio && sella.passaggio.verso < 0);
+  cameraAndatura(dt, su);
   const obiettivo = su ? SELLA.lontano : 1;
   if (Math.abs(obiettivo - sella.scalaCam) < 1e-4) return;
   const nuova = sella.scalaCam + (obiettivo - sella.scalaCam) * (1 - Math.exp(-3.5 * dt));
@@ -2187,6 +2215,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyK' && !e.repeat && knight) { mostraProvaCombattimento(); return; }   // G1 passo 4: solo Libera
   if (e.code === 'KeyU' && !e.repeat) { messaggio(musica.alterna() ? 'Musica accesa (U per spegnerla).' : 'Musica spenta (U per riaccenderla).'); return; }
   if (e.code === 'KeyF' && !e.repeat && knight) { fischia(); return; }
+  if (e.code === 'KeyQ' && !e.repeat && knight) { cambiaLatoCamera(); return; }
   if (e.code === PORTA.tasto && !e.repeat) {
     const azione = AZIONI_TASTO.find((a) => a.pronta());
     if (azione) { azione.esegui(); return; }
