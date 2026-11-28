@@ -76,6 +76,8 @@ html, body {
   background: rgba(243, 217, 140, .14); border: 1px solid rgba(243, 217, 140, .45); border-radius: 3px; }
 #hud .aiuto .piede { margin-top: 5px; font-size: 12px; color: #b8a880; }
 #hud .aiuto .ridotta { display: none; }
+#hud .aiuto .chiudi, #hud .aiuto .ridotta { pointer-events: auto; cursor: pointer; color: #e8c470; }
+#hud .aiuto .chiudi:hover, #hud .aiuto .ridotta:hover { color: #fff3cf; }
 #hud .aiuto.chiusa .gruppi, #hud .aiuto.chiusa .piede { display: none; }
 #hud .aiuto.chiusa .ridotta { display: block; font-size: 13px; }
 

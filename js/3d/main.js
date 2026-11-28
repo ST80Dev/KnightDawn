@@ -660,15 +660,15 @@ const diario = creaDiario({
   onApri: () => { cronista = true; tasti.clear(); if (_invitoPorta) _invitoPorta.hidden = true; },
   onChiudi: () => { cronista = null; tasti.clear(); _rigaZaino = null; },
 });
-/** Riga del diario compatto: andatura tenuta e, col cavallo, quanto galoppo gli resta o se va fatto riposare. */
+/** Riga del diario compatto: andatura tenuta e, col cavallo, quanta strada gli resta a quell'andatura o se va fatto riposare. */
 function rigaAndatura() {
   if (!knight) return '';
   const k = knight.stato, c = Knight.cavallo;
-  const galoppo = c ? `galoppo per ~${fmt(c.vigore * VIAGGIO.METRI_GALOPPO_PER_VIGORE / 1000, 1)} km` : '';
   const stanco = c && c.vigore < c.vigoreMax * 0.25 ? (c.vigore <= 0 ? 'sfiancato: fallo riposare' : 'stanco: fallo riposare') : '';
   if (Knight.inSella && cavallo) {
-    const a = cavallo.stato.velEffettiva < FERMO ? 'fermo' : cavallo.stato.andatura;
-    return `In sella · ${a} · ${stanco || galoppo}`;
+    const fermo = cavallo.stato.velEffettiva < FERMO, an = fermo ? 'trotto' : cavallo.stato.andatura;
+    const resta = `~${fmt(Knight.metriCavallo(an) / 1000, 1)} km ${{ passo: 'al passo', trotto: 'al trotto', galoppo: 'al galoppo' }[an]}`;
+    return `In sella · ${fermo ? 'fermo (riposa)' : an} · ${stanco || resta}`;
   }
   const a = k.velEffettiva < FERMO ? 'fermo' : k.velocita < 0 ? 'indietro' : k.andatura;
   const dove = !cavallo ? '' : cavallo.indietro ? ' · cavallo rimasto indietro' : stanco ? ` · cavallo ${stanco}` : '';
@@ -1952,8 +1952,12 @@ function creaLegenda() {
   _legenda = avvisoHud('', 'aiuto');
   _legenda.innerHTML = `<div class="gruppi">${LEGENDA().map(([g, righe]) => `<div class="gruppo"><div class="tg">${g}</div>`
     + righe.map(([t, a]) => `<div class="r"><kbd>${t}</kbd><span>${a}</span></div>`).join('') + '</div>').join('')}</div>`
-    + `<div class="piede">H: nascondi i comandi · modalità ${inStoria() ? 'Storia' : 'Libera'}</div>`
-    + '<div class="ridotta">H: comandi</div>';
+    + `<div class="piede"><span class="chiudi">▾ nascondi (H)</span> · modalità ${inStoria() ? 'Storia' : 'Libera'}</div>`
+    + '<div class="ridotta">▸ Comandi (H)</div>';
+  // Si apre e si chiude anche col clic (sulla riga ridotta o su «nascondi»)
+  _legenda.addEventListener('click', (e) => {
+    if (e.target.closest('.chiudi, .ridotta')) impostaLegenda(!_legenda.classList.contains('chiusa'));
+  });
   let ridotta = false;
   try { ridotta = localStorage.getItem('kd.legendaRidotta') === '1'; } catch { /* niente memoria: aperta */ }
   impostaLegenda(ridotta);
@@ -1990,7 +1994,7 @@ function fischia() {
 }
 // In sella (milestone Cavallo, passo 3): E monta (entro ~3 m dal cavallo) e smonta (quasi fermi, con un punto libero
 // accanto); ~0,6 s di passaggio dalla staffa alla sella. Camera più alta e più lontana, con una transizione morbida.
-// Andature: Ctrl passo, normale trotto, Shift galoppo; il galoppo consuma il vigore del cavallo (Knight.consumaVigoreMetri).
+// Andature: Ctrl passo, normale trotto, Shift galoppo; ogni andatura consuma il vigore del cavallo (Knight.consumaVigoreMetri).
 const SELLA = { distanza: 3, durata: 0.6, perno: 2.6, lontano: 6.5 / 4.2 };
 const sella = { passaggio: null, scalaCam: 1, base: null, tAvviso: 0 };   // passaggio: { t, verso: 1 monta | -1 smonta, terra }
 const SELLA_FERMO = { avanti: 0, gira: 0, giroMouse: 0, corsa: false, camminata: false };
@@ -2044,9 +2048,12 @@ function guidaInSella(dt) {
   // In sella a Forza 0 si va ancora al trotto (la fatica la fa il cavallo), ma niente galoppo
   input.camminata = camminata;
   input.corsa = premuto('corsa');
-  input.senzaGaloppo = Knight.isHorseTired() || sfinito();
-  if (input.corsa && input.senzaGaloppo && input.avanti > 0 && performance.now() > sella.tAvviso) {
-    messaggio(Knight.isHorseTired() ? 'Il cavallo è sfiancato: niente galoppo finché non riposa.' : 'Sei sfinito: niente galoppo.', 3000);
+  // Cavallo sfiancato (vigore 0): solo il passo; il cavaliere sfinito: niente galoppo
+  const sfiancato = Knight.isHorseTired();
+  if (sfiancato) input.camminata = true;
+  input.senzaGaloppo = sfiancato || sfinito();
+  if (input.avanti > 0 && (sfiancato ? !camminata || input.corsa : input.corsa && input.senzaGaloppo) && performance.now() > sella.tAvviso) {
+    messaggio(sfiancato ? 'Il cavallo è sfiancato: solo al passo finché non riposa (fermati).' : 'Sei sfinito: niente galoppo.', 3000);
     sella.tAvviso = performance.now() + 8000;
   }
   cavallo.update(dt, null, input);
@@ -2616,7 +2623,7 @@ function frame(now) {
       // Da fermi si recupera; al passo (o all'indietro) un terzo del riposo, mentre la salita costa (contaPercorso).
       const k = knight.stato;
       if (k.velEffettiva < FERMO) Knight.riposaPassi(passi);
-      if (cavallo) Knight.riposaCavallo(passi, cavallo.stato.velEffettiva < FERMO, cavallo.stato.andatura);
+      if (cavallo) Knight.riposaCavallo(passi, cavallo.stato.velEffettiva < FERMO);
       else if (!Knight.isMounted() && (k.velocita < 0 || k.andatura === 'camminata')) Knight.riposaPassi(passi * VIAGGIO.RECUPERO_CAMMINATA);
     } else {
       cam.prendiGiroMouse();               // in pausa il mouse non gira il cavaliere
