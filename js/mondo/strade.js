@@ -1356,7 +1356,7 @@ export function aggiungiTraghetti(carta) {
   // centro di una cella di riva di 1 km, quindi per costruzione centinaia di metri dentro terra (misurato su 30 semi: 352
   // segni su 536 oltre 300 m dall'acqua). Si fa per ultimo perché rx, ry restano la cella con cui tutto il resto
   // ragiona (rive, terre servite, verificaAccessi); il punto preciso va in px, pz (m), con il verso dell'acqua vx, vz.
-  for (const t of tratte) for (const a of [t.a, t.b]) suRiva(carta, a, t.tipo === 'traghetto');
+  for (const t of tratte) for (const a of [t.a, t.b]) suRiva(carta, a, t.tipo !== 'mare');   // il barcaiolo anche sui laghi
   carta.traghetti = tratte;
   const perTipo = {};
   for (const t of tratte) perTipo[t.tipo] = (perTipo[t.tipo] ?? 0) + 1;
@@ -1697,6 +1697,17 @@ function barcaioli(carta, tratte, terre, riva, cellaDi) {
   if (!sopra.size) return;
   const villaggi = (carta.siti ?? []).filter((v) => v.tipo === 'villaggio')
     .map((v) => ({ sito: v.id, x: v.x / cella, y: v.z / cella, terra: terre.id[cellaDi(v.x, v.z)] }));
+  // Le barche partono e arrivano sulla riva: celle di terra che toccano un'acqua qualsiasi (mare o lago: le terre si
+  // separano anche sui laghi, e `riva` del mare da sola lasciava senza barcaiolo le isole dei laghi).
+  const sponda = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    if (terre.id[i] < 0) continue;
+    const x = i % cols, y = (i - x) / cols;
+    for (let d = 0; d < 8; d++) {
+      const xx = x + V8X[d], yy = y + V8Y[d];
+      if (xx >= 0 && yy >= 0 && xx < cols && yy < rows && terre.id[yy * cols + xx] < 0) { sponda[i] = 1; break; }
+    }
+  }
   for (const [t, r] of sopra) {
     if (!r.siti && !r.abitato) continue;
     // Riva dell'isola e riva di una terra già servita **che abbia un villaggio a portata**: le due condizioni vanno
@@ -1704,10 +1715,10 @@ function barcaioli(carta, tratte, terre, riva, cellaDi) {
     // villaggi, l'isola restava scoperta anche quando poco più in là ce n'era una servita e abitata.
     let miglior = null;
     for (let i = 0; i < n; i++) {
-      if (terre.id[i] !== t || !riva[i]) continue;   // dalla riva, non dal mezzo dell'isola
+      if (terre.id[i] !== t || !sponda[i]) continue;   // dalla riva, non dal mezzo dell'isola
       const ix = (i % cols) + 0.5, iy = ((i / cols) | 0) + 0.5;
       for (let j = 0; j < n; j++) {
-        if (terre.id[j] < 0 || !servite.has(terre.id[j]) || !riva[j]) continue;
+        if (terre.id[j] < 0 || !servite.has(terre.id[j]) || !sponda[j]) continue;
         const jx = (j % cols) + 0.5, jy = ((j / cols) | 0) + 0.5;
         const km = Math.hypot(ix - jx, iy - jy) * cella / 1000;
         if (km > M.barcaiolo.traversata || (miglior && km >= miglior.km)) continue;
