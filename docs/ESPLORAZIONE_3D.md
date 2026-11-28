@@ -3810,6 +3810,11 @@ pastori in sospeso.
   luci vicine (`FUOCO_CAMPO`, 16 m). Spento: pietre, legna bruciata, cenere. Il cavaliere siede (`knight3d.siedi`,
   posa a terra con le ginocchia alzate), il cavallo è messo a 4,5 m. Il fuoco non è nel salvataggio: ricaricando
   sparisce (anche la cenere).
+- **Misure** [Certo, Chromium headless, `?libera&seme=570549`, Scena spostata nel bosco a (94490, 24032), di notte]:
+  chiamate 154 → **157** con il fuoco acceso (triangoli 648.192 → 648.605), 157 da spento con la cenere; la prima luce
+  vicina va al fuoco (24). Carta del fuoco, cavaliere seduto, notte fino a Prima con la cenere, tizzone acceso fino alla
+  Prima seguente; sulla neve a (66168, 5413) niente fuoco (manca la legna) e Salute −5. Nessun errore. Logica in Node
+  (tizzone, notte al fuoco +10/+5, gelo −5 mai sotto 1; griglia della legna uguale al conteggio diretto).
 
 ### Legna lungo le strade, per bioma (misura per la PR (c))
 [Certo, Node, 4 semi (570549, 48213, 1234, 99001), 8 blocchi di 2×2 km per bioma centrati su strade, pipeline del
