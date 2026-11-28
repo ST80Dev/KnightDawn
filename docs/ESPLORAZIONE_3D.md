@@ -3585,6 +3585,28 @@ l'acqua non è profonda 1,1 m (8–22 m) e fino a 6 m dentro terra perché ci si
 triangoli per approdo, materiali condivisi creati una volta. Prova minima: `?seme=825636&prova&centro=74875,23981`,
 145 chiamate contro 144 prima, nessun errore. Manca il comando «imbarcati» (viaggio, sessione di gioco G2).
 
+## Spalle dei ponti e acqua dei torrenti (novembre 2026) — fatto, misurato, da provare
+
+> Dalla sessione cardine, deciso dall'utente: gradini alle testate dei ponti (misurati da M4) e acqua dei torrenti che
+> quasi non si vede (notato da M8).
+
+**Ponti.** Misurato su 8 ponti del seme 570549 (suolo composto come in `main.js`: ponte, strada, terreno): alle testate
+scalini di **0,13–0,50 m**, mai sull'asse e sempre a 1,3 m di lato. Causa: vicino al fiume il generatore non spiana la
+strada (alveo e rive restano fuori dal ripiano), che arriva inclinata di traverso fino a ~23° o si interrompe prima del
+ponte, mentre l'impalcato è piano alla quota media. Rimedio (`acqua.js`, `PONTE.spalla`): a ogni testata una **spalla**
+che parte dalla quota del ponte e arriva al suolo misurato al suo capo esterno, lunga quanto serve per restare entro il
+15 % (1,5–6 m), con una gonna sui fianchi; è suolo come l'impalcato e sta nella stessa mesh del ponte (nessuna chiamata
+in più). Il suolo si legge solo al capo: in mezzo ha scalini suoi (il nastro della strada che finisce prima del ponte,
+0,25 m) che la spalla altrimenti copiava. **Dopo: scalini ≤ 0,03 m su tutti gli 8 ponti, rampe di 7–17°.** Il generatore
+non cambia.
+
+**Torrenti.** Misurato su 5 torrenti dello stesso seme (occhio a 3,2 m dal suolo, di traverso): le sponde coprono poco,
+da 20 m si vede il 50–100 % dell'acqua piena, da 50 m il 29–100 %. Causa probabile, non misurabile qui: il colore, un
+azzurro-grigio scuro all'86 % su terra bagnata e ghiaia scure. Rimedio (`FIUME_SCENA.torrente`): nei corsi fino a 4 m di
+semilarghezza il nastro prende un azzurro più chiaro (#7aa3b3), sfumando fino a 8 m; al centro strisce di corrente più
+chiare a chiazze di ~15 m, da un rumore in coordinate del mondo. Solo colori per vertice (nessun costo per fotogramma);
+larghezza, bordi sfumati e rilievo invariati. L'orizzonte (oltre il blocco) resta col colore di prima.
+
 ## Fuori dal prototipo (non farlo ora)
 
 Multiplayer, server/VPS, NPC con IA, mobile/touch, modelli esterni, combattimento in 3D, ombre di
