@@ -2897,6 +2897,13 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
 - **Salvataggio**: posizione e direzione del cavallo nella Scena, `Knight.inSella`. Salvataggi vecchi: senza cavallo →
   ronzino nuovo accanto al cavaliere, a piedi.
 
+- **Camera che segue l'andatura** (approvata dall'utente il 28/11/2026): in sella la camera gira attorno al perno verso
+  un lato invece di spostarsi di spalla, per vedere il cavallo di tre quarti, la strada in curva e sentire la velocità.
+  Fermo e al passo 10° (come la spalla destra a piedi), trotto 15° e +1 m, galoppo 19° e +2 m; campo visivo +3° al
+  trotto e +6° al galoppo (mai oltre). Si passa con la velocità del cavallo, smorzata (~2 s), mai a scatti. **Q**
+  sceglie il lato (destra o sinistra), ricordato nel browser. A piedi la camera non cambia. `CAMERA_ANDATURA` in
+  `main.js`, `cfg.angolo` e `cfg.aggiunta` in `camera.js`; nessun costo (stessi raggi contro i muri).
+
 ### Budget e stile (regole di `docs/PRESTAZIONI.md` passo 6, `docs/GRAFICA_3D.md`)
 
 - **≤ 6.000 triangoli, ≤ 12 oggetti**, uno per snodo animato: corpo (con sella, gualdrappa, finimenti), collo, testa

@@ -15,6 +15,10 @@ export const CAMERA_CFG = {
   distanzaMax: 12,
   altezzaPerno: 1.6,      // m sopra i piedi del cavaliere
   spalla: 0.7,            // m di spostamento a destra: il cavaliere non copre il centro della vista
+  // In sella (milestone Cavallo): la camera gira attorno al perno verso un lato (rad, + = da destra, − = da sinistra) e si
+  // allontana di `aggiunta` m oltre la distanza scelta con la rotella. A piedi restano 0 (main.js, aggiornaCameraSella).
+  angolo: 0,
+  aggiunta: 0,
   inclinazione: 0.28,     // rad: 0 = camera all'altezza del perno; positivo = più alta, sguardo verso il basso
   inclinazioneMin: -0.3,
   inclinazioneMax: 0.9,
@@ -137,13 +141,17 @@ export function createFollowCamera(camera, terrain, knight, dom, occlusori = [])
     // al muro, poi torna indietro con calma quando il muro non c'è più. Si controllano due raggi,
     // dal perno e dal centro del cavaliere, così uno spigolo non si infila tra camera e cavaliere.
     const inc = cfg.inclinazione;
-    _d.set(-fx * Math.cos(inc), Math.sin(inc), -fz * Math.cos(inc));
-    let limite = Math.min(cfg.distanza, primoMuro(perno, _d, cfg.distanza + cfg.margineMuri) - cfg.margineMuri);
+    // Dietro, ruotato di cfg.angolo verso il lato (destra: (rx, rz))
+    const ca = Math.cos(cfg.angolo), sa = Math.sin(cfg.angolo);
+    const bx = -fx * ca + rx * sa, bz = -fz * ca + rz * sa;
+    const distanza = cfg.distanza + cfg.aggiunta;
+    _d.set(bx * Math.cos(inc), Math.sin(inc), bz * Math.cos(inc));
+    let limite = Math.min(distanza, primoMuro(perno, _d, distanza + cfg.margineMuri) - cfg.margineMuri);
     if (occlusori.length) {
-      _t.copy(perno).addScaledVector(_d, cfg.distanza).sub(_c);      // centro → camera a piena distanza
+      _t.copy(perno).addScaledVector(_d, distanza).sub(_c);          // centro → camera a piena distanza
       const lt = _t.length();
       const muro = primoMuro(_c, _t.normalize(), lt + cfg.margineMuri);
-      if (muro < Infinity) limite = Math.min(limite, cfg.distanza * (muro - cfg.margineMuri) / lt);
+      if (muro < Infinity) limite = Math.min(limite, distanza * (muro - cfg.margineMuri) / lt);
     }
     stato.distanzaLibera = frena(stato.distanzaLibera, Math.max(DISTANZA_MIN, limite), dt, immediato);
     pos.copy(perno).addScaledVector(_d, stato.distanzaLibera);
