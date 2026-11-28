@@ -126,6 +126,9 @@ export function segnoValico(ctx, px, py, m, presidio) {
 }
 
 /** Ponte: due archetti contrapposti lungo la strada (angolo `a`). */
+/** Punto di un approdo in coordinate della Carta: la riva vera se il generatore l'ha trovata, altrimenti la cella. */
+const rivaCarta = (a, C) => (a.px !== undefined ? [a.px / C, a.pz / C] : [a.rx, a.ry]);
+
 /** Approdo di un traghetto: un'ancora (fusto, ceppo e marre). */
 export function segnoApprodo(ctx, px, py, m) {
   ctx.lineWidth = Math.max(1.4, m * 0.3);
@@ -948,9 +951,9 @@ export function createCartaVista(contenitore, opzioni = {}) {
       const w = Math.max(1.6 * dpr / s, 0.12);
       const rotta = (t) => {
         ctx.beginPath();
-        ctx.moveTo(t.a.rx, t.a.ry);
+        ctx.moveTo(...rivaCarta(t.a, carta.cella));
         if (t.rotta) for (let i = 0; i < t.rotta.x.length; i++) ctx.lineTo(t.rotta.x[i], t.rotta.y[i]);
-        ctx.lineTo(t.b.rx, t.b.ry);
+        ctx.lineTo(...rivaCarta(t.b, carta.cella));
         ctx.stroke();
       };
       // Sotto una linea scura continua, sopra il tratteggio chiaro: sull'acqua azzurra il solo chiaro si perde.
@@ -988,8 +991,9 @@ export function createCartaVista(contenitore, opzioni = {}) {
     const P = (x, y) => [x * s + tx, y * s + ty];
     // Approdi dei traghetti: un'ancora stilizzata sulla riva.
     for (const t of carta.traghetti ?? []) for (const a of [t.a, t.b]) {
-      if (!noto(a.rx, a.ry)) continue;
-      const [px, py] = P(a.rx, a.ry);
+      const [ax, ay] = rivaCarta(a, carta.cella);
+      if (!noto(ax, ay)) continue;
+      const [px, py] = P(ax, ay);
       if (px < -14 || py < -14 || px > canvas.width + 14 || py > canvas.height + 14) continue;
       conAlone(ctx, () => segnoApprodo(ctx, px, py, SEGNI.approdo * dpr), 3 * dpr);
     }

@@ -3388,7 +3388,6 @@ di saper sbarcare creerebbe il difetto che oggi non c'è.
 Vincoli: il traghetto non deve diventare la scorciatoia universale (una traversata è lenta e, in futuro, chiusa dal
 maltempo); la generazione resta dentro il budget di ~15 s, rimisurata sui semi 570549, 8899 e 42424.
 
-<<<<<<< HEAD
 ## Rotte per mare e barcaiolo (novembre 2026) — deciso dall'utente, fatto, da provare
 
 > Dopo i traghetti di lago, una misura su **30 semi** ha mostrato che la premessa da cui eravamo partiti era
@@ -3435,7 +3434,7 @@ fuori dall'acqua giusta e nessun approdo che non sia su terra. `VERSIONE_GENERAT
 **Resta da fare, non mio**: il viaggio vero (costi in tempo e denaro, comando «imbarcati») è della sessione di gioco,
 in G2; la regola «niente luoghi dove nessuna rotta arriva» è di M8 in `siti.js`, e va scritta **dopo** queste rotte,
 non prima, o vieterebbe isole che ora sono raggiungibili.
-=======
+
 ## Città: quali rocche lo diventano (novembre 2026) — fatto, misurato, da provare
 
 > Richiesta dell'utente a M7: «le città siano più grandi delle rocche normali». La taglia è lavoro di M7 (classe
@@ -3482,7 +3481,6 @@ branch): se il terreno non regge il borgo più largo, il candidato viene saltato
 classe e il tetto stanno **sopra** quella riga. Da rimisurare quando le due parti si uniscono: i tre filtri si
 moltiplicano (classe × terreno che regge × distanza di 30 km) e il numero di città potrebbe calare — è il caso che il
 ripiego non copre, perché il salto di M7 non dipende dalla quota.
->>>>>>> origin/main
 
 ## Mulino ad acqua (novembre 2026) — fatto, misurato, da provare
 
@@ -3529,6 +3527,52 @@ con una griglia a 200 m costruita una volta; `verificaSiti` misura sulla stessa 
 
 **Resta da fare**: gente al mulino (il mugnaio), e i sacchi di farina. Il forno e gli orti dei villaggi restano fuori
 dal passo, come già scritto.
+
+## Luoghi all'asciutto, grotte, approdi e sentieri (novembre 2026) — fatto, misurato, da provare
+
+> Segnalato dall'utente (semi 825177, 327914, 825636): villaggi in acqua; approdi «un po' nell'entroterra rispetto alla
+> costa» e niente sul posto; grotte con l'imbocco sospeso su pendii irraggiungibili; sentieri che fra i tornanti «erano
+> un su e giù continuo ravvicinato, a gobbe e conche»; villaggi segnati sulla Carta dove arrivati c'era solo la terra
+> battuta, senza case.
+
+**Misure su 30 semi** (825177, 327914, 825636, 570549, 8899, 42424, 1–24), in Node sul terreno delle Scene:
+
+| | prima | dopo |
+|---|---|---|
+| villaggi con ≥ ¼ dell'ingombro in acqua (su 8370) | 155, in tutti i semi | 10 |
+| villaggi con il centro in acqua | 69 | 0 |
+| segni d'approdo oltre 300 m dall'acqua (su ~530) | 352 (53 oltre 1 km) | 0 |
+| grotte con l'imbocco oltre 35° / oltre 40° (su ~400) | 161 / 80 | 0 / 0 (mediana 22°) |
+| sentieri inclinati di traverso oltre 10° | 52 % della lunghezza | 0,3 % |
+| gobbe lungo i sentieri (inversioni di pendenza del terreno disegnato) | 32–48 per km | 0,1 per km |
+| villaggi senza case (≤ 2), 4 semi, `createVillaggio` vero in Node | 15 su 1110 | 1 |
+| tempo di generazione | invariato | |
+
+**Cause e rimedi.**
+1. *Villaggi in acqua.* La scelta guardava solo la cella di 1 km della Carta; il lago delle Scene ne esce, e la mappa
+   dell'acqua a 125 m non conosce né la larghezza del fiume né l'ingombro del villaggio. Ora `affinaPunto` (siti.js)
+   prova i candidati dal migliore in giù e accetta solo un punto con centro e ingombro all'asciutto (`fuoriAcqua`:
+   mare, alveo dei fiumi, laghi; `SITI.asciutto`). Vale per tutti i siti; il mulino guarda solo il centro (la ruota sta
+   nella corrente). `verificaSiti` lo controlla.
+2. *Villaggi senza case.* Non era la pendenza (sul terreno c'era posto: misurato) ma due cose: villaggi davvero nel
+   lago (punto 1) e, in `villaggio3d.js`, un lotto contava «bagnato» se c'era un lago **vicino** (`livelloLago` vale in
+   tutta la fascia attorno), anche 13–37 m sopra il pelo dell'acqua. Ora conta solo dove l'acqua copre il terreno. I
+   ripiani a terrazze chiesti per i villaggi in pendio non servono a questi casi: si rivalutano se ne resta uno vero.
+3. *Approdi.* Il segno stava al centro della cella di riva di 1 km, quindi per costruzione nell'entroterra; il barcaiolo
+   poteva partire da una cella qualsiasi. Ora `suRiva` (strade.js) mette l'approdo sull'ultimo punto asciutto prima
+   dell'acqua ferma (terreno base, poi bisezione esatta): `px, pz` in m e il verso dell'acqua `vx, vz`, che serviranno
+   al pontile. `rx, ry` restano la cella con cui ragionano rive, terre servite e `verificaAccessi`. Il barcaiolo parte e
+   arriva solo da celle di riva, del mare o di un lago.
+4. *Grotte.* Si sceglieva il punto più ripido della cella fino a 45°. Ora (modo `piede`, `GROTTE`) si parte da un punto
+   ripido e si scende lungo la massima pendenza fino al primo suolo dolce (≤ 24°), con il terreno che a monte sale
+   almeno del 55 % entro 14 m: l'imbocco al piede del pendio, la roccia alle spalle. Grotte per mondo: 10–15 come prima.
+5. *Sentieri.* Il ripiano sotto la carreggiata (`spianaSottoStrade`, scena.js) saltava le strade sotto 1 m di
+   semilarghezza, cioè tutti i sentieri (0,6 m): il nastro si appoggiava al pendio. `SOTTO_STRADA.semiMinima` = 0,5.
+
+`VERSIONE_GENERATORE` `+asciutto-1+grotte-piede-1+approdi-riva-1+sentieri-ripiano-1`.
+
+**Resta da fare:** il pontile con la barca nelle Scene (chiesto dall'utente, file nuovo da approvare), che si appoggia
+a `px, pz, vx, vz`.
 
 ## Fuori dal prototipo (non farlo ora)
 

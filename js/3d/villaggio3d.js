@@ -336,8 +336,10 @@ export function* createVillaggioAPezzi(suolo, sito, ox, oz, carta, cx, cz) {
   };
   const asciutto = (u, v) => {
     const [x, z] = W(u, v);
-    quotaFinale(carta, x, z, undefined, es);
-    return Number.isNaN(es.livello) && Number.isNaN(livelloLago(carta, x, z));
+    // Il lago conta solo dove l'acqua copre davvero il terreno: `livelloLago` vale anche nella fascia attorno al lago, e
+    // un villaggio sulla riva alta (misurati 13–37 m sopra il pelo) restava senza case, con la sola terra battuta.
+    const h = quotaFinale(carta, x, z, undefined, es);
+    return Number.isNaN(es.livello) && !(livelloLago(carta, x, z) > h);
   };
   const vie = [];                                         // strade del villaggio: { punti, largo }
   const piazze = [];                                      // { c, r }
