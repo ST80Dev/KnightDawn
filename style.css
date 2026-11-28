@@ -99,65 +99,6 @@ html, body {
 
 #hud .messaggio[hidden] { display: none; }
 
-/* Pannello di stato: data e ora, attributi, Onore */
-#hud .stato {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  min-width: 210px;
-  padding: 7px 10px 8px;
-  background: rgba(26, 14, 4, 0.72);
-  border: 1px solid #5a3a18;
-  border-radius: 3px;
-  color: #d8c8a0;
-  font-size: 13px;
-}
-
-#hud .stato[hidden] { display: none; }
-
-#hud .stato .data {
-  color: #c8a030;
-  margin-bottom: 5px;
-}
-
-#hud .stato .attr {
-  display: grid;
-  grid-template-columns: 58px 1fr 30px;
-  align-items: center;
-  gap: 6px;
-  margin: 3px 0;
-}
-
-#hud .stato .barra {
-  height: 7px;
-  background: rgba(0, 0, 0, 0.45);
-  border: 1px solid #3a2010;
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-#hud .stato .barra i {
-  display: block;
-  height: 100%;
-  width: 100%;
-  background: #8a6030;
-}
-
-#hud .stato .forza .barra i   { background: #b08a3a; }
-#hud .stato .salute .barra i  { background: #9a3a2a; }
-#hud .stato .volonta .barra i { background: #4a6a8a; }
-#hud .stato .attr.basso .val  { color: #e08a50; }
-
-#hud .stato .val {
-  text-align: right;
-  font: 12px ui-monospace, Consolas, monospace;
-}
-
-#hud .stato .onore {
-  margin-top: 5px;
-  color: #c8b890;
-}
-
 /* Avviso di pausa */
 #hud .pausa {
   position: absolute;
@@ -493,14 +434,7 @@ html, body {
 .scrittoio .lettura { display: flex; align-items: flex-start; justify-content: center; min-width: 470px; overflow-y: auto; max-height: calc(100vh - 120px); padding: 8px; }
 .scrittoio .vuoto { grid-column: 1 / -1; width: 420px; color: #d8c8a0; font-style: italic; }
 
-/* ── Pannello di stato, messaggi e minimappa: sobri, legno scuro e filetto d'oro ── */
-#hud .stato { font-family: var(--kd-testo); font-size: 15px; background: var(--kd-legno); border: 1px solid var(--kd-oro-scuro);
-  border-radius: 0; box-shadow: inset 0 0 0 1px rgba(243, 217, 140, .18), 0 6px 18px rgba(0, 0, 0, .45); }
-#hud .stato .data { font: 600 13.5px var(--kd-titolo); letter-spacing: .05em; color: var(--kd-oro-chiaro); }
-#hud .stato .chi { font: italic 15px var(--kd-testo); color: #e6d6ae; margin: 2px 0 6px; }
-#hud .stato .attr, #hud .stato .onore { font-family: var(--kd-testo); }
-#hud .stato .val { font-family: var(--kd-testo); font-variant-numeric: lining-nums tabular-nums; }
-#hud .stato .barra { border-color: rgba(217, 178, 90, .35); }
+/* ── Messaggi e minimappa: sobri, legno scuro e filetto d'oro ── */
 #hud .messaggio, #hud .avviso, #hud .pausa { font-family: var(--kd-testo); font-size: 16px; color: #ecdcb6; background: var(--kd-legno);
   border: 1px solid var(--kd-oro-scuro); border-radius: 0; box-shadow: inset 0 0 0 1px rgba(243, 217, 140, .18), 0 4px 14px rgba(0, 0, 0, .45); }
 #hud .pausa { font-family: var(--kd-titolo); letter-spacing: .08em; color: var(--kd-oro-chiaro); }
@@ -716,3 +650,83 @@ body.con-avvisi #fps { top: 132px; }   /* il pannello F3 sotto gli avvisi */
 .schermata-morte .scelte { display: flex; justify-content: center; gap: 14px; margin-top: 20px; }
 .schermata-morte .scelte button { cursor: pointer; padding: 7px 18px; font: 600 15px var(--kd-titolo); letter-spacing: .06em;
   color: #fff3cf; background: radial-gradient(circle at 35% 30%, #a3301c, #6e160b); border: 1px solid var(--kd-oro-scuro); }
+
+/* ── Diario del cavaliere (js/3d/diario.js): compatto in alto a destra, libro al centro ── */
+.diario { position: fixed; top: 8px; right: 8px; width: 318px; z-index: 8; box-sizing: border-box; padding: 9px 9px 9px 18px; cursor: pointer;
+  background: linear-gradient(100deg, #3a1a0e 0%, #5a2a16 8%, #4a2212 60%, #3a180c 100%); border-radius: 3px 8px 8px 3px;
+  box-shadow: inset 0 0 0 1px rgba(243, 217, 140, .25), inset 6px 0 6px -2px rgba(0, 0, 0, .6), 0 8px 18px rgba(0, 0, 0, .55); }
+.diario[hidden], .diario.nascosto { display: none; }
+.diario::before { content: ''; position: absolute; left: 7px; top: 6px; bottom: 6px; width: 2px; opacity: .7;
+  background: repeating-linear-gradient(180deg, #d9b25a 0 6px, transparent 6px 12px); }          /* cucitura del dorso */
+.diario .pagina { position: relative; padding: 9px 13px 10px; color: var(--kd-inchiostro); border-radius: 1px 4px 4px 1px;
+  background: radial-gradient(ellipse at 40% 35%, #efdfb4, #dcc08a 70%, #c4a068); box-shadow: inset 0 0 10px rgba(90, 52, 16, .45); }
+.diario .nastro { position: absolute; right: 38px; bottom: -22px; width: 14px; height: 34px; background: linear-gradient(90deg, #7a1f12, #a3301c, #7a1f12);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 78%, 0 100%); }
+.diario .nome { font: 600 19px var(--kd-titolo); letter-spacing: .06em; color: var(--kd-rubrica); line-height: 1.1; }
+.diario .rango { display: flex; justify-content: space-between; font: italic 16px var(--kd-testo); color: #3e2810; margin: 1px 0 4px; }
+.diario .oro { font: 600 15px var(--kd-titolo); font-style: normal; color: #6a4a10; }
+.diario .oro::before { content: ''; display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 5px; vertical-align: -1px;
+  background: radial-gradient(circle at 35% 30%, #f6e29c, #b08a3a 70%, #6a4a10); box-shadow: 0 0 0 1px #6a4a10; }
+.diario .data { font: 600 12.5px var(--kd-titolo); letter-spacing: .06em; color: #4a2f14; padding: 3px 0; margin-bottom: 5px;
+  border-top: 1px solid rgba(110, 70, 20, .45); border-bottom: 1px solid rgba(110, 70, 20, .45); }
+.diario .attr { display: grid; grid-template-columns: 62px 1fr 30px; align-items: center; gap: 8px; font: 15px/1.35 var(--kd-testo); }
+.diario .attr .b, .diario-aperto .stato .b { height: 6px; background: rgba(90, 52, 16, .18); border: 1px solid rgba(90, 52, 16, .45); }
+.diario .attr .b i, .diario-aperto .stato .b i { display: block; height: 100%; }
+.diario .forza .b i, .diario-aperto .b.forza i { background: #a07a28; }
+.diario .salute .b i, .diario-aperto .b.salute i { background: #8a2a1a; }
+.diario .volonta .b i, .diario-aperto .b.volonta i { background: #3a5a7a; }
+.diario .attr .v { text-align: right; font-variant-numeric: lining-nums tabular-nums; }
+.diario .attr.basso .v { color: #a3301c; font-weight: 600; }
+.diario .linguette { display: flex; flex-wrap: wrap; gap: 3px; margin: 7px -2px 0; }
+.diario .linguette button { flex: 1 1 30%; white-space: nowrap; cursor: pointer; padding: 4px 0 3px; font: 600 11.5px var(--kd-titolo); letter-spacing: .05em;
+  color: #f3d98c; background: linear-gradient(180deg, rgba(122, 31, 18, .9), rgba(80, 20, 10, .9)); border: 1px solid rgba(243, 217, 140, .35); border-radius: 0; }
+.diario .linguette button:hover { color: #fff3cf; background: linear-gradient(180deg, #9a2a18, #6a1a0c); }
+.diario .linguette button b { color: #fff3cf; font-size: 10px; margin-right: 4px; padding: 0 3px; border: 1px solid rgba(243, 217, 140, .5); }
+
+.diario-aperto { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(12, 6, 2, .55); }
+.diario-aperto .libro { position: relative; width: min(1240px, calc(100vw - 150px)); height: min(760px, calc(100vh - 40px)); box-sizing: border-box;
+  padding: 22px 26px; display: grid; grid-template-columns: 1fr 1fr; border-radius: 10px;
+  background: linear-gradient(90deg, #3a180c, #5a2a16 6%, #4a2212 48%, #2a1008 50%, #4a2212 52%, #5a2a16 94%, #3a180c);
+  box-shadow: inset 0 0 0 2px rgba(243, 217, 140, .25), 0 24px 50px rgba(0, 0, 0, .7); }
+.diario-aperto .pag { position: relative; padding: 30px 44px 40px; color: var(--kd-inchiostro); font: 18px/1.5 var(--kd-testo); overflow: hidden;
+  display: flex; flex-direction: column; min-height: 0; }
+.diario-aperto .pag::after { content: ''; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 0 40px rgba(110, 70, 20, .35); }
+.diario-aperto .pag-s { background: linear-gradient(90deg, #d4b47a, #ecdcb0 10%, #e6d2a2 88%, #b8945a); border-radius: 4px 0 0 4px; }
+.diario-aperto .pag-d { background: linear-gradient(90deg, #b8945a, #e6d2a2 12%, #ecdcb0 90%, #d4b47a); border-radius: 0 4px 4px 0; }
+.diario-aperto h2 { margin: 0; font: 600 26px var(--kd-titolo); letter-spacing: .09em; color: var(--kd-rubrica); text-align: center; }
+.diario-aperto .sott { text-align: center; font: italic 16px var(--kd-testo); color: #5a3c1c; margin-top: 2px; }
+.diario-aperto .sott.quando { margin: 0 0 10px; }
+.diario-aperto .fregio { flex: none; height: 16px; width: 240px; margin: 6px auto 14px; background: var(--kd-fregio) center / contain no-repeat; }
+.diario-aperto .stato { display: grid; grid-template-columns: 90px 1fr 80px; gap: 6px 12px; align-items: center; margin: 4px 10px 14px; }
+.diario-aperto .stato .b { height: 8px; }
+.diario-aperto .indice { margin: 4px 10px; border-top: 1px solid rgba(110, 70, 20, .5); }
+.diario-aperto .indice button { display: flex; justify-content: space-between; width: 100%; padding: 6px 4px; cursor: pointer; text-align: left;
+  font: 18px var(--kd-testo); color: var(--kd-inchiostro); background: none; border: 0; border-bottom: 1px dotted rgba(110, 70, 20, .5); }
+.diario-aperto .indice button:hover, .diario-aperto .indice button.su { background: rgba(122, 79, 34, .16); }
+.diario-aperto .indice button.su { font-weight: 600; }
+.diario-aperto .indice button span:last-child { font: 600 13px var(--kd-titolo); color: #6e5534; letter-spacing: .06em; }
+.diario-aperto .piede { position: absolute; left: 0; right: 0; bottom: 12px; text-align: center; font: italic 14px var(--kd-testo); color: #6e5534; }
+.diario-aperto .corpo { overflow-y: auto; min-height: 0; padding-right: 4px; }
+.diario-aperto .nastri { position: absolute; right: -104px; top: 60px; display: flex; flex-direction: column; gap: 6px; }
+.diario-aperto .nastri button { display: block; width: 104px; padding: 7px 0 7px 22px; cursor: pointer; text-align: left; border: 0;
+  font: 600 12px var(--kd-titolo); letter-spacing: .06em; color: #fff3cf; clip-path: polygon(0 0, 100% 0, 86% 50%, 100% 100%, 0 100%); }
+.diario-aperto .nastri button.su { transform: translateX(-12px); filter: brightness(1.25); }
+.diario-aperto .tt { font: 600 15px var(--kd-titolo); letter-spacing: .1em; color: var(--kd-rubrica); border-bottom: 1px solid rgba(110, 70, 20, .55);
+  padding-bottom: 3px; margin: 12px 0 2px; }
+.diario-aperto .testo { margin: 4px 0 10px; text-align: justify; font-style: italic; color: #3e2810; }
+.diario-aperto .vuota { font-style: italic; color: var(--kd-sbiadito); padding: 6px 4px; }
+.diario-aperto .voce-tab { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 5px 4px;
+  border-bottom: 1px dotted rgba(110, 70, 20, .45); }
+.diario-aperto .voce-tab i, .diario-aperto .proposito i { display: block; font-size: 15px; color: #5a3c1c; }
+.diario-aperto .destra { font: 600 14px var(--kd-titolo); color: #4a2f14; letter-spacing: .04em; white-space: nowrap; }
+.diario-aperto .voce-tab button { font: 600 14px var(--kd-titolo); letter-spacing: .06em; padding: 4px 10px; cursor: pointer; color: #fff3cf;
+  background: radial-gradient(circle at 35% 30%, #a3743a, #6e4a1c); border: 1px solid #4a2f10; }
+.diario-aperto .voce-tab button:disabled { background: #c9b48a; color: #efe2c2; border-color: #b09868; cursor: default; }
+.diario-aperto .proposito { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: baseline; padding: 8px 2px;
+  border-bottom: 1px dotted rgba(110, 70, 20, .5); }
+.diario-aperto .proposito .s { font: 20px var(--kd-testo); color: var(--kd-rubrica); }
+.diario-aperto .proposito.fatto .s { color: #2f5a1e; }
+.diario-aperto .proposito.ignoto { opacity: .55; }
+.diario-aperto .cron div { font: italic 16.5px/1.45 var(--kd-testo); color: #3e2810; padding: 2px 0; }
+.diario-aperto .cron div::before { content: '❧ '; color: var(--kd-rubrica); font-style: normal; }
+.diario-aperto .cron b { font: 600 12px var(--kd-titolo); font-style: normal; color: #6e5534; letter-spacing: .05em; margin-right: 6px; }

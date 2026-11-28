@@ -76,6 +76,7 @@ const Knight = {
   primaSangue: false, // true dopo la prima vera battaglia (gate investitura)
   apprendista: null,
   compagni: [],   // max 3: { nome, archetipo:'lama'|'ombra'|'conoscitore', fedelta }
+  cronaca: [],    // diario: le ultime azioni, dalla più vecchia { quando, testo } (al più 60)
 
   // Azzera e re-inizializza per una nuova partita.
   // Stato iniziale = garzone di stalla durante l'Età della Veglia (GDD §3,
@@ -116,6 +117,14 @@ const Knight = {
     this.primaSangue   = false;
     this.apprendista  = null;
     this.compagni     = [];
+    this.cronaca      = [];
+  },
+
+  /** Una riga nella cronaca del diario (`quando`: già scritto, es. «G2 · Nona»). Tiene solo le più recenti. */
+  annota(testo, quando) {
+    if (!testo) return;
+    this.cronaca.push({ quando: quando || '', testo });
+    if (this.cronaca.length > 60) this.cronaca.splice(0, this.cronaca.length - 60);
   },
 
   // Promozione di rango: imposta rango/titolo e applica un bonus modesto a un
