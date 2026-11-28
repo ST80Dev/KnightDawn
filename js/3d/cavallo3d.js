@@ -1140,3 +1140,12 @@ export function createCavallo(terrain, ostacoli = []) {
   self = api;
   return api;
 }
+
+/**
+ * Forme e misure del cavallo, per gli animali da tiro semplificati e istanziati dei veicoli (js/3d/carri3d.js): stesse
+ * sezioni e stessi snodi, meno suddivisioni. Solo lettura.
+ */
+export const FORME_CAVALLO = {
+  tubo, tornio, chiaviZY, chiaviGamba, puntoTesta, TRONCO, COLLO, CODA, TESTA, ALTA_ANT, ALTA_POST, BASSA_ANT, BASSA_POST,
+  ANTERIORE, POSTERIORE, PERNO_COLLO, PERNO_CODA, PERNO_TESTA, DIR_TESTA, CENTRO_Y, COL,
+};
