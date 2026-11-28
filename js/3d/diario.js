@@ -19,7 +19,8 @@ const pct = ([c, m]) => Math.max(0, Math.min(100, (c / m) * 100));
 
 /**
  * @param {{
- *   stato: () => { nome, titolo, oro, onore, data, sottotitolo, attr: { forza: [cur, max], salute, volonta } },
+ *   stato: () => { nome, titolo, oro, onore, data, sottotitolo, attr: { forza: [cur, max], salute, volonta },
+ *     cavallo?: { vigore: [cur, max] } | null, andatura?: string },
  *   sezione: (id: string) => { titolo?, sottotitolo?, blocchi: object[] },
  *   onApri?: () => void, onChiudi?: () => void }} opzioni
  * Blocchi di una sezione: { titolo?, testo? , vuota?, righe?: [{ nome, info?, destra?, azione?, disponibile?, scegli? }],
@@ -33,15 +34,18 @@ export function creaDiario(opzioni) {
   el.innerHTML = '<div class="pagina"><div class="nome"></div><div class="rango"><span class="titolo"></span><span class="oro"></span></div>'
     + '<div class="data"></div>'
     + ATTRIBUTI.map(([id, n]) => `<div class="attr ${id}"><span>${n}</span><span class="b"><i></i></span><span class="v"></span></div>`).join('')
+    + '<div class="attr cavallo" hidden><span>Cavallo</span><span class="b"><i></i></span><span class="v"></span></div>'
+    + '<div class="andatura-riga"></div>'
     + `<div class="linguette">${SEZIONI_DIARIO.map(([id, n]) => `<button type="button" data-s="${id}">${id === 'zaino' ? '<b>I</b>' : ''}${n}</button>`).join('')}</div>`
     + '</div><div class="nastro"></div>';
   document.body.appendChild(el);
   const q = (s) => el.querySelector(s);
   const campi = { nome: q('.nome'), titolo: q('.rango .titolo'), oro: q('.rango .oro'), data: q('.data') };
-  const attr = Object.fromEntries(ATTRIBUTI.map(([id]) => {
+  const attr = Object.fromEntries([...ATTRIBUTI, ['cavallo']].map(([id]) => {
     const r = q('.attr.' + id);
     return [id, { r, b: r.querySelector('i'), v: r.querySelector('.v') }];
   }));
+  const rigaAndatura = q('.andatura-riga');
   el.querySelectorAll('.linguette button').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); apri(b.dataset.s); }));
   el.querySelector('.pagina').addEventListener('click', () => apri(ultima));
   const cache = new Map();
@@ -61,6 +65,16 @@ export function creaDiario(opzioni) {
       imposta(id + '.v', Math.ceil(a[0]), (v) => { x.v.textContent = v; });
       imposta(id + '.basso', p < 20, (v) => { x.r.classList.toggle('basso', v); });
     }
+    // Cavallo (vigore: quanto galoppo resta) e andatura tenuta: a piedi o in sella
+    const c = s.cavallo, x = attr.cavallo;
+    imposta('cav.c', !!c, (v) => { x.r.hidden = !v; });
+    if (c) {
+      const p = pct(c.vigore);
+      imposta('cav.w', p.toFixed(1), (v) => { x.b.style.width = v + '%'; });
+      imposta('cav.v', Math.ceil(c.vigore[0]), (v) => { x.v.textContent = v; });
+      imposta('cav.basso', p < 25, (v) => { x.r.classList.toggle('basso', v); });
+    }
+    imposta('andatura', s.andatura ?? '', (v) => { rigaAndatura.textContent = v; rigaAndatura.hidden = !v; });
   }
 
   // ─── Aperto: il libro ───

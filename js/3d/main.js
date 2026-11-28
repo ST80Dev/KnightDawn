@@ -653,11 +653,27 @@ const diario = creaDiario({
     sottotitolo: `${Knight.titolo} · ${inStoria() && Calendar.inVeglia ? `al servizio della ${nomeCasata()}` : 'senza signore'}`,
     attr: { forza: [Knight.forza.cur, Knight.forza.max], salute: [Knight.salute.cur, Knight.salute.max],
       volonta: [Knight.volonta.cur, Knight.volonta.max] },
+    cavallo: Knight.cavallo ? { vigore: [Knight.cavallo.vigore, Knight.cavallo.vigoreMax] } : null,
+    andatura: rigaAndatura(),
   }),
   sezione: (id) => diarioSezione(id),
   onApri: () => { cronista = true; tasti.clear(); if (_invitoPorta) _invitoPorta.hidden = true; },
   onChiudi: () => { cronista = null; tasti.clear(); _rigaZaino = null; },
 });
+/** Riga del diario compatto: andatura tenuta e, col cavallo, quanto galoppo gli resta o se va fatto riposare. */
+function rigaAndatura() {
+  if (!knight) return '';
+  const k = knight.stato, c = Knight.cavallo;
+  const galoppo = c ? `galoppo per ~${fmt(c.vigore * VIAGGIO.METRI_GALOPPO_PER_VIGORE / 1000, 1)} km` : '';
+  const stanco = c && c.vigore < c.vigoreMax * 0.25 ? (c.vigore <= 0 ? 'sfiancato: fallo riposare' : 'stanco: fallo riposare') : '';
+  if (Knight.inSella && cavallo) {
+    const a = cavallo.stato.velEffettiva < FERMO ? 'fermo' : cavallo.stato.andatura;
+    return `In sella · ${a} · ${stanco || galoppo}`;
+  }
+  const a = k.velEffettiva < FERMO ? 'fermo' : k.velocita < 0 ? 'indietro' : k.andatura;
+  const dove = !cavallo ? '' : cavallo.indietro ? ' · cavallo rimasto indietro' : stanco ? ` · cavallo ${stanco}` : '';
+  return `A piedi · ${a}${dove}`;
+}
 const DUE = (n, uno, molti) => `${n} ${n === 1 ? uno : molti}`;
 /** Tempo di cammino a piedi (~4,5 km/h), detto come lo direbbe un viandante. */
 function cammino(m) {
@@ -1713,11 +1729,7 @@ async function init() {
     get cambiBlocco() { return { quanti: cambiBlocco, ms: msCambioBlocco, totale: msTotaleBlocco, inCorso: !!preparazione, ultimo: ultimoCambio }; },
   };
 
-  avvisoHud('Frecce o WASD: muovi · trascina col mouse: gira · Shift: scatto · Ctrl: camminata sì/no · Spazio: scavalca · E: monta/smonta · F: fischia il cavallo'
-    + ` · R: riposa/dormi · P: pausa · rotella: distanza · C: camera libera · M: ${inStoria() ? 'Carta' : 'Carta (clic: vai lì) · T: avanza · K: prova di combattimento'}`
-    + ' · N: minimappa (icona, piccola, grande) · +/−: zoom minimappa · J: scrittoio e avvisi · I: diario · U: musica'
-    + ` · F2: qualità · F3: info · F8: menu · modalità ${inStoria() ? 'Storia' : 'Libera'}`,
-  'aiuto');
+  creaLegenda();
 }
 
 function cambiaModoCamera() {
@@ -1917,7 +1929,8 @@ document.getElementById('hud').appendChild(indicatoreAndatura);
 const sfinito = () => Knight.forza.cur <= 0;   // a Forza 0 niente corsa né scatto
 
 function aggiornaIndicatoreAndatura() {
-  const testo = sfinito() ? 'Sfinito: solo camminata (R per accamparti)'
+  const testo = Knight.inSella ? (camminata ? 'Passo (Ctrl per il trotto)' : '')
+    : sfinito() ? 'Sfinito: solo camminata (R per accamparti)'
     : camminata ? 'Camminata (Ctrl per la corsetta)' : '';
   imposta('andatura', (v) => {
     indicatoreAndatura.textContent = v;
@@ -1925,6 +1938,35 @@ function aggiornaIndicatoreAndatura() {
     indicatoreAndatura.classList.toggle('sfinito', sfinito());
   }, testo);
 }
+// Legenda dei comandi in basso a sinistra: a gruppi, tasto e azione (H la riduce a una riga e la riapre).
+const LEGENDA = () => [
+  ['A piedi', [['W A S D', 'muovi'], ['Shift', 'scatto'], ['Ctrl', 'camminata sì/no'], ['Spazio', 'scavalca'], ['R', 'riposa · dormi']]],
+  ['In sella', [['E', 'monta · smonta'], ['W', 'trotto'], ['Shift', 'galoppo'], ['Ctrl', 'passo sì/no'], ['F', 'fischia il cavallo']]],
+  ['Azioni', [['E', 'parla · entra'], ['I', 'diario'], ['J', 'scrittoio'], ['M', 'Carta'], ['P', 'pausa']]],
+  ['Vista', [['mouse', 'trascina: gira'], ['rotella', 'distanza'], ['C', 'camera libera'], ['N', 'minimappa'], ['+ −', 'zoom minimappa']]],
+  ['Sistema', [['U', 'musica'], ['F2', 'qualità'], ['F3', 'info'], ['F8', 'menu'],
+    ...(inStoria() ? [] : [['T', 'avanza'], ['K', 'combattimento']])]],
+];
+let _legenda = null;
+function creaLegenda() {
+  _legenda = avvisoHud('', 'aiuto');
+  _legenda.innerHTML = `<div class="gruppi">${LEGENDA().map(([g, righe]) => `<div class="gruppo"><div class="tg">${g}</div>`
+    + righe.map(([t, a]) => `<div class="r"><kbd>${t}</kbd><span>${a}</span></div>`).join('') + '</div>').join('')}</div>`
+    + `<div class="piede">H: nascondi i comandi · modalità ${inStoria() ? 'Storia' : 'Libera'}</div>`
+    + '<div class="ridotta">H: comandi</div>';
+  let ridotta = false;
+  try { ridotta = localStorage.getItem('kd.legendaRidotta') === '1'; } catch { /* niente memoria: aperta */ }
+  impostaLegenda(ridotta);
+}
+function impostaLegenda(ridotta) {
+  if (!_legenda) return;
+  _legenda.classList.toggle('chiusa', ridotta);
+  try { localStorage.setItem('kd.legendaRidotta', ridotta ? '1' : '0'); } catch { /* pazienza */ }
+  // la meridiana sta sopra la legenda
+  document.documentElement.style.setProperty('--legenda', `${_legenda.offsetHeight + 16}px`);
+}
+window.addEventListener('resize', () => impostaLegenda(_legenda?.classList.contains('chiusa')));
+
 // Cavallo (milestone Cavallo, passo 2): F fischia; se è rimasto indietro (bloccato o oltre ~60 m) un avviso lo dice.
 const _frustum = new THREE.Frustum(), _mVista = new THREE.Matrix4(), _sfera = new THREE.Sphere();
 function inVista(x, y, z) {
@@ -2054,6 +2096,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyK' && !e.repeat && knight) { mostraProvaCombattimento(); return; }   // G1 passo 4: solo Libera
   if (e.code === 'KeyU' && !e.repeat) { messaggio(musica.alterna() ? 'Musica accesa (U per spegnerla).' : 'Musica spenta (U per riaccenderla).'); return; }
   if (e.code === 'KeyF' && !e.repeat && knight) { fischia(); return; }
+  if (e.code === 'KeyH' && !e.repeat) { impostaLegenda(!_legenda?.classList.contains('chiusa')); return; }
   if (e.code === PORTA.tasto && !e.repeat) {
     const azione = AZIONI_TASTO.find((a) => a.pronta());
     if (azione) { azione.esegui(); return; }
