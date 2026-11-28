@@ -2994,9 +2994,12 @@ e 1 chiamata per le pietre di guado; atteso ≤ 0,2 ms. Percorso di prova anche 
    altrimenti avviso; in sella le porte non si aprono, la persona vicina vince su «smonta»; F e Spazio spenti. Camera:
    perno 1,6 → 2,6 m e distanza ×6,5/4,2 con transizione morbida, la rotella resta libera. Forza in sella: quella
    della camminata ×0,7 (`isMounted` = in sella e con vigore), in piano zero, la salita costa. **Vigore** (rivisto con
-   l'utente il 28/11): solo il galoppo lo consuma, 1 ogni 250 m (il ronzino, 20, galoppa ~5 km); da fermo torna pieno
-   in un Passo, al passo in due; a vigore 0 niente galoppo e niente sconto. A Forza 0 in sella si trotta ancora, ma non
-   si galoppa. In Libera il ronzino è ora in `Knight.cavallo` (anche nei salvataggi di prima). Cambio di Scena in sella:
+   l'utente il 28/11, poi di nuovo lo stesso giorno: «una sua resistenza dovrà averla» anche al passo e al trotto, così nei
+   viaggi si gestisce quella del cavallo oltre alla propria): un punto ogni 2.000 m al passo, 800 al trotto, 250 al
+   galoppo (il ronzino, 20, fa ~40 km al passo, ~16 al trotto, ~5 al galoppo); recupera solo da fermo, pieno in un Passo
+   (18 minuti reali); senza cavaliere in sella non si stanca; a vigore 0 solo il passo e niente sconto. Il diario
+   compatto mostra la barra «Cavallo» e la strada che resta all'andatura tenuta («~12 km al trotto»), sotto il 25 %
+   «stanco: fallo riposare». A Forza 0 in sella si trotta ancora, ma non si galoppa. In Libera il ronzino è ora in `Knight.cavallo` (anche nei salvataggi di prima). Cambio di Scena in sella:
    il cavallo sotto il cavaliere (il salvataggio della posizione è il passo 4). `&sella` nel percorso di prova (accordo
    con M1): sale in sella e usa perno e distanza della camera in sella; il riquadro dice «cavallo: a piedi/in sella».
    Misure in headless: cavaliere 87 chiamate e 15.084 triangoli a piedi, **86 e 15.082 in sella** (l'ombra spenta),

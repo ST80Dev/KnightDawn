@@ -60,12 +60,26 @@ html, body {
   position: absolute;
   bottom: 8px;
   left: 8px;
-  padding: 3px 10px;
-  background: rgba(26, 14, 4, 0.6);
-  color: #d8c8a0;
-  font-size: 12px;
+  padding: 8px 12px 6px;
+  background: rgba(26, 14, 4, 0.72);
+  color: #e4d6b0;
+  font-size: 14px;
   border-radius: 3px;
 }
+/* Legenda a gruppi: tasto e azione, una colonna per gruppo; H la riduce a una riga */
+#hud .aiuto .gruppi { display: flex; gap: 22px; }
+#hud .aiuto .gruppo { display: grid; grid-template-columns: max-content auto; column-gap: 8px; align-content: start; align-items: center; }
+#hud .aiuto .tg { grid-column: 1 / -1; font: 600 12.5px var(--kd-titolo, serif); letter-spacing: .08em; text-transform: uppercase; color: #e8c470; margin-bottom: 3px; }
+#hud .aiuto .r { display: contents; }
+#hud .aiuto .r span { line-height: 1.5; white-space: nowrap; }
+#hud .aiuto kbd { justify-self: start; font: 600 12px/1.3 var(--kd-testo, serif); color: #fff3cf; padding: 0 5px;
+  background: rgba(243, 217, 140, .14); border: 1px solid rgba(243, 217, 140, .45); border-radius: 3px; }
+#hud .aiuto .piede { margin-top: 5px; font-size: 12px; color: #b8a880; }
+#hud .aiuto .ridotta { display: none; }
+#hud .aiuto .chiudi, #hud .aiuto .ridotta { pointer-events: auto; cursor: pointer; color: #e8c470; }
+#hud .aiuto .chiudi:hover, #hud .aiuto .ridotta:hover { color: #fff3cf; }
+#hud .aiuto.chiusa .gruppi, #hud .aiuto.chiusa .piede { display: none; }
+#hud .aiuto.chiusa .ridotta { display: block; font-size: 13px; }
 
 /* Indicatore dell'andatura attiva (camminata) */
 #hud .andatura {
@@ -509,7 +523,7 @@ html, body {
 .carta-cronista .avanti:not(.vista) .continua { pointer-events: none; }
 
 /* Meridiana (interfaccia.js, creaMeridiana): tavoletta di pietra dal bordo scheggiato, disegno dritto e leggibile */
-.meridiana { position: fixed; left: 14px; bottom: 40px;   /* in basso a sinistra, sopra la riga d'aiuto: in alto c'è il pannello F3 */
+.meridiana { position: fixed; left: 14px; bottom: var(--legenda, 40px);   /* in basso a sinistra, sopra la riga d'aiuto: in alto c'è il pannello F3 */
   z-index: 5; width: 236px; pointer-events: none;
   filter: drop-shadow(0 5px 7px rgba(0, 0, 0, .55)); }
 .meridiana[hidden] { display: none; }
@@ -677,6 +691,10 @@ body.con-avvisi #fps { top: 132px; }   /* il pannello F3 sotto gli avvisi */
 .diario .volonta .b i, .diario-aperto .b.volonta i { background: #3a5a7a; }
 .diario .attr .v { text-align: right; font-variant-numeric: lining-nums tabular-nums; }
 .diario .attr.basso .v { color: #a3301c; font-weight: 600; }
+.diario .attr[hidden] { display: none; }
+.diario .cavallo .b i { background: #6e4a22; }
+.diario .andatura-riga { font: italic 14px/1.35 var(--kd-testo); color: #3e2810; margin-top: 3px; }
+.diario .andatura-riga[hidden] { display: none; }
 .diario .linguette { display: flex; flex-wrap: wrap; gap: 3px; margin: 7px -2px 0; }
 .diario .linguette button { flex: 1 1 30%; white-space: nowrap; cursor: pointer; padding: 4px 0 3px; font: 600 11.5px var(--kd-titolo); letter-spacing: .05em;
   color: #f3d98c; background: linear-gradient(180deg, rgba(122, 31, 18, .9), rgba(80, 20, 10, .9)); border: 1px solid rgba(243, 217, 140, .35); border-radius: 0; }
