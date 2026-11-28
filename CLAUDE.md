@@ -10,8 +10,12 @@ Il movimento di esplorazione è in tempo reale; il combattimento **resta a turni
 Vanilla JS (ES modules) / HTML / CSS + **Three.js r187 copiato in `lib/three/`**.
 Nessun bundler, nessun npm in produzione, nessun CDN: Three.js si carica via `importmap` da file locali.
 Deploy GitHub Pages. Single-player, localStorage. UI in italiano. Target: desktop a 1920×1080, mouse + tastiera (schermo di riferimento: `docs/GRAFICA_3D.md`).
-Test: su GitHub Pages dopo il merge in `main` (ricaricare con Ctrl+F5, cache ~10 min); `main` può essere
-instabile durante lo sviluppo. In alternativa in locale con `python -m http.server` (no doppio clic sull'HTML).
+Test: l'utente prova su GitHub Pages dopo il merge in `main` (Ctrl+F5, cache ~10 min): aspetto, sensazione di gioco, ms
+della GPU. Il browser headless qui gira a ~1 FPS e un caricamento costa minuti: usarlo poco, solo per la prova minima prima
+di ogni merge (pagina che parte, nessun errore), per i numeri (triangoli, chiamate, misure) e mai per giudicare un aspetto
+(immagini di interfaccia: HTML sopra una schermata già fatta). Verifica proporzionata al rischio: ritocchi una prova mirata,
+difetti una misura sul caso segnalato, prestazioni misura prima/dopo. Ogni PR porta 3–5 punti di prova con l'indirizzo esatto.
+Percorso di prova: `?seme=570549&prova`. Generatore: verifiche in Node, senza browser. Locale: `python -m http.server` (no doppio clic sull'HTML).
 
 ## Struttura
 - `index.html` + `style.css` — canvas WebGL + overlay HUD in HTML/CSS + importmap
@@ -19,7 +23,7 @@ instabile durante lo sviluppo. In alternativa in locale con `python -m http.serv
   qualità), `terrain.js`, `orizzonte.js`, `acqua.js`, `blocchi.js` (blocco che segue il cavaliere), `cielo.js` (giorno/notte,
   nebbia, meteo), `camera.js`, `knight3d.js`, `cavallo3d.js`, `abitanti3d.js` (persone di rocche e borghi), `castle3d.js`
   (Tavullia), `rocca3d.js`, `borgo3d.js`, `edifici3d.js` (kit unico degli edifici), `villaggio3d.js` (villaggi, ovili, mulini),
-  `rovine3d.js`, `vegetazione3d.js`, `minimappa.js`, `cartaVista.js`, `interfaccia.js` (menu d'avvio, Carta del cronista, combattimento)
+  `rovine3d.js`, `vegetazione3d.js`, `minimappa.js`, `cartaVista.js`, `interfaccia.js` (menu d'avvio, Carta del cronista, combattimento), `avvisi.js` (riquadro avvisi)
 - `js/mondo/` — generatore del mondo, moduli ES senza grafica né DOM (`rumore.js`, `carta.js`, `verifica.js`,
   `scena.js`, `fiumi.js`, `luoghi.js`, `strade.js`, `siti.js`, `vegetazione.js`; `lavoratore.js` = Web Worker con cache IndexedDB, `generatore.js` = lato pagina); la vista di
   sviluppo della Carta è `js/3d/cartaVista.js`. Cambiando le Carte generate: aggiornare `VERSIONE_GENERATORE`
@@ -70,7 +74,5 @@ architettura: quelle stanno in `docs/`. Aggiornare la fase corrente a ogni cambi
 
 ## Fase corrente
 
-**G1, Veglia giocabile e menu d'avvio** (`docs/EARLY_GAME.md` §7; passi 1–3 uniti, passo 4 combattimento da provare, poi il 5: incontri con gli animali): prima milestone di gioco,
-ordine delle successive in `docs/GDD.md` §5. La grafica (M7 7–8, M8 5–8, `docs/ESPLORAZIONE_3D.md`) prosegue quando un
-passo di gioco la richiede; contenuti nuovi sempre nel budget di `docs/PRESTAZIONI.md` e provati con `?seme=570549&prova`.
-M0–M6 e «Prestazioni» completate.
+**G1, Veglia giocabile** (`docs/EARLY_GAME.md` §7; passi 1–3 uniti, passo 4 combattimento da provare, poi il 5: incontri con gli animali); ordine delle milestone
+in `docs/GDD.md` §5. La grafica prosegue quando un passo di gioco la richiede, nel budget di `docs/PRESTAZIONI.md`.

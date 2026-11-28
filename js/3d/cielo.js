@@ -45,7 +45,7 @@ export const CICLO = {
     discoLuna: new THREE.Color('#e4e8ee'),
     soleGiorno: new THREE.Color('#fff0d4'), soleBasso: new THREE.Color('#ffb070'),
     emisferaCieloGiorno: new THREE.Color('#dce8ec'), emisferaCieloNotte: new THREE.Color('#5a6c94'),
-    emisferaTerraGiorno: new THREE.Color('#8a7550'), emisferaTerraNotte: new THREE.Color('#2c2a2a'),
+    emisferaTerraGiorno: new THREE.Color('#8a7550'), emisferaTerraNotte: new THREE.Color('#363330'),
   },
 };
 const _gradi = Math.PI / 180;
@@ -319,6 +319,10 @@ export function creaCielo(scene, renderer = null) {
     // l'alba ha luce bassa e calda e ombre lunghe (deciso con l'utente, 28/11/2026; prima 8° e 10°).
     const giorno = smoothstep(-5, 14, altezza);
     _luceGiorno = giorno;
+    // La luce ambiente (emisfera) sale prima del sole: sotto la chioma del bosco è l'unica luce che arriva, e con la
+    // curva del sole il sottobosco restava quasi nero per due ore (deciso con l'utente, 28/11/2026). Il sole mantiene
+    // la sua curva lunga: ombre lunghe e luce calda all'alba restano.
+    const ambiente = smoothstep(-5, 8, altezza);
     const crepuscolo = Math.max(0, 1 - Math.abs(altezza - 1) / 9) * smoothstep(-8, -2, altezza);
 
     const a = altezza * _gradi, z = azimut * _gradi;
@@ -328,9 +332,9 @@ export function creaCielo(scene, renderer = null) {
     sole.color.copy(C.soleGiorno).lerp(C.soleBasso, 1 - smoothstep(4, 26, altezza));
     luna.intensity = CICLO.lunaMax * (1 - giorno);
 
-    emisfera.intensity = THREE.MathUtils.lerp(CICLO.emisferaNotte, CICLO.emisferaGiorno, giorno);
-    emisfera.color.copy(C.emisferaCieloNotte).lerp(C.emisferaCieloGiorno, giorno);
-    emisfera.groundColor.copy(C.emisferaTerraNotte).lerp(C.emisferaTerraGiorno, giorno);
+    emisfera.intensity = THREE.MathUtils.lerp(CICLO.emisferaNotte, CICLO.emisferaGiorno, ambiente);
+    emisfera.color.copy(C.emisferaCieloNotte).lerp(C.emisferaCieloGiorno, ambiente);
+    emisfera.groundColor.copy(C.emisferaTerraNotte).lerp(C.emisferaTerraGiorno, ambiente);
 
     _col.copy(C.cieloNotte).lerp(C.cieloGiorno, giorno).lerp(C.cieloCrepuscolo, crepuscolo * 0.75);
     scene.background.copy(_col);

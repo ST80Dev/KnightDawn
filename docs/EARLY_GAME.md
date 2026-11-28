@@ -292,6 +292,13 @@ poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un
    cavaliere»; nebbia della conoscenza; luoghi, approdi, ponti, valichi e gruppi montuosi solo se conosciuti; sul
    cursore solo bioma, quota arrotondata e luogo conosciuto («terre ignote» altrove); niente clic che sposta; il
    gioco è fermo; `M` o `Esc` la chiudono. `N` resta la minimappa piccola/grande.
+   *Seconda correzione (novembre 2026, richiesta dell'utente):* la nebbia non fa più capire dove finisce il mondo:
+   in Storia continua uguale oltre il confine (niente tinta più scura né linea), nella minimappa e nella Carta; il
+   cursore oltre il confine dice «terre ignote». Aspetto di pergamena antica, più scura, a macchie e toni variabili
+   (`NEBBIA`, `mascheraNebbia`, `disegnaNebbia` in `cartaVista.js`): una tessera di rumore periodico generata una
+   volta, a tre scale ancorate al mondo; bordi della parte nota sfumati dall'interpolazione delle celle; l'intravisto
+   resta più chiaro dell'ignoto. Nella minimappa sta nel fondo in cache e, quando cambia solo la nebbia, si rifà il
+   solo rettangolo scoperto. In Libera il confine resta com'era (fondo scuro e linea).
 2. **Carta del cronista vera.** Riquadro con titolo, testo, pulsanti tematici, prerequisiti visibili
    («Richiede…») ed esito; usa il motore di `js/events.js` così com'è. Effetto di tempo nuovo
    `{ type:'tempo', minuti:N }` accanto a `passi` (`Calendar.avanzaMinuti`); i costi della Veglia passano
@@ -365,6 +372,16 @@ poco). Più corta, il prologo diventa una formalità; più lunga, chi rigioca un
    sinistra) a Prima (6, a destra) passando per Mattutino; tacche ogni ora e mezza; **lune** al posto dei soli (falce
    crescente a Compieta, piena a mezzanotte, calante a Lodi) e una lancetta argento.
    Corretto anche `Calendar.fineVeglia`: all'investitura l'ora del giorno ripartiva da Prima.
+3c. **Avvisi in alto a sinistra** [richiesta dell'utente, novembre 2026]. **Stato: fatto, da provare dall'utente.**
+   `js/3d/avvisi.js` (file nuovo approvato): linguette Notizie · Voci · Bandi · Consigli (pallino se c'è qualcosa di non
+   letto; il clic apre quella sezione dello scrittoio, `J`) e due strisce di carta da piccione viaggiatore. Striscia «dal
+   mondo»: gli ultimi 3 fogli (voci di taverna, bandi, il mercato del giorno, i luoghi appena intravisti). Striscia
+   «consiglio»: `vegliaConsigli` in `js/data/events_veglia.js`, suggerimenti scritti dentro il mondo calcolati dallo stato
+   del garzone (oro, lezioni, Forza, Salute, pasto, ora). Ogni striscia cambia ogni ~25 s fra i messaggi recenti; un
+   messaggio nuovo resta fermo col sigillo finché non lo si legge (mouse sopra o clic); ferma col mouse sopra. Il DOM cambia
+   solo all'arrivo di un messaggio o allo scatto del ciclo. Sostituisce l'avviso d'arrivo dei fogli; lo scrittoio è diviso
+   nelle stesse sezioni; il pannello F3 scende sotto gli avvisi. Zona libera per i riquadri al centro (combattimento):
+   ~1270×680, x 300–1570, y 170–850 a 1920×1080. A regime gli avvisi ricorderanno anche le missioni (G4).
 4. **Combattimento nel riquadro.** Tre colonne (cavaliere, scelte e Slancio, nemico) e cronaca dei Round;
    la scena dietro è ferma. Ogni Round confermato avanza il calendario dei suoi minuti; i rami di esito
    tornano all'evento. In Veglia a Salute 0 si sviene; dopo l'investitura **schermata di morte** con

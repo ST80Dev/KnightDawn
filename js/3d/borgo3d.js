@@ -16,7 +16,7 @@
 // Interfaccia come la rocca (rocca3d.js): object, solidi, spingiFuori, quotaSuolo, dentro, aggiornaLuci.
 
 import * as THREE from 'three';
-import { prisma, unisci, dentroPoligono, distanzaContorno, areaPoligono, normaleLato, localeDelLuogo, creaSpinta,
+import { prisma, unisci, appoggiaSulTerreno, dentroPoligono, distanzaContorno, areaPoligono, normaleLato, localeDelLuogo, creaSpinta,
   scatolaLato, geoTorrePorta, geoGhiera, materialeMuro, rifinisci, tonoDelLuogo } from './rocca3d.js';
 import { creaKit, siToccano, EDIFICI, PEZZO_MS, completaPezzi } from './edifici3d.js';
 import { RAMPA_PORTA } from '../mondo/luoghi.js';
@@ -42,11 +42,13 @@ const PORTA = { larghezza: 3.6, imposta: 3.0, torreLarghezza: 8, torreProfondita
 // RAMPA_PORTA (fuori dalla porta, fino al terreno; anche la rampa lungo il muro) viene da js/mondo/luoghi.js.
 const TRATTO = 6;                          // m: lunghezza dei gradoni delle mura sul pendio
 const SCARPA = 0.15;                       // inclinazione della scarpa alla base delle mura (tangente)
-// Strade interne: larghezza (m), quota sopra il terreno (m; diverse, così agli incroci non sfarfallano).
+// Strade interne: larghezza (m), quota sopra il terreno (m; diverse di 5 mm, così agli incroci non sfarfallano). Il
+// cavaliere cammina sul terreno: con 12–14 cm i piedi affondavano nel selciato (segnalazione dell'utente), ora 1–2 cm e
+// solo lungo le pieghe del terreno qualche cm in più (appoggiaSulTerreno, rocca3d.js).
 const STRADE = {
-  via: { larghezza: 4.2, sopra: 0.14 },
-  mura: { larghezza: 3.0, sopra: 0.12, rientro: 10 },   // via lungo le mura, a `rientro` m dalla cinta
-  vicolo: { larghezza: 2.6, sopra: 0.13 },
+  via: { larghezza: 4.2, sopra: 0.02 },
+  mura: { larghezza: 3.0, sopra: 0.01, rientro: 10 },   // via lungo le mura, a `rientro` m dalla cinta
+  vicolo: { larghezza: 2.6, sopra: 0.015 },
   pendenzaVia: 0.1,                        // oltre, la via principale sale a tornanti
   passo: 2,                                // m tra le sezioni del nastro
   tessera: 3.2,                            // m: lato della texture del selciato (512 px)
@@ -537,8 +539,10 @@ export function* createBorgoAPezzi(suolo, luogo, ox, oz, rocca, clima = 'tempera
       strade.push({ tipo: 'vicolo', punti: serpeggia(ricampiona(chaikin(pv, 3), STRADE.passo), 0.6, 7, fase + k * 2) });
     }
   }
-  // Nastri di ciottolato: 5 vertici per sezione (bordi un po' irregolari), sul terreno + qualche cm.
+  // Nastri di ciottolato: 5 vertici per sezione (bordi un po' irregolari), 1–2 cm sopra il suolo su cui si cammina: il
+  // terreno o, sotto la porta e sulle rampe, il pavimento di quotaSuolo (lo stesso che il cavaliere usa per i piedi).
   let triStrade = 0;
+  const suoloCammino = (x, z) => quotaSuolo(x, z) ?? suolo.getHeight(x, z);
   const geoStrade = (() => {
     const pos = [], uv = [], idx = [];
     for (const s of strade) {
@@ -552,7 +556,7 @@ export function* createBorgoAPezzi(suolo, luogo, ox, oz, rocca, clima = 'tempera
           const t = j / 4 - 0.5;
           const bordo = (j === 0 || j === 4) ? 1 + 0.18 * Math.sin(lung * 0.9 + j * 2.1 + fase) * Math.sin(lung * 0.37 + fase) : 1;
           const u = P[i][0] + nu * t * S.larghezza * bordo, v = P[i][1] + nv * t * S.larghezza * bordo;
-          pos.push(X(u, v), terreno(u, v) + S.sopra, Z(u, v));
+          pos.push(X(u, v), suoloCammino(X(u, v), Z(u, v)) + S.sopra, Z(u, v));
           uv.push(t * S.larghezza / STRADE.tessera, lung / STRADE.tessera);
         }
       }
@@ -564,6 +568,7 @@ export function* createBorgoAPezzi(suolo, luogo, ox, oz, rocca, clima = 'tempera
         }
       }
     }
+    appoggiaSulTerreno(pos, idx, suoloCammino);
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
     geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
