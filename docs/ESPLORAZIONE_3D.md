@@ -3571,8 +3571,13 @@ dal passo, come già scritto.
 
 `VERSIONE_GENERATORE` `+asciutto-1+grotte-piede-1+approdi-riva-1+sentieri-ripiano-1`.
 
-**Resta da fare:** il pontile con la barca nelle Scene (chiesto dall'utente, file nuovo da approvare), che si appoggia
-a `px, pz, vx, vz`.
+**Pontile e barca nelle Scene** (file nuovo `js/3d/approdi3d.js`, approvato dall'utente). Su ogni capo di traghetto e
+di rotta per mare: impalcato di tavole su pali, largo 2,4 m, 0,75 m sopra il pelo, dalla riva verso il largo finché
+l'acqua non è profonda 1,1 m (8–22 m) e fino a 6 m dentro terra perché ci si salga senza gradino; ci si cammina sopra
+(`quotaSuolo` in `componiSuolo`). Barca a remi ormeggiata di fianco alla testa, che dondola. Barcaiolo, come da regola
+«nessun molo»: barca tirata in secca dal lato del villaggio, palo d'ormeggio sull'isola. Due chiamate e al più ~1300
+triangoli per approdo, materiali condivisi creati una volta. Prova minima: `?seme=825636&prova&centro=74875,23981`,
+145 chiamate contro 144 prima, nessun errore. Manca il comando «imbarcati» (viaggio, sessione di gioco G2).
 
 ## Fuori dal prototipo (non farlo ora)
 
