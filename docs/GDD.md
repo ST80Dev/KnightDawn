@@ -77,10 +77,13 @@ Si definisce attraverso le scelte di gioco:
 - **Volontà** (0-100) — forza mentale; cala con eventi oscuri, paura, magia nemica
 - **Salute** (0-100) — integrità corporea; cala in combattimento (0 = morte)
 - **Onore** (-5/+5) — statura morale bipolare; apre e chiude porte con fazioni e NPC
+- **Esperienza** (cresce, cala raramente) — quanto il cavaliere ha vissuto; con un evento fa salire di livello
+  (deciso con l'utente, 28/11/2026; regole in `docs/EARLY_GAME.md` §2)
 
 **Progressione per ranghi.** Il cavaliere non parte tale: inizia come **garzone
-di stalla** nella Veglia e sale per **ranghi sociali** (Garzone → Scudiero →
-Cavaliere Errante → di Ventura → Campione/Bannerale). I ranghi sbloccano
+di stalla** nella Veglia e sale di **livello** con l'Esperienza (Garzone → Scudiero → Cavaliere Errante →
+Cavaliere Provato → Veterano → Campione → Leggenda), con un **ruolo** secondo la via (giurato: fino a Capitano e
+Campione della casata; di ventura: Capitano di ventura, Condottiero). Livelli e ruoli sbloccano
 *accesso e opportunità* (corti, contratti, covi, compagni) con bonus modesti —
 niente albero abilità. Dettaglio completo (apertura, azioni, mercato) in
 `docs/EARLY_GAME.md`.

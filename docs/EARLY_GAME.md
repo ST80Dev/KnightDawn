@@ -48,22 +48,36 @@ GDD §2: *"nessuna classe, nessun albero abilità"*). Un rango fa avanzare sopra
 **accesso e opportunità**; i bonus passivi sono **modesti** (l'ascesa è sociale,
 non power-creep). Riempie il `[TBD] Sistema di progressione` del GDD §2.
 
-| Rango | Fase | Sblocca |
-|---|---|---|
-| **Garzone** | Veglia | lavori umili, mercato base, acquisto del primo ronzino |
-| **Scudiero** | Veglia | addestramento col maestro d'armi, prime armi vere, piccole missioni fuori porta |
-| **Cavaliere Errante** | soglia → Prima Era | libertà sulla mappa, contratti, assoldare il 1° compagno (Seguito) |
-| **Cavaliere di Ventura** | mid | corti minori, fondazione del 1° covo |
-| **Campione / Bannerale** | late | corti maggiori, più compagni, contratti d'élite |
+**Livello e ruolo** [deciso con l'utente, 28/11/2026: nomi comprensibili, «Bannerale» tolto perché in italiano non si
+capisce]. Due cose distinte: il **livello** dice quanto il cavaliere ha vissuto e viene dall'**Esperienza**; il **ruolo**
+dice a chi serve e viene dalla via scelta all'investitura (`docs/FACTIONS.md` §3). Nel gioco si leggono insieme:
+«Rodrick, Veterano, Capitano della casata Corvin»; «Rodrick, Cavaliere Provato, Capitano di ventura».
 
-[Proposta, novembre 2026, con la scelta tra fedeltà e ventura di `docs/FACTIONS.md` §3] Dopo Cavaliere
-Errante i ranghi si dividono in due vie: **del vessillo** (giurato a una casata, fino a **Bannerale**) e
-**della ventura** (libero, fino a **Capitano di ventura**; «Campione» resta un titolo d'impresa). Si può
-passare da una via all'altra giurando o sciogliendo il giuramento. Nomi intermedi da decidere.
+| Livello (Esperienza) | Fase | Ruolo, via giurata | Ruolo, via della ventura | Sblocca |
+|---|---|---|---|---|
+| **Garzone** | Veglia | — | — | lavori umili, mercato base, primo ronzino |
+| **Scudiero** | Veglia | — | — | maestro d'armi, prime armi vere, piccole missioni fuori porta |
+| **Cavaliere Errante** | investitura | Cavaliere al servizio di una casata | Cavaliere di ventura | libertà sulla mappa, contratti, 1° compagno |
+| **Cavaliere Provato** | inizio | Cavaliere della casata | Capitano di ventura | corti minori, 1° covo |
+| **Veterano** | metà | Capitano della casata (stendardo, comanda uomini) | Condottiero | più compagni, contratti grandi |
+| **Campione** | avanzata | Campione della casata | Campione | corti maggiori, contratti d'élite |
+| **Leggenda** | fine | Leggenda | Leggenda | i racconti precedono il cavaliere (S8) |
+
+Il ruolo sale con la reputazione presso chi si serve e con le nomine (evento narrativo), ma non supera il livello di una
+colonna: un Cavaliere Errante non diventa Capitano. Cambiando via si cambia colonna allo stesso gradino, se la nuova
+casata o il nuovo committente lo riconoscono.
+
+**Esperienza** [deciso con l'utente, 28/11/2026]: caratteristica che cresce facendo cose e fa avanzare il livello.
+- Si guadagna con **cose diverse**: combattimenti, incarichi, eventi, luoghi scoperti, imprese. **La stessa azione rende
+  sempre meno** (il decimo lavoro in stalla quasi niente, il primo orso molto): niente grinding.
+- **Cala raramente**, solo per fatti gravi (sconfitta disonorevole, giuramento rotto).
+- **Non basta da sola**: ogni livello chiede una soglia di Esperienza **e** un evento (impresa, riconoscimento, nomina).
+- **Non dà punti da spendere**: i bonus di livello restano quelli modesti qui sotto.
+- Numeri [DA BILANCIARE] con G4 (incarichi): soglie, valori per tipo di azione, calo per ripetizione.
 
 ### Come si sale
 
-Avanzamento per **imprese + reputazione + soglie d'oro**, mai per grinding puro.
+Avanzamento per **Esperienza + imprese + reputazione**, mai per grinding puro.
 La promozione è un **evento narrativo** (riconoscimento, investitura, nomina),
 non un pulsante "sali di livello".
 
